@@ -233,23 +233,6 @@ pub fn parse_elasticsearch_hosts(s: Option<String>) -> Result<Vec<String>> {
     Ok(res)
 }
 
-pub fn parse_replica_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
-    let s = match s {
-        Some(s) => s,
-        None => return Ok(vec![]),
-    };
-    let rgx = r"^([\w]+::)+[\w]+$".to_string();
-    let rgx = Regex::new(&rgx).unwrap();
-    let mut res = vec![];
-    for target in s.trim().split(',') {
-        if !rgx.is_match(target) {
-            bail!("Invalid replica_log_debug_overrides: '{}'", s);
-        }
-        res.push(target.to_string());
-    }
-    Ok(res)
-}
-
 /// An immutable snapshot of the Internet Computer topology valid at a
 /// particular registry version.
 #[derive(Clone)]
@@ -974,7 +957,6 @@ pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
     fn get_elasticsearch_hosts(&self) -> Result<Vec<String>>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
-    fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>>;
     fn get_ic_os_img_url(&self) -> Result<Url>;
     fn get_ic_os_img_sha256(&self) -> Result<String>;
     fn get_malicious_ic_os_img_url(&self) -> Result<Url>;
@@ -1017,12 +999,6 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
         let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
         Ok(initial_replica_version.version)
-    }
-
-    fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>> {
-        let dep_rel_path = "replica_log_debug_overrides";
-        let log_debug_overrides = self.read_dependency_to_string(dep_rel_path).ok();
-        parse_replica_log_debug_overrides(log_debug_overrides)
     }
 
     fn get_ic_os_img_url(&self) -> Result<Url> {
@@ -2033,7 +2009,7 @@ impl SshSession for IcNodeSnapshot {
 #[macro_export]
 macro_rules! retry_with_msg {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
-        retry(
+        $crate::driver::test_env_api::retry(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
             $timeout,
@@ -2099,7 +2075,7 @@ fn trunc_error(err_str: String) -> String {
 #[macro_export]
 macro_rules! retry_with_msg_async {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
-        retry_async(
+        $crate::driver::test_env_api::retry_async(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
             $timeout,

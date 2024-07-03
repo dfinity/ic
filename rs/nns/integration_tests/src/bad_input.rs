@@ -12,6 +12,40 @@ use ic_nns_test_utils::itest_helpers::{
 use on_wire::bytes;
 
 #[test]
+fn test_skipping_quota() {
+    state_machine_test_on_nns_subnet(|runtime| async move {
+        let canister = set_up_governance_canister(
+            &runtime,
+            GovernanceCanisterInitPayloadBuilder::new().build(),
+        )
+        .await;
+
+        // the skipping quota is set to 10_000 (`DEFAULT_SKIPPING_QUOTA`) so the following input passes
+        let skipped: Vec<u8> = vec![42; 9_042];
+        let res: Result<Option<ProposalInfo>, String> = canister
+            .query_("get_pending_proposals", candid, (skipped,))
+            .await;
+        res.unwrap();
+
+        // but the next one is rejected
+        let skipped: Vec<u8> = vec![42; 10_042];
+        let res: Result<Option<ProposalInfo>, String> = canister
+            .query_("get_pending_proposals", candid, (skipped,))
+            .await;
+        let err = res.unwrap_err();
+        let expected_err = "Deserialization Failed";
+        assert!(
+            err.contains(expected_err),
+            "Expected `{}` did not occur within the observed error:\n{}",
+            expected_err,
+            err
+        );
+
+        Ok(())
+    });
+}
+
+#[test]
 fn test_bad_proposal_id_candid_type() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(

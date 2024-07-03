@@ -25,10 +25,10 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+    image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
       <<: *image
     timeout-minutes: 120
@@ -58,6 +58,9 @@ jobs:
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     <<: *dind-large-setup
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - <<: *checkout
       - <<: *before-script

@@ -1,5 +1,5 @@
 use candid::Principal;
-use ic_tests::driver::{test_env::TestEnv, test_env_api::HasDependencies};
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::HasDependencies};
 use slog::{info, Logger};
 use std::fs;
 use std::io::Write;

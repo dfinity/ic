@@ -1,18 +1,18 @@
 use anyhow::Result;
 use ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::NnsCanisterWasmStrategy;
+use ic_system_test_driver::sns_client::test_create_service_nervous_system_proposal;
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use ic_tests::nns_tests::neurons_fund;
 use ic_tests::nns_tests::neurons_fund::NnsNfNeuron;
 use ic_tests::nns_tests::{
     sns_deployment, sns_deployment::generate_ticket_participants_workload, swap_finalization,
     swap_finalization::finalize_committed_swap,
 };
-use ic_tests::sns_client::test_create_service_nervous_system_proposal;
-use ic_tests::systest;
-use ic_tests::util::block_on;
 use std::time::Duration;
 
 // At the time of this writing, the empirically-determined maximum is that 2,084
@@ -85,7 +85,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
 
     // Calculate a value for `contribution_per_user` that will cause the icp
     // raised by the swap to exactly equal `params.max_icp_e8s - cf_contribution`.
-    let contribution_per_user = ic_tests::util::divide_perfectly(
+    let contribution_per_user = ic_system_test_driver::util::divide_perfectly(
         "maximum_direct_participation_icp",
         swap_params
             .maximum_direct_participation_icp

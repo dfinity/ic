@@ -1,7 +1,7 @@
-use crate::{driver::test_env_api::*, retry_with_msg, util::*};
 use anyhow::bail;
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_system_test_driver::{driver::test_env_api::*, util::*};
 use reqwest::Url;
 use slog::{debug, info, Logger};
 use std::time::Duration;
@@ -80,7 +80,7 @@ pub fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str)
 
 /// Try to store the given message. Retry for 300 seconds or until update was unsuccessful
 pub fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!(
             "store message in canister {} via {}",
             canister_id,
@@ -189,7 +189,7 @@ pub fn cert_state_makes_progress_with_retries(
     backoff: Duration,
 ) {
     let mut current_timestamp: Option<u64> = None;
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!(
             "checking if the certified time of canister {} on {} has advanced",
             effective_canister_id.to_string(),
@@ -231,7 +231,7 @@ pub fn cert_state_makes_no_progress_with_retries(
     backoff: Duration,
 ) {
     let mut current_timestamp: Option<u64> = None;
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!(
             "checking if the certified time of canister {} on {} does not advance",
             effective_canister_id.to_string(),

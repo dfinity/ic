@@ -1,5 +1,5 @@
 {
-  "checksum": "742fd49dac56ff31922e692a95f135f980fea1db74b848a4f73de55871ec4498",
+  "checksum": "48613629bee3517c9932ca2ff8424e580de9b8e9953dc1f316285d51b80c853e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3629,67 +3629,6 @@
       ],
       "license_file": null
     },
-    "async-socks5 0.5.1": {
-      "name": "async-socks5",
-      "version": "0.5.1",
-      "package_url": "https://github.com/ark0f/async-socks5",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/async-socks5/0.5.1/download",
-          "sha256": "77f634add2445eb2c1f785642a67ca1073fedd71e73dc3ca69435ef9b9bdedc7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "async_socks5",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "async_socks5",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "thiserror 1.0.57",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.38.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.74",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.1"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
-    },
     "async-stream 0.3.5": {
       "name": "async-stream",
       "version": "0.3.5",
@@ -5082,6 +5021,120 @@
       ],
       "license_file": "LICENSE"
     },
+    "axum-server 0.6.0": {
+      "name": "axum-server",
+      "version": "0.6.0",
+      "package_url": "https://github.com/programatik29/axum-server",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/axum-server/0.6.0/download",
+          "sha256": "c1ad46c3ec4e12f4a4b6835e173ba21c25e484c9d02b49770bf006ce5367c036"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_server",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "axum_server",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arc-swap",
+            "default",
+            "rustls",
+            "rustls-pemfile",
+            "tls-rustls",
+            "tokio-rustls"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arc-swap 1.6.0",
+              "target": "arc_swap"
+            },
+            {
+              "id": "bytes 1.6.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.0",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.3.1",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.3",
+              "target": "hyper_util"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "rustls 0.21.12",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pemfile 2.1.2",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "tokio 1.38.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.24.1",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "backoff 0.4.0": {
       "name": "backoff",
       "version": "0.4.0",
@@ -6247,7 +6300,7 @@
               "target": "clang_sys"
             },
             {
-              "id": "itertools 0.10.5",
+              "id": "itertools 0.12.0",
               "target": "itertools"
             },
             {
@@ -7660,7 +7713,7 @@
         "deps": {
           "common": [
             {
-              "id": "hashbrown 0.12.3",
+              "id": "hashbrown 0.13.2",
               "target": "hashbrown"
             }
           ],
@@ -16998,10 +17051,6 @@
               "target": "async_scoped"
             },
             {
-              "id": "async-socks5 0.5.1",
-              "target": "async_socks5"
-            },
-            {
               "id": "async-stream 0.3.5",
               "target": "async_stream"
             },
@@ -17021,6 +17070,11 @@
             {
               "id": "axum-server 0.5.1",
               "target": "axum_server"
+            },
+            {
+              "id": "axum-server 0.6.0",
+              "target": "axum_server",
+              "alias": "axum_server_0_6_0"
             },
             {
               "id": "backoff 0.4.0",
@@ -17240,10 +17294,6 @@
               "target": "escargot"
             },
             {
-              "id": "ethabi 18.0.0",
-              "target": "ethabi"
-            },
-            {
               "id": "ethers-core 2.0.10",
               "target": "ethers_core"
             },
@@ -17364,10 +17414,6 @@
               "alias": "hyper_rustls_0_27_x"
             },
             {
-              "id": "hyper-socks2 0.8.0",
-              "target": "hyper_socks2"
-            },
-            {
               "id": "hyper-util 0.1.3",
               "target": "hyper_util"
             },
@@ -17428,7 +17474,7 @@
               "target": "ic_response_verification"
             },
             {
-              "id": "ic-stable-structures 0.6.4",
+              "id": "ic-stable-structures 0.6.5",
               "target": "ic_stable_structures"
             },
             {
@@ -20536,7 +20582,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "full-serde",
             "once_cell",
             "regex",
@@ -27047,96 +27092,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-socks2 0.8.0": {
-      "name": "hyper-socks2",
-      "version": "0.8.0",
-      "package_url": "https://github.com/ark0f/hyper-socks2",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hyper-socks2/0.8.0/download",
-          "sha256": "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hyper_socks2",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hyper_socks2",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "hyper-rustls",
-            "rustls",
-            "rustls-native-certs",
-            "rusttls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "async-socks5 0.5.1",
-              "target": "async_socks5"
-            },
-            {
-              "id": "futures 0.3.30",
-              "target": "futures"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-rustls 0.24.2",
-              "target": "hyper_rustls"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls",
-              "alias": "rusttls"
-            },
-            {
-              "id": "rustls-native-certs 0.6.3",
-              "target": "rustls_native_certs"
-            },
-            {
-              "id": "thiserror 1.0.57",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.38.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
-    },
     "hyper-timeout 0.4.1": {
       "name": "hyper-timeout",
       "version": "0.4.1",
@@ -28897,14 +28852,14 @@
       ],
       "license_file": null
     },
-    "ic-stable-structures 0.6.4": {
+    "ic-stable-structures 0.6.5": {
       "name": "ic-stable-structures",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "package_url": "https://github.com/dfinity/stable-structures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.4/download",
-          "sha256": "07e2282054c8ddf0cb2a7abf5c174c373917b4345c9a096ae4aa7f7185cdcdc7"
+          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.5/download",
+          "sha256": "03f3044466a69802de74e710dc0300b706a05696a0531c942ca856751a13b0db"
         }
       },
       "targets": [
@@ -28958,7 +28913,7 @@
           ],
           "selects": {}
         },
-        "version": "0.6.4"
+        "version": "0.6.5"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34740,7 +34695,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.102",
+                "id": "openssl-sys 0.9.93",
                 "target": "openssl_sys"
               }
             ]
@@ -34783,7 +34738,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.102",
+                "id": "openssl-sys 0.9.93",
                 "target": "openssl_sys"
               }
             ]
@@ -40587,14 +40542,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.102": {
+    "openssl-sys 0.9.93": {
       "name": "openssl-sys",
-      "version": "0.9.102",
+      "version": "0.9.93",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.102/download",
-          "sha256": "c597637d56fbc83893a35eb0dd04b2b8e7a50c91e64e9493e398b5df4fb45fa2"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.93/download",
+          "sha256": "db4d56a4c0478783083cfafcc42493dd4a981d41669da64b4572a2a089b51b1d"
         }
       },
       "targets": [
@@ -40635,14 +40590,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.102",
+              "id": "openssl-sys 0.9.93",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.102"
+        "version": "0.9.93"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -77215,13 +77170,13 @@
     "assert_matches 1.5.0",
     "async-recursion 1.0.5",
     "async-scoped 0.8.0",
-    "async-socks5 0.5.1",
     "async-stream 0.3.5",
     "async-trait 0.1.74",
     "axum 0.6.20",
     "axum 0.7.4",
     "axum-extra 0.9.1",
     "axum-server 0.5.1",
+    "axum-server 0.6.0",
     "backoff 0.4.0",
     "backon 0.4.1",
     "base32 0.4.0",
@@ -77277,7 +77232,6 @@
     "either 1.9.0",
     "erased-serde 0.3.31",
     "escargot 0.5.8",
-    "ethabi 18.0.0",
     "ethers-core 2.0.10",
     "ethnum 1.4.0",
     "exec 0.3.1",
@@ -77307,7 +77261,6 @@
     "hyper 1.3.1",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.27.1",
-    "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.35.0",
@@ -77324,7 +77277,7 @@
     "ic-http-certification 2.3.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 2.3.0",
-    "ic-stable-structures 0.6.4",
+    "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.35.0",
     "ic-wasm 0.7.1",

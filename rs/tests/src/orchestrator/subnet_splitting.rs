@@ -25,20 +25,20 @@ Success::
 
 end::catalog[] */
 
-use crate::{
+use crate::orchestrator::utils::{
+    rw_message::{
+        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+        store_message,
+    },
+    subnet_recovery::*,
+};
+use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{IcNodeSnapshot, SubnetSnapshot, *},
-    },
-    orchestrator::utils::{
-        rw_message::{
-            can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-            store_message,
-        },
-        subnet_recovery::*,
     },
     util::*,
 };

@@ -836,7 +836,6 @@ mod tests {
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ replica_log_debug_overrides }}", "[]")
             .replace("{{ nns_url }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
             .replace("{{ query_stats_aggregation }}", "\"Enabled\"")

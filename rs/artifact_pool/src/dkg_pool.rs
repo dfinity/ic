@@ -11,8 +11,7 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::ArtifactKind, artifact_kind::DkgArtifact, consensus, consensus::dkg,
-    consensus::dkg::DkgMessageId, Height,
+    artifact_kind::DkgArtifact, consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height,
 };
 use prometheus::IntCounter;
 
@@ -114,14 +113,14 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
                 }
                 ChangeAction::AddToValidated(message) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: DkgArtifact::message_to_advert(&message),
+                        artifact: message.clone(),
                         is_latency_sensitive: true,
                     });
                     self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: DkgArtifact::message_to_advert(&message),
+                        artifact: message.clone(),
                         // relayed
                         is_latency_sensitive: false,
                     });

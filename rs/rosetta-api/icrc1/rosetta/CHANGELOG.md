@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Added
 - Added /ready endpoint which indicates whether Rosetta is finished with its initial block synch
-- Added Sync Status to network/status
+### Fixes
+- Changed default database path to match /data/db.sqlite
 
 ## [1.1.0] - 2024-06-13
 ### Fixes

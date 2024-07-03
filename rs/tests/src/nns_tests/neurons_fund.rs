@@ -6,15 +6,14 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use ic_rosetta_test_utils::EdKeypair;
+use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
+    canister_api::{CallMode, NnsRequestProvider},
+};
 use icp_ledger::Subaccount;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rosetta_core::models::RosettaSupportedKeyPair;
-
-use crate::{
-    canister_agent::HasCanisterAgentCapability,
-    canister_api::{CallMode, NnsRequestProvider},
-};
 
 /// Deterministically generates NNS neurons that have joined the Neurons' Fund (NF).
 /// As long as at least one neuron is in the NF, the NF will contribute to the SNS.
@@ -99,7 +98,7 @@ impl Identity for NnsNfNeuron {
 impl NnsNfNeuron {
     pub async fn get_current_info(
         &self,
-        nns_node: &crate::driver::test_env_api::IcNodeSnapshot,
+        nns_node: &ic_system_test_driver::driver::test_env_api::IcNodeSnapshot,
         nns_request_provider: &NnsRequestProvider,
     ) -> Result<Neuron, String> {
         let neuron_id = self.neuron.id.as_ref().unwrap().id;

@@ -1,8 +1,14 @@
-use crate::canister_agent::HasCanisterAgentCapability;
-use crate::canister_api::{CallMode, Request};
-use crate::canister_requests;
-use crate::driver::test_env_api::{HasPublicApiUrl, SshSession};
-use crate::driver::{
+use crate::nns_dapp::set_authorized_subnets;
+use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use crate::orchestrator::utils::subnet_recovery::{
+    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
+};
+use crate::tecdsa::{make_key, KEY_ID1};
+use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::canister_api::{CallMode, Request};
+use ic_system_test_driver::canister_requests;
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, SshSession};
+use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -11,15 +17,13 @@ use crate::driver::{
         HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
     },
 };
-use crate::generic_workload_engine::engine::Engine;
-use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
-use crate::nns_dapp::set_authorized_subnets;
-use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::orchestrator::utils::subnet_recovery::{
-    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
+use ic_system_test_driver::generic_workload_engine::engine::Engine;
+use ic_system_test_driver::generic_workload_engine::metrics::{
+    LoadTestMetricsProvider, RequestOutcome,
 };
-use crate::tecdsa::{make_key, KEY_ID1};
-use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanister};
+use ic_system_test_driver::util::{
+    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
+};
 
 use candid::{Encode, Principal};
 use futures::future::join_all;
@@ -378,7 +382,7 @@ pub fn tecdsa_performance_test(
  * 6. Read the active tc rules.
  */
 fn limit_tc_ssh_command() -> String {
-    let cfg = crate::util::get_config();
+    let cfg = ic_system_test_driver::util::get_config();
     let p2p_listen_port = cfg.transport.unwrap().listening_port;
     format!(
         r#"set -euo pipefail

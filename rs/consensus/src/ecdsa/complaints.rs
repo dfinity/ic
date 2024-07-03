@@ -1,6 +1,6 @@
 //! The complaint handling
 
-use crate::consensus::metrics::{timed_call, EcdsaComplaintMetrics};
+use crate::ecdsa::metrics::{timed_call, EcdsaComplaintMetrics};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;

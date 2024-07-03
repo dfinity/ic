@@ -5,6 +5,7 @@ pub mod sandbox_safe_system_state;
 mod stable_memory;
 
 use ic_base_types::PrincipalIdBlobParseError;
+use ic_config::embedders::StableMemoryPageLimit;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -1500,6 +1501,34 @@ impl SystemApiImpl {
             ApiType::Init { .. } | ApiType::PreUpgrade { .. }
         )
     }
+
+    /// Based on the page limit object, returns the page limit for the current
+    /// system API type. Can be called with the limit for dirty pages or accessed pages.
+    pub fn get_page_limit(&self, page_limit: &StableMemoryPageLimit) -> NumOsPages {
+        match &self.api_type {
+            // Longer-running messages make use of a different, possibly higher limit.
+            ApiType::Init { .. } | ApiType::PreUpgrade { .. } => page_limit.upgrade,
+            // Queries have a separate limit.
+            ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => page_limit.query,
+            // Callbacks and cleanup for composite queries (non-replicated execution) need to be treated as queries,
+            // whereas in replicated mode they are treated as regular messages.
+            ApiType::ReplyCallback { execution_mode, .. }
+            | ApiType::RejectCallback { execution_mode, .. }
+            | ApiType::Cleanup { execution_mode, .. } => {
+                if *execution_mode == ExecutionMode::NonReplicated {
+                    page_limit.query
+                } else {
+                    page_limit.message
+                }
+            }
+            // All other API types get the replicated message limit.
+            ApiType::Update { .. } | ApiType::Start { .. } | ApiType::SystemTask { .. } => {
+                page_limit.message
+            }
+        }
+    }
 }
 
 impl SystemApi for SystemApiImpl {
@@ -2025,9 +2054,9 @@ impl SystemApi for SystemApiImpl {
         name_src: usize,
         name_len: usize,
         reply_fun: u32,
-        reply_env: u32,
+        reply_env: u64,
         reject_fun: u32,
-        reject_env: u32,
+        reject_env: u64,
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
@@ -2072,8 +2101,8 @@ impl SystemApi for SystemApiImpl {
                     name_src,
                     name_len,
                     heap,
-                    WasmClosure::new(reply_fun, reply_env.into()),
-                    WasmClosure::new(reject_fun, reject_env.into()),
+                    WasmClosure::new(reply_fun, reply_env),
+                    WasmClosure::new(reject_fun, reject_env),
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
                     MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
                     self.max_sum_exported_function_name_lengths,
@@ -2146,7 +2175,7 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()> {
+    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u64) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2181,7 +2210,7 @@ impl SystemApi for SystemApiImpl {
                     error: "ic0.call_on_cleanup called when no call is under construction."
                         .to_string(),
                 }),
-                Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env.into())),
+                Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env)),
             },
         };
         trace_syscall!(self, CallOnCleanup, fun, env);

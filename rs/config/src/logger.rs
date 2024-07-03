@@ -39,18 +39,12 @@ pub enum LogDestination {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    pub node_id: u64,
     #[serde(with = "LevelDef")]
     pub level: Level,
-
-    pub debug_overrides: Vec<String>,
-
-    /// The format of emitted log lines
+    /// The format of emitted log lines.
     pub format: LogFormat,
-
     /// The destination where logs should be written.
     pub log_destination: LogDestination,
-
     /// If set to `false`, the logging thread will _not_ block even if the queue/buffer full.
     ///
     /// Messages are logged asynchronously.
@@ -66,10 +60,8 @@ fn default_block_on_overflow() -> bool {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            node_id: 100,
             level: Level::Debug,
             format: LogFormat::TextFull,
-            debug_overrides: vec![],
             log_destination: LogDestination::default(),
             block_on_overflow: true,
         }

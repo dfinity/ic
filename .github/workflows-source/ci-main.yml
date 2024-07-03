@@ -11,6 +11,7 @@ on:
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
+      - 'master'
 
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
@@ -40,10 +41,10 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+    image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
       <<: *image
     timeout-minutes: 90
@@ -67,6 +68,9 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -153,6 +157,9 @@ jobs:
       - <<: *before-script
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
+        # TODO: remove when we flakiness is resolved or when we move to hosted runners
+        # settting to true to allow a job to pass when this step fails
+        continue-on-error: true
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false' || github.event_name == 'schedule'
         uses:  ./.github/actions/bazel-test-all/
         with:

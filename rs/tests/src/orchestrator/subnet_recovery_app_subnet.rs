@@ -28,23 +28,25 @@ Success::
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
-use crate::driver::constants::SSH_USERNAME;
-use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
-use crate::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
+use ic_system_test_driver::driver::driver_setup::{
+    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
+};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 
-use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::orchestrator::utils::subnet_recovery::*;
 use crate::tecdsa::make_key_ids_for_all_schemes;
-use crate::util::*;
 use ic_base_types::NodeId;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
 use ic_recovery::{file_sync_helper, get_node_metrics};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::util::*;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
@@ -154,7 +156,7 @@ pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
     app_subnet_recovery_test(env, APP_NODES, false, false);
 }
 
-pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool, ecdsa: bool) {
+pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool, chain_key: bool) {
     let logger = env.logger();
 
     let master_version = env.get_initial_replica_version().unwrap();
@@ -181,15 +183,15 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
     let create_new_subnet = !topology_snapshot
         .subnets()
         .any(|s| s.subnet_type() == SubnetType::Application);
-    assert!(ecdsa >= create_new_subnet);
+    assert!(chain_key >= create_new_subnet);
 
     let key_ids = make_key_ids_for_all_schemes();
-    let ecdsa_pub_keys = ecdsa.then(|| {
-        info!(logger, "ECDSA flag set, creating key on NNS.");
+    let chain_key_pub_keys = chain_key.then(|| {
+        info!(logger, "Chain key flag set, creating key on NNS.");
         if create_new_subnet {
             info!(
                 logger,
-                "No app subnet found, creating a new one with the ECDSA key."
+                "No app subnet found, creating a new one with the Chain keys."
             );
             enable_chain_key_on_new_subnet(
                 &env,
@@ -292,7 +294,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
-        keep_downloaded_state: Some(ecdsa),
+        keep_downloaded_state: Some(chain_key),
         subnet_id,
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
@@ -303,7 +305,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         pub_key: Some(pub_key),
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),
-        ecdsa_subnet_id: ecdsa.then_some(root_subnet_id),
+        chain_key_subnet_id: chain_key.then_some(root_subnet_id),
         next_step: None,
     };
 
@@ -392,7 +394,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         assert!(height > Height::from(1000));
     }
 
-    if ecdsa {
+    if chain_key {
         if !create_new_subnet {
             disable_chain_key_on_subnet(
                 &nns_node,
@@ -408,11 +410,11 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
                 key_ids.clone(),
                 &logger,
             );
-            assert_eq!(ecdsa_pub_keys.clone().unwrap(), app_keys)
+            assert_eq!(chain_key_pub_keys.clone().unwrap(), app_keys)
         }
 
-        for (key_id, ecdsa_pub_key) in ecdsa_pub_keys.unwrap() {
-            run_chain_key_signature_test(&nns_canister, &logger, &key_id, ecdsa_pub_key);
+        for (key_id, chain_key_pub_key) in chain_key_pub_keys.unwrap() {
+            run_chain_key_signature_test(&nns_canister, &logger, &key_id, chain_key_pub_key);
         }
     }
 

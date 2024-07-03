@@ -1305,6 +1305,68 @@ fn can_filter_by_certification_mask() {
 }
 
 #[test]
+fn should_archive_checkpoints_correctly() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let mut heights = vec![height(0)];
+        for i in 1..14 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone());
+        }
+
+        assert_eq!(height(13), state_manager.latest_state_height());
+        let latest_state = state_manager.get_latest_state();
+        assert_eq!(height(13), latest_state.height());
+
+        // Manually marks checkpoint at height 6 and 10 as unverified, and it should be archived on restart.
+        let marker_file_6 = state_manager
+            .state_layout()
+            .checkpoint_untracked(height(6))
+            .unwrap()
+            .unverified_checkpoint_marker();
+        std::fs::File::create(marker_file_6).expect("failed to write to marker file");
+
+        let marker_file_10 = state_manager
+            .state_layout()
+            .checkpoint_untracked(height(10))
+            .unwrap()
+            .unverified_checkpoint_marker();
+        std::fs::File::create(marker_file_10).expect("failed to write to marker file");
+
+        let state_manager = restart_fn(state_manager, Some(height(6)));
+
+        // The unverified checkpoints at height 6 and 10, and any checkpoints at or above height 8 are archived.
+        // However, at most one checkpoint will be stored in the backups directory after cleanup.
+        assert_eq!(
+            state_manager.state_layout().backup_heights().unwrap(),
+            vec![height(12)],
+        );
+
+        // The checkpoints at height 2 and 4 should not be accidentally archived.
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(2), height(4)],
+        );
+
+        // State manager should restart from checkpoint at height 4 instead of 6 or 8.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(2), height(4)],
+        );
+        assert_eq!(height(4), state_manager.latest_state_height());
+        let (latest_height, _) = state_manager.take_tip();
+        assert_eq!(height(4), latest_height);
+    });
+}
+
+#[test]
 fn can_remove_checkpoints() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let mut heights = vec![height(0)];

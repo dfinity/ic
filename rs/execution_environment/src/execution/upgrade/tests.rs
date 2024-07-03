@@ -76,7 +76,6 @@ fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
             LogEntryLogger::new(
                 slog::Logger::root(slog::Discard, slog::o!()),
                 slog::Level::Trace,
-                vec![],
             )
             .into(),
         )
@@ -970,12 +969,12 @@ fn dts_uninstall_with_aborted_upgrade() {
     }
 
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-    assert_eq!(
-        err.description(),
-        format!(
-            "Error from Canister {canister_id}: Attempted to execute a message, but the canister contains no Wasm module.",
-        )
+    err.assert_contains(
+        ErrorCode::CanisterWasmModuleNotFound,
+        &format!(
+            "Error from Canister {canister_id}: Attempted to execute a message, \
+            but the canister contains no Wasm module.",
+        ),
     );
 }
 

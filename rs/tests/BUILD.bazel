@@ -31,7 +31,6 @@ rust_library(
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
         "src/consensus/cow_safety.wasm",
-        "src/message.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],

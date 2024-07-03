@@ -1,7 +1,7 @@
 //! The pre signature process manager
 
-use crate::consensus::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
+use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
 use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
@@ -154,26 +154,20 @@ impl EcdsaPreSignerImpl {
                 continue;
             }
 
-            // We don't expect dealings for the xnet transcripts on the target subnet
-            // (as the initial dealings are already built and passed in by the source
-            // subnet)
-            if target_subnet_xnet_transcripts.contains(&dealing.transcript_id) {
-                self.metrics
-                    .pre_sign_errors_inc("unexpected_dealing_xnet_target_subnet");
-                ret.push(EcdsaChangeAction::HandleInvalid(
-                    id,
-                    format!(
-                        "Dealing for xnet dealing on target subnet: {}",
-                        signed_dealing
-                    ),
-                ));
-                continue;
-            }
+            // Disable the height check on target subnet side for the initial transcripts.
+            // Since the transcript_id.source_height is from the source subnet, the height
+            // cannot be relied upon. This also lets us process the shares for the initial
+            // bootstrap with higher urgency, without deferring it.
+            let msg_height = if target_subnet_xnet_transcripts.contains(&dealing.transcript_id) {
+                None
+            } else {
+                Some(dealing.transcript_id.source_height())
+            };
 
             match Action::action(
                 block_reader,
                 &transcript_param_map,
-                Some(dealing.transcript_id.source_height()),
+                msg_height,
                 &dealing.transcript_id,
             ) {
                 Action::Process(transcript_params_ref) => {
@@ -1680,19 +1674,21 @@ mod tests {
     }
 
     fn test_validate_dealings(key_id: MasterPublicKeyId) {
-        let (id_2, id_3, id_4, id_5) = (
+        let (id_2, id_3, id_4, id_5, id_6) = (
             // A dealing for a transcript that is requested by finalized block (accepted)
             create_transcript_id_with_height(2, Height::from(100)),
             // A dealing for a transcript that is requested by finalized block (accepted)
             create_transcript_id_with_height(3, Height::from(10)),
             // A dealing for a transcript that is not requested by finalized block (dropped)
             create_transcript_id_with_height(4, Height::from(5)),
-            // A dealing for a transcript that references a future block height (deferred)
+            // A dealing for a transcript that is not requested and references a future block height (deferred)
             create_transcript_id_with_height(5, Height::from(500)),
+            // A dealing for a XNet transcript that is requested and references a future block height (accepted)
+            create_transcript_id_with_height(6, Height::from(500)),
         );
         let mut artifacts = vec![];
 
-        let ids = vec![id_2, id_3, id_4, id_5];
+        let ids = vec![id_2, id_3, id_4, id_5, id_6];
         let msg_ids = ids
             .into_iter()
             .map(|id| {
@@ -1706,14 +1702,18 @@ mod tests {
                 msg_id
             })
             .collect::<Vec<_>>();
-        let (msg_id_2, msg_id_3, msg_id_4) = (&msg_ids[0], &msg_ids[1], &msg_ids[2]);
+        let (msg_id_2, msg_id_3, msg_id_4, msg_id_6) =
+            (&msg_ids[0], &msg_ids[1], &msg_ids[2], &msg_ids[4]);
 
         // Set up the transcript creation request
-        // The block requests transcripts 2, 3
+        // The block requests transcripts 2, 3, 6
         let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_1]);
         let t3 = create_transcript_param(&key_id, id_3, &[NODE_2], &[NODE_1]);
-        let block_reader =
-            TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t2, t3.clone()]);
+        let t6 = create_transcript_param(&key_id, id_6, &[NODE_2], &[NODE_1]);
+        let block_reader = TestEcdsaBlockReader::for_pre_signer_test(
+            Height::from(100),
+            vec![t2, t3.clone(), t6.clone()],
+        );
 
         // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1732,12 +1732,15 @@ mod tests {
         });
 
         // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated.
-        // Dealings for target subnet xnet transcripts should be handled invalid.
+        // Dealings for requested target subnet xnet transcripts (even for future heights) should also be validated.
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let block_reader = block_reader
                     .clone()
-                    .with_target_subnet_xnet_transcripts(vec![t3.transcript_params_ref.clone()]);
+                    .with_target_subnet_xnet_transcripts(vec![
+                        t3.transcript_params_ref.clone(),
+                        t6.transcript_params_ref.clone(),
+                    ]);
 
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -1745,10 +1748,11 @@ mod tests {
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let change_set = pre_signer.validate_dealings(&ecdsa_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
+                assert_eq!(change_set.len(), 4);
                 assert!(is_moved_to_validated(&change_set, msg_id_2));
-                assert!(is_handle_invalid(&change_set, msg_id_3));
+                assert!(is_moved_to_validated(&change_set, msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                assert!(is_moved_to_validated(&change_set, msg_id_6));
             })
         });
 

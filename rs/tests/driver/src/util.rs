@@ -17,9 +17,9 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::{
     agent::{
         http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-        RejectCode, RejectResponse,
+        EnvelopeContent, RejectCode, RejectResponse,
     },
-    Agent, AgentError, Identity, RequestId,
+    Agent, AgentError, Identity, RequestId, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
@@ -35,6 +35,7 @@ use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
+use ic_types::messages::{HttpCallContent, HttpQueryContent};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
@@ -55,7 +56,7 @@ use std::{
     fmt::Debug,
     future::Future,
     net::IpAddr,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::net::{TcpSocket, TcpStream};
@@ -70,12 +71,12 @@ pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 pub const IDENTITY_PEM:&str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
 /// A short wasm module that is a legal canister binary.
-pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
+pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 /// The following definition is a temporary work-around. Please do not copy!
-pub(crate) const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
+pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
-pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../ic-os/components/ic/ic.json5.template");
+pub const CFG_TEMPLATE_BYTES: &[u8] =
+    include_bytes!("../../../../ic-os/components/ic/ic.json5.template");
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
@@ -847,7 +848,7 @@ pub fn get_app_subnet_and_node(
 // This indirectly asserts a non-zero finalization rate of the subnet:
 // - We store a string in the memory by sending an `update` message to a canister
 // - We retrieve the saved string by sending `query` message to a canister
-pub(crate) async fn assert_subnet_can_make_progress(message: &[u8], node: &IcNodeSnapshot) {
+pub async fn assert_subnet_can_make_progress(message: &[u8], node: &IcNodeSnapshot) {
     let agent = assert_create_agent(node.get_public_url().as_str()).await;
     let universal_canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
     universal_canister.store_to_stable(0, message).await;
@@ -859,7 +860,7 @@ pub(crate) async fn assert_subnet_can_make_progress(message: &[u8], node: &IcNod
     );
 }
 
-pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: RejectCode) {
+pub fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: RejectCode) {
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
@@ -889,7 +890,7 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
     }
 }
 
-pub(crate) fn assert_reject_msg<T: std::fmt::Debug>(
+pub fn assert_reject_msg<T: std::fmt::Debug>(
     res: Result<T, AgentError>,
     code: RejectCode,
     partial_message: &str,
@@ -943,7 +944,7 @@ pub enum EndpointsStatus {
     AllUnhealthy,
 }
 
-pub(crate) fn assert_nodes_health_statuses(
+pub fn assert_nodes_health_statuses(
     log: slog::Logger,
     nodes: &[IcNodeSnapshot],
     status: EndpointsStatus,
@@ -982,7 +983,7 @@ pub(crate) fn assert_nodes_health_statuses(
 
 /// Asserts that the response from an agent call is rejected by the replica
 /// resulting in a [`AgentError::UncertifiedReject`], and an expected [`RejectCode`].
-pub(crate) fn assert_http_submit_fails(
+pub fn assert_http_submit_fails(
     result: Result<RequestId, AgentError>,
     expected_reject_code: RejectCode,
 ) {
@@ -1021,7 +1022,7 @@ pub async fn create_canister(agent: &Agent, effective_canister_id: PrincipalId) 
     create_canister_with_cycles(agent, effective_canister_id, CYCLES_LIMIT_PER_CANISTER).await
 }
 
-pub(crate) async fn create_canister_with_cycles(
+pub async fn create_canister_with_cycles(
     agent: &Agent,
     effective_canister_id: PrincipalId,
     amount: Cycles,
@@ -1036,7 +1037,7 @@ pub(crate) async fn create_canister_with_cycles(
         .0
 }
 
-pub(crate) async fn create_canister_with_cycles_and_specified_id(
+pub async fn create_canister_with_cycles_and_specified_id(
     agent: &Agent,
     specified_id: PrincipalId,
     amount: Cycles,
@@ -1065,7 +1066,7 @@ pub async fn install_canister(
         .unwrap_or_else(|err| panic!("Couldn't install canister: {}", err));
 }
 
-pub(crate) async fn create_and_install_with_cycles(
+pub async fn create_and_install_with_cycles(
     agent: &Agent,
     effective_canister_id: PrincipalId,
     canister_wasm: &[u8],
@@ -1076,7 +1077,7 @@ pub(crate) async fn create_and_install_with_cycles(
     canister_id
 }
 
-pub(crate) async fn create_and_install_with_cycles_and_specified_id(
+pub async fn create_and_install_with_cycles_and_specified_id(
     agent: &Agent,
     specified_id: PrincipalId,
     canister_wasm: &[u8],
@@ -1088,7 +1089,7 @@ pub(crate) async fn create_and_install_with_cycles_and_specified_id(
     canister_id
 }
 
-pub(crate) fn assert_balance_equals(expected: Cycles, actual: Cycles, epsilon: Cycles) {
+pub fn assert_balance_equals(expected: Cycles, actual: Cycles, epsilon: Cycles) {
     // Tolerate both positive and negative difference. Assumes no u64 overflows.
     assert!(
         expected < actual + epsilon && actual < expected + epsilon,
@@ -1099,7 +1100,7 @@ pub(crate) fn assert_balance_equals(expected: Cycles, actual: Cycles, epsilon: C
     );
 }
 
-pub(crate) async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
+pub async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
@@ -1110,7 +1111,7 @@ pub(crate) async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 
     u128::try_from(canister_status.cycles.0).unwrap()
 }
 
-pub(crate) async fn set_controller(
+pub async fn set_controller(
     controllee: &Principal,
     controller: &Principal,
     controllee_agent: &Agent,
@@ -1163,13 +1164,13 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
     }
 }
 
-pub(crate) async fn create_canister_via_canister(
+pub async fn create_canister_via_canister(
     wallet_canister: &UniversalCanister<'_>,
 ) -> Result<Principal, AgentError> {
     create_canister_via_canister_with_cycles(wallet_canister, Cycles::new(2_000_000_000_000)).await
 }
 
-pub(crate) async fn create_canister_via_canister_with_cycles(
+pub async fn create_canister_via_canister_with_cycles(
     wallet_canister: &UniversalCanister<'_>,
     cycles: Cycles,
 ) -> Result<Principal, AgentError> {
@@ -1188,7 +1189,7 @@ pub(crate) async fn create_canister_via_canister_with_cycles(
         })
 }
 
-pub(crate) async fn get_balance_via_canister(
+pub async fn get_balance_via_canister(
     &canister_id: &Principal,
     via_canister: &UniversalCanister<'_>,
 ) -> Cycles {
@@ -1208,7 +1209,7 @@ pub(crate) async fn get_balance_via_canister(
         .unwrap()
 }
 
-pub(crate) async fn get_icp_balance(
+pub async fn get_icp_balance(
     ledger: &Canister<'_>,
     can: &CanisterId,
     subaccount: Option<Subaccount>,
@@ -1223,7 +1224,7 @@ pub(crate) async fn get_icp_balance(
         .map(tokens_from_proto)
 }
 
-pub(crate) async fn transact_icp_subaccount(
+pub async fn transact_icp_subaccount(
     log: &slog::Logger,
     ledger: &Canister<'_>,
     sender: (&UniversalCanister<'_>, Option<Subaccount>),
@@ -1262,7 +1263,7 @@ pub(crate) async fn transact_icp_subaccount(
     .await
 }
 
-pub(crate) async fn transact_icp(
+pub async fn transact_icp(
     log: &slog::Logger,
     ledger: &Canister<'_>,
     sender: &UniversalCanister<'_>,
@@ -1272,7 +1273,7 @@ pub(crate) async fn transact_icp(
     transact_icp_subaccount(log, ledger, (sender, None), amount, (recipient, None)).await
 }
 
-pub(crate) fn to_principal_id(principal: &Principal) -> PrincipalId {
+pub fn to_principal_id(principal: &Principal) -> PrincipalId {
     PrincipalId::try_from(principal.as_slice()).unwrap()
 }
 
@@ -1287,7 +1288,7 @@ pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Princip
     }
 }
 
-pub(crate) async fn assert_canister_counter_with_retries(
+pub async fn assert_canister_counter_with_retries(
     log: &slog::Logger,
     agent: &Agent,
     canister_id: &Principal,
@@ -1339,7 +1340,7 @@ pub(crate) async fn assert_canister_counter_with_retries(
 }
 
 /// Converts Canister id into an escaped byte string
-pub(crate) fn escape_for_wat(id: &Principal) -> String {
+pub fn escape_for_wat(id: &Principal) -> String {
     // Quoting from
     // https://webassembly.github.io/spec/core/text/values.html#text-string:
     //
@@ -1361,7 +1362,6 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ ipv6_address }}", "::")
         .replace("{{ backup_retention_time_secs }}", "0")
         .replace("{{ backup_purging_interval_secs }}", "0")
-        .replace("{{ replica_log_debug_overrides }}", "[]")
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
         .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
@@ -1683,7 +1683,7 @@ pub fn pad_all_lines_but_first(s: String, padding: usize) -> String {
     result
 }
 
-pub(crate) fn create_service_nervous_system_into_params(
+pub fn create_service_nervous_system_into_params(
     create_service_nervous_system: CreateServiceNervousSystem,
     swap_approved_timestamp_seconds: u64,
 ) -> Result<Params, String> {
@@ -1754,4 +1754,37 @@ pub(crate) fn create_service_nervous_system_into_params(
         ),
     };
     Ok(params)
+}
+
+pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signature {
+    let HttpQueryContent::Query { query: content } = content;
+    let msg = EnvelopeContent::Query {
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
+        canister_id: Principal::from_slice(&content.canister_id),
+        method_name: content.method_name.clone(),
+        arg: content.arg.0.clone(),
+        nonce: None,
+    };
+    identity.sign(&msg).unwrap()
+}
+
+pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signature {
+    let HttpCallContent::Call { update: content } = content;
+    let msg = EnvelopeContent::Call {
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
+        canister_id: Principal::from_slice(&content.canister_id),
+        method_name: content.method_name.clone(),
+        arg: content.arg.0.clone(),
+        nonce: content.nonce.clone().map(|blob| blob.0),
+    };
+    identity.sign(&msg).unwrap()
+}
+
+pub fn expiry_time() -> Duration {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        + Duration::from_secs(4 * 60)
 }

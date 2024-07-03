@@ -1,23 +1,15 @@
 use super::*;
 use crate::{
-    governance::{Governance, MockEnvironment},
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{
-        neuron::{DissolveState, Followees},
-        Governance as GovernanceProto, KnownNeuronData,
-    },
-    storage::reset_stable_memory,
+    pb::v1::{neuron::Followees, KnownNeuronData},
 };
 use assert_matches::assert_matches;
-use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger};
 use ic_nervous_system_governance::index::{
     neuron_following::NeuronFollowingIndex, neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
-use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap, hashset};
-use std::time::{SystemTime, UNIX_EPOCH};
+use maplit::{hashmap, hashset};
 
 #[test]
 fn add_remove_neuron() {
@@ -154,7 +146,7 @@ fn add_remove_neuron() {
 }
 
 fn create_model_neuron_builder(id: u64) -> NeuronBuilder {
-    let mut account = vec![0; 32];
+    let account = vec![0; 32];
 
     NeuronBuilder::new(
         NeuronId { id },
@@ -550,19 +542,4 @@ fn update_neuron_update_known_neuron_name() {
     assert!(indexes
         .known_neuron()
         .contains_known_neuron_name("different known neuron data"));
-}
-
-fn create_mock_environment(now_timestamp_seconds: Option<u64>) -> MockEnvironment {
-    let mut environment = MockEnvironment::new();
-    let now_timestamp_seconds = now_timestamp_seconds.unwrap_or(now_seconds());
-
-    environment.expect_now().return_const(now_timestamp_seconds);
-    environment
-}
-
-fn now_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
 }

@@ -49,10 +49,7 @@ pub async fn network_status(
 ) -> Result<Json<NetworkStatusResponse>> {
     verify_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
-    Ok(Json(services::network_status(
-        &state.storage,
-        state.synched.clone(),
-    )?))
+    Ok(Json(services::network_status(&state.storage)?))
 }
 
 pub async fn block(

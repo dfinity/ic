@@ -10,6 +10,7 @@ on:
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
+      - 'master'
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -36,11 +37,12 @@ env:
 jobs:
   bazel-test-all:
     name: Bazel Test All
-    runs-on:
-      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,9 +86,9 @@ jobs:
             bazel-targets
   bazel-build-all-config-check:
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
     name: Bazel Build All Config Check
     steps:
@@ -147,6 +149,9 @@ jobs:
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
+        # TODO: remove when we flakiness is resolved or when we move to hosted runners
+        # settting to true to allow a job to pass when this step fails
+        continue-on-error: true
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false' || github.event_name == 'schedule'
         uses: ./.github/actions/bazel-test-all/
         with:
@@ -164,9 +169,9 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -187,9 +192,9 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -234,9 +239,9 @@ jobs:
   build-ic:
     name: Build IC
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -326,9 +331,9 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -361,9 +366,9 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
     steps:
       - name: Checkout

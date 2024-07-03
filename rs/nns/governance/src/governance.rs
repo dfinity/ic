@@ -2049,7 +2049,16 @@ impl Governance {
     ) -> ListNeuronsResponse {
         let now = self.env.now();
         let implicitly_requested_neurons = if req.include_neurons_readable_by_caller {
-            self.get_neuron_ids_by_principal(caller)
+            // To maintain compatibility with the old API, we include all neurons readable by the
+            // caller when the param is not set.
+            let include_empty_neurons =
+                req.include_empty_neurons_readable_by_caller.unwrap_or(true);
+            if include_empty_neurons {
+                self.get_neuron_ids_by_principal(caller)
+            } else {
+                self.neuron_store
+                    .get_non_empty_neuron_ids_readable_by_caller(*caller)
+            }
         } else {
             Vec::new()
         };

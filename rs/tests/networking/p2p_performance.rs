@@ -1,9 +1,9 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::networking::p2p_performance_workload::{config, test, Latency, SubnetId};
-use ic_tests::systest;
 
 // Test parameters
 const RPS: usize = 1_000;

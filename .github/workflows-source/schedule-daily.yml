@@ -24,10 +24,11 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+    image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       <<: *image
     timeout-minutes: 120
@@ -67,12 +68,21 @@ jobs:
   rust-benchmarks:
     name: Bazel Run Rust Benchmarks
     <<: *dind-large-setup
+    runs-on:
+      # see linux-x86-64 runner group
+      labels: rust-benchmarks
+    container:
+      <<: *image
+      # running on bare metal machine using ubuntu user
+      options: --user ubuntu
     timeout-minutes: 720 # 12 hours
-    # TODO: disable in GitLab before enabling here
-    if: ${{ && false }}
     strategy:
       matrix:
-        targets: ["//rs/crypto/...", "//rs/state_manager/..."]
+        targets:
+          - "//rs/crypto/..."
+          - "//rs/state_manager/..."
+          - "//rs/certification/..."
+          - "//rs/boundary_node/ic_boundary/..."
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -93,8 +103,9 @@ jobs:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
     timeout-minutes: 120
-    # TODO: enable when zh1 is active again
-    if: ${{ false }}
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - <<: *checkout
       - <<: *before-script

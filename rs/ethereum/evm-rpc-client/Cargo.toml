@@ -12,6 +12,7 @@ candid = { workspace = true }
 ic-canister-log = "0.2.0"
 ic-cdk = { workspace = true }
 serde = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 mockall = { workspace = true }
