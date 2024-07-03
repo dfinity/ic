@@ -160,7 +160,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "axum": crate.spec(
-                version = "^0.7.4",
+                version = "^0.7.5",
             ),
             "axum-extra": crate.spec(
                 version = "^0.9.0",
@@ -497,7 +497,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper": crate.spec(
-                version = "^1.3.1",
+                version = "^1.4.0",
                 features = [
                     "full",
                 ],
@@ -1072,9 +1072,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "rustls": crate.spec(
-                package = "rustls",
                 default_features = False,
-                version = "^0.23.8",
+                version = "^0.23.10",
                 features = [
                     "ring",
                 ],
@@ -1294,8 +1293,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.26.0",
                 default_features = False,
                 features = [
-                    "logging",
-                    "tls12",
                     "ring",
                 ],
             ),

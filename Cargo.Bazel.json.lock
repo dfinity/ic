@@ -1,5 +1,5 @@
 {
-  "checksum": "5d6d91f7b069d6df1074f657bd13f8ec1b46da9ef9ddbea0d4fa57085f013370",
+  "checksum": "4a40e9491172c70d605b9a7fd48be7c3c8ca41c566d360964d8fb5926d5e98a3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1623,7 +1623,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.4",
+              "id": "axum 0.7.5",
               "target": "axum"
             },
             {
@@ -4232,14 +4232,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "axum 0.7.4": {
+    "axum 0.7.5": {
       "name": "axum",
-      "version": "0.7.4",
+      "version": "0.7.5",
       "package_url": "https://github.com/tokio-rs/axum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/axum/0.7.4/download",
-          "sha256": "1236b4b292f6c4d6dc34604bb5120d85c3fe1d1aa596bd5cc52ca054d13e7b9e"
+          "url": "https://static.crates.io/crates/axum/0.7.5/download",
+          "sha256": "3a6c9af12842a67734c9a2e355436e5d03b22383ed60cf13cd0c18fbfe3dcbcf"
         }
       },
       "targets": [
@@ -4292,7 +4292,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.4",
+              "id": "axum 0.7.5",
               "target": "build_script_build"
             },
             {
@@ -4320,7 +4320,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -4368,7 +4368,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "sync_wrapper 0.1.2",
+              "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
             },
             {
@@ -4408,7 +4408,7 @@
           ],
           "selects": {}
         },
-        "version": "0.7.4"
+        "version": "0.7.5"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -4711,7 +4711,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.4",
+              "id": "axum 0.7.5",
               "target": "axum"
             },
             {
@@ -4877,7 +4877,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.4",
+              "id": "axum 0.7.5",
               "target": "axum"
             },
             {
@@ -5102,7 +5102,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -16893,7 +16893,7 @@
               "alias": "axum_0_6_1"
             },
             {
-              "id": "axum 0.7.4",
+              "id": "axum 0.7.5",
               "target": "axum"
             },
             {
@@ -17234,7 +17234,7 @@
               "alias": "hyper_0_14_27"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -17775,7 +17775,7 @@
               "alias": "rustls_0_21_12"
             },
             {
-              "id": "rustls 0.23.8",
+              "id": "rustls 0.23.10",
               "target": "rustls"
             },
             {
@@ -26591,14 +26591,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper 1.3.1": {
+    "hyper 1.4.0": {
       "name": "hyper",
-      "version": "1.3.1",
+      "version": "1.4.0",
       "package_url": "https://github.com/hyperium/hyper",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper/1.3.1/download",
-          "sha256": "fe575dd17d0862a9a33781c8c4696a55c320909004a67a00fb286ba8b1bc496d"
+          "url": "https://static.crates.io/crates/hyper/1.4.0/download",
+          "sha256": "c4fe55fb7a772d59a5ff1dfbff4fe0258d19b89fec4b233e75d35d5d2316badc"
         }
       },
       "targets": [
@@ -26689,7 +26689,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.3.1"
+        "version": "1.4.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -26844,7 +26844,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -26949,7 +26949,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -26957,7 +26957,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "rustls 0.23.8",
+              "id": "rustls 0.23.10",
               "target": "rustls"
             },
             {
@@ -27122,7 +27122,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -27211,7 +27211,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -27477,7 +27477,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -36786,7 +36786,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.4",
+              "id": "axum 0.7.5",
               "target": "axum"
             },
             {
@@ -36822,7 +36822,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.3.1",
+              "id": "hyper 1.4.0",
               "target": "hyper"
             },
             {
@@ -51647,7 +51647,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper 1.3.1",
+                "id": "hyper 1.4.0",
                 "target": "hyper"
               },
               {
@@ -54186,14 +54186,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.8": {
+    "rustls 0.23.10": {
       "name": "rustls",
-      "version": "0.23.8",
+      "version": "0.23.10",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.8/download",
-          "sha256": "79adb16721f56eb2d843e67676896a61ce7a0fa622dc18d3e372477a029d2740"
+          "url": "https://static.crates.io/crates/rustls/0.23.10/download",
+          "sha256": "05cff451f60db80f490f3c182b77c35260baace73209e9cdbbe526bfe3a4d402"
         }
       },
       "targets": [
@@ -54229,8 +54229,6 @@
         ],
         "crate_features": {
           "common": [
-            "log",
-            "logging",
             "ring",
             "std",
             "tls12"
@@ -54240,10 +54238,6 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
               "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
@@ -54252,7 +54246,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.8",
+              "id": "rustls 0.23.10",
               "target": "build_script_build"
             },
             {
@@ -54276,7 +54270,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.8"
+        "version": "0.23.10"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -64580,7 +64574,6 @@
         ],
         "crate_features": {
           "common": [
-            "logging",
             "ring",
             "tls12"
           ],
@@ -64589,7 +64582,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.8",
+              "id": "rustls 0.23.10",
               "target": "rustls"
             },
             {
@@ -77324,7 +77317,7 @@
     "async-stream 0.3.5",
     "async-trait 0.1.73",
     "axum 0.6.20",
-    "axum 0.7.4",
+    "axum 0.7.5",
     "axum-extra 0.9.1",
     "axum-server 0.5.1",
     "axum-server 0.6.0",
@@ -77409,7 +77402,7 @@
     "httptest 0.15.4",
     "humantime 2.1.0",
     "hyper 0.14.27",
-    "hyper 1.3.1",
+    "hyper 1.4.0",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.27.1",
     "hyper-util 0.1.3",
@@ -77550,7 +77543,7 @@
     "rust_decimal_macros 1.30.0",
     "rustc-hash 1.1.0",
     "rustls 0.21.12",
-    "rustls 0.23.8",
+    "rustls 0.23.10",
     "rustls-native-certs 0.7.0",
     "rustls-pemfile 2.1.2",
     "rustls-pki-types 1.7.0",
