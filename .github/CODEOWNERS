@@ -16,6 +16,7 @@
 /bin/afl_wrapper.sh       @dfinity/product-security
 /bin/build-all-fuzzers.sh @dfinity/product-security
 /bin/fuzzing_coverage.sh  @dfinity/product-security
+release-fixtures.bzl      @dfinity/ic-message-routing-owners
 
 # [Bazel]
 /bazel/                   @dfinity/idx

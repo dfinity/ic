@@ -4,6 +4,16 @@ Rules to manipulate with artifacts: download, upload etc.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("//bazel:status.bzl", "FAKE_IC_VERSION")
+load("//bazel:fixtures.bzl", "FAKE_IC_VERSION")
+
+def filesum_file(label_name, file):
+    return label_name + "/" + file.basename + ".SHA256SUM"
+
+def url_file(label_name, file):
+    return label_name + "_" + file.basename + ".url"
+
+def proxy_cache_url_file(label_name, file):
+    return label_name + "_" + file.basename + ".proxy-cache-url"
 
 def _upload_artifact_impl(ctx):
     """
@@ -36,7 +46,7 @@ def _upload_artifact_impl(ctx):
     out = []
 
     for f in ctx.files.inputs:
-        filesum = ctx.actions.declare_file(ctx.label.name + "/" + f.basename + ".SHA256SUM")
+        filesum = ctx.actions.declare_file(filesum_file(ctx.label.name, f.basename))
         ctx.actions.run_shell(
             command = "(cd {path} && shasum --algorithm 256 --binary {src}) > {out}".format(path = f.dirname, src = f.basename, out = filesum.path),
             inputs = [f],
@@ -54,9 +64,8 @@ def _upload_artifact_impl(ctx):
     fileurl = []
     allinputs = ctx.files.inputs + [checksum] if s3_upload else [checksum]
     for f in allinputs:
-        filename = ctx.label.name + "_" + f.basename
-        url = ctx.actions.declare_file(filename + ".url")
-        proxy_cache_url = ctx.actions.declare_file(filename + ".proxy-cache-url")
+        url = ctx.actions.declare_file(url_file(ctx.label.name, f))
+        proxy_cache_url = ctx.actions.declare_file(proxy_cache_url_file(ctx.label.name, f))
         ctx.actions.run(
             executable = uploader,
             arguments = [f.path, url.path, proxy_cache_url.path],
@@ -117,3 +126,87 @@ def upload_artifacts(**kwargs):
             tags.append(tag)
     kwargs["tags"] = tags
     _upload_artifacts(**kwargs)
+
+def _generate_fixtures_bzl_impl(ctx):
+    out = ctx.outputs.out
+    sha_extension = "SHA256SUM"
+    # For each input, we find the corresponding files with the SHA256SUM and URL
+    triples = [
+        (input.label.name,
+        [f for f in ctx.files.uploaded_files if f.path.endswith(filesum_file(ctx.attr.upload_label.label.name, file))][0],
+        [f for f in ctx.files.uploaded_files if f.path.endswith(url_file(ctx.attr.upload_label.label.name, file))][0] 
+        ) for (input, file) in zip(ctx.attr.inputs, ctx.files.inputs)
+    ]
+    # As we're only constructing the rule and don't have access to the URLs right now, we create
+    # a single large shell command that iterates over all the inputs and writes the corresponding information
+    commands = ["echo 'TEST_FIXTURES = [' > {out_path}".format(out_path = out.path)]
+    for (name, sha256sum, url) in triples:
+        file_commands = [
+            """echo   '    {'""",
+            """echo   '        "name": "{name}",'""".format(name = release_fixture_name(name)),
+            """printf '        "url": "%s",\n' $(cat {url_path})""".format(url_path = url.path),
+            """printf '        "sha256": "%s\",\n' $(cut -d ' ' -f1 {sha256_path})""".format(sha256_path = sha256sum.path),
+            """echo   '    },'"""
+        ]
+        commands += [cmd + ">> " + out.path for cmd in file_commands]
+    commands += ["echo ']' >> {out_path}".format(out_path = out.path)]
+    command = '; '.join(commands)
+    print("command is:\n", command)
+    ctx.actions.run_shell(
+        inputs = ctx.files.uploaded_files,
+        command = command,
+        outputs = [out]
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+generate_fixtures_bzl = rule(
+    implementation = _generate_fixtures_bzl_impl,
+    attrs = {
+        "uploaded_files": attr.label_list(allow_files = True),
+        "inputs": attr.label_list(allow_files = True),
+        "upload_label": attr.label(),
+        "out": attr.output(),
+    },
+)
+
+def upload_fixtures(name, out, **kwargs):
+    """
+    Upload the specified fixtures and generate a release_fixtures.bzl file.
+
+    Args:
+      name: name of the rule
+      **kwargs: all arguments to pass to upload_artifacts (should include at least inputs)
+
+    The output release_fixturs.bzl file defines a RELEASE_FIXTURES variable that can then
+    serve as a basis for downloading the fixtures in the Bazel WORKSPACE file.
+    """
+    intermediate_name = name + "_upload"
+
+    upload_artifacts(
+        name = intermediate_name,
+        **kwargs,
+    )
+
+    generate_fixtures_bzl(
+        name = name,
+        out = out,
+        uploaded_files = [":" + intermediate_name],
+        inputs = kwargs["inputs"],
+        upload_label = ":" + intermediate_name,
+    )
+
+def rust_fixture_generator(name, **kwargs):
+    binary_name = name + "_binary"
+    rust_binary(
+        name = binary_name,
+        **kwargs,
+    )
+
+    native.genrule(
+        name = name,
+        tools = [
+            ":" + binary_name,
+        ],
+        outs = [name + ".fixture"],
+        cmd = "$(location :{binary_name}) > $@".format(binary_name = binary_name),
+    )

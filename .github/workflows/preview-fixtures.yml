@@ -1,0 +1,39 @@
+# This is just a temporarily placeholder for testing; when merged, this should go into 
+# the tag-release workflow
+
+name: Fixture generation and upload
+on:
+  pull_request: 
+
+jobs:
+  upload-fixtures:
+    name: Upload fixtures
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Generate and upload fixtures
+        shell: bash
+        run:
+          bazel build //publish/fixtures:upload_fixtures
+      - name: Commit the new fixtures
+        shell: bash
+        run: |
+          set -x
+          cp bazel-bin/release_fixtures.bzl release_fixtures.bzl
+          git add release_fixtures.bzl
+          git commit -m "Release CI: Update release fixtures"
+      - name: Open a PR with the new fixtures
+        # TODO: check that this is allowed by the repo settings;
+        # see https://github.com/marketplace/actions/create-pull-request#workflow-permissions
+        uses: peter-evans/create-pull-request@v6
+        with:
+          # Do we need to do auth here?
+          # token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Update release fixtures
+          title: Update release fixtures
+          body: |
+            This PR updates the release fixtures.
+          branch: update-release-fixtures
+          base: master

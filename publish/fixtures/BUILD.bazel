@@ -1,0 +1,9 @@
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_fixtures")
+
+# Add all fixtures (generated using rust_fixture_generator) that need to be 
+# uploaded to the inputs
+upload_fixtures(
+    name = "upload_fixtures",
+    inputs = [],
+    out = "release_fixtures.bzl",
+)
