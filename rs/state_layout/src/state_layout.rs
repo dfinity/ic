@@ -674,19 +674,6 @@ impl StateLayout {
         Ok(())
     }
 
-    /// Returns the untracked `CheckpointLayout` for the given height (if there is one).
-    pub fn checkpoint_untracked(
-        &self,
-        height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let cp_name = Self::checkpoint_name(height);
-        let path = self.checkpoints().join(cp_name);
-        if !path.exists() {
-            return Err(LayoutError::NotFound(height));
-        }
-        CheckpointLayout::new_untracked(path, height)
-    }
-
     /// Returns the layout of the checkpoint with the given height (if
     /// there is one).
     pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
@@ -1454,11 +1441,6 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     /// Returns if the checkpoint is marked as unverified or not.
     pub fn is_checkpoint_verified(&self) -> bool {
         !self.unverified_checkpoint_marker().exists()
-    }
-
-    /// Path of unverified checkpoint marker for the given height.
-    pub fn unverified_checkpoint_marker(&self) -> PathBuf {
-        self.root.join(UNVERIFIED_CHECKPOINT_MARKER)
     }
 
     /// Creates the unverified checkpoint marker.
