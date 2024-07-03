@@ -31,8 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
-      # Todo: send slack notification of failure
-      - run: echo 'The triggering workflow failed'
+      - run: |
+          echo 'CI Main workflow failed'
+          exit 1
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     runs-on:
