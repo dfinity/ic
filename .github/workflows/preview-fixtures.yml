@@ -64,6 +64,8 @@ jobs:
           ls -al
           echo "Copying"
           cp bazel-bin/publish/fixtures/release_fixtures.bzl release_fixtures.bzl 
+          git config --global user.email "github-automation@dfinity.org"
+          git config --global user.name "GitHub Fixture Workflow"
           git add release_fixtures.bzl
           git commit -m "Release CI: Update release fixtures"
       - name: Open a PR with the new fixtures
