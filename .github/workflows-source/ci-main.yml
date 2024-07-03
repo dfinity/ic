@@ -44,9 +44,13 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-large
+      labels: dind-runner-large-p
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
   before-script: &before-script
     name: Before script
@@ -67,15 +71,7 @@ anchors:
 jobs:
   bazel-test-all:
     name: Bazel Test All
-    runs-on:
-      labels: dind-runner-large-p
-    container:
-      <<: *image
-      options: >-
-        -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 90
+    <<: *dind-large-setup
     steps:
       - <<: *checkout
       - <<: *before-script

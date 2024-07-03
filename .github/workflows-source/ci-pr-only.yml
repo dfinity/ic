@@ -22,17 +22,22 @@ anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-small-setup: &dind-small-setup
-    runs-on:
-      labels: dind-small
-    container:
-      <<: *image
     timeout-minutes: 30
-  dind-large-setup: &dind-large-setup
-    runs-on:
-      labels: dind-large
+    labels: dind-runner-large-p
     container:
       <<: *image
-    timeout-minutes: 90
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+  dind-large-setup: &dind-large-setup
+    labels: dind-runner-large-p
+    container:
+      <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
   before-script: &before-script
     name: Before script
     id: before-script
