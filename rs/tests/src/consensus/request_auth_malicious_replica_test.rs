@@ -25,17 +25,18 @@ Coverage::
 Authentication checks in block validation.
 end::catalog[] */
 
-use crate::crypto::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-};
-use crate::util::*;
+use crate::crypto::request_signature_test::random_ecdsa_identity;
 use ic_agent::export::Principal;
 use ic_agent::Identity;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+};
+use ic_system_test_driver::util::*;
+use ic_system_test_driver::util::{expiry_time, sign_update};
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::messages::{

@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     assert_canister_error, check_balance, create_ledger_client, do_multiple_txn, make_user_ed25519,
@@ -7,7 +6,6 @@ use crate::rosetta_tests::lib::{
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
@@ -19,6 +17,8 @@ use ic_rosetta_api::models::NeuronState;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{SetDissolveTimestamp, Stake, StartDissolve, StopDissolve};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use icp_ledger::{AccountIdentifier, Operation, DEFAULT_TRANSFER_FEE};
 use serde_json::{json, Value};
 use slog::info;

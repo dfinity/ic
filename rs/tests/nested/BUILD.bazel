@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/rust_canisters/canister_test",
     "//rs/tests",
+    "//rs/tests/driver:ic-system-test-driver",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:slog",
@@ -20,7 +21,7 @@ DEPENDENCIES = [
 
 RUNNER_DEPENDENCIES = [
     "nested",
-    "//rs/tests",
+    "//rs/tests/driver:ic-system-test-driver",
     "@crate_index//:anyhow",
 ]
 

@@ -1,14 +1,13 @@
 name: Release Testing
 
 on:
-  push:
-    workflow_run:
-      workflows: ["CI Main"]
-      types:
-        - completed
-      branches:
-        - 'hotfix-*-rc--*'
-        - 'rc--*'
+  workflow_run:
+    workflows: ["CI Main"]
+    types:
+      - completed
+    branches:
+      - 'hotfix-*-rc--*'
+      - 'rc--*'
   workflow_dispatch:
 
 env:
@@ -53,6 +52,7 @@ anchors:
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
 
 jobs:
+  name: Check CI Main Failure
   ci-main-failure:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}

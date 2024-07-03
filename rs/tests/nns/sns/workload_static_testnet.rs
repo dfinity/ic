@@ -1,14 +1,13 @@
 use anyhow::Result;
-use ic_tests::driver::test_env::TestEnv;
-use slog::info;
-use std::time::Duration;
-
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_deployment::{
     setup_static_testnet, workload_static_testnet_fe_users, workload_static_testnet_get_account,
     workload_static_testnet_sale_bot,
 };
-use ic_tests::systest;
+use slog::info;
+use std::time::Duration;
 
 fn workload_static_testnet(env: TestEnv) {
     let log = env.logger();

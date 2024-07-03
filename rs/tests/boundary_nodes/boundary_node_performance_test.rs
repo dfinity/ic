@@ -1,11 +1,8 @@
 use anyhow::Result;
-use ic_tests::{
-    boundary_nodes::{
-        helpers::BoundaryNodeHttpsConfig,
-        performance_test::{query_calls_test, setup, update_calls_test},
-    },
-    driver::group::SystemTestGroup,
-    systest,
+use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
+use ic_tests::boundary_nodes::{
+    helpers::BoundaryNodeHttpsConfig,
+    performance_test::{query_calls_test, setup, update_calls_test},
 };
 use std::time::Duration;
 

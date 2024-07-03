@@ -23,17 +23,16 @@ use crate::boundary_nodes::{
         set_counters_on_counter_canisters,
     },
 };
-use crate::{
+use ic_system_test_driver::{
     driver::{
         asset_canister::{DeployAssetCanister, UploadAssetRequest},
         boundary_node::BoundaryNodeVm,
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
+            HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    retry_with_msg_async,
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
 use std::{iter, net::SocketAddrV6, time::Duration};
@@ -80,7 +79,7 @@ async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Pr
         .expect("Could not create http_counter canister");
 
     info!(&logger, "Waiting for canisters to finish installing...");
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "agent of {} observes canister module {}",
             install_node.0.to_string(),
@@ -154,7 +153,7 @@ pub fn canister_test(env: TestEnv) {
         info!(&logger, "created canister={canister_id}");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.as_ref().unwrap().0.to_string(),
@@ -174,7 +173,7 @@ pub fn canister_test(env: TestEnv) {
         .unwrap();
 
         info!(&logger, "Creating BN agent...");
-        let agent = retry_with_msg_async!(
+        let agent = ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "build agent for BoundaryNode {}",
                 boundary_node.get_public_url().to_string()
@@ -190,7 +189,7 @@ pub fn canister_test(env: TestEnv) {
         info!(&logger, "Calling read...");
         // We must retry the first request to a canister.
         // This is because a new canister might take a few seconds to show up in the BN's routing tables
-        let read_result = retry_with_msg_async!(
+        let read_result = ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "calling read on canister {} on BoundaryNode {}",
                 canister_id.to_string(),
@@ -257,7 +256,7 @@ pub fn asset_canister_test(env: TestEnv) {
         };
         let http_client = client_builder.build().unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a small asset with the correct hash succeeds and is verified without streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -296,7 +295,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a small, gzipped asset with the correct hash succeeds and is verified without streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -338,7 +337,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 4mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -382,7 +381,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 6mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified".to_string(),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -426,7 +425,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting an 8mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -469,7 +468,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 10mb asset with the correct hash succeeds but the asset is larger than the limit that we can safely verify while streaming so it is not verified",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -513,7 +512,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 4mb asset with the incorrect hash fails because the asset is within the limit that we can safely verify while streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -556,7 +555,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 10mb asset with an invalid hash succeeds because the asset is larger than what we can safely verify while streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -673,7 +672,7 @@ pub fn http_canister_test(env: TestEnv) {
         let client = client_builder.build().unwrap();
 
         let url = &format!("https://{host}/foo");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting not found)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -701,7 +700,7 @@ pub fn http_canister_test(env: TestEnv) {
         // "x-ic-test", "streaming-callback"
         // "x-icx-require-certification", "1"
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("PUT {}", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -719,7 +718,7 @@ pub fn http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -737,7 +736,7 @@ pub fn http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -763,7 +762,7 @@ pub fn http_canister_test(env: TestEnv) {
 
         // Check that `canisterId` parameters go unused
         let url = &format!("https://{invalid_host}/?canisterId={canister_id}");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 400)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -830,7 +829,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         info!(&logger, "created kv_store canister={canister_id}");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.0.to_string(),
@@ -866,7 +865,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         let client = client_builder.build().unwrap();
 
         let url = &format!("https://{host}/foo");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting foo not found)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -894,7 +893,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         // "x-ic-test", "streaming-callback"
         // "x-icx-require-certification", "1"
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("PUT {} (expecting set to bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -912,7 +911,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -930,7 +929,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1030,7 +1029,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         let client = client_builder.proxy(proxy).build().unwrap();
 
         let url = &format!("https://{host}/foo");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting foo not found)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1058,7 +1057,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         // "x-ic-test", "streaming-callback"
         // "x-icx-require-certification", "1"
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("PUT {} (expecting set to bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1076,7 +1075,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1094,7 +1093,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1120,7 +1119,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
 
         // Check that `canisterId` parameters go unused
         let url = &format!("https://{invalid_host}/?canisterId={canister_id}");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 400)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1220,7 +1219,7 @@ pub fn denylist_test(env: TestEnv) {
             .expect("Could not create http_counter canister");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.as_ref().unwrap().0,
@@ -1269,7 +1268,7 @@ pub fn denylist_test(env: TestEnv) {
 
         // Probe the blocked canister, we should get a 451
         let url = &format!("https://{canister_id}.raw.{host}/");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 451)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1331,7 +1330,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
             .expect("Could not create http_counter canister");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.as_ref().unwrap().0,
@@ -1367,7 +1366,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
 
         // Check canister is available
         let url = &format!("https://{canister_id}.raw.{host}/");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {}", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1402,7 +1401,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Check canister is restricted
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 451)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1437,7 +1436,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Check canister is available
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {}", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -2193,7 +2192,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2254,7 +2253,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2366,7 +2365,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2574,7 +2573,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2635,7 +2634,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),

@@ -2009,7 +2009,7 @@ impl SshSession for IcNodeSnapshot {
 #[macro_export]
 macro_rules! retry_with_msg {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
-        retry(
+        $crate::driver::test_env_api::retry(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
             $timeout,
@@ -2075,7 +2075,7 @@ fn trunc_error(err_str: String) -> String {
 #[macro_export]
 macro_rules! retry_with_msg_async {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
-        retry_async(
+        $crate::driver::test_env_api::retry_async(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
             $timeout,

@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::tecdsa::tecdsa_remove_nodes_test::{config, test};
 
 fn main() -> Result<()> {

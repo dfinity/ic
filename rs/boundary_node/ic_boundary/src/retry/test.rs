@@ -103,6 +103,7 @@ async fn test_retry() -> Result<(), Error> {
             RetryParams {
                 retry_count: 3,
                 retry_update_call: false,
+                disable_latency_routing: true,
             },
             retry_request,
         ));
@@ -168,6 +169,7 @@ async fn test_retry() -> Result<(), Error> {
             RetryParams {
                 retry_count: 3,
                 retry_update_call: true,
+                disable_latency_routing: true,
             },
             retry_request,
         ));
