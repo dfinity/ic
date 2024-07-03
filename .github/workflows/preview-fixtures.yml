@@ -61,6 +61,7 @@ jobs:
         shell: bash
         run: |
           set -x
+          ls -al
           find / -name release_fixtures.bzl
           cp bazel-out/k8-opt/bin/publish/fixtures/release_fixtures.bzl release_fixtures.bzl
           git add release_fixtures.bzl
