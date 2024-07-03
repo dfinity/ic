@@ -33,6 +33,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+      - name: Set BAZEL_EXTRA_ARGS_RULES
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
+            echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
+          fi
+          if [[ $BRANCH_NAME =~ hotfix-.*-rc--.* ]]; then
+            echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate" >> $GITHUB_ENV
+          fi
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
       - name: Generate and upload fixtures
         uses: ./.github/actions/bazel-test-all/
         with:
