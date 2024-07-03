@@ -363,19 +363,20 @@ impl WasmtimeEmbedder {
             Err(err) => return Err((err.clone(), system_api)),
         };
 
-        // Compute dirty page limit based on the message type.
-        let current_dirty_page_limit = match system_api {
-            Some(ref system_api) => {
-                if system_api.is_install_or_upgrade_message() {
-                    self.config.stable_memory_dirty_page_limit.upgrade
-                } else {
-                    self.config.stable_memory_dirty_page_limit.message
-                }
-            }
+        // Compute dirty page limit and access page limit based on the message type.
+        let (current_dirty_page_limit, current_accessed_limit) = match system_api {
+            Some(ref system_api) => (
+                system_api.get_page_limit(&self.config.stable_memory_dirty_page_limit),
+                system_api.get_page_limit(&self.config.stable_memory_accessed_page_limit),
+            ),
+
             // If system api is not present, then this function has been called from
             // get_initial_globals_and_memory(). In this case, the number of
             // dirty pages does not matter as the canister is not running.
-            None => self.config.stable_memory_dirty_page_limit.message,
+            None => (
+                self.config.stable_memory_dirty_page_limit.message,
+                self.config.stable_memory_accessed_page_limit.message,
+            ),
         };
 
         let mut store = Store::new(
@@ -479,7 +480,7 @@ impl WasmtimeEmbedder {
                 .expect("Couldn't set dirty page counter global");
             instance.get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
                 .expect("Counter for accessed pages global should have been added with native stable memory enabled.")
-                .set(&mut store, Val::I64(self.config.stable_memory_accessed_page_limit.get() as i64))
+                .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
                 .expect("Couldn't set dirty page counter global");
         }
 
@@ -514,7 +515,7 @@ impl WasmtimeEmbedder {
             dirty_page_overhead: self.config.dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: current_dirty_page_limit,
-            stable_memory_page_access_limit: self.config.stable_memory_accessed_page_limit,
+            stable_memory_page_access_limit: current_accessed_limit,
             main_memory_type,
         })
     }
