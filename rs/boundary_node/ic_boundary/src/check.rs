@@ -11,6 +11,7 @@ use bytes::Buf;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
+use simple_moving_average::{SumTreeSMA, SMA};
 use tokio::{
     select,
     sync::{mpsc, watch},
@@ -64,11 +65,20 @@ impl fmt::Display for CheckError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
+const WINDOW_SIZE: usize = 10;
+type LatencyMovAvg = SumTreeSMA<f64, f64, WINDOW_SIZE>;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct NodeState {
     healthy: bool,
     height: u64,
+    avg_latency_secs: f64,
 }
+
+// Send node's state message to the SubnetActor after this number of health checks have passed.
+const CHECKS_MSG_PERIODICITY: usize = 10;
+// Send node's state message to the SubnetActor, if node's latency has deviated from the average by more than this threshold value.
+const LATENCY_CHANGE_THRESHOLD: f64 = 0.15;
 
 // NodeActor periodically runs the health checking with given interval and sends the NodeState down to
 // SubnetActor when it changes
@@ -79,6 +89,8 @@ struct NodeActor {
     token: CancellationToken,
     checker: Arc<dyn Check>,
     state: Option<NodeState>,
+    avg_mov_latency: LatencyMovAvg,
+    checks_counter: usize,
 }
 
 impl NodeActor {
@@ -96,23 +108,56 @@ impl NodeActor {
             token,
             checker,
             state: None,
+            avg_mov_latency: LatencyMovAvg::new(),
+            checks_counter: 0,
         }
     }
 
     // Perform the health check
     async fn check(&mut self) {
+        self.checks_counter += 1;
+
+        let start = Instant::now();
         let res = self.checker.check(&self.node).await;
 
-        let state = NodeState {
-            healthy: res.is_ok(),
-            height: res.map_or(0, |x| x.height),
+        let (healthy, height, latency_change) = match &res {
+            Ok(res) => {
+                let latency = start.elapsed().as_secs_f64();
+                let current_avg = self.avg_mov_latency.get_average();
+                self.avg_mov_latency.add_sample(latency);
+                let latency_change = (latency - current_avg).abs() / current_avg;
+                (true, res.height, latency_change)
+            }
+            // Note: we don't add latency to the moving average in case of an error.
+            Err(_) => (false, 0, 0.0),
         };
 
-        // Send the state down the line if it has changed
-        if Some(state) != self.state {
-            self.state = Some(state);
+        // Note: initially we update only the health field. height and avg latency are updated conditionally.
+        let mut new_state = self.state.unwrap_or_else(|| NodeState {
+            healthy,
+            height,
+            avg_latency_secs: self.avg_mov_latency.get_average(),
+        });
+        new_state.healthy = healthy;
+
+        // Update height and avg latency based on conditions.
+        if self.checks_counter >= CHECKS_MSG_PERIODICITY
+            || latency_change > LATENCY_CHANGE_THRESHOLD
+        {
+            // reset the counter
+            self.checks_counter = 0;
+            new_state.avg_latency_secs = self.avg_mov_latency.get_average();
+            new_state.height = height;
+        }
+
+        // Send the state down the line if either:
+        // - health has changed
+        // - conditionally updated height has changed
+        // - conditionally updated avg latency has changed
+        if Some(new_state) != self.state {
+            self.state = Some(new_state);
             // It can never fail in our case
-            let _ = self.channel.send((self.idx, state)).await;
+            let _ = self.channel.send((self.idx, new_state)).await;
         }
     }
 
@@ -201,7 +246,7 @@ impl SubnetActor {
             .states
             .iter()
             // calc_min_height is called only when all states are Some()
-            .map(|x| x.unwrap())
+            .map(|x| x.as_ref().unwrap())
             .filter(|x| x.healthy)
             .map(|x| x.height)
             .collect::<Vec<_>>();
@@ -245,13 +290,17 @@ impl SubnetActor {
             .states
             .iter()
             // All states are Some() - it's checked above
-            .map(|x| x.unwrap())
+            .map(|x| x.as_ref().unwrap())
             .enumerate()
             // Map from idx to a node
             .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
             // Discard unhealthy & lagging behind
             .filter(|(_, state)| state.healthy && state.height >= min_height)
-            .map(|(node, _)| node)
+            .map(|(node, state)| {
+                let mut node = (*node).clone();
+                node.avg_latency_secs = state.avg_latency_secs;
+                Arc::new(node)
+            })
             .collect::<Vec<_>>();
 
         // See if the healthy nodes set changed

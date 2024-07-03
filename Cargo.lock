@@ -5460,6 +5460,7 @@ dependencies = [
  "serde_json",
  "serde_regex",
  "serde_yaml 0.9.34+deprecated",
+ "simple_moving_average",
  "slog",
  "strum 0.26.2",
  "tempfile",

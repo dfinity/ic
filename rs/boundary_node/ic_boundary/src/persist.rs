@@ -68,6 +68,32 @@ impl RouteSubnet {
 
         Ok(nodes)
     }
+
+    // max acceptable number of malicious nodes in a subnet
+    pub fn fault_tolerance_factor(&self) -> usize {
+        (self.nodes.len() - 1) / 3
+    }
+
+    pub fn pick_n_out_of_m_closest(
+        &self,
+        n: usize,
+        m: usize,
+    ) -> Result<Vec<Arc<Node>>, ErrorCause> {
+        // nodes should already be sorted by latency after persist() invocation
+        let m = std::cmp::min(m, self.nodes.len());
+        let nodes = &self.nodes[0..m];
+
+        let picked_nodes = nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .map(Arc::clone)
+            .collect::<Vec<_>>();
+
+        if picked_nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(picked_nodes)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -149,7 +175,9 @@ impl Persist for Persister {
             .into_iter()
             .flat_map(|subnet| {
                 let id = subnet.id.to_string();
-                let nodes = subnet.nodes;
+                let mut nodes = subnet.nodes;
+                // Sort nodes by latency before publishing to avoid sorting on each retry_request() call.
+                nodes.sort_by(|a, b| a.avg_latency_secs.partial_cmp(&b.avg_latency_secs).unwrap());
 
                 subnet.ranges.into_iter().map(move |range| {
                     Arc::new(RouteSubnet {
