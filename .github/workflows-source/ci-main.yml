@@ -73,7 +73,7 @@ jobs:
       <<: *image
       options: >-
         -e NODE_NAME
-        --privileged --cgroupns host --network host
+        --privileged --cgroupns host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     steps:
