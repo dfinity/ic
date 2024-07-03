@@ -98,13 +98,13 @@ lazy_static! {
                 }),
             }),
             swap_parameters: Some(SwapParameters {
-                minimum_participants: Some(5),
+                minimum_participants: Some(4),
                 minimum_direct_participation_icp: Some(Tokens::from_tokens(499_900)),
-                maximum_direct_participation_icp: Some(Tokens::from_tokens(749_900)),
-                minimum_participant_icp: Some(Tokens::from_tokens(1)),
+                maximum_direct_participation_icp: Some(Tokens::from_tokens(549_900)),
+                minimum_participant_icp: Some(Tokens::from_tokens(20)),
                 maximum_participant_icp: Some(Tokens::from_tokens(500_000)),
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: Some(5),
+                    count: Some(3),
                     dissolve_delay_interval: Some(Duration::from_secs(7_890_000)), // 3 months
                 }),
                 confirmation_text: None,
@@ -1229,10 +1229,10 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
         &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_1.swap_canister_id),
         participant,
-        ExplosiveTokens::from_e8s(E8),
+        ExplosiveTokens::from_e8s(20 * E8),
     );
 
-    assert_eq!(response.icp_accepted_participation_e8s, E8);
+    assert_eq!(response.icp_accepted_participation_e8s, 20 * E8);
 
     // Submit a copy of the same proposal. This should succeed since there is no deduping mechanism
     // for SNS content
@@ -1285,8 +1285,8 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
         &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_2.swap_canister_id),
         participant,
-        ExplosiveTokens::from_e8s(E8),
+        ExplosiveTokens::from_e8s(20 * E8),
     );
 
-    assert_eq!(response.icp_accepted_participation_e8s, E8);
+    assert_eq!(response.icp_accepted_participation_e8s, 20 * E8);
 }

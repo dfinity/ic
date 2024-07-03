@@ -337,6 +337,7 @@ impl NervousSystemParameters {
 
     /// This is an upper bound for `max_number_of_neurons`. Exceeding it may cause
     /// degradation in the governance canister or the subnet hosting the SNS.
+    /// See also: `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`.
     pub const MAX_NUMBER_OF_NEURONS_CEILING: u64 = 200_000;
 
     /// This is an upper bound for `max_number_of_proposals_with_ballots`. Exceeding
