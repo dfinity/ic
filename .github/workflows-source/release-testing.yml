@@ -49,7 +49,7 @@ anchors:
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
 
 jobs:
-  on-failure:
+  ci-main-failure:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
