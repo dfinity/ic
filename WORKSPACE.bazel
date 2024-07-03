@@ -937,7 +937,7 @@ http_file(
     url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
 )
 
-load(":release_fixtures.bzl", "TEST_FIXTURES")
+load("release_fixtures.bzl", "TEST_FIXTURES")
 
 [
     http_file(
