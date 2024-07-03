@@ -2,7 +2,7 @@ name: Release Testing
 on:
   push:
     workflow_run:
-      workflows: ["Main CI"]
+      workflows: ["CI Main"]
       types:
         - completed
       branches:
