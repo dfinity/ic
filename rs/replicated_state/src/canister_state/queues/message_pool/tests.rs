@@ -200,10 +200,6 @@ fn test_take() {
             assert_eq!(Some(&request), pool.get(request_id));
             assert_eq!(Some(&response), pool.get(response_id));
 
-            // Messages are still in the pool.
-            assert_eq!(Some(&request), pool.get(request_id));
-            assert_eq!(Some(&response), pool.get(response_id));
-
             // Actually take the messages.
             assert_eq!(Some(request), pool.take(request_id));
             assert_eq!(Some(response), pool.take(response_id));
