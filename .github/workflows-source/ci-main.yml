@@ -71,9 +71,9 @@ jobs:
       labels: dind-runner-large-p
     container:
       <<: *image
-      options: |
-        -e NODE_NAME \
-        --privileged --cgroupns host --network host \
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host --network host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     steps:
