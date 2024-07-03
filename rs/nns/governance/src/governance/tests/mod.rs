@@ -22,6 +22,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
+mod neurons_fund;
 mod stake_maturity;
 
 #[test]
