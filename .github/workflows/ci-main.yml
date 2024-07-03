@@ -41,7 +41,10 @@ jobs:
       labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
-      options: --privileged --cgroupns host --network host -e NODE_NAME
+      options: |
+        -e NODE_NAME \
+        --privileged --cgroupns host --network host \
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     steps:
       - name: Checkout
