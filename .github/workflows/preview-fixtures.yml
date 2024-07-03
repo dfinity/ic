@@ -21,6 +21,8 @@ jobs:
       CI_PIPELINE_SOURCE: ${{ github.event_name }}
       CI_PROJECT_DIR: ${{ github.workspace }}
       CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+      # TODO: will probably want to remove?
+      CI_MERGE_REQUEST_TITLE: "${{ github.event.pull_request.title }} [S3_UPLOAD]"
       ROOT_PIPELINE_ID: ${{ github.run_id }}
       BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
       RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
