@@ -18,7 +18,8 @@ env:
 jobs:
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
-    labels: dind-runner-large-p
+    runs-on:
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
       options: >-
@@ -50,7 +51,8 @@ jobs:
   lock-generate:
     name: Lock Generate
     timeout-minutes: 30
-    labels: dind-runner-large-p
+    runs-on:
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
       options: >-
@@ -83,7 +85,8 @@ jobs:
   pre-commit:
     name: Pre Commit Test
     timeout-minutes: 30
-    labels: dind-runner-large-p
+    runs-on:
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
       options: >-
