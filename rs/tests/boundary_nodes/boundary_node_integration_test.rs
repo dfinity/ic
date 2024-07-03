@@ -2,21 +2,21 @@
 
 use anyhow::Result;
 
-use ic_tests::{
-    boundary_nodes::{
-        boundary_nodes_integration::{
-            asset_canister_test, canister_allowlist_test, canister_routing_test, canister_test,
-            denylist_test, direct_to_replica_options_test, direct_to_replica_rosetta_test,
-            direct_to_replica_test, http_canister_test, http_endpoint_test, ic_gateway_test,
-            prefix_canister_id_test, proxy_http_canister_test, read_state_via_subnet_path_test,
-            reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test, seo_test,
-        },
-        constants::BOUNDARY_NODE_NAME,
-        helpers::BoundaryNodeHttpsConfig,
-        setup::setup_ic_with_bn,
-    },
+use ic_system_test_driver::{
     driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,
+};
+use ic_tests::boundary_nodes::{
+    boundary_nodes_integration::{
+        asset_canister_test, canister_allowlist_test, canister_routing_test, canister_test,
+        denylist_test, direct_to_replica_options_test, direct_to_replica_rosetta_test,
+        direct_to_replica_test, http_canister_test, http_endpoint_test, ic_gateway_test,
+        prefix_canister_id_test, proxy_http_canister_test, read_state_via_subnet_path_test,
+        reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test, seo_test,
+    },
+    constants::BOUNDARY_NODE_NAME,
+    helpers::BoundaryNodeHttpsConfig,
+    setup::setup_ic_with_bn,
 };
 
 fn main() -> Result<()> {
