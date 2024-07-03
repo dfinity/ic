@@ -49,7 +49,7 @@ fn master_pubkeys_are_produced() -> Result<(), String> {
             if config.num_rounds < 60 {
                 config.num_rounds = 60;
             }
-            assert!(run_n_rounds_and_check_pubkey(config, Vec::new(), true));
+            assert!(run_n_rounds_and_check_pubkeys(config, Vec::new(), true));
         })
 }
 
@@ -212,7 +212,7 @@ fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
                 };
                 malicious.push(malicious::with_malicious_flags(malicious_flags));
             }
-            assert!(run_n_rounds_and_check_pubkey(config, malicious, true))
+            assert!(run_n_rounds_and_check_pubkeys(config, malicious, true))
         })
 }
 
@@ -321,7 +321,7 @@ fn run_n_rounds_and_collect_hashes(
     hashes.as_ref().take()
 }
 
-fn run_n_rounds_and_check_pubkey(
+fn run_n_rounds_and_check_pubkeys(
     config: ConsensusRunnerConfig,
     modifiers: Vec<ComponentModifier>,
     finish: bool,
