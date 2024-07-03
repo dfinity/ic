@@ -12,7 +12,7 @@ use ic_agent::{Agent, Identity};
 
 use crate::{
     canister_api::{CallMode, Request, Response},
-    driver::test_env_api::{retry_async, HasPublicApiUrl, IcNodeSnapshot},
+    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
     generic_workload_engine::metrics::RequestOutcome,
     retry_with_msg_async,
     util::{assert_create_agent, assert_create_agent_with_identity},

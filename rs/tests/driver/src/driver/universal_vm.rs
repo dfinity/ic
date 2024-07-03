@@ -12,8 +12,8 @@ use crate::driver::resource::{
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_ssh_session_from_env, retry, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-    SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
+    get_ssh_session_from_env, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
+    RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::k8s::datavolume::DataVolumeContentType;

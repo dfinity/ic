@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     acc_id, assert_canister_error, check_balance, create_ledger_client, do_multiple_txn, do_txn,
@@ -7,12 +6,13 @@ use crate::rosetta_tests::lib::{
 };
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::{setup, TRANSFER_FEE};
-use crate::util::block_on;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
 use ic_rosetta_api::models::EdKeypair;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_test_utils::RequestInfo;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use icp_ledger::{AccountIdentifier, Operation};
 use lazy_static::lazy_static;
 use rosetta_core::models::RosettaSupportedKeyPair;

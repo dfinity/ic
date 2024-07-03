@@ -17,20 +17,11 @@ end::catalog[] */
 use std::collections::{BTreeMap, HashSet};
 use std::time::Duration;
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT,
-    RETRY_BACKOFF,
-};
-use crate::nns::{self, get_subnet_list_from_registry};
-use crate::retry_with_msg_async;
 use crate::tecdsa::{
     create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
     execute_update_subnet_proposal, get_public_key_with_retries, make_bip340_key_id,
     make_ecdsa_key_id, make_eddsa_key_id, scale_cycles, DKG_INTERVAL, NUMBER_OF_NODES,
 };
-use crate::util::*;
 use anyhow::bail;
 use canister_test::{Canister, Cycles};
 use ic_agent::{
@@ -42,6 +33,13 @@ use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
+use ic_system_test_driver::nns::{self, get_subnet_list_from_registry};
+use ic_system_test_driver::util::*;
 use ic_types::Height;
 use itertools::Itertools;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
@@ -64,7 +62,7 @@ pub const LIFE_CYCLE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(11 * 60);
 /// Creates one system subnet without signing enabled and one application subnet
 /// with signing enabled.
 pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
-    use crate::driver::test_env_api::*;
+    use ic_system_test_driver::driver::test_env_api::*;
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -104,7 +102,7 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
 
 /// Creates one system subnet and two application subnets.
 pub fn config(test_env: TestEnv) {
-    use crate::driver::test_env_api::*;
+    use ic_system_test_driver::driver::test_env_api::*;
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -550,7 +548,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 ECDSA_PAYLOAD_METRICS, key_id, XNET_RESHARE_AGREEMENTS,
             );
             let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "check if number of reshare agreements on subnet {} is zero",
                     app_subnet.subnet_id,

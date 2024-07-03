@@ -1,9 +1,7 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::lib::{do_multiple_txn, one_day_from_now_nanos, NeuronDetails};
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::{AccountBalanceResponse, NeuronInfoResponse, NeuronState};
@@ -11,6 +9,8 @@ use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{SetDissolveTimestamp, StartDissolve, StopDissolve};
 use ic_rosetta_test_utils::{assert_canister_error, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};

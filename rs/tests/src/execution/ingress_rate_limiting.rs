@@ -13,14 +13,14 @@ Runbook::
 
 
 end::catalog[] */
-use crate::{
+use ic_agent::{agent::RejectCode, identity::Identity};
+use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
     },
     util::*,
 };
-use ic_agent::{agent::RejectCode, identity::Identity};
 use ic_universal_canister::wasm;
 
 /// Not defining `canister_inspect_message` accepts all ingress messages.

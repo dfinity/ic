@@ -1,6 +1,6 @@
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
@@ -10,9 +10,9 @@ use ic_tests::driver::{
         RetrieveIpv4Addr,
     },
 };
+use ic_system_test_driver::systest;
 use ic_tests::nns_dapp::nns_dapp_customizations;
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_tests::systest;
 use sdk_system_tests::{
     asset::get_asset_as_string,
     config::configure_local_network,

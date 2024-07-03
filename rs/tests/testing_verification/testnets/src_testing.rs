@@ -43,9 +43,9 @@ use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::boundary_node::BoundaryNodeVm;
-use ic_tests::driver::ic::{InternetComputer, Subnet};
-use ic_tests::driver::{
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -55,12 +55,12 @@ use ic_tests::driver::{
         NnsCanisterWasmStrategy,
     },
 };
+use ic_system_test_driver::util::{block_on, create_canister};
 use ic_tests::nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
     set_icp_xdr_exchange_rate,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_tests::util::{block_on, create_canister};
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use std::str::FromStr;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};

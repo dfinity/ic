@@ -12,28 +12,12 @@ use std::collections::HashSet;
 use std::time::Instant;
 use tokio::time::sleep;
 
-use crate::{
-    boundary_nodes::{
-        constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
-        helpers::{
-            install_canisters, read_counters_on_counter_canisters,
-            set_counters_on_counter_canisters,
-        },
-        setup::TEST_PRIVATE_KEY,
+use crate::boundary_nodes::{
+    constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
+    helpers::{
+        install_canisters, read_counters_on_counter_canisters, set_counters_on_counter_canisters,
     },
-    driver::test_env_api::IcNodeSnapshot,
-};
-use crate::{
-    driver::{
-        boundary_node::BoundaryNodeVm,
-        test_env::TestEnv,
-        test_env_api::{
-            retry_async, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-            SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-        },
-    },
-    nns::{self, vote_execute_proposal_assert_executed},
-    util::{block_on, runtime_from_url},
+    setup::TEST_PRIVATE_KEY,
 };
 use candid::{Decode, Encode};
 use ic_canister_client::Sender;
@@ -42,6 +26,17 @@ use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
+use ic_system_test_driver::driver::{
+    boundary_node::BoundaryNodeVm,
+    test_env::TestEnv,
+    test_env_api::{
+        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, SshSession,
+        READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    },
+};
+use ic_system_test_driver::nns::{self, vote_execute_proposal_assert_executed};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use itertools::Itertools;
 use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
@@ -267,7 +262,7 @@ async fn test(env: TestEnv) {
             .build()
             .unwrap();
 
-        retry_async(
+        ic_system_test_driver::retry_with_msg_async!(
             "fetch_root_key",
             &log,
             Duration::from_secs(30),
@@ -277,7 +272,7 @@ async fn test(env: TestEnv) {
                     return Ok(());
                 }
                 bail!("Failed to fetch root key");
-            },
+            }
         )
         .await
         .expect("Failed to fetch root key");
@@ -513,7 +508,7 @@ async fn add_api_boundary_nodes_via_proposal(
 ) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = nns::get_governance_canister(&nns_runtime);
-    let version = crate::nns::get_software_version_from_snapshot(&nns_node)
+    let version = ic_system_test_driver::nns::get_software_version_from_snapshot(&nns_node)
         .await
         .expect("could not obtain replica software version");
 
@@ -586,7 +581,7 @@ async fn add_api_boundary_nodes_via_proposal(
 
 async fn assert_api_bns_healthy(log: &slog::Logger, http_client: Client, api_domains: Vec<&str>) {
     for domain in api_domains.iter() {
-        retry_async(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_api_bns_health",
             log,
             READY_WAIT_TIMEOUT,
@@ -603,7 +598,7 @@ async fn assert_api_bns_healthy(log: &slog::Logger, http_client: Client, api_dom
                 }
 
                 bail!("API BN with domain {domain} is not yet healthy");
-            },
+            }
         )
         .await
         .expect("API BNs didn't report healthy");
@@ -616,7 +611,7 @@ async fn assert_api_bns_present_in_state_tree(
     nns_node: IcNodeSnapshot,
     expected_api_bns: Vec<ApiBoundaryNode>,
 ) {
-    retry_async(
+    ic_system_test_driver::retry_with_msg_async!(
         "assert_api_bns_present_in_state_tree",
         log,
         Duration::from_secs(70),
@@ -646,7 +641,7 @@ async fn assert_api_bns_present_in_state_tree(
             }
 
             Ok(())
-        },
+        }
     )
     .await
     .expect("API BNs haven't appeared in the state tree");

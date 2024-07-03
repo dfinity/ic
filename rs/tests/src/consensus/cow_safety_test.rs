@@ -27,7 +27,10 @@ use ic_agent::export::Principal;
 use ic_types::Height;
 use rand::Rng;
 
-use crate::{
+use candid::{Decode, Encode};
+use ic_base_types::PrincipalId;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
@@ -35,9 +38,6 @@ use crate::{
     },
     util::*,
 };
-use candid::{Decode, Encode};
-use ic_base_types::PrincipalId;
-use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 
 const COW_SAFETY_CANISTER: &[u8] = include_bytes!("cow_safety.wasm");

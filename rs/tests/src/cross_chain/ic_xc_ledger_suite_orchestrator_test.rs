@@ -1,13 +1,4 @@
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    NnsCanisterWasmStrategy, NnsCustomizations,
-};
-use crate::nns::vote_and_execute_proposal;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::retry_with_msg_async;
-use crate::util::{block_on, runtime_from_url};
 use anyhow::{anyhow, bail};
 use candid::{Encode, Nat, Principal};
 use canister_test::Wasm;
@@ -25,6 +16,14 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    NnsCanisterWasmStrategy, NnsCustomizations,
+};
+use ic_system_test_driver::nns::vote_and_execute_proposal;
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_wasm_types::CanisterModule;
 use slog::info;
 use std::future::Future;
@@ -283,7 +282,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
         "Upgrade finished. Ledger orchestrator is back running"
     );
 
-    let created_canister_ids = retry_with_msg_async!(
+    let created_canister_ids = ic_system_test_driver::retry_with_msg_async!(
         "checking if all canisters are created",
         logger,
         Duration::from_secs(100),
@@ -380,7 +379,7 @@ async fn status_of_nns_controlled_canister_satisfy<P: Fn(&CanisterStatusResult) 
 ) {
     use dfn_candid::candid;
 
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling canister_status of {} to check if {} satisfies the predicate",
             root_canister.canister_id(),
@@ -467,7 +466,7 @@ where
     Fut: Future<Output = Result<R, String>>,
     F: Fn() -> Fut,
 {
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         msg.as_ref(),
         logger,
         Duration::from_secs(100),

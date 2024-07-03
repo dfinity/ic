@@ -1,11 +1,11 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
-use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::util::*;
 use ic_agent::agent::RejectCode;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::util::*;
 use ic_utils::interfaces::ManagementCanister;
 
 /// Tests that query replies can be larger than update replies.
