@@ -29,8 +29,6 @@ anchors:
       <<: *image
       options: >-
         -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-runner-large-p
@@ -38,8 +36,6 @@ anchors:
       <<: *image
       options: >-
         -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
   before-script: &before-script
     name: Before script
     id: before-script

@@ -50,7 +50,7 @@ anchors:
       options: >-
         -e NODE_NAME
         --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   before-script: &before-script
     name: Before script
