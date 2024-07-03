@@ -140,7 +140,7 @@ def _generate_fixtures_bzl_impl(ctx):
     ]
     # As we're only constructing the rule and don't have access to the actual sha256/URLs right now, we create
     # a single large shell command that iterates over all the inputs and writes the corresponding information
-    commands = ["echo 'TEST_FIXTURES = [' > {out_path}".format(out_path = out.path)]
+    commands = ["echo 'RELEASE_FIXTURES = [' > {out_path}".format(out_path = out.path)]
     for (name, sha256sum, url) in triples:
         file_commands = [
             """echo   '    {'""",
