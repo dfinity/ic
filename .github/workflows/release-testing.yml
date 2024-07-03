@@ -41,6 +41,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
@@ -67,6 +69,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
@@ -92,6 +96,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
