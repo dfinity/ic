@@ -145,7 +145,7 @@ fn test_parse() {
             restricted_countries: Some(vec!["US".to_string(), "CH".to_string()]),
 
             vesting_schedule: VestingSchedule {
-                events: 83,
+                events: 9,
                 interval: parse_duration("17 days").unwrap(),
             },
 
@@ -430,7 +430,7 @@ fn test_convert_to_create_service_nervous_system() {
 
             neuron_basket_construction_parameters: Some(
                 nns_governance_pb::NeuronBasketConstructionParameters {
-                    count: Some(83),
+                    count: Some(9),
                     dissolve_delay_interval: Some(parse_duration("17 days").unwrap()),
                 }
             ),
