@@ -44,7 +44,7 @@ impl CanisterQueuesFixture {
                 .receiver(self.this)
                 .build()
                 .into(),
-            InputQueueType::LocalSubnet,
+            LocalSubnet,
         )
     }
 
@@ -55,7 +55,7 @@ impl CanisterQueuesFixture {
                 .respondent(self.other)
                 .build()
                 .into(),
-            InputQueueType::LocalSubnet,
+            LocalSubnet,
         )
     }
 
@@ -710,8 +710,8 @@ fn test_peek_input_round_robin() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
+    push_requests(&mut queues, RemoteSubnet, &remote_requests);
 
     let ingress = Ingress {
         source: user_test_id(77),
@@ -784,7 +784,7 @@ fn test_skip_input_round_robin() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
     let ingress = Ingress {
         source: user_test_id(77),
         receiver: canister_test_id(13),
@@ -857,7 +857,7 @@ fn test_peek_input_with_stale_references() {
         })
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &requests);
+    push_requests(&mut queues, LocalSubnet, &requests);
 
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
@@ -950,23 +950,19 @@ fn test_peek_canister_input_does_not_affect_schedule() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
+    push_requests(&mut queues, RemoteSubnet, &remote_requests);
 
     // Schedules before peek.
     let before_local_schedule = queues.local_subnet_input_schedule.clone();
     let before_remote_schedule = queues.remote_subnet_input_schedule.clone();
 
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
+        queues.peek_canister_input(RemoteSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
     );
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
+        queues.peek_canister_input(LocalSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
     );
 
@@ -1003,38 +999,30 @@ fn test_skip_canister_input() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
+    push_requests(&mut queues, RemoteSubnet, &remote_requests);
 
     // Peek before skip.
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
+        queues.peek_canister_input(RemoteSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
     );
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
+        queues.peek_canister_input(LocalSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
     );
 
-    queues.skip_canister_input(InputQueueType::RemoteSubnet);
-    queues.skip_canister_input(InputQueueType::LocalSubnet);
+    queues.skip_canister_input(RemoteSubnet);
+    queues.skip_canister_input(LocalSubnet);
 
     // Peek will return a different result.
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
+        queues.peek_canister_input(RemoteSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()))
     );
     assert_eq!(queues.remote_subnet_input_schedule.len(), 2);
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
+        queues.peek_canister_input(LocalSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()))
     );
     assert_eq!(queues.local_subnet_input_schedule.len(), 2);
@@ -1075,18 +1063,16 @@ fn encode_roundtrip() {
     queues
         .push_input(
             RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::LocalSubnet,
+            LocalSubnet,
         )
         .unwrap();
     queues
         .push_input(
             RequestBuilder::default().sender(other).build().into(),
-            InputQueueType::RemoteSubnet,
+            RemoteSubnet,
         )
         .unwrap();
-    queues
-        .pop_canister_input(InputQueueType::RemoteSubnet)
-        .unwrap();
+    queues.pop_canister_input(RemoteSubnet).unwrap();
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
     let encoded: pb_queues::CanisterQueues = (&queues).into();
@@ -1122,12 +1108,10 @@ fn encode_non_default_pool() {
     queues
         .push_input(
             RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::RemoteSubnet,
+            RemoteSubnet,
         )
         .unwrap();
-    queues
-        .pop_canister_input(InputQueueType::RemoteSubnet)
-        .unwrap();
+    queues.pop_canister_input(RemoteSubnet).unwrap();
     // Sanity check that the pool is empty but not equal to the default.
     assert_eq!(0, queues.pool.len());
     assert_ne!(MessagePool::default(), queues.pool);
@@ -1150,13 +1134,13 @@ fn decode_invalid_input_schedule() {
     queues
         .push_input(
             RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::LocalSubnet,
+            LocalSubnet,
         )
         .unwrap();
     queues
         .push_input(
             RequestBuilder::default().sender(other).build().into(),
-            InputQueueType::RemoteSubnet,
+            RemoteSubnet,
         )
         .unwrap();
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
@@ -1344,7 +1328,7 @@ fn test_stats_best_effort() {
 
     // Make reservatuibs for the responses.
     queues
-        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(request.clone().into(), LocalSubnet)
         .unwrap();
     queues.pop_input().unwrap();
     queues
@@ -1353,10 +1337,10 @@ fn test_stats_best_effort() {
     queues.output_into_iter().next().unwrap();
     // Actually enqueue the messages.
     queues
-        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(request.clone().into(), LocalSubnet)
         .unwrap();
     queues
-        .push_input(response.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(response.clone().into(), LocalSubnet)
         .unwrap();
     queues.push_output_response(response.clone().into());
     queues
@@ -1461,7 +1445,7 @@ fn test_stats_guaranteed_response() {
 
     // Make reservatuibs for the responses.
     queues
-        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(request.clone().into(), LocalSubnet)
         .unwrap();
     queues.pop_input().unwrap();
     queues
@@ -1470,10 +1454,10 @@ fn test_stats_guaranteed_response() {
     queues.output_into_iter().next().unwrap();
     // Actually enqueue the messages.
     queues
-        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(request.clone().into(), LocalSubnet)
         .unwrap();
     queues
-        .push_input(response.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(response.clone().into(), LocalSubnet)
         .unwrap();
     queues.push_output_response(response.clone().into());
     queues
@@ -1590,10 +1574,10 @@ fn test_stats_oversized_requests() {
     let guaranteed_extra_bytes = guaranteed_size_bytes - MAX_RESPONSE_COUNT_BYTES;
 
     queues
-        .push_input(best_effort.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(best_effort.clone().into(), LocalSubnet)
         .unwrap();
     queues
-        .push_input(guaranteed.clone().into(), InputQueueType::LocalSubnet)
+        .push_input(guaranteed.clone().into(), LocalSubnet)
         .unwrap();
     queues
         .push_output_request(best_effort.clone().into(), UNIX_EPOCH)
@@ -1729,9 +1713,7 @@ fn test_garbage_collect() {
     assert_eq!(1, queues.canister_queues.len());
 
     // Push input response.
-    queues
-        .push_input(response.into(), InputQueueType::LocalSubnet)
-        .unwrap();
+    queues.push_input(response.into(), LocalSubnet).unwrap();
     // Before popping any input, `queue.next_input_queue` has default value.
     assert_eq!(NextInputQueue::default(), queues.next_input_queue);
     // No-op.
