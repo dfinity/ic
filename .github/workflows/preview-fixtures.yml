@@ -61,8 +61,7 @@ jobs:
         shell: bash
         run: |
           set -x
-          find . -name release_fixtures.bzl
-          tree -a
+          find / -name release_fixtures.bzl
           cp bazel-bin/release_fixtures.bzl release_fixtures.bzl
           git add release_fixtures.bzl
           git commit -m "Release CI: Update release fixtures"
