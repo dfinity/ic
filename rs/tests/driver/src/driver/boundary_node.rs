@@ -19,7 +19,7 @@ use crate::{
         resource::{DiskImage, ImageType},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_ssh_session_from_env, retry, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
+            get_ssh_session_from_env, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
             HasDependencies, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot, HasVmName,
             IcNodeContainer, RetrieveIpv4Addr, SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
         },

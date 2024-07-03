@@ -1,13 +1,13 @@
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::driver::test_env_api::HasTopologySnapshot;
-use crate::driver::test_env_api::IcNodeContainer;
-use crate::driver::universal_vm::UniversalVms;
-use crate::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
+use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
+use ic_system_test_driver::driver::universal_vm::UniversalVms;
+use ic_system_test_driver::{
     driver::ic::{InternetComputer, Subnet},
     driver::universal_vm::UniversalVm,
 };
-use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use std::net::{IpAddr, SocketAddr};
 use std::{fs::File, io::Write};

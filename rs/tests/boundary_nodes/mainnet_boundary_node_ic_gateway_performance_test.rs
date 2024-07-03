@@ -1,8 +1,7 @@
 use anyhow::Result;
-use ic_tests::{
-    boundary_nodes::performance_test::{empty_setup, mainnet_query_calls_ic_gateway_test},
-    driver::group::SystemTestGroup,
-    systest,
+use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
+use ic_tests::boundary_nodes::performance_test::{
+    empty_setup, mainnet_query_calls_ic_gateway_test,
 };
 use std::{env, net::Ipv6Addr, time::Duration};
 

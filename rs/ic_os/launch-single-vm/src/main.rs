@@ -1,26 +1,24 @@
-use std::collections::BTreeMap;
-use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
-use std::process::Command;
-
 use clap::Parser;
-use reqwest::blocking::Client;
-use serde::Serialize;
-use slog::{o, Drain};
-use tempfile::tempdir;
-use url::Url;
-
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::NodeConfiguration,
     subnet_configuration::SubnetConfig,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     farm::{CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType},
     ic::{Subnet, VmAllocationStrategy},
 };
 use ic_types::ReplicaVersion;
+use reqwest::blocking::Client;
+use serde::Serialize;
+use slog::{o, Drain};
+use std::collections::BTreeMap;
+use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
+use std::process::Command;
+use tempfile::tempdir;
+use url::Url;
 
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 

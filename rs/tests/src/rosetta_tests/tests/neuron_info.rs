@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
@@ -7,7 +6,6 @@ use crate::rosetta_tests::lib::{
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use assert_json_diff::assert_json_eq;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
@@ -18,6 +16,8 @@ use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, NeuronInfo, PublicKeyOrPrincipal};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;

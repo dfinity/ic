@@ -1,7 +1,3 @@
-use std::time::Duration;
-
-use crate::{nns::vote_and_execute_proposal, util::MessageCanister};
-
 use candid::{Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
@@ -24,6 +20,7 @@ use ic_nns_governance::{
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{nns::vote_and_execute_proposal, util::MessageCanister};
 use ic_types::{PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
@@ -34,6 +31,7 @@ use registry_canister::mutations::{
     do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
 };
 use slog::{debug, info, Logger};
+use std::time::Duration;
 
 pub mod tecdsa_add_nodes_test;
 pub mod tecdsa_complaint_test;

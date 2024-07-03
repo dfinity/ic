@@ -10,7 +10,6 @@ documentation.workspace = true
 async-trait = { workspace = true }
 bincode = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
-ed25519-consensus = "2.0.1"
 hex = { workspace = true }
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }
@@ -54,6 +53,7 @@ tokio = { workspace = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 ic-certification-test-utils = { path = "../certification/test-utils" }
+ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }

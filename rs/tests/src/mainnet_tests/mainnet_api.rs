@@ -1,11 +1,11 @@
-use crate::driver::test_env::TestEnvAttribute;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasRegistryLocalStore};
-use crate::driver::test_setup::GroupSetup;
-use crate::driver::{
+use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_system_test_driver::driver::test_env::TestEnvAttribute;
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasRegistryLocalStore};
+use ic_system_test_driver::driver::test_setup::GroupSetup;
+use ic_system_test_driver::driver::{
     test_env::{HasIcPrepDir, TestEnv},
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
-use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use slog::info;
 
 use ic_registry_local_store::{compact_delta_to_changelog, Changelog};

@@ -2617,8 +2617,6 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 #[derive(Debug, EnumString, EnumIter, Display, Copy, Clone, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum QueryMethod {
-    BitcoinGetUtxosQuery,
-    BitcoinGetBalanceQuery,
     FetchCanisterLogs,
 }
 

@@ -1,6 +1,6 @@
 //! ECDSA specific stats.
 
-use crate::consensus::metrics::{
+use crate::ecdsa::metrics::{
     EcdsaPreSignatureMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
 };
 use ic_management_canister_types::MasterPublicKeyId;

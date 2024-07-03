@@ -28,15 +28,6 @@ Coverage::
 
 end::catalog[] */
 
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-};
-use crate::util::{
-    block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
-    UniversalCanister,
-};
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use futures::future::join_all;
@@ -51,6 +42,15 @@ use ic_nns_governance::{
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron},
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+};
+use ic_system_test_driver::util::{
+    block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
+    UniversalCanister,
+};
 use ic_types::CanisterId;
 use icp_ledger::{Subaccount, Tokens, DEFAULT_TRANSFER_FEE};
 use slog::info;

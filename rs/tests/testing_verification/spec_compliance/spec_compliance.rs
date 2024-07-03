@@ -2,16 +2,15 @@ use canister_http::get_universal_vm_address;
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
-use ic_tests::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::driver::test_env_api::{
+use ic_system_test_driver::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
+use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
     IcNodeContainer, NnsCanisterWasmStrategy, NnsInstallationBuilder, SubnetSnapshot,
     TopologySnapshot,
 };
-use ic_tests::driver::universal_vm::UniversalVm;
-use ic_tests::retry_with_msg;
+use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_types::SubnetId;
 use slog::{info, Logger};
 use std::path::PathBuf;
@@ -37,8 +36,8 @@ const EXCLUDED: &[&str] = &[
 pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
     use hyper::Client;
     use hyper_rustls::HttpsConnectorBuilder;
-    use ic_tests::driver::test_env_api::{retry, secs};
-    use ic_tests::util::block_on;
+    use ic_system_test_driver::driver::test_env_api::secs;
+    use ic_system_test_driver::util::block_on;
     use std::env;
 
     let vm_resources = VmResources {
@@ -113,7 +112,7 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             .expect("failed to set up universal VM");
         canister_http::start_httpbin_on_uvm(&env);
         let log = env.logger();
-        retry_with_msg!(
+        ic_system_test_driver::retry_with_msg!(
             "check if httpbin is responding to requests",
             log.clone(),
             secs(300),

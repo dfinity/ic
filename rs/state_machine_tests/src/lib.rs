@@ -1,10 +1,13 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
+use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
+use ic_consensus::dkg::make_registry_cup;
+use ic_consensus_utils::crypto::SignVerify;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
@@ -16,8 +19,11 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
+use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
+    batch_payload::IntoMessages,
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
     consensus::PayloadBuilder as ConsensusPayloadBuilder,
     consensus_pool::ConsensusTime,
@@ -25,12 +31,13 @@ use ic_interfaces::{
     ingress_pool::{
         IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
+    p2p::consensus::MutablePool,
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
-use ic_logger::ReplicaLogger;
+use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
@@ -41,6 +48,7 @@ pub use ic_management_canister_types::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto},
@@ -78,9 +86,10 @@ use ic_replicated_state::{
     page_map::Buffer,
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
-use ic_state_layout::{CheckpointLayout, RwPolicy};
+use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
+use ic_test_utilities_consensus::FakeConsensusPoolCache;
 use ic_test_utilities_metrics::{
     fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
     fetch_int_gauge_vec, Labels,
@@ -95,9 +104,11 @@ use ic_types::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
         QueryStatsPayload, TotalQueryStats, ValidationContext, XNetPayload,
     },
+    canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
+        CatchUpPackage,
     },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
@@ -116,10 +127,15 @@ use ic_types::{
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
 };
 pub use ic_types::{
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
+    canister_http::{
+        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
+        CanisterHttpResponseMetadata,
+    },
     crypto::threshold_sig::ThresholdSigPublicKey,
+    crypto::{CryptoHash, CryptoHashOf},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, HttpRequestError, MessageId},
+    signature::BasicSignature,
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
@@ -136,7 +152,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
 pub use slog::Level;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     fmt,
     io::{self, stderr},
@@ -225,8 +241,13 @@ fn make_nodes_registry(
     is_root_subnet: bool,
     public_key: ThresholdSigPublicKey,
     ni_dkg_transcript: NiDkgTranscript,
-) -> Arc<FakeRegistryClient> {
-    let registry_version = INITIAL_REGISTRY_VERSION;
+) -> FakeRegistryClient {
+    let registry_version = if registry_data_provider.is_empty() {
+        INITIAL_REGISTRY_VERSION
+    } else {
+        let latest_registry_version = registry_data_provider.latest_version();
+        RegistryVersion::from(latest_registry_version.get() + 1)
+    };
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
     let subnet_id_proto = SubnetIdProto {
@@ -295,6 +316,7 @@ fn make_nodes_registry(
         .with_max_ingress_bytes_per_message(max_ingress_bytes_per_message)
         .with_max_ingress_messages_per_block(max_ingress_messages_per_block)
         .with_max_block_payload_size(max_block_payload_size)
+        .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
             key_configs: ecdsa_keys
                 .iter()
@@ -319,7 +341,7 @@ fn make_nodes_registry(
     registry_data_provider
         .add(
             &make_catch_up_package_contents_key(subnet_id),
-            INITIAL_REGISTRY_VERSION,
+            registry_version,
             Some(cup_contents),
         )
         .expect("Failed to add subnet record.");
@@ -337,9 +359,7 @@ fn make_nodes_registry(
         public_key,
     );
 
-    let registry_client = Arc::new(FakeRegistryClient::new(
-        Arc::clone(&registry_data_provider) as _
-    ));
+    let registry_client = FakeRegistryClient::new(Arc::clone(&registry_data_provider) as _);
     registry_client.update_to_latest_version();
     registry_client
 }
@@ -591,7 +611,6 @@ pub struct StateMachine {
     pub query_handler:
         tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     runtime: Arc<Runtime>,
-    pub state_dir: TempDir,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
@@ -600,6 +619,12 @@ pub struct StateMachine {
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
+    time_source: Arc<FastForwardTimeSource>,
+    canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
+    canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
+    // This field must be the last one so that the temporary directory is deleted at the very end.
+    pub state_dir: TempDir,
+    // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
 }
 
 impl Default for StateMachine {
@@ -637,7 +662,7 @@ pub struct StateMachineBuilder {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     lsmt_override: Option<LsmtConfig>,
     is_root_subnet: bool,
-    seq_no: u8,
+    seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
 }
@@ -669,7 +694,7 @@ impl StateMachineBuilder {
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
             lsmt_override: None,
             is_root_subnet: false,
-            seq_no: 0,
+            seed: [42; 32],
             with_extra_canister_range: None,
             dts: true,
         }
@@ -788,7 +813,7 @@ impl StateMachineBuilder {
         Self {
             ecdsa_keys: vec![EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
-                name: format!("master_ecdsa_public_key_{}", self.seq_no),
+                name: format!("master_ecdsa_public_key_{}", hex::encode(self.seed)),
             }],
             ..self
         }
@@ -815,8 +840,8 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_subnet_seq_no(self, seq_no: u8) -> Self {
-        Self { seq_no, ..self }
+    pub fn with_subnet_seed(self, seed: [u8; 32]) -> Self {
+        Self { seed, ..self }
     }
 
     pub fn with_root_subnet_config(self) -> Self {
@@ -854,7 +879,7 @@ impl StateMachineBuilder {
             self.registry_data_provider,
             self.lsmt_override,
             self.is_root_subnet,
-            self.seq_no,
+            self.seed,
             self.dts,
         )
     }
@@ -936,6 +961,7 @@ impl StateMachineBuilder {
             sm.registry_client.clone(),
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),
+            sm.canister_http_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1013,9 +1039,34 @@ impl StateMachine {
         let ingress_messages = (0..ingress.message_count())
             .map(|i| ingress.get(i).unwrap().1)
             .collect();
+        let (http_responses, _) =
+            CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
+        let inducted: Vec<_> = http_responses
+            .clone()
+            .into_iter()
+            .map(|r| r.callback)
+            .collect();
+        let changeset = self
+            .canister_http_pool
+            .read()
+            .unwrap()
+            .get_validated_shares()
+            .filter_map(|share| {
+                if inducted.contains(&share.content.id) {
+                    Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.canister_http_pool
+            .write()
+            .unwrap()
+            .apply_changes(changeset);
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
-            .with_xnet_payload(xnet_payload);
+            .with_xnet_payload(xnet_payload)
+            .with_consensus_responses(http_responses);
 
         // Push responses to ECDSA management canister calls into `PayloadBuilder`.
         let sign_with_ecdsa_contexts = state
@@ -1077,7 +1128,7 @@ impl StateMachine {
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
-        seq_no: u8,
+        seed: [u8; 32],
         dts: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
@@ -1093,12 +1144,12 @@ impl StateMachine {
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
 
-        let node_offset: u64 = StdRng::seed_from_u64(seq_no.into()).gen();
+        let node_offset: u64 = StdRng::from_seed(seed).gen();
         let nodes: Vec<StateMachineNode> = (0..subnet_size as u64)
             .map(|i| (node_offset + i).into())
             .collect();
         let (ni_dkg_transcript, secret_key) =
-            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(seq_no.into()));
+            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
         let public_key = (&ni_dkg_transcript).try_into().unwrap();
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
         let subnet_id =
@@ -1152,6 +1203,30 @@ impl StateMachine {
             &sm_config,
             None,
             malicious_flags.clone(),
+        ));
+
+        // get the CUP from the registry
+        let cup: CatchUpPackage =
+            make_registry_cup(&registry_client, subnet_id, &replica_logger).unwrap();
+        let cup_proto: pb::CatchUpPackage = cup.into();
+        // now we can wrap the registry client into an Arc
+        let registry_client = Arc::new(registry_client);
+
+        let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
+            metrics_registry.clone(),
+            replica_logger.clone(),
+        )));
+        let consensus_pool_cache = FakeConsensusPoolCache::new(cup_proto);
+        let crypto = CryptoReturningOk::default();
+        let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
+            canister_http_pool.clone(),
+            Arc::new(consensus_pool_cache),
+            Arc::new(crypto),
+            state_manager.clone(),
+            subnet_id,
+            registry_client.clone(),
+            &metrics_registry,
+            replica_logger.clone(),
         ));
 
         // NOTE: constructing execution services requires tokio context.
@@ -1238,7 +1313,7 @@ impl StateMachine {
         // and thus use `CryptoReturningOk`.
         let ingress_verifier = Arc::new(CryptoReturningOk::default());
         let ingress_manager = Arc::new(IngressManager::new(
-            time_source,
+            time_source.clone(),
             consensus_time.clone(),
             Box::new(IngressHistoryReaderImpl::new(state_manager.clone())),
             ingress_pool.clone(),
@@ -1270,7 +1345,7 @@ impl StateMachine {
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
-            metrics_registry,
+            metrics_registry: metrics_registry.clone(),
             query_handler: runtime.block_on(async {
                 TowerBuffer::new(execution_services.query_execution_service, 1)
             }),
@@ -1282,9 +1357,12 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             idkg_subnet_public_keys,
-            replica_logger,
+            replica_logger: replica_logger.clone(),
             nodes,
             batch_summary: None,
+            time_source,
+            canister_http_pool,
+            canister_http_payload_builder,
         }
     }
 
@@ -1544,6 +1622,40 @@ impl StateMachine {
             .push(msg, self.get_time());
     }
 
+    pub fn mock_canister_http_response(
+        &self,
+        request_id: u64,
+        timeout: Time,
+        canister_id: CanisterId,
+        content: CanisterHttpResponseContent,
+    ) {
+        for node in &self.nodes {
+            let registry_version = self.registry_client.get_latest_version();
+            let response = CanisterHttpResponse {
+                id: CanisterHttpRequestId::from(request_id),
+                timeout,
+                canister_id,
+                content: content.clone(),
+            };
+            let response_metadata = CanisterHttpResponseMetadata {
+                id: CallbackId::from(request_id),
+                timeout,
+                registry_version,
+                content_hash: ic_types::crypto::crypto_hash(&response),
+            };
+            let signature = CryptoReturningOk::default()
+                .sign(&response_metadata, node.node_id, registry_version)
+                .unwrap();
+            let share = Signed {
+                content: response_metadata,
+                signature,
+            };
+            self.canister_http_pool.write().unwrap().apply_changes(vec![
+                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+            ]);
+        }
+    }
+
     /// Triggers a single round of execution without any new inputs.  The state
     /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
@@ -1746,9 +1858,12 @@ impl StateMachine {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        self.consensus_time
-            .set(Time::from_nanos_since_unix_epoch(t));
+        let time = Time::from_nanos_since_unix_epoch(t);
+        self.consensus_time.set(time);
         self.time.store(t, Ordering::Relaxed);
+        self.time_source
+            .set_time(time)
+            .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
     }
 
     /// Returns the current state machine time.
@@ -1885,14 +2000,16 @@ impl StateMachine {
             canister_directory.display()
         );
 
-        let tip: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
+        let tip: CheckpointLayout<ReadOnly> = CheckpointLayout::new_untracked(
             self.state_manager.state_layout().raw_path().join("tip"),
             ic_types::Height::new(0),
         )
         .expect("failed to obtain tip");
         let tip_canister_layout = tip
             .canister(&canister_id)
-            .expect("failed to obtain writeable canister layout");
+            .expect("failed to obtain canister layout");
+        std::fs::create_dir_all(tip_canister_layout.raw_path())
+            .expect("Failed to create checkpoint dir");
 
         fn copy_as_writeable(src: &Path, dst: &Path) {
             assert!(
@@ -2752,12 +2869,22 @@ impl StateMachine {
     pub fn canister_http_request_contexts(
         &self,
     ) -> BTreeMap<CallbackId, CanisterHttpRequestContext> {
+        let request_ids_already_made: BTreeSet<_> = self
+            .canister_http_pool
+            .read()
+            .unwrap()
+            .get_validated_shares()
+            .map(|share| share.content.id)
+            .collect();
         let state = self.state_manager.get_latest_state().take();
         state
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts
             .clone()
+            .into_iter()
+            .filter(|(id, _)| !request_ids_already_made.contains(id))
+            .collect()
     }
 
     /// Returns the size estimate of canisters heap delta in bytes.
@@ -2911,6 +3038,12 @@ impl PayloadBuilder {
     pub fn with_xnet_payload(self, xnet_payload: XNetPayload) -> Self {
         Self {
             xnet_payload,
+            ..self
+        }
+    }
+    pub fn with_consensus_responses(self, consensus_responses: Vec<ConsensusResponse>) -> Self {
+        Self {
+            consensus_responses,
             ..self
         }
     }

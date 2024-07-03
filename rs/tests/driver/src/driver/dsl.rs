@@ -16,7 +16,7 @@ use slog::Logger;
 #[macro_export]
 macro_rules! systest {
     ($a:path) => {
-        ic_tests::driver::dsl::TestFunction::new(std::stringify!($a), $a)
+        ic_system_test_driver::driver::dsl::TestFunction::new(std::stringify!($a), $a)
     };
 }
 

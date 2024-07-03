@@ -1,7 +1,4 @@
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, IcNodeContainer};
-use crate::rosetta_tests::setup::subnet_sys;
-use crate::util::{assert_create_agent, block_on};
+use crate::ckbtc::lib::subnet_sys;
 use candid::{Decode, Encode, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -12,6 +9,9 @@ use ic_nns_governance::pb::v1::{
     manage_neuron_response, ManageNeuronResponse, Proposal, ProposalInfo,
 };
 use ic_nns_governance::proposals::proposal_submission::create_make_proposal_payload;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, IcNodeContainer};
+use ic_system_test_driver::util::{assert_create_agent, block_on};
 use slog::{debug, Logger};
 
 use super::lib::NeuronDetails;

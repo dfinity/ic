@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/rust_canisters/canister_test",
     "//rs/types/base_types",
+    "//rs/types/error_types",
     "//rs/test_utilities",
     "//rs/test_utilities/embedders",
     "//rs/test_utilities/execution_environment",

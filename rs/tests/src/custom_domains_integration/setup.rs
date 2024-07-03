@@ -1,4 +1,5 @@
-use crate::{
+use certificate_orchestrator_interface::InitArg;
+use ic_system_test_driver::{
     driver::{
         asset_canister::{DeployAssetCanister, UploadAssetRequest},
         boundary_node::{
@@ -7,16 +8,13 @@ use crate::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            retry_async, GetFirstHealthyNodeSnapshot, HasDependencies, HasPublicApiUrl,
-            HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SshSession,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            GetFirstHealthyNodeSnapshot, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
+            IcNodeContainer, NnsInstallationBuilder, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
-    retry_with_msg_async,
     util::{agent_observes_canister_module, block_on},
 };
-use certificate_orchestrator_interface::InitArg;
 
 use serde_json::json;
 use std::{io::Read, net::SocketAddrV6, time::Duration};
@@ -447,7 +445,7 @@ async fn setup_certificate_orchestartor(
     .await
     .expect("failed to spawn task");
 
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!("observing canister module {}", cid.to_string()),
         &env.logger(),
         READY_WAIT_TIMEOUT,
@@ -526,7 +524,7 @@ async fn setup_boundary_node(
     // Await NNS Registry
     let registry = RegistryCanister::new(bn.nns_node_urls);
 
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         "getting routing table from registry",
         &env.logger(),
         READY_WAIT_TIMEOUT,

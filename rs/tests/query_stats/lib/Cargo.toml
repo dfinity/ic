@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+tests = { path = "../.." }
 candid = { workspace = true }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-types = { path = "../../../types/types" }
@@ -16,5 +17,5 @@ ic-utils = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
-tests = { path = "../../" }
+ic-system-test-driver = { path = "../../driver" }
 tokio = { workspace = true }

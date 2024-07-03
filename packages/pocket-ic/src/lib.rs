@@ -34,8 +34,8 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    BlobCompression, BlobId, DtsFlag, ExtendedSubnetConfigSet, InstanceId, RawEffectivePrincipal,
-    RawMessageId, SubnetId, SubnetSpec, Topology,
+    BlobCompression, BlobId, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig, InstanceId,
+    RawEffectivePrincipal, RawMessageId, SubnetId, SubnetSpec, Topology,
 };
 use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
@@ -412,6 +412,28 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
     }
 
+    /// Creates an HTTPS gateway for this IC instance
+    /// listening on an optionally specified domain and port
+    /// and configures the IC instance to make progress
+    /// automatically, i.e., periodically update the time
+    /// of the IC to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub async fn make_live_https(
+        &mut self,
+        listen_at: Option<u16>,
+        domain: String,
+        https_config: HttpsConfig,
+    ) -> Url {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .make_live_https(listen_at, domain, https_config)
+                .await
+        })
+    }
+
     /// Stops auto progress (automatic time updates and round executions)
     /// and the HTTP gateway for this IC instance.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
@@ -583,11 +605,11 @@ impl PocketIc {
 
     /// Creates a canister with a specific canister ID and optional custom settings.
     /// Returns an error if the canister ID is already in use.
-    /// Panics if the canister ID is not contained in any of the subnets.
+    /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
-    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS
-    /// subnet range, it is not intended to be used on regular app or system subnets,
-    /// where it can lead to conflicts on which the function panics.
+    /// The canister ID must be an IC mainnet canister ID that does not belong to the NNS or II subnet,
+    /// otherwise the function might panic (for NNS and II canister IDs,
+    /// the PocketIC instance should already be created with those subnets).
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
     pub fn create_canister_with_id(
         &self,
@@ -666,6 +688,33 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .reinstall_canister(canister_id, wasm_module, arg, sender)
+                .await
+        })
+    }
+
+    /// Uninstall a canister.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn uninstall_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
+    }
+
+    /// Update canister settings.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn update_canister_settings(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        settings: CanisterSettings,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .update_canister_settings(canister_id, sender, settings)
                 .await
         })
     }
