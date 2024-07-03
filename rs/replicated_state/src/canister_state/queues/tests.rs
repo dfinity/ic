@@ -120,6 +120,42 @@ impl CanisterQueuesFixture {
     }
 }
 
+fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
+    for req in requests {
+        queues.push_input(req.clone().into(), input_type).unwrap()
+    }
+}
+
+fn request(deadline: CoarseTime) -> Request {
+    request_with_payload(13, deadline)
+}
+
+fn request_with_payload(payload_size: usize, deadline: CoarseTime) -> Request {
+    RequestBuilder::new()
+        .sender(canister_test_id(13))
+        .receiver(canister_test_id(13))
+        .method_payload(vec![13; payload_size])
+        .deadline(deadline)
+        .build()
+}
+
+fn response(deadline: CoarseTime) -> Response {
+    response_with_payload(13, deadline)
+}
+
+fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response {
+    ResponseBuilder::new()
+        .respondent(canister_test_id(13))
+        .originator(canister_test_id(13))
+        .response_payload(Payload::Data(vec![13; payload_size]))
+        .deadline(deadline)
+        .build()
+}
+
+fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
+    CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
+}
+
 /// Can push one request to the output queues.
 #[test]
 fn can_push_output_request() {
@@ -180,7 +216,7 @@ fn can_push_input_response_after_output_request() {
     queues.push_input_response().unwrap();
 }
 
-/// Check that `available_output_request_slots` doesn't count input requests and
+/// Checks that `available_output_request_slots` doesn't count input requests and
 /// output reserved slots and responses.
 #[test]
 fn test_available_output_request_slots_dont_counts() {
@@ -199,7 +235,7 @@ fn test_available_output_request_slots_dont_counts() {
     );
 }
 
-/// Check that `available_output_request_slots` counts output requests and input
+/// Checks that `available_output_request_slots` counts output requests and input
 /// reserved slots and responses.
 #[test]
 fn test_available_output_request_slots_counts() {
@@ -227,7 +263,7 @@ fn test_available_output_request_slots_counts() {
     );
 }
 
-/// Check that `available_output_request_slots` counts timed out output
+/// Checks that `available_output_request_slots` counts timed out output
 /// requests.
 #[test]
 fn test_available_output_request_slots_counts_timed_out_output_requests() {
@@ -895,6 +931,124 @@ fn test_output_into_iter() {
     assert!(queues.pool.len() == 0);
 }
 
+#[test]
+fn test_peek_canister_input_does_not_affect_schedule() {
+    let mut queues = CanisterQueues::default();
+    let local_senders = [
+        canister_test_id(1),
+        canister_test_id(2),
+        canister_test_id(1),
+    ];
+    let remote_senders = [canister_test_id(13), canister_test_id(14)];
+
+    let local_requests = local_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+    let remote_requests = remote_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+
+    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+
+    // Schedules before peek.
+    let before_local_schedule = queues.local_subnet_input_schedule.clone();
+    let before_remote_schedule = queues.remote_subnet_input_schedule.clone();
+
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::RemoteSubnet)
+            .unwrap(),
+        CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
+    );
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::LocalSubnet)
+            .unwrap(),
+        CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
+    );
+
+    // Schedules are not changed.
+    assert_eq!(queues.local_subnet_input_schedule, before_local_schedule);
+    assert_eq!(queues.remote_subnet_input_schedule, before_remote_schedule);
+    assert_eq!(
+        queues
+            .canister_queues
+            .get(&canister_test_id(1))
+            .unwrap()
+            .0
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn test_skip_canister_input() {
+    let mut queues = CanisterQueues::default();
+    let local_senders = [
+        canister_test_id(1),
+        canister_test_id(2),
+        canister_test_id(1),
+    ];
+    let remote_senders = [canister_test_id(13), canister_test_id(14)];
+
+    let local_requests = local_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+    let remote_requests = remote_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+
+    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+
+    // Peek before skip.
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::RemoteSubnet)
+            .unwrap(),
+        CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
+    );
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::LocalSubnet)
+            .unwrap(),
+        CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
+    );
+
+    queues.skip_canister_input(InputQueueType::RemoteSubnet);
+    queues.skip_canister_input(InputQueueType::LocalSubnet);
+
+    // Peek will return a different result.
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::RemoteSubnet)
+            .unwrap(),
+        CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()))
+    );
+    assert_eq!(queues.remote_subnet_input_schedule.len(), 2);
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::LocalSubnet)
+            .unwrap(),
+        CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()))
+    );
+    assert_eq!(queues.local_subnet_input_schedule.len(), 2);
+    assert_eq!(
+        queues
+            .canister_queues
+            .get(&canister_test_id(1))
+            .unwrap()
+            .0
+            .len(),
+        2
+    );
+}
+
 struct StrictMetrics;
 impl CheckpointLoadingMetrics for StrictMetrics {
     fn observe_broken_soft_invariant(&self, msg: String) {
@@ -1168,160 +1322,6 @@ fn decode_backward_compatibility() {
         .try_into()
         .unwrap();
     assert_eq!(expected_queues, queues);
-}
-
-fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
-    for req in requests {
-        queues.push_input(req.clone().into(), input_type).unwrap()
-    }
-}
-
-fn request(deadline: CoarseTime) -> Request {
-    request_with_payload(13, deadline)
-}
-
-fn request_with_payload(payload_size: usize, deadline: CoarseTime) -> Request {
-    RequestBuilder::new()
-        .sender(canister_test_id(13))
-        .receiver(canister_test_id(13))
-        .method_payload(vec![13; payload_size])
-        .deadline(deadline)
-        .build()
-}
-
-fn response(deadline: CoarseTime) -> Response {
-    response_with_payload(13, deadline)
-}
-
-fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response {
-    ResponseBuilder::new()
-        .respondent(canister_test_id(13))
-        .originator(canister_test_id(13))
-        .response_payload(Payload::Data(vec![13; payload_size]))
-        .deadline(deadline)
-        .build()
-}
-
-fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
-    CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
-}
-
-#[test]
-fn test_peek_canister_input_does_not_affect_schedule() {
-    let mut queues = CanisterQueues::default();
-    let local_senders = [
-        canister_test_id(1),
-        canister_test_id(2),
-        canister_test_id(1),
-    ];
-    let remote_senders = [canister_test_id(13), canister_test_id(14)];
-
-    let local_requests = local_senders
-        .iter()
-        .map(|sender| RequestBuilder::default().sender(*sender).build())
-        .collect::<Vec<_>>();
-    let remote_requests = remote_senders
-        .iter()
-        .map(|sender| RequestBuilder::default().sender(*sender).build())
-        .collect::<Vec<_>>();
-
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
-
-    // Schedules before peek.
-    let before_local_schedule = queues.local_subnet_input_schedule.clone();
-    let before_remote_schedule = queues.remote_subnet_input_schedule.clone();
-
-    assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
-        CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
-    );
-    assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
-        CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
-    );
-
-    // Schedules are not changed.
-    assert_eq!(queues.local_subnet_input_schedule, before_local_schedule);
-    assert_eq!(queues.remote_subnet_input_schedule, before_remote_schedule);
-    assert_eq!(
-        queues
-            .canister_queues
-            .get(&canister_test_id(1))
-            .unwrap()
-            .0
-            .len(),
-        2
-    );
-}
-
-#[test]
-fn test_skip_canister_input() {
-    let mut queues = CanisterQueues::default();
-    let local_senders = [
-        canister_test_id(1),
-        canister_test_id(2),
-        canister_test_id(1),
-    ];
-    let remote_senders = [canister_test_id(13), canister_test_id(14)];
-
-    let local_requests = local_senders
-        .iter()
-        .map(|sender| RequestBuilder::default().sender(*sender).build())
-        .collect::<Vec<_>>();
-    let remote_requests = remote_senders
-        .iter()
-        .map(|sender| RequestBuilder::default().sender(*sender).build())
-        .collect::<Vec<_>>();
-
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
-
-    // Peek before skip.
-    assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
-        CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
-    );
-    assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
-        CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
-    );
-
-    queues.skip_canister_input(InputQueueType::RemoteSubnet);
-    queues.skip_canister_input(InputQueueType::LocalSubnet);
-
-    // Peek will return a different result.
-    assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
-        CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()))
-    );
-    assert_eq!(queues.remote_subnet_input_schedule.len(), 2);
-    assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
-        CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()))
-    );
-    assert_eq!(queues.local_subnet_input_schedule.len(), 2);
-    assert_eq!(
-        queues
-            .canister_queues
-            .get(&canister_test_id(1))
-            .unwrap()
-            .0
-            .len(),
-        2
-    );
 }
 
 #[test]
@@ -1972,7 +1972,7 @@ prop_compose! {
 
 proptest! {
     #[test]
-    fn peek_and_next_consistent(
+    fn output_into_iter_peek_and_next_consistent(
         (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
     ) {
         let mut output_iter = canister_queues.output_into_iter();
@@ -1989,7 +1989,7 @@ proptest! {
     }
 
     #[test]
-    fn peek_and_next_consistent_with_excludes(
+    fn output_into_iter_peek_and_next_consistent_with_excludes(
         (mut canister_queues, raw_requests) in arb_canister_queues(100, None),
         start in 0..=1,
         exclude_step in 2..=5,
@@ -2014,7 +2014,7 @@ proptest! {
     }
 
     #[test]
-    fn iter_leaves_non_consumed_messages_untouched(
+    fn output_into_iter_leaves_non_consumed_messages_untouched(
         (mut canister_queues, mut raw_requests) in arb_canister_queues(100, Some(10)),
     ) {
         let num_requests = raw_requests.len();
@@ -2050,7 +2050,7 @@ proptest! {
     }
 
     #[test]
-    fn iter_with_exclude_leaves_excluded_queues_untouched(
+    fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
         (mut canister_queues, mut raw_requests) in arb_canister_queues(100, None),
         start in 0..=1,
         exclude_step in 2..=5,
@@ -2063,7 +2063,7 @@ proptest! {
 
             let mut i = start;
             let mut excluded = 0;
-            while output_iter.peek().is_some() {
+            while let Some(peeked_message) = output_iter.peek() {
                 i += 1;
                 if i % exclude_step == 0 {
                     output_iter.exclude_queue();
@@ -2074,7 +2074,9 @@ proptest! {
                     continue;
                 }
 
+                let peeked_message = peeked_message.clone();
                 let popped_message = output_iter.pop().unwrap();
+                assert_eq!(popped_message, peeked_message);
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -2099,7 +2101,7 @@ proptest! {
     }
 
     #[test]
-    fn iter_yields_correct_elements(
+    fn output_into_iter_yields_correct_elements(
         (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
     ) {
         let recovered: VecDeque<_> = canister_queues
@@ -2110,7 +2112,7 @@ proptest! {
     }
 
     #[test]
-    fn exclude_leaves_state_untouched(
+    fn output_into_iter_exclude_leaves_state_untouched(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
     ) {
         let expected_canister_queues = canister_queues.clone();
@@ -2126,19 +2128,19 @@ proptest! {
     }
 
     #[test]
-    fn peek_pop_loop_terminates(
+    fn output_into_iter_peek_pop_loop_terminates(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
     ) {
         let mut output_iter = canister_queues.output_into_iter();
 
-        while output_iter.peek().is_some() {
-            output_iter.next();
+        while let Some(msg) = output_iter.peek() {
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
         assert_eq!(None, output_iter.next());
     }
 
     #[test]
-    fn peek_pop_loop_with_excludes_terminates(
+    fn output_into_iter_peek_pop_loop_with_excludes_terminates(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
         start in 0..=1,
         exclude_step in 2..=5,
@@ -2146,18 +2148,18 @@ proptest! {
         let mut output_iter = canister_queues.output_into_iter();
 
         let mut i = start;
-        while output_iter.peek().is_some() {
+        while let Some(msg) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
                 continue;
             }
-            output_iter.next();
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
     }
 
     #[test]
-    fn peek_with_stale_references(
+    fn output_into_iter_peek_with_stale_references(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
         deadline in any::<u32>(),
     ) {
@@ -2170,14 +2172,14 @@ proptest! {
 
         // Peek and pop until the output queues are empty.
         let mut output_iter = canister_queues.output_into_iter();
-        while output_iter.peek().is_some() {
-            output_iter.next();
+        while let Some(msg) = output_iter.peek() {
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
         assert_eq!(None, output_iter.next());
     }
 }
 
-/// Tests 'has_expired_deadlines` reports
+/// Tests that 'has_expired_deadlines` reports:
 /// - false for an empty `CanisterQueues`.
 /// - false for a non-empty `CanisterQueues` using a current time < all deadlines.
 /// - true for a non-empty `CanisterQueues` using a current time >= at least one deadline.
