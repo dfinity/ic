@@ -4,7 +4,8 @@ Rules to manipulate with artifacts: download, upload etc.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("//bazel:status.bzl", "FAKE_IC_VERSION")
-load("//bazel:fixtures.bzl", "FAKE_IC_VERSION")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:fixtures.bzl", "release_fixture_name")
 
 def filesum_file(label_name, file):
     return label_name + "/" + file.basename + ".SHA256SUM"
@@ -184,6 +185,7 @@ def upload_fixtures(name, out, **kwargs):
 
     upload_artifacts(
         name = intermediate_name,
+        remote_subdir = "fixtures",
         **kwargs,
     )
 
