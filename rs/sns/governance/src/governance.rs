@@ -4935,6 +4935,16 @@ impl Governance {
                 } else {
                     neuron.maturity_e8s_equivalent += neuron_reward_e8s;
                 }
+                // Add the neuron_reward_e8s to the reward_events_to_neuron_reward_e8s map on the neuron. 
+                neuron.reward_events_to_neuron_reward_e8s.insert( 
+                    reward_event_end_timestamp_seconds, 
+                    neuron_reward_e8s
+                );
+                // prune
+                while neuron.reward_events_to_neuron_reward_e8s.len() > 10 {
+                    // prune earliest. 
+                    
+                }
                 distributed_e8s_equivalent += neuron_reward_e8s;
             }
         }
