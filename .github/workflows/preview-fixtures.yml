@@ -11,12 +11,27 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+    env:
+      AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Generate and upload fixtures
         shell: bash
-        run:
+        run: |
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+
+          # handle github and gitlab differently
+          if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
+              ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+          elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
+              echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+          else
+              echo '$AWS_SHARED_CREDENTIALS_CONTENT or $AWS_SHARED_CREDENTIALS_FILE has to be set' >&2
+              exit 1
+          fi
+          
           bazel build //publish/fixtures:upload_fixtures
       - name: Commit the new fixtures
         shell: bash
