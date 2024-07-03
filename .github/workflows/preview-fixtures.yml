@@ -55,13 +55,14 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//publish/fixtures:upload_fixtures"
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          # check if PR title contains release and set timeout filters accordingly
           RUN_ON_DIFF_ONLY: 'false'
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Commit the new fixtures
         shell: bash
         run: |
           set -x
+          find . -name release_fixtures.bzl
+          tree -a
           cp bazel-bin/release_fixtures.bzl release_fixtures.bzl
           git add release_fixtures.bzl
           git commit -m "Release CI: Update release fixtures"
