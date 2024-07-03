@@ -37,9 +37,10 @@ env:
 jobs:
   bazel-test-all:
     name: Bazel Test All
+    timeout-minutes: 90
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
-    timeout-minutes: 90
+      options: -e NODE_NAME
     runs-on:
       group: zh1
       labels: dind-large
