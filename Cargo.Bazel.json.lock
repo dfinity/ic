@@ -1,5 +1,5 @@
 {
-  "checksum": "4bdf46f1f0aa26a4541b4a3abea2ff8849949d29bced733835fd9efac6405194",
+  "checksum": "885c1619fbeeee7a4fe58abf87a405694a24becfe4e95e2de60d2bab9097d348",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3642,67 +3642,6 @@
         "MIT"
       ],
       "license_file": null
-    },
-    "async-socks5 0.5.1": {
-      "name": "async-socks5",
-      "version": "0.5.1",
-      "package_url": "https://github.com/ark0f/async-socks5",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/async-socks5/0.5.1/download",
-          "sha256": "77f634add2445eb2c1f785642a67ca1073fedd71e73dc3ca69435ef9b9bdedc7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "async_socks5",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "async_socks5",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "thiserror 1.0.57",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.38.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.73",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.1"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
     },
     "async-stream 0.3.5": {
       "name": "async-stream",
@@ -16831,10 +16770,6 @@
               "target": "async_scoped"
             },
             {
-              "id": "async-socks5 0.5.1",
-              "target": "async_socks5"
-            },
-            {
               "id": "async-stream 0.3.5",
               "target": "async_stream"
             },
@@ -17071,10 +17006,6 @@
             {
               "id": "escargot 0.5.7",
               "target": "escargot"
-            },
-            {
-              "id": "ethabi 18.0.0",
-              "target": "ethabi"
             },
             {
               "id": "ethers-core 2.0.8",
@@ -20386,7 +20317,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "full-serde",
             "once_cell",
             "regex",
@@ -77272,7 +77202,6 @@
     "assert_matches 1.5.0",
     "async-recursion 1.0.5",
     "async-scoped 0.8.0",
-    "async-socks5 0.5.1",
     "async-stream 0.3.5",
     "async-trait 0.1.73",
     "axum 0.6.20",
@@ -77334,7 +77263,6 @@
     "either 1.8.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
-    "ethabi 18.0.0",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
     "exec 0.3.1",

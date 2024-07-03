@@ -11,6 +11,8 @@ Runbook::
 . Get public keys for all supported schemes.
 . Add all X unassigned nodes to System subnet via proposal.
 . Assert that node membership has changed.
+. Assert that the key was reshared due to the new membership
+. Assert that all nodes are making progress
 . Assert that chain key signing continues to work with the same public key as before.
 
 Success::
@@ -25,8 +27,10 @@ use super::DKG_INTERVAL;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    secs, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    SubnetSnapshot,
 };
+use crate::orchestrator::utils::rw_message::cert_state_makes_progress_with_retries;
 use crate::tecdsa::{
     enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
     make_key_ids_for_all_schemes,
@@ -36,15 +40,18 @@ use crate::{
     util::*,
 };
 use canister_test::Canister;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
-use slog::info;
+use slog::{info, Logger};
 
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
+
+const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -100,14 +107,18 @@ pub fn test(env: TestEnv) {
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let msg_can =
         block_on(async { MessageCanister::new(&agent, nns_node.effective_canister_id()).await });
+    let nns = topology_snapshot.root_subnet();
     let mut public_keys = BTreeMap::new();
     for key_id in &key_ids {
-        let public_key = block_on(async {
-            get_public_key_with_logger(key_id, &msg_can, &log)
+        block_on(async {
+            let public_key = get_public_key_with_logger(key_id, &msg_can, &log)
                 .await
-                .unwrap()
+                .unwrap();
+            public_keys.insert(key_id.clone(), public_key);
+            info!(log, "Asserting initial metric state of key {}", key_id);
+            // Initially, the sum of key creations should be equal to the number of nodes
+            assert_metric_sum(&nns, key_id, NODES_COUNT, &log).await;
         });
-        public_keys.insert(key_id.clone(), public_key);
     }
     info!(
         log,
@@ -140,10 +151,26 @@ pub fn test(env: TestEnv) {
         // Get a new snapshot.
         let topology_snapshot = env.topology_snapshot();
         assert!(topology_snapshot.unassigned_nodes().next().is_none());
-        assert_eq!(
-            topology_snapshot.root_subnet().nodes().count(),
-            UNASSIGNED_NODES_COUNT + NODES_COUNT
-        );
+        let nns = topology_snapshot.root_subnet();
+        assert_eq!(nns.nodes().count(), UNASSIGNED_NODES_COUNT + NODES_COUNT);
+
+        for key_id in &key_ids {
+            info!(log, "Make sure key {} was rotated.", key_id);
+            // All nodes (old and new) should have increased their metric by one.
+            assert_metric_sum(&nns, key_id, 2 * NODES_COUNT + UNASSIGNED_NODES_COUNT, &log).await;
+        }
+
+        info!(log, "Assert all nodes are making progress.");
+        for node in nns.nodes() {
+            cert_state_makes_progress_with_retries(
+                &node.get_public_url(),
+                node.effective_canister_id(),
+                &log,
+                /*timeout=*/ secs(100),
+                /*backoff=*/ secs(3),
+            );
+        }
+
         info!(log, "Run through signature test.");
         let msg_can = MessageCanister::from_canister_id(&agent, msg_can.canister_id());
         for (key_id, public_key) in public_keys {
@@ -153,4 +180,44 @@ pub fn test(env: TestEnv) {
             assert_eq!(public_key, public_key_);
         }
     });
+}
+
+async fn assert_metric_sum(
+    subnet: &SubnetSnapshot,
+    key_id: &MasterPublicKeyId,
+    expected_sum: usize,
+    log: &Logger,
+) {
+    let mut count = 0;
+    let metric_with_label = format!("{}{{key_id=\"{}\"}}", ECDSA_KEY_TRANSCRIPT_CREATED, key_id);
+    let metrics = MetricsFetcher::new(subnet.nodes(), vec![metric_with_label.clone()]);
+    loop {
+        match metrics.fetch::<u64>().await {
+            Ok(map) => {
+                let values = map[&metric_with_label].clone();
+                let sum: u64 = values.into_iter().sum();
+                if sum as usize == expected_sum {
+                    info!(
+                        log,
+                        "Found correct value of key rotation metric for {}", key_id
+                    );
+                    break;
+                } else {
+                    info!(
+                        log,
+                        "Sum of metrics for {} is {} != {}", key_id, sum, expected_sum
+                    );
+                }
+            }
+            Err(err) => {
+                info!(log, "Could not connect to metrics yet {:?}", err);
+            }
+        }
+        count += 1;
+        // Abort after 30 tries
+        if count > 30 {
+            panic!("Failed to find key rotation of {}", key_id);
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    }
 }

@@ -2,9 +2,13 @@ name: Release Testing
 
 on:
   push:
-    branches:
-      - 'hotfix-*-rc--*'
-      - 'rc--*'
+    workflow_run:
+      workflows: ["CI Main"]
+      types:
+        - completed
+      branches:
+        - 'hotfix-*-rc--*'
+        - 'rc--*'
   workflow_dispatch:
 
 env:
@@ -30,7 +34,8 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       <<: *image
     timeout-minutes: 180 # 3 hours
@@ -44,9 +49,18 @@ anchors:
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
 
 jobs:
+  ci-main-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - run: |
+          echo 'CI Main workflow failed'
+          exit 1
+
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     <<: *dind-large-setup
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -64,6 +78,7 @@ jobs:
     name: Bazel System Test Staging
     continue-on-error: True
     <<: *dind-large-setup
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -81,6 +96,7 @@ jobs:
     name: Bazel System Test Hotfix
     <<: *dind-large-setup
     timeout-minutes: 90
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script

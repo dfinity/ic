@@ -16,7 +16,7 @@ pub trait Logger<T>: Clone {
 
     /// Return true if events should be logged at the given level and module,
     /// false otherwise
-    fn is_enabled_at(&self, level: slog::Level, module_path: &'static str) -> bool;
+    fn is_enabled_at(&self, level: slog::Level) -> bool;
 
     /// Return true if this is the first log in n seconds, false otherwise
     fn is_n_seconds<V: Into<i32>>(&self, seconds: V, metadata: LogMetadata) -> bool;
@@ -89,8 +89,8 @@ where
         self.inner_logger.log(message, context, metadata)
     }
 
-    pub fn is_enabled_at(&self, level: slog::Level, module_path: &'static str) -> bool {
-        self.inner_logger.is_enabled_at(level, module_path)
+    pub fn is_enabled_at(&self, level: slog::Level) -> bool {
+        self.inner_logger.is_enabled_at(level)
     }
 
     pub fn is_n_seconds<T: Into<i32>>(&self, seconds: T, metadata: LogMetadata) -> bool {
@@ -150,7 +150,7 @@ mod tests {
             assert_eq!(metadata.level, self.expected_level);
         }
 
-        fn is_enabled_at(&self, _: slog::Level, _: &'static str) -> bool {
+        fn is_enabled_at(&self, _: slog::Level) -> bool {
             true
         }
 
@@ -167,7 +167,7 @@ mod tests {
             panic!("Unexpected call to log()!");
         }
 
-        fn is_enabled_at(&self, _: slog::Level, _: &'static str) -> bool {
+        fn is_enabled_at(&self, _: slog::Level) -> bool {
             false
         }
 
@@ -186,7 +186,7 @@ mod tests {
             self.count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
 
-        fn is_enabled_at(&self, _: slog::Level, _: &'static str) -> bool {
+        fn is_enabled_at(&self, _: slog::Level) -> bool {
             true
         }
 

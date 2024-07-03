@@ -13,7 +13,7 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{ArtifactKind, CanisterHttpResponseId},
+    artifact::CanisterHttpResponseId,
     artifact_kind::CanisterHttpArtifact,
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
@@ -121,7 +121,7 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: CanisterHttpArtifact::message_to_advert(&share),
+                        artifact: share.clone(),
                         is_latency_sensitive: true,
                     });
                     self.validated.insert(share, ());
@@ -184,6 +184,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
+        artifact::ArtifactKind,
         canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
         crypto::{CryptoHash, Signed},
         messages::CallbackId,
@@ -253,7 +254,10 @@ mod tests {
             CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
         ]);
 
-        assert_eq!(result.artifacts_with_opt[0].advert.id, id);
+        assert_eq!(
+            CanisterHttpArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+            id
+        );
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share, pool.lookup_validated(&id).unwrap());

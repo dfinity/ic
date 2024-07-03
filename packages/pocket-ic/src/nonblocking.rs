@@ -58,7 +58,6 @@ pub struct PocketIc {
     // how long a get/post request may retry or poll
     max_request_time_ms: Option<u64>,
     http_gateway: Option<HttpGatewayInfo>,
-    topology: Topology,
     server_url: Url,
     reqwest_client: reqwest::Client,
     _log_guard: Option<WorkerGuard>,
@@ -113,7 +112,7 @@ impl PocketIc {
         let log_guard = setup_tracing(parent_pid);
 
         let reqwest_client = reqwest::Client::new();
-        let (instance_id, topology) = match reqwest_client
+        let instance_id = match reqwest_client
             .post(server_url.join("instances").unwrap())
             .json(&config)
             .send()
@@ -123,10 +122,7 @@ impl PocketIc {
             .await
             .expect("Could not parse response for create instance request")
         {
-            CreateInstanceResponse::Created {
-                instance_id,
-                topology,
-            } => (instance_id, topology),
+            CreateInstanceResponse::Created { instance_id, .. } => instance_id,
             CreateInstanceResponse::Error { message } => panic!("{}", message),
         };
         debug!("instance_id={} New instance created.", instance_id);
@@ -135,7 +131,6 @@ impl PocketIc {
             instance_id,
             max_request_time_ms,
             http_gateway: None,
-            topology,
             server_url,
             reqwest_client,
             _log_guard: log_guard,
@@ -144,7 +139,8 @@ impl PocketIc {
 
     /// Returns the topology of the different subnets of this PocketIC instance.
     pub async fn topology(&self) -> Topology {
-        self.topology.clone()
+        let endpoint = "read/topology";
+        self.get(endpoint).await
     }
 
     /// Upload and store a binary blob to the PocketIC server.
@@ -303,6 +299,8 @@ impl PocketIc {
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
+        // Execute a tick to make sure all subnets have a certified state.
+        self.tick().await;
         self.auto_progress().await;
         self.start_http_gateway(listen_at).await
     }
@@ -373,7 +371,7 @@ impl PocketIc {
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn root_key(&self) -> Option<Vec<u8>> {
-        let subnet_id = self.topology.get_nns()?;
+        let subnet_id = self.topology().await.get_nns()?;
         let subnet_id: RawSubnetId = subnet_id.into();
         let endpoint = "read/pub_key";
         let res = self.post::<Vec<u8>, _>(endpoint, subnet_id).await;
@@ -604,11 +602,11 @@ impl PocketIc {
 
     /// Creates a canister with a specific canister ID and optional custom settings.
     /// Returns an error if the canister ID is already in use.
-    /// Panics if the canister ID is not contained in any of the subnets.
+    /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
-    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS
-    /// subnet range, it is not intended to be used on regular app or system subnets,
-    /// where it can lead to conflicts on which the function panics.
+    /// The canister ID must be an IC mainnet canister ID that does not belong to the NNS or II subnet,
+    /// otherwise the function might panic (for NNS and II canister IDs,
+    /// the PocketIC instance should already be created with those subnets).
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
     pub async fn create_canister_with_id(
         &self,
@@ -800,6 +798,46 @@ impl PocketIc {
             wasm_module,
             arg,
             sender,
+        )
+        .await
+    }
+
+    /// Uninstall a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn uninstall_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        call_candid_as::<(CanisterIdRecord,), ()>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "uninstall_code",
+            (CanisterIdRecord { canister_id },),
+        )
+        .await
+    }
+
+    /// Update canister settings.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn update_canister_settings(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        settings: CanisterSettings,
+    ) -> Result<(), CallError> {
+        call_candid_as::<_, ()>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "update_settings",
+            (UpdateSettingsArgument {
+                canister_id,
+                settings,
+            },),
         )
         .await
     }

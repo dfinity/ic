@@ -2,11 +2,13 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
-use crate::ecdsa::utils::get_chain_key_config_if_enabled;
-use crate::ecdsa::{
-    make_bootstrap_summary, payload_builder::make_bootstrap_summary_with_initial_dealings,
-    utils::inspect_chain_key_initializations,
+use crate::{
+    consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
+    ecdsa::{
+        make_bootstrap_summary,
+        payload_builder::make_bootstrap_summary_with_initial_dealings,
+        utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},
+    },
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
@@ -20,8 +22,6 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::consensus::SummaryPayload;
-use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash};
 use ic_types::{
     artifact::{Priority, PriorityFn},
     artifact_kind::DkgArtifact,
@@ -29,17 +29,16 @@ use ic_types::{
     consensus::{
         dkg::{DealingContent, DkgMessageId, Message},
         idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank,
+        Payload, RandomBeaconContent, Rank, SummaryPayload,
     },
     crypto::{
         crypto_hash,
         threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     signature::ThresholdSignature,
     Height, NodeId, RegistryVersion, SubnetId, Time,
 };
-pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
 pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use phantom_newtype::Id;
 use prometheus::Histogram;
@@ -54,6 +53,8 @@ pub(crate) mod payload_validator;
 #[cfg(test)]
 mod test_utils;
 mod utils;
+
+pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
@@ -585,8 +586,7 @@ fn bootstrap_ecdsa_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::test_utils::complement_state_manager_with_remote_dkg_requests;
-    use super::*;
+    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
         dependencies, dependencies_with_subnet_params,

@@ -10,7 +10,6 @@ use ic_interfaces::{
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::ArtifactKind;
 use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
 use ic_types::NodeId;
@@ -210,7 +209,7 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
                 artifacts_with_opt.push(ArtifactWithOpt {
-                    advert: CertificationArtifact::message_to_advert(&msg),
+                    artifact: msg.clone(),
                     is_latency_sensitive: true,
                 });
                 self.validated_pool_metrics
@@ -223,7 +222,7 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
             ChangeAction::MoveToValidated(msg) => {
                 if !msg.is_share() {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: CertificationArtifact::message_to_advert(&msg),
+                        artifact: msg.clone(),
                         // relayed
                         is_latency_sensitive: false,
                     });
@@ -438,6 +437,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::artifact::ArtifactKind;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         consensus::certification::{
@@ -605,7 +605,10 @@ mod tests {
                 ChangeAction::MoveToValidated(cert_msg.clone()),
             ]);
             let expected = CertificationArtifact::message_to_advert(&cert_msg).id;
-            assert_eq!(result.artifacts_with_opt[0].advert.id, expected);
+            assert_eq!(
+                CertificationArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                expected
+            );
             assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
