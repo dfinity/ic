@@ -68,6 +68,9 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
+    container:
+      <<: *image
+      options: -e NODE_NAME
     runs-on:
       group: zh1
       labels: dind-large
