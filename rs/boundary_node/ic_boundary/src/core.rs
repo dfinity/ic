@@ -609,6 +609,7 @@ pub fn setup_router(
         RetryParams {
             retry_count: cli.retry.retry_count as usize,
             retry_update_call: cli.retry.retry_update_call,
+            disable_latency_routing: cli.retry.disable_latency_routing,
         },
         retry_request,
     );
