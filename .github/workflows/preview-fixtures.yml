@@ -62,7 +62,6 @@ jobs:
         run: |
           set -x
           ls -al
-          find / -name release_fixtures.bzl
           echo "Copying"
           cp bazel-bin/publish/fixtures/release_fixtures.bzl release_fixtures.bzl 
           git add release_fixtures.bzl
