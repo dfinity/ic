@@ -24,6 +24,9 @@ pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
 /// The default voting_power_percentage_multiplier applied to a neuron.
 pub const DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER: u64 = 100;
 
+// The max number of reward_events_to_neuron_reward_e8s per neuron
+pub const MAX_KEEP_REWARD_EVENTS_TO_NEURON_REWARD_E8S_PER_NEURON: u64 = 5;
+
 /// The state of a neuron
 #[derive(Debug, PartialEq, Eq)]
 pub enum NeuronState {
