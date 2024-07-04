@@ -28,7 +28,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshot,
+    canister_snapshots::{CanisterSnapshot, CanisterSnapshotError},
     canister_state::{
         execution_state::Memory,
         system_state::{
@@ -1931,7 +1931,8 @@ impl CanisterManager {
         }
 
         // Create new snapshot.
-        let new_snapshot = CanisterSnapshot::from(canister, state.time());
+        let new_snapshot = CanisterSnapshot::new_from(canister, state.time())
+        .map_err(|err| CanisterManagerError::from(err))?;
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
@@ -2033,8 +2034,8 @@ impl CanisterManager {
         let (_old_execution_state, mut system_state, scheduler_state) =
             canister.clone().into_parts();
 
-        let (instructions_used, new_execution_state) = match snapshot.execution_snapshot() {
-            Some(execution_snapshot) => {
+        let (instructions_used, new_execution_state) = {
+            let execution_snapshot = snapshot.execution_snapshot();
                 let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
                 let compilation_cost_handling = if state
                     .metadata
@@ -2066,9 +2067,7 @@ impl CanisterManager {
                 new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
                 new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
                 (instructions_used, Some(new_execution_state))
-            }
-            None => (NumInstructions::new(0), None),
-        };
+            };
 
         system_state.wasm_chunk_store = snapshot.chunk_store().clone();
         system_state
@@ -2271,6 +2270,9 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    CanisterSnapshotExecutionStateNotFound {
+        canister_id: CanisterId,
+    },
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -2317,6 +2319,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::CanisterSnapshotNotFound { .. }
             | CanisterManagerError::CanisterHeapDeltaRateLimited { .. }
             | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
+            | CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. }
             | CanisterManagerError::LongExecutionAlreadyInProgress { .. }
             | CanisterManagerError::MissingUpgradeOptionError { .. }
             | CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
@@ -2600,6 +2603,14 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
+            CanisterSnapshotExecutionStateNotFound {canister_id} => {
+                Self::new(
+                    ErrorCode::CanisterRejectedMessage, 
+                    format!(
+                        "Could not create new snapshot for canister {}: ", canister_id,
+                    )
+                )
+            }
             LongExecutionAlreadyInProgress { canister_id } => {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2624,6 +2635,15 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
+        }
+    }
+}
+
+impl From<CanisterSnapshotError> for CanisterManagerError {
+    fn from(err: CanisterSnapshotError) -> Self {
+        match err {
+            CanisterSnapshotError::EmptyExecutionState(canister_id) => 
+            CanisterManagerError::CanisterSnapshotExecutionStateNotFound {canister_id: canister_id},
         }
     }
 }

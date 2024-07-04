@@ -380,7 +380,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
     assert_eq!(
-        *snapshot.canister_module().unwrap(),
+        *snapshot.canister_module(),
         test.canister_state(canister_id)
             .execution_state
             .as_ref()

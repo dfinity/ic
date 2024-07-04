@@ -1,6 +1,5 @@
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
 use ic_wasm_types::CanisterModule;
-
 use crate::{
     canister_state::execution_state::Memory,
     canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
@@ -216,26 +215,31 @@ impl CanisterSnapshot {
         }
     }
 
-    pub fn from(canister: &CanisterState, taken_at_timestamp: Time) -> Self {
-        let execution_snapshot =
-            canister
-                .execution_state
-                .as_ref()
-                .map(|execution_state| ExecutionStateSnapshot {
-                    wasm_binary: execution_state.wasm_binary.binary.clone(),
-                    stable_memory: PageMemory::from(&execution_state.stable_memory),
-                    wasm_memory: PageMemory::from(&execution_state.wasm_memory),
-                });
+    pub fn new_from(canister: &CanisterState, taken_at_timestamp: Time) -> Result<Self, CanisterSnapshotError> {
+        let canister_id = canister.canister_id();
 
-        Self {
-            canister_id: canister.canister_id(),
+        let execution_state =
+        canister
+            .execution_state
+            .as_ref()
+            .ok_or(
+                CanisterSnapshotError::EmptyExecutionState(canister_id)
+            )?;
+        let execution_snapshot = ExecutionStateSnapshot {
+            wasm_binary: execution_state.wasm_binary.binary.clone(),
+            stable_memory: PageMemory::from(&execution_state.stable_memory),
+            wasm_memory: PageMemory::from(&execution_state.wasm_memory),
+        };
+
+        Ok(CanisterSnapshot {
+            canister_id,
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version,
             certified_data: canister.system_state.certified_data.clone(),
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
             size: canister.snapshot_memory_usage(),
-        }
+        })
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -279,39 +283,43 @@ impl CanisterSnapshot {
     }
 }
 
-/// Errors that can occur when converting from (sender, [`InstallCodeArgsV2`]) to
-/// an [`InstallCodeContext`].
-#[derive(Debug)]
-pub enum InstallCodeContextError {
-    ComputeAllocation(InvalidComputeAllocationError),
-    MemoryAllocation(InvalidMemoryAllocationError),
-    InvalidHash(String),
-}
 
-impl From<InstallCodeContextError> for UserError {
-    fn from(err: InstallCodeContextError) -> Self {
-        match err {
-            InstallCodeContextError::ComputeAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "ComputeAllocation expected to be in the range [{}..{}], got {}",
-                    err.min(),
-                    err.max(),
-                    err.given()
-                ),
-            ),
-            InstallCodeContextError::MemoryAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
-                ),
-            ),
-            InstallCodeContextError::InvalidHash(err) => {
-                UserError::new(ErrorCode::CanisterContractViolation, err)
-            }
-        }
-    }
+// impl TryFrom<(&CanisterState, Time)> for CanisterSnapshot {
+//     type Error = CanisterSnapshotError;
+
+//     fn try_from(input: (&CanisterState, Time)) -> Result<Self, Self::Error> {
+//         let (canister, taken_at_timestamp) = input;
+//         let canister_id = canister.canister_id();
+
+//         let execution_state =
+//         canister
+//             .execution_state
+//             .as_ref()
+//             .ok_or(
+//                 CanisterSnapshotError::EmptyExecutionState(canister_id)
+//             )?;
+//         let execution_snapshot = ExecutionStateSnapshot {
+//             wasm_binary: execution_state.wasm_binary.binary.clone(),
+//             stable_memory: PageMemory::from(&execution_state.stable_memory),
+//             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
+//         };
+
+//         Ok(CanisterSnapshot {
+//             canister_id,
+//             taken_at_timestamp,
+//             canister_version: canister.system_state.canister_version,
+//             certified_data: canister.system_state.certified_data.clone(),
+//             chunk_store: canister.system_state.wasm_chunk_store.clone(),
+//             execution_snapshot,
+//             size: canister.snapshot_memory_usage(),
+//         })
+//     }
+// }
+
+/// Errors that can occur when trying to create a `CanisterSnapshot` from (&CanisterState, Time).
+#[derive(Debug)]
+pub enum CanisterSnapshotError {
+    EmptyExecutionState(CanisterId),
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.
