@@ -852,7 +852,7 @@ impl Blocks {
             tx.execute(
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks (
-                    idx INTEGER NOT NULL PRIMARY KEY,
+                    rosetta_block_idx INTEGER NOT NULL PRIMARY KEY,
                     parent_hash BLOB,
                     hash BLOB NOT NULL,
                     timestamp TEXT
@@ -863,9 +863,9 @@ impl Blocks {
             tx.execute(
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks_transactions (
-                    idx INTEGER NOT NULL REFERENCES rosetta_blocks(idx),
+                    rosetta_block_idx INTEGER NOT NULL REFERENCES rosetta_blocks(rosetta_block_idx),
                     block_idx INTEGER NOT NULL REFERENCES blocks(idx),
-                    PRIMARY KEY(idx, block_idx)
+                    PRIMARY KEY(rosetta_block_idx, block_idx)
                 )
                 "#,
                 [],
@@ -909,10 +909,11 @@ impl Blocks {
         //     in the blocks table + 1, i.e. the next incoming block.
         //  3. else the first rosetta block index will be
         //     the lowest possible block index, i.e. 0.
-        let first_rosetta_block_index =
-            connection.query_row("SELECT min(idx) FROM rosetta_blocks", [], |row| {
-                row.get::<_, Option<u64>>(0)
-            })?;
+        let first_rosetta_block_index = connection.query_row(
+            "SELECT min(rosetta_block_idx) FROM rosetta_blocks",
+            [],
+            |row| row.get::<_, Option<u64>>(0),
+        )?;
         let first_rosetta_block_index = match first_rosetta_block_index {
             Some(first_rosetta_block_index) => first_rosetta_block_index,
             None => connection
@@ -1369,7 +1370,7 @@ impl Blocks {
         {
             let mut statement = transaction
                 .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks (idx, hash, timestamp)
+                    r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
                                 VALUES (:idx, :hash, :timestamp)"#,
                 )
                 .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
@@ -1386,7 +1387,7 @@ impl Blocks {
         {
             let mut statement = transaction
                 .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks_transactions (idx, block_idx)
+                    r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
                     VALUES (:idx, :block_idx)"#,
                 )
                 .map_err(|e| {
@@ -1434,7 +1435,9 @@ impl Blocks {
             .lock()
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
         let mut statement = connection
-            .prepare_cached("SELECT parent_hash, timestamp FROM rosetta_blocks WHERE idx=:idx")
+            .prepare_cached(
+                "SELECT parent_hash, timestamp FROM rosetta_blocks WHERE rosetta_block_idx=:idx",
+            )
             .map_err(|e| format!("Unable to prepare query: {e:?}"))?;
         let mut blocks = statement
             .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
@@ -1464,7 +1467,7 @@ impl Blocks {
                 r#"SELECT blocks.idx, block
                    FROM rosetta_blocks_transactions JOIN blocks
                    ON rosetta_blocks_transactions.block_idx = blocks.idx
-                   WHERE rosetta_blocks_transactions.idx=:idx"#,
+                   WHERE rosetta_blocks_transactions.rosetta_block_idx=:idx"#,
             )
             .map_err(|e| format!("Unable to select block: {e:?}"))?;
         let blocks = statement
@@ -1498,13 +1501,11 @@ fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
 
 #[cfg(test)]
 mod tests {
+    use super::Blocks;
+    use crate::rosetta_block::RosettaBlock;
     use candid::Principal;
     use ic_ledger_core::block::BlockType;
     use icp_ledger::{AccountIdentifier, Block, Memo, Operation, TimeStamp, Tokens, Transaction};
-
-    use crate::rosetta_block::RosettaBlock;
-
-    use super::Blocks;
 
     #[test]
     fn test_store_load_rosetta_block() {
