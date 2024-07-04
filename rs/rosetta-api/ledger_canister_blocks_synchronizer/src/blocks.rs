@@ -1424,8 +1424,6 @@ impl Blocks {
             let block = self.get_hashed_block(&block_index)?;
             let transaction = Block::decode(block.block)?.transaction;
             // TODO: check for duplicates too and create new rosetta block if there are
-            info!("rosetta_block.timestamp: {:?}", rosetta_block.timestamp);
-            info!("        block.timestamp: {:?}", block.timestamp);
             if block.timestamp == rosetta_block.timestamp {
                 rosetta_block.transactions.insert(block_index, transaction);
             } else {
