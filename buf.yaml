@@ -21,6 +21,7 @@ lint:
     - DEFAULT
 breaking:
   ignore:
+    - types/v1/idkg.proto
   use:
     - WIRE
   except:

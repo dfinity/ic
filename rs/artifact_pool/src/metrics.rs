@@ -107,20 +107,20 @@ impl PoolMetrics {
     }
 }
 
-/// Metrics for ECDSA pool's validated/unvalidated section.
+/// Metrics for IDKG pool's validated/unvalidated section.
 #[derive(Clone)]
-pub struct EcdsaPoolMetrics {
+pub struct IDkgPoolMetrics {
     pool_artifacts: IntGaugeVec,
     persistence_errors: IntCounterVec,
 }
 
-impl EcdsaPoolMetrics {
+impl IDkgPoolMetrics {
     pub fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
         Self {
             pool_artifacts: metrics_registry.register(
                 IntGaugeVec::new(
                     opts!(
-                        "ecdsa_pool_artifacts",
+                        "idkg_pool_artifacts",
                         "Current number of artifacts in the given pool, by artifact type",
                         labels! {LABEL_POOL => pool, LABEL_POOL_TYPE => pool_type}
                     ),
@@ -131,8 +131,8 @@ impl EcdsaPoolMetrics {
             persistence_errors: metrics_registry.register(
                 IntCounterVec::new(
                     opts!(
-                        "ecdsa_pool_persistence_errors",
-                        "ECDSA pool persistence related errors",
+                        "idkg_pool_persistence_errors",
+                        "IDKG pool persistence related errors",
                         labels! {LABEL_POOL => pool, LABEL_POOL_TYPE => pool_type}
                     ),
                     &["type"],

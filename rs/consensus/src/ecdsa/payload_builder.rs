@@ -12,7 +12,7 @@ use errors::MembershipError;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::retrieve_mega_public_key_from_registry;
-use ic_interfaces::ecdsa::EcdsaPool;
+use ic_interfaces::ecdsa::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -401,7 +401,7 @@ pub(crate) fn create_data_payload(
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
-    ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+    idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
@@ -427,19 +427,19 @@ pub(crate) fn create_data_payload(
         Some(ecdsa_payload_metrics),
         log,
     )?;
-    let ecdsa_pool = ecdsa_pool.read().unwrap();
+    let idkg_pool = idkg_pool.read().unwrap();
 
     let signature_builder = EcdsaSignatureBuilderImpl::new(
         &block_reader,
         crypto,
-        ecdsa_pool.deref(),
+        idkg_pool.deref(),
         ecdsa_payload_metrics,
         log.clone(),
     );
     let transcript_builder = EcdsaTranscriptBuilderImpl::new(
         &block_reader,
         crypto,
-        ecdsa_pool.deref(),
+        idkg_pool.deref(),
         ecdsa_payload_metrics,
         log.clone(),
     );

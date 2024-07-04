@@ -795,7 +795,7 @@ pub struct IDkgDealingSupport {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaPrefix {
+pub struct IDkgPrefix {
     #[prost(uint64, tag = "1")]
     pub group_tag: u64,
     #[prost(uint64, tag = "2")]
@@ -807,18 +807,18 @@ pub struct EcdsaPrefix {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PrefixHashPair {
     #[prost(message, optional, tag = "1")]
-    pub prefix: ::core::option::Option<EcdsaPrefix>,
+    pub prefix: ::core::option::Option<IDkgPrefix>,
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaArtifactId {
-    #[prost(oneof = "ecdsa_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
-    pub kind: ::core::option::Option<ecdsa_artifact_id::Kind>,
+pub struct IDkgArtifactId {
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
 }
-/// Nested message and enum types in `EcdsaArtifactId`.
-pub mod ecdsa_artifact_id {
+/// Nested message and enum types in `IDkgArtifactId`.
+pub mod i_dkg_artifact_id {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {

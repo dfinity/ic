@@ -125,14 +125,14 @@ impl ArtifactKind for DkgArtifact {
     }
 }
 
-/// The `ArtifactKind` of ECDSA messages.
+/// The `ArtifactKind` of IDKG messages.
 #[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
-pub struct EcdsaArtifact;
+pub struct IDkgArtifact;
 
-/// `EcdsaArtifact` implements the `ArtifactKind` trait.
-impl ArtifactKind for EcdsaArtifact {
-    const TAG: ArtifactTag = ArtifactTag::EcdsaArtifact;
-    type PbId = ic_protobuf::types::v1::EcdsaArtifactId;
+/// `IDkgArtifact` implements the `ArtifactKind` trait.
+impl ArtifactKind for IDkgArtifact {
+    const TAG: ArtifactTag = ArtifactTag::IDkgArtifact;
+    type PbId = ic_protobuf::types::v1::IDkgArtifactId;
     type PbIdError = ProxyDecodeError;
     type Id = IDkgMessageId;
     type PbMessage = ic_protobuf::types::v1::IDkgMessage;
@@ -143,8 +143,8 @@ impl ArtifactKind for EcdsaArtifact {
     type Attribute = IDkgMessageAttribute;
 
     /// The function converts a `IDkgMessage` into an advert for a
-    /// `EcdsaArtifact`.
-    fn message_to_advert(msg: &IDkgMessage) -> Advert<EcdsaArtifact> {
+    /// `IDkgArtifact`.
+    fn message_to_advert(msg: &IDkgMessage) -> Advert<IDkgArtifact> {
         Advert {
             id: IDkgMessageId::from(msg),
             attribute: IDkgMessageAttribute::from(msg),

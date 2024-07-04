@@ -1,13 +1,13 @@
 use crate::consensus_pool::{InitializablePoolSection, PoolSectionOp, PoolSectionOps};
-use crate::lmdb_iterator::{LMDBEcdsaIterator, LMDBIterator};
-use crate::metrics::EcdsaPoolMetrics;
+use crate::lmdb_iterator::{LMDBIDkgIterator, LMDBIterator};
+use crate::metrics::IDkgPoolMetrics;
 use ic_config::artifact_pool::LMDBConfig;
 use ic_interfaces::consensus_pool::PurgeableArtifactType;
 use ic_interfaces::{
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
     },
-    ecdsa::{EcdsaPoolSection, EcdsaPoolSectionOp, EcdsaPoolSectionOps, MutableEcdsaPoolSection},
+    ecdsa::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -22,8 +22,8 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         idkg::{
-            EcdsaArtifactId, EcdsaComplaint, EcdsaOpening, EcdsaPrefix, EcdsaPrefixOf,
-            EcdsaSigShare, IDkgMessage, IDkgMessageType, SchnorrSigShare,
+            EcdsaComplaint, EcdsaOpening, EcdsaSigShare, IDkgArtifactId, IDkgMessage,
+            IDkgMessageType, IDkgPrefix, IDkgPrefixOf, SchnorrSigShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
@@ -1561,46 +1561,46 @@ impl crate::certification_pool::MutablePoolSection
     }
 }
 
-///////////////////////////// ECDSA Pool /////////////////////////////
+///////////////////////////// IDKG Pool /////////////////////////////
 
 #[derive(Debug)]
-pub(crate) struct EcdsaIdKey(Vec<u8>);
+pub(crate) struct IDkgIdKey(Vec<u8>);
 
-impl AsRef<[u8]> for EcdsaIdKey {
+impl AsRef<[u8]> for IDkgIdKey {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
 
-impl From<&[u8]> for EcdsaIdKey {
-    fn from(bytes: &[u8]) -> EcdsaIdKey {
-        EcdsaIdKey(bytes.to_vec())
+impl From<&[u8]> for IDkgIdKey {
+    fn from(bytes: &[u8]) -> IDkgIdKey {
+        IDkgIdKey(bytes.to_vec())
     }
 }
 
-impl From<&IDkgMessageId> for EcdsaIdKey {
-    fn from(msg_id: &IDkgMessageId) -> EcdsaIdKey {
+impl From<&IDkgMessageId> for IDkgIdKey {
+    fn from(msg_id: &IDkgMessageId) -> IDkgIdKey {
         let prefix = msg_id.prefix();
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
         bytes.extend_from_slice(&msg_id.hash().0);
-        EcdsaIdKey(bytes)
+        IDkgIdKey(bytes)
     }
 }
 
-impl From<&EcdsaPrefix> for EcdsaIdKey {
-    fn from(prefix: &EcdsaPrefix) -> EcdsaIdKey {
+impl From<&IDkgPrefix> for IDkgIdKey {
+    fn from(prefix: &IDkgPrefix) -> IDkgIdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
-        EcdsaIdKey(bytes)
+        IDkgIdKey(bytes)
     }
 }
 
-fn deser_idkg_message_id(message_type: IDkgMessageType, id_key: EcdsaIdKey) -> IDkgMessageId {
+fn deser_idkg_message_id(message_type: IDkgMessageType, id_key: IDkgIdKey) -> IDkgMessageId {
     let mut group_tag_bytes = [0; 8];
     group_tag_bytes.copy_from_slice(&id_key.0[0..8]);
 
@@ -1614,7 +1614,7 @@ fn deser_idkg_message_id(message_type: IDkgMessageType, id_key: EcdsaIdKey) -> I
 
     (
         message_type,
-        EcdsaPrefix::new_with_meta_hash(
+        IDkgPrefix::new_with_meta_hash(
             u64::from_be_bytes(group_tag_bytes),
             u64::from_be_bytes(meta_hash_bytes),
             Height::from(u64::from_be_bytes(height_bytes)),
@@ -1629,7 +1629,7 @@ struct IDkgMessageDb {
     db_env: Arc<Environment>,
     db: Database,
     object_type: IDkgMessageType,
-    metrics: EcdsaPoolMetrics,
+    metrics: IDkgPoolMetrics,
     log: ReplicaLogger,
 }
 
@@ -1638,7 +1638,7 @@ impl IDkgMessageDb {
         db_env: Arc<Environment>,
         db: Database,
         object_type: IDkgMessageType,
-        metrics: EcdsaPoolMetrics,
+        metrics: IDkgPoolMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -1654,7 +1654,7 @@ impl IDkgMessageDb {
     /// false otherwise.
     fn insert_txn(&self, message: IDkgMessage, tx: &mut RwTransaction) -> bool {
         assert_eq!(IDkgMessageType::from(&message), self.object_type);
-        let key = EcdsaIdKey::from(&EcdsaArtifactId::from(&message));
+        let key = IDkgIdKey::from(&IDkgArtifactId::from(&message));
         let bytes = match bincode::serialize::<IDkgMessage>(&message) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -1680,7 +1680,7 @@ impl IDkgMessageDb {
     }
 
     fn get_object(&self, id: &IDkgMessageId) -> Option<IDkgMessage> {
-        let key = EcdsaIdKey::from(id);
+        let key = IDkgIdKey::from(id);
         let tx = match self.db_env.begin_ro_txn() {
             Ok(tx) => tx,
             Err(err) => {
@@ -1722,7 +1722,7 @@ impl IDkgMessageDb {
     /// Adds the serialized <key> to be removed to the transaction. Returns true on success,
     /// false otherwise.
     fn remove_txn(&self, id: &IDkgMessageId, tx: &mut RwTransaction) -> bool {
-        let key = EcdsaIdKey::from(id);
+        let key = IDkgIdKey::from(id);
         if let Err(err) = tx.del(self.db, &key, None) {
             error!(
                 self.log,
@@ -1736,7 +1736,7 @@ impl IDkgMessageDb {
 
     fn iter<T: TryFrom<IDkgMessage>>(
         &self,
-        prefix: Option<EcdsaPrefixOf<T>>,
+        prefix: Option<IDkgPrefixOf<T>>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
@@ -1748,7 +1748,7 @@ impl IDkgMessageDb {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
             key_bytes.extend_from_slice(key);
-            let id_key = EcdsaIdKey(key_bytes);
+            let id_key = IDkgIdKey(key_bytes);
             let id = deser_idkg_message_id(message_type, id_key);
 
             // Stop iterating if we hit a different prefix.
@@ -1790,29 +1790,29 @@ impl IDkgMessageDb {
             }
         };
 
-        Box::new(LMDBEcdsaIterator::new(
+        Box::new(LMDBIDkgIterator::new(
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| EcdsaIdKey::from(&p.get())),
+            prefix.map(|p| IDkgIdKey::from(&p.get())),
             self.log.clone(),
         ))
     }
 }
 
-/// The PersistentEcdsaPoolSection is just a collection of per-message type
+/// The PersistentIDkgPoolSection is just a collection of per-message type
 /// backend DBs. The main role is to route the operations to the appropriate
 /// backend DB.
-pub(crate) struct PersistentEcdsaPoolSection {
+pub(crate) struct PersistentIDkgPoolSection {
     // Per message type data base
     db_env: Arc<Environment>,
     message_dbs: Vec<(IDkgMessageType, IDkgMessageDb)>,
-    metrics: EcdsaPoolMetrics,
+    metrics: IDkgPoolMetrics,
     log: ReplicaLogger,
 }
 
-impl PersistentEcdsaPoolSection {
-    pub(crate) fn new_ecdsa_pool(
+impl PersistentIDkgPoolSection {
+    pub(crate) fn new_idkg_pool(
         config: LMDBConfig,
         read_only: bool,
         log: ReplicaLogger,
@@ -1826,9 +1826,9 @@ impl PersistentEcdsaPoolSection {
         }
 
         let mut path = config.persistent_pool_validated_persistent_db_path;
-        path.push("ecdsa");
+        path.push("idkg");
         if let Err(err) = std::fs::create_dir_all(path.as_path()) {
-            panic!("Error creating ECDSA dir {:?}: {:?}", path, err)
+            panic!("Error creating IDKG dir {:?}: {:?}", path, err)
         }
         let db_env = Arc::new(create_db_env(
             path.as_path(),
@@ -1837,17 +1837,17 @@ impl PersistentEcdsaPoolSection {
         ));
 
         let mut message_dbs = Vec::new();
-        let metrics = EcdsaPoolMetrics::new(metrics_registry, pool, pool_type);
+        let metrics = IDkgPoolMetrics::new(metrics_registry, pool, pool_type);
         for (message_type, type_key) in &type_keys {
             let db = if read_only {
                 db_env.open_db(Some(type_key.name())).unwrap_or_else(|err| {
-                    panic!("Error opening ECDSA db {}: {:?}", type_key.name(), err)
+                    panic!("Error opening IDKG db {}: {:?}", type_key.name(), err)
                 })
             } else {
                 db_env
                     .create_db(Some(type_key.name()), DatabaseFlags::empty())
                     .unwrap_or_else(|err| {
-                        panic!("Error creating ECDSA db {}: {:?}", type_key.name(), err)
+                        panic!("Error creating IDKG db {}: {:?}", type_key.name(), err)
                     })
             };
             message_dbs.push((
@@ -1864,7 +1864,7 @@ impl PersistentEcdsaPoolSection {
 
         info!(
             log,
-            "PersistentEcdsaPoolSection::new_ecdsa_pool(): num_dbs = {}",
+            "PersistentIDkgPoolSection::new_idkg_pool(): num_dbs = {}",
             type_keys.len()
         );
 
@@ -1896,7 +1896,7 @@ impl PersistentEcdsaPoolSection {
     }
 }
 
-impl EcdsaPoolSection for PersistentEcdsaPoolSection {
+impl IDkgPoolSection for PersistentIDkgPoolSection {
     fn contains(&self, msg_id: &IDkgMessageId) -> bool {
         self.get_message_db(IDkgMessageType::from(msg_id))
             .get_object(msg_id)
@@ -1915,7 +1915,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn signed_dealings_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<SignedIDkgDealing>,
+        prefix: IDkgPrefixOf<SignedIDkgDealing>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Dealing);
         message_db.iter(Some(prefix))
@@ -1930,7 +1930,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn dealing_support_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<IDkgDealingSupport>,
+        prefix: IDkgPrefixOf<IDkgDealingSupport>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
         message_db.iter(Some(prefix))
@@ -1945,7 +1945,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn ecdsa_signature_shares_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaSigShare>,
+        prefix: IDkgPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
         message_db.iter(Some(prefix))
@@ -1960,7 +1960,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn schnorr_signature_shares_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<SchnorrSigShare>,
+        prefix: IDkgPrefixOf<SchnorrSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
         message_db.iter(Some(prefix))
@@ -1988,7 +1988,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn complaints_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaComplaint>,
+        prefix: IDkgPrefixOf<EcdsaComplaint>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
         message_db.iter(Some(prefix))
@@ -2001,15 +2001,15 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn openings_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaOpening>,
+        prefix: IDkgPrefixOf<EcdsaOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
         message_db.iter(Some(prefix))
     }
 }
 
-impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
-    fn mutate(&mut self, ops: EcdsaPoolSectionOps) {
+impl MutableIDkgPoolSection for PersistentIDkgPoolSection {
+    fn mutate(&mut self, ops: IDkgPoolSectionOps) {
         if ops.ops.is_empty() {
             return;
         }
@@ -2019,7 +2019,7 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
             Err(err) => {
                 error!(
                     self.log,
-                    "MutableEcdsaPoolSection::mutate(): begin_rw_txn(): {:?}", err
+                    "MutableIDkgPoolSection::mutate(): begin_rw_txn(): {:?}", err
                 );
                 self.metrics.persistence_error("begin_rw_txn");
                 return;
@@ -2028,7 +2028,7 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
 
         for op in ops.ops {
             match op {
-                EcdsaPoolSectionOp::Insert(message) => {
+                IDkgPoolSectionOp::Insert(message) => {
                     let message_type = IDkgMessageType::from(&message);
                     let db = self.get_message_db(message_type);
                     if !db.insert_txn(message, &mut tx) {
@@ -2036,7 +2036,7 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
                     }
                     self.metrics.observe_insert(message_type.as_str());
                 }
-                EcdsaPoolSectionOp::Remove(id) => {
+                IDkgPoolSectionOp::Remove(id) => {
                     let message_type = IDkgMessageType::from(&id);
                     let db = self.get_message_db(message_type);
                     if !db.remove_txn(&id, &mut tx) {
@@ -2055,14 +2055,14 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
             Err(err) => {
                 error!(
                     self.log,
-                    "MutableEcdsaPoolSection::mutate(): tx.commit(): {:?}", err
+                    "MutableIDkgPoolSection::mutate(): tx.commit(): {:?}", err
                 );
                 self.metrics.persistence_error("tx_commit");
             }
         }
     }
 
-    fn as_pool_section(&self) -> &dyn EcdsaPoolSection {
+    fn as_pool_section(&self) -> &dyn IDkgPoolSection {
         self
     }
 }

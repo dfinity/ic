@@ -4,7 +4,7 @@ use crate::ecdsa::metrics::{
     EcdsaPreSignatureMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
 };
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_types::consensus::idkg::{EcdsaBlockReader, EcdsaStats, PreSigId, RequestId};
+use ic_types::consensus::idkg::{EcdsaBlockReader, IDkgStats, PreSigId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
 };
@@ -15,15 +15,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// Implementation of EcdsaStats
-pub struct EcdsaStatsImpl {
-    state: Mutex<EcdsaStatsInternal>,
+/// Implementation of IDkgStats
+pub struct IDkgStatsImpl {
+    state: Mutex<IDkgStatsInternal>,
     transcript_metrics: EcdsaTranscriptMetrics,
     pre_signature_metrics: EcdsaPreSignatureMetrics,
     signature_metrics: EcdsaSignatureMetrics,
 }
 
-struct EcdsaStatsInternal {
+struct IDkgStatsInternal {
     transcript_stats: HashMap<IDkgTranscriptId, TranscriptStats>,
     pre_signature_stats: HashMap<PreSigId, PreSignatureStats>,
     signature_stats: HashMap<RequestId, SignatureStats>,
@@ -48,11 +48,11 @@ struct SignatureStats {
     sig_share_aggregation_duration: Vec<Duration>,
 }
 
-impl EcdsaStatsImpl {
-    /// Creates EcdsaStatsImpl
+impl IDkgStatsImpl {
+    /// Creates IDkgStatsImpl
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            state: Mutex::new(EcdsaStatsInternal {
+            state: Mutex::new(IDkgStatsInternal {
                 transcript_stats: HashMap::new(),
                 pre_signature_stats: HashMap::new(),
                 signature_stats: HashMap::new(),
@@ -152,7 +152,7 @@ impl EcdsaStatsImpl {
     }
 }
 
-impl EcdsaStats for EcdsaStatsImpl {
+impl IDkgStats for IDkgStatsImpl {
     fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader) {
         let mut active_transcripts = HashSet::new();
         let mut state = self.state.lock().unwrap();

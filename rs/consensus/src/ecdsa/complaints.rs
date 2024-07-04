@@ -7,7 +7,7 @@ use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::{ErrorReproducibility, IDkgProtocol};
-use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
+use ic_interfaces::ecdsa::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::IDkgMessageId;
@@ -28,7 +28,7 @@ use super::utils::update_purge_height;
 
 pub(crate) trait EcdsaComplaintHandler: Send {
     /// The on_state_change() called from the main ECDSA path.
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
+    fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet;
 
     /// Get a reference to the transcript loader.
     fn as_transcript_loader(&self) -> &dyn EcdsaTranscriptLoader;
@@ -100,9 +100,9 @@ impl EcdsaComplaintHandlerImpl {
     /// Processes the received complaints
     fn validate_complaints(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         block_reader: &dyn EcdsaBlockReader,
-    ) -> EcdsaChangeSet {
+    ) -> IDkgChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
         let requested_transcripts = self.requested_transcripts(block_reader);
 
@@ -110,14 +110,14 @@ impl EcdsaComplaintHandlerImpl {
         let mut validated_complaints = BTreeSet::new();
 
         let mut ret = Vec::new();
-        for (id, signed_complaint) in ecdsa_pool.unvalidated().complaints() {
+        for (id, signed_complaint) in idkg_pool.unvalidated().complaints() {
             let complaint = signed_complaint.get();
             // Remove the duplicate entries
             let key = ComplaintKey::from(&signed_complaint);
             if validated_complaints.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_complaints_in_batch");
-                ret.push(EcdsaChangeAction::HandleInvalid(
+                ret.push(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
                         "Duplicate complaint in unvalidated batch: {}",
@@ -136,12 +136,12 @@ impl EcdsaComplaintHandlerImpl {
             ) {
                 Action::Process(transcript_ref) => {
                     if self.has_complainer_issued_complaint(
-                        ecdsa_pool,
+                        idkg_pool,
                         &complaint.idkg_complaint,
                         &signed_complaint.signature.signer,
                     ) {
                         self.metrics.complaint_errors_inc("duplicate_complaint");
-                        ret.push(EcdsaChangeAction::HandleInvalid(
+                        ret.push(IDkgChangeAction::HandleInvalid(
                             id,
                             format!("Duplicate complaint: {}", signed_complaint),
                         ));
@@ -151,13 +151,13 @@ impl EcdsaComplaintHandlerImpl {
                             Some(transcript) => {
                                 let action =
                                     self.crypto_verify_complaint(id, &transcript, signed_complaint);
-                                if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                                if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
                                     validated_complaints.insert(key);
                                 }
                                 ret.append(&mut action.into_iter().collect());
                             }
                             None => {
-                                ret.push(EcdsaChangeAction::HandleInvalid(
+                                ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
                                         "validate_complaints(): failed to resolve: {}",
@@ -168,7 +168,7 @@ impl EcdsaComplaintHandlerImpl {
                         }
                     }
                 }
-                Action::Drop => ret.push(EcdsaChangeAction::RemoveUnvalidated(id)),
+                Action::Drop => ret.push(IDkgChangeAction::RemoveUnvalidated(id)),
                 Action::Defer => {}
             }
         }
@@ -179,12 +179,12 @@ impl EcdsaComplaintHandlerImpl {
     /// Sends openings for complaints from peers
     fn send_openings(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         block_reader: &dyn EcdsaBlockReader,
-    ) -> EcdsaChangeSet {
+    ) -> IDkgChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
 
-        ecdsa_pool
+        idkg_pool
             .validated()
             .complaints()
             .filter(|(_, signed_complaint)| {
@@ -194,7 +194,7 @@ impl EcdsaComplaintHandlerImpl {
                 }
                 let complaint = signed_complaint.get();
                 !self.has_node_issued_opening(
-                    ecdsa_pool,
+                    idkg_pool,
                     &complaint.idkg_complaint.transcript_id,
                     &complaint.idkg_complaint.dealer_id,
                     &self.node_id,
@@ -223,9 +223,9 @@ impl EcdsaComplaintHandlerImpl {
     /// Processes the received openings
     fn validate_openings(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         block_reader: &dyn EcdsaBlockReader,
-    ) -> EcdsaChangeSet {
+    ) -> IDkgChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
         let requested_transcripts = self.requested_transcripts(block_reader);
 
@@ -233,7 +233,7 @@ impl EcdsaComplaintHandlerImpl {
         let mut validated_openings = BTreeSet::new();
 
         let mut ret = Vec::new();
-        for (id, signed_opening) in ecdsa_pool.unvalidated().openings() {
+        for (id, signed_opening) in idkg_pool.unvalidated().openings() {
             let opening = signed_opening.get();
 
             // Remove duplicate entries
@@ -241,7 +241,7 @@ impl EcdsaComplaintHandlerImpl {
             if validated_openings.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_openings_in_batch");
-                ret.push(EcdsaChangeAction::HandleInvalid(
+                ret.push(IDkgChangeAction::HandleInvalid(
                     id,
                     format!("Duplicate opening in unvalidated batch: {}", signed_opening),
                 ));
@@ -257,18 +257,18 @@ impl EcdsaComplaintHandlerImpl {
             ) {
                 Action::Process(transcript_ref) => {
                     if self.has_node_issued_opening(
-                        ecdsa_pool,
+                        idkg_pool,
                         &opening.idkg_opening.transcript_id,
                         &opening.idkg_opening.dealer_id,
                         &signed_opening.signature.signer,
                     ) {
                         self.metrics.complaint_errors_inc("duplicate_opening");
-                        ret.push(EcdsaChangeAction::HandleInvalid(
+                        ret.push(IDkgChangeAction::HandleInvalid(
                             id,
                             format!("Duplicate opening: {}", signed_opening),
                         ));
                     } else if let Some(signed_complaint) =
-                        self.get_complaint_for_opening(ecdsa_pool, &signed_opening)
+                        self.get_complaint_for_opening(idkg_pool, &signed_opening)
                     {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_openings") {
                             Some(transcript) => {
@@ -278,13 +278,13 @@ impl EcdsaComplaintHandlerImpl {
                                     signed_opening,
                                     &signed_complaint,
                                 );
-                                if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                                if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
                                     validated_openings.insert(key);
                                 }
                                 ret.append(&mut action.into_iter().collect());
                             }
                             None => {
-                                ret.push(EcdsaChangeAction::HandleInvalid(
+                                ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
                                         "validate_openings(): failed to resolve: {}",
@@ -300,7 +300,7 @@ impl EcdsaComplaintHandlerImpl {
                             .complaint_errors_inc("opening_missing_complaint");
                     }
                 }
-                Action::Drop => ret.push(EcdsaChangeAction::RemoveUnvalidated(id)),
+                Action::Drop => ret.push(IDkgChangeAction::RemoveUnvalidated(id)),
                 Action::Defer => {}
             }
         }
@@ -311,9 +311,9 @@ impl EcdsaComplaintHandlerImpl {
     /// Purges the entries no longer needed from the artifact pool
     fn purge_artifacts(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         block_reader: &dyn EcdsaBlockReader,
-    ) -> EcdsaChangeSet {
+    ) -> IDkgChangeSet {
         let active_transcripts = block_reader
             .active_transcripts()
             .iter()
@@ -324,7 +324,7 @@ impl EcdsaComplaintHandlerImpl {
         let current_height = block_reader.tip_height();
 
         // Unvalidated complaints
-        let mut action = ecdsa_pool
+        let mut action = idkg_pool
             .unvalidated()
             .complaints()
             .filter(|(_, signed_complaint)| {
@@ -336,12 +336,12 @@ impl EcdsaComplaintHandlerImpl {
                     &active_transcripts,
                 )
             })
-            .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
+            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id))
             .collect();
         ret.append(&mut action);
 
         // Validated complaints
-        let mut action = ecdsa_pool
+        let mut action = idkg_pool
             .validated()
             .complaints()
             .filter(|(_, signed_complaint)| {
@@ -353,12 +353,12 @@ impl EcdsaComplaintHandlerImpl {
                     &active_transcripts,
                 )
             })
-            .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
+            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id))
             .collect();
         ret.append(&mut action);
 
         // Unvalidated openings
-        let mut action = ecdsa_pool
+        let mut action = idkg_pool
             .unvalidated()
             .openings()
             .filter(|(_, signed_opening)| {
@@ -370,12 +370,12 @@ impl EcdsaComplaintHandlerImpl {
                     &active_transcripts,
                 )
             })
-            .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
+            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id))
             .collect();
         ret.append(&mut action);
 
         // Validated openings
-        let mut action = ecdsa_pool
+        let mut action = idkg_pool
             .validated()
             .openings()
             .filter(|(_, signed_opening)| {
@@ -387,7 +387,7 @@ impl EcdsaComplaintHandlerImpl {
                     &active_transcripts,
                 )
             })
-            .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
+            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id))
             .collect();
         ret.append(&mut action);
 
@@ -427,7 +427,7 @@ impl EcdsaComplaintHandlerImpl {
         id: IDkgMessageId,
         transcript: &IDkgTranscript,
         signed_complaint: EcdsaComplaint,
-    ) -> Option<EcdsaChangeAction> {
+    ) -> Option<IDkgChangeAction> {
         let complaint = signed_complaint.get();
 
         // Verify the signature
@@ -438,7 +438,7 @@ impl EcdsaComplaintHandlerImpl {
             if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_complaint_signature_permanent");
-                return Some(EcdsaChangeAction::HandleInvalid(
+                return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
                         "Complaint signature validation(permanent error): {}, error = {:?}",
@@ -467,7 +467,7 @@ impl EcdsaComplaintHandlerImpl {
             Err(error) if error.is_reproducible() => {
                 self.metrics
                     .complaint_errors_inc("verify_complaint_permanent");
-                Some(EcdsaChangeAction::HandleInvalid(
+                Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
                         "Complaint validation(permanent error): {}, error = {:?}",
@@ -488,7 +488,7 @@ impl EcdsaComplaintHandlerImpl {
             }
             Ok(()) => {
                 self.metrics.complaint_metrics_inc("complaint_received");
-                Some(EcdsaChangeAction::MoveToValidated(
+                Some(IDkgChangeAction::MoveToValidated(
                     IDkgMessage::EcdsaComplaint(signed_complaint),
                 ))
             }
@@ -500,7 +500,7 @@ impl EcdsaComplaintHandlerImpl {
         &self,
         signed_complaint: &EcdsaComplaint,
         transcript: &IDkgTranscript,
-    ) -> EcdsaChangeSet {
+    ) -> IDkgChangeSet {
         let complaint = signed_complaint.get();
 
         // Create the opening
@@ -531,9 +531,9 @@ impl EcdsaComplaintHandlerImpl {
             Ok(signature) => {
                 let ecdsa_opening = EcdsaOpening { content, signature };
                 self.metrics.complaint_metrics_inc("openings_sent");
-                vec![EcdsaChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaOpening(ecdsa_opening),
-                )]
+                vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                    ecdsa_opening,
+                ))]
             }
             Err(err) => {
                 warn!(
@@ -553,7 +553,7 @@ impl EcdsaComplaintHandlerImpl {
         transcript: &IDkgTranscript,
         signed_opening: EcdsaOpening,
         signed_complaint: &EcdsaComplaint,
-    ) -> Option<EcdsaChangeAction> {
+    ) -> Option<IDkgChangeAction> {
         let opening = signed_opening.get();
         let complaint = signed_complaint.get();
 
@@ -565,7 +565,7 @@ impl EcdsaComplaintHandlerImpl {
             if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_opening_signature_permanent");
-                return Some(EcdsaChangeAction::HandleInvalid(
+                return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
                         "Opening signature validation(permanent error): {}, error = {:?}",
@@ -595,7 +595,7 @@ impl EcdsaComplaintHandlerImpl {
             Err(error) if error.is_reproducible() => {
                 self.metrics
                     .complaint_errors_inc("verify_opening_permanent");
-                Some(EcdsaChangeAction::HandleInvalid(
+                Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
                         "Opening validation(permanent error): {}, error = {:?}",
@@ -614,7 +614,7 @@ impl EcdsaComplaintHandlerImpl {
             }
             Ok(()) => {
                 self.metrics.complaint_metrics_inc("opening_received");
-                Some(EcdsaChangeAction::MoveToValidated(
+                Some(IDkgChangeAction::MoveToValidated(
                     IDkgMessage::EcdsaOpening(signed_opening),
                 ))
             }
@@ -625,7 +625,7 @@ impl EcdsaComplaintHandlerImpl {
     /// IDkgComplaint
     fn has_complainer_issued_complaint(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         idkg_complaint: &IDkgComplaint,
         complainer_id: &NodeId,
     ) -> bool {
@@ -634,7 +634,7 @@ impl EcdsaComplaintHandlerImpl {
             &idkg_complaint.dealer_id,
             complainer_id,
         );
-        ecdsa_pool
+        idkg_pool
             .validated()
             .complaints_by_prefix(prefix)
             .any(|(_, signed_complaint)| {
@@ -648,11 +648,11 @@ impl EcdsaComplaintHandlerImpl {
     /// Looks up the complaint for the given opening
     fn get_complaint_for_opening(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         signed_opening: &EcdsaOpening,
     ) -> Option<EcdsaComplaint> {
         let opening = signed_opening.get();
-        ecdsa_pool
+        idkg_pool
             .validated()
             .complaints()
             .find(|(_, signed_complaint)| {
@@ -667,13 +667,13 @@ impl EcdsaComplaintHandlerImpl {
     /// <transcript Id, dealer Id, opener Id>
     fn has_node_issued_opening(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         transcript_id: &IDkgTranscriptId,
         dealer_id: &NodeId,
         opener_id: &NodeId,
     ) -> bool {
         let prefix = opening_prefix(transcript_id, dealer_id, opener_id);
-        ecdsa_pool
+        idkg_pool
             .validated()
             .openings_by_prefix(prefix)
             .any(|(_, signed_opening)| {
@@ -687,11 +687,11 @@ impl EcdsaComplaintHandlerImpl {
     /// Looks up the valid openings for the given complaint (if any)
     fn get_openings_for_complaint(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         complaint: &IDkgComplaint,
     ) -> BTreeMap<NodeId, IDkgOpening> {
         let mut openings = BTreeMap::new();
-        for (_, signed_opening) in ecdsa_pool.validated().openings() {
+        for (_, signed_opening) in idkg_pool.validated().openings() {
             let opening = signed_opening.get();
             if opening.idkg_opening.transcript_id == complaint.transcript_id
                 && opening.idkg_opening.dealer_id == complaint.dealer_id
@@ -775,7 +775,7 @@ impl EcdsaComplaintHandlerImpl {
 }
 
 impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
+    fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
@@ -784,7 +784,7 @@ impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
                 .then(|| {
                     timed_call(
                         "purge_artifacts",
-                        || self.purge_artifacts(ecdsa_pool, &block_reader),
+                        || self.purge_artifacts(idkg_pool, &block_reader),
                         &metrics.on_state_change_duration,
                     )
                 })
@@ -793,26 +793,26 @@ impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
         let validate_complaints = || {
             timed_call(
                 "validate_complaints",
-                || self.validate_complaints(ecdsa_pool, &block_reader),
+                || self.validate_complaints(idkg_pool, &block_reader),
                 &metrics.on_state_change_duration,
             )
         };
         let send_openings = || {
             timed_call(
                 "send_openings",
-                || self.send_openings(ecdsa_pool, &block_reader),
+                || self.send_openings(idkg_pool, &block_reader),
                 &metrics.on_state_change_duration,
             )
         };
         let validate_openings = || {
             timed_call(
                 "validate_openings",
-                || self.validate_openings(ecdsa_pool, &block_reader),
+                || self.validate_openings(idkg_pool, &block_reader),
                 &metrics.on_state_change_duration,
             )
         };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] =
+        let calls: [&'_ dyn Fn() -> IDkgChangeSet; 3] =
             [&validate_complaints, &send_openings, &validate_openings];
 
         changes.append(&mut self.schedule.call_next(&calls));
@@ -828,7 +828,7 @@ pub(crate) trait EcdsaTranscriptLoader: Send {
     /// Loads the given transcript
     fn load_transcript(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         transcript: &IDkgTranscript,
     ) -> TranscriptLoadStatus;
 }
@@ -848,7 +848,7 @@ pub(crate) enum TranscriptLoadStatus {
 impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
     fn load_transcript(
         &self,
-        ecdsa_pool: &dyn EcdsaPool,
+        idkg_pool: &dyn IDkgPool,
         transcript: &IDkgTranscript,
     ) -> TranscriptLoadStatus {
         // 1. Try loading the transcripts without openings
@@ -876,7 +876,7 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
         let mut new_complaints = Vec::new();
         let mut old_complaints = Vec::new();
         for complaint in complaints {
-            if !self.has_complainer_issued_complaint(ecdsa_pool, &complaint, &self.node_id) {
+            if !self.has_complainer_issued_complaint(idkg_pool, &complaint, &self.node_id) {
                 if let Some(ecdsa_complaint) =
                     self.crypto_create_complaint(complaint, transcript.registry_version)
                 {
@@ -896,7 +896,7 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
         // and retry loading the transcript
         let mut openings = BTreeMap::new();
         for complaint in old_complaints {
-            let complaint_openings = self.get_openings_for_complaint(ecdsa_pool, &complaint);
+            let complaint_openings = self.get_openings_for_complaint(idkg_pool, &complaint);
             openings.insert(complaint, complaint_openings);
         }
         match IDkgProtocol::load_transcript_with_openings(&*self.crypto, transcript, &openings) {
@@ -984,7 +984,7 @@ mod tests {
     use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_types::consensus::idkg::{EcdsaObject, TranscriptRef};
+    use ic_types::consensus::idkg::{IDkgObject, TranscriptRef};
     use ic_types::crypto::AlgorithmId;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::Height;
@@ -1124,12 +1124,12 @@ mod tests {
         // Test successful validation using CryptoReturningOk
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
 
-                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
@@ -1139,16 +1139,16 @@ mod tests {
         // Test transient crypto failure during validation
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                let (mut idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
                     pool_config,
                     logger,
                     Some(crypto_without_keys()),
                 );
 
-                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 // Crypto should return a transient error thus validation of msg_id_3 should be deferred.
-                let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
             })
@@ -1157,13 +1157,13 @@ mod tests {
         // Simulate failure when resolving transcript ref
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
 
-                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
-                let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
 
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
@@ -1178,7 +1178,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
@@ -1186,7 +1186,7 @@ mod tests {
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 let msg_id = complaint.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaComplaint(complaint.clone()),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
@@ -1194,17 +1194,17 @@ mod tests {
 
                 // Validated pool already has complaint from NODE_3 for
                 // transcript id_1, dealer NODE_2
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                let change_set = vec![IDkgChangeAction::AddToValidated(
                     IDkgMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(30),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
-                let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
             })
@@ -1216,7 +1216,7 @@ mod tests {
     fn test_ecdsa_complaints_purging() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler, mut consensus_pool) =
+                let (mut idkg_pool, complaint_handler, mut consensus_pool) =
                     create_complaint_dependencies_and_pool(pool_config, logger);
                 let transcript_height = Height::from(30);
                 let id_1 = create_transcript_id_with_height(1, Height::from(0));
@@ -1227,13 +1227,13 @@ mod tests {
                 let complaint2 = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id2 = complaint2.message_id();
                 let change_set = vec![
-                    EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(complaint1)),
-                    EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(complaint2)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(complaint1)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(complaint2)),
                 ];
-                ecdsa_pool.apply_changes(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Finalized height doesn't increase, so complaint1 shouldn't be purged
-                let change_set = complaint_handler.on_state_change(&ecdsa_pool);
+                let change_set = complaint_handler.on_state_change(&idkg_pool);
                 assert_eq!(
                     *complaint_handler.prev_finalized_height.borrow(),
                     Height::from(0)
@@ -1242,7 +1242,7 @@ mod tests {
 
                 // Finalized height increases, so complaint1 is purged
                 let new_height = consensus_pool.advance_round_normal_operation_n(29);
-                let change_set = complaint_handler.on_state_change(&ecdsa_pool);
+                let change_set = complaint_handler.on_state_change(&idkg_pool);
                 assert_eq!(
                     *complaint_handler.prev_finalized_height.borrow(),
                     new_height
@@ -1250,11 +1250,11 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
 
-                ecdsa_pool.apply_changes(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Finalized height increases above complaint2, so it is purged
                 let new_height = consensus_pool.advance_round_normal_operation();
-                let change_set = complaint_handler.on_state_change(&ecdsa_pool);
+                let change_set = complaint_handler.on_state_change(&idkg_pool);
                 assert_eq!(
                     *complaint_handler.prev_finalized_height.borrow(),
                     new_height
@@ -1273,7 +1273,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
@@ -1281,7 +1281,7 @@ mod tests {
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 0);
                 let msg_id_1 = complaint.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
@@ -1290,7 +1290,7 @@ mod tests {
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 1);
                 let msg_id_2 = complaint.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
@@ -1301,7 +1301,7 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
-                let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
                 assert!(is_handle_invalid(&change_set, &msg_id_1));
@@ -1356,16 +1356,16 @@ mod tests {
         // Opening should be sent when using CryptoReturningOk
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
 
-                ecdsa_pool.apply_changes(
+                idkg_pool.apply_changes(
                     artifacts
                         .iter()
-                        .map(|a| EcdsaChangeAction::AddToValidated(a.clone()))
+                        .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
                         .collect(),
                 );
-                let change_set = complaint_handler.send_openings(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_opening_added_to_validated(
                     &change_set,
@@ -1379,20 +1379,20 @@ mod tests {
         // Opening should not be sent if crypto fails
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                let (mut idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
                     pool_config,
                     logger,
                     Some(crypto_without_keys()),
                 );
 
-                ecdsa_pool.apply_changes(
+                idkg_pool.apply_changes(
                     artifacts
                         .iter()
-                        .map(|a| EcdsaChangeAction::AddToValidated(a.clone()))
+                        .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
                         .collect(),
                 );
 
-                let change_set = complaint_handler.send_openings(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
             })
         });
@@ -1495,14 +1495,13 @@ mod tests {
         // Opening should be moved to validated when using CryptoReturningOk
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
 
-                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
-                ecdsa_pool
-                    .apply_changes(vec![EcdsaChangeAction::AddToValidated(complaint.clone())]);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
-                let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
@@ -1512,18 +1511,17 @@ mod tests {
         // Opening should be deferred when crypto returns transient failure
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                let (mut idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
                     pool_config,
                     logger,
                     Some(crypto_without_keys()),
                 );
 
-                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
-                ecdsa_pool
-                    .apply_changes(vec![EcdsaChangeAction::AddToValidated(complaint.clone())]);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
                 // Crypto should return a transient error thus validation of msg_id_2 should be deferred.
-                let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
             })
@@ -1532,15 +1530,14 @@ mod tests {
         // Opening should be handled invalid when corresponding transcript fails to be resolved
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
 
-                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
-                ecdsa_pool
-                    .apply_changes(vec![EcdsaChangeAction::AddToValidated(complaint.clone())]);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
-                let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
@@ -1554,7 +1551,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
@@ -1562,24 +1559,24 @@ mod tests {
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaOpening(opening.clone()),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
                 });
 
                 // Validated pool already has it
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaOpening(opening),
-                )];
-                ecdsa_pool.apply_changes(change_set);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
             })
@@ -1593,7 +1590,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
@@ -1601,7 +1598,7 @@ mod tests {
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 1);
                 let msg_id_1 = opening.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
@@ -1610,7 +1607,7 @@ mod tests {
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 2);
                 let msg_id_2 = opening.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
@@ -1619,20 +1616,20 @@ mod tests {
                 // Make sure we also have matching complaints
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 let message = IDkgMessage::EcdsaComplaint(complaint);
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: message.clone(),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
-                let change_set = vec![EcdsaChangeAction::AddToValidated(message)];
-                ecdsa_pool.apply_changes(change_set);
+                let change_set = vec![IDkgChangeAction::AddToValidated(message)];
+                idkg_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
@@ -1648,7 +1645,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
@@ -1658,7 +1655,7 @@ mod tests {
 
                 // Complaint 1: height <= current_height, active transcripts (not purged)
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
@@ -1667,7 +1664,7 @@ mod tests {
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id = complaint.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
@@ -1675,7 +1672,7 @@ mod tests {
 
                 // Complaint 3: height > current_height (not purged)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
@@ -1687,7 +1684,7 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
@@ -1700,7 +1697,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
@@ -1710,25 +1707,25 @@ mod tests {
 
                 // Complaint 1: height <= current_height, active transcripts (not purged)
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                let change_set = vec![IDkgChangeAction::AddToValidated(
                     IDkgMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id = complaint.message_id();
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                let change_set = vec![IDkgChangeAction::AddToValidated(
                     IDkgMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                let change_set = vec![IDkgChangeAction::AddToValidated(
                     IDkgMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1736,7 +1733,7 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id));
             })
@@ -1749,7 +1746,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
@@ -1759,7 +1756,7 @@ mod tests {
 
                 // Opening 1: height <= current_height, active transcripts (not purged)
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
@@ -1768,7 +1765,7 @@ mod tests {
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
@@ -1776,7 +1773,7 @@ mod tests {
 
                 // Complaint 3: height > current_height (not purged)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                ecdsa_pool.insert(UnvalidatedArtifact {
+                idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
@@ -1788,7 +1785,7 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
@@ -1801,7 +1798,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
@@ -1811,25 +1808,25 @@ mod tests {
 
                 // Opening 1: height <= current_height, active transcripts (not purged)
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaOpening(opening),
-                )];
-                ecdsa_pool.apply_changes(change_set);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_id();
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaOpening(opening),
-                )];
-                ecdsa_pool.apply_changes(change_set);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaOpening(opening),
-                )];
-                ecdsa_pool.apply_changes(change_set);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1837,7 +1834,7 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id));
             })
@@ -1872,10 +1869,10 @@ mod tests {
                     .next()
                     .unwrap()
                     .crypto();
-                let (ecdsa_pool, complaint_handler) =
+                let (idkg_pool, complaint_handler) =
                     create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
-                let status = complaint_handler.load_transcript(&ecdsa_pool, &idkg_transcript);
+                let status = complaint_handler.load_transcript(&idkg_pool, &idkg_transcript);
                 assert_matches!(status, TranscriptLoadStatus::Success);
             })
         })
@@ -1893,10 +1890,10 @@ mod tests {
                 let t = create_transcript(&key_id, create_transcript_id(1), &receivers[..]);
 
                 let crypto = env.nodes.iter().next().unwrap().crypto();
-                let (ecdsa_pool, complaint_handler) =
+                let (idkg_pool, complaint_handler) =
                     create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
-                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
                 assert_matches!(status, TranscriptLoadStatus::Failure);
             })
         })
@@ -1925,12 +1922,12 @@ mod tests {
                     .next()
                     .unwrap()
                     .crypto();
-                let (ecdsa_pool, complaint_handler) =
+                let (idkg_pool, complaint_handler) =
                     create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
                 // Will attempt to create a complaint but fail since node ID of crypto and
                 // complaint_handler are different
-                let status = complaint_handler.load_transcript(&ecdsa_pool, &transcript);
+                let status = complaint_handler.load_transcript(&idkg_pool, &transcript);
                 assert_matches!(status, TranscriptLoadStatus::Failure);
             })
         })
@@ -1963,7 +1960,7 @@ mod tests {
 
                 let complainer_crypto = components.next().unwrap().crypto();
                 let remaining_nodes: Vec<_> = components.collect();
-                let (mut ecdsa_pool, complaint_handler) =
+                let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies_with_crypto_and_node_id(
                         pool_config,
                         logger,
@@ -1971,11 +1968,11 @@ mod tests {
                         complainer,
                     );
 
-                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
                 let complaint = match status {
                     TranscriptLoadStatus::Complaints(mut complaints) if complaints.len() == 1 => {
                         let complaint = complaints.remove(0);
-                        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::AddToValidated(
+                        idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
                             IDkgMessage::EcdsaComplaint(complaint.clone()),
                         )]);
                         complaint
@@ -1984,7 +1981,7 @@ mod tests {
                 };
 
                 // should fail due to insufficient openings
-                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
                 assert_matches!(status, TranscriptLoadStatus::Failure);
 
                 for node in remaining_nodes {
@@ -1998,13 +1995,13 @@ mod tests {
                         .sign(&content, node.id(), t.registry_version)
                         .expect("Failed to sign opening content");
                     let opening = EcdsaOpening { content, signature };
-                    ecdsa_pool.apply_changes(vec![EcdsaChangeAction::AddToValidated(
+                    idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
                         IDkgMessage::EcdsaOpening(opening),
                     )]);
                 }
 
                 // should now be successful
-                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
                 assert_matches!(status, TranscriptLoadStatus::Success);
             })
         })

@@ -6,7 +6,7 @@ use crate::ecdsa::{
 };
 use ic_interfaces::{
     crypto::BasicSigner,
-    ecdsa::{EcdsaChangeAction, EcdsaChangeSet},
+    ecdsa::{IDkgChangeAction, IDkgChangeSet},
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::node::RegistryVersion;
@@ -46,17 +46,17 @@ impl BasicSigner<IDkgDealing> for EcdsaPreSignerImpl {
 
 /// Modify the given changeset with malicious behavior.
 pub fn maliciously_alter_changeset(
-    changeset: EcdsaChangeSet,
+    changeset: IDkgChangeSet,
     pre_signer: &EcdsaPreSignerImpl,
     malicious_flags: &MaliciousFlags,
-) -> EcdsaChangeSet {
+) -> IDkgChangeSet {
     let block_reader =
         EcdsaBlockReaderImpl::new(pre_signer.consensus_block_cache.finalized_chain());
 
     changeset
         .into_iter()
         .flat_map(|action| match action {
-            EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
+            IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
                 if malicious_flags.maliciously_corrupt_ecdsa_dealings =>
             {
                 let transcript_id = dealing.idkg_dealing().transcript_id;
@@ -75,7 +75,7 @@ pub fn maliciously_alter_changeset(
                             &pre_signer.log,
                             &pre_signer.metrics,
                         );
-                        EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
+                        IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
                     })
             }
             _ => Some(action),
