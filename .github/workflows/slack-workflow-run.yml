@@ -8,7 +8,6 @@ on:
       - master
       - rc--*
     workflows:
-      - Schedule Hourly
       - Schedule Daily
       - Schedule Weekly
       - Release Testing

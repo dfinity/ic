@@ -1051,7 +1051,7 @@ fn decode_forward_compatibility() {
     //
 
     // A `CanisterQueue` with a request, a response and a reserved slot.
-    let mut iq1 = CanisterQueue::new(10);
+    let mut iq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     // Enqueue a request and a response.
     iq1.push_request(pool.insert_inbound(req.clone().into()));
     iq1.try_reserve_response_slot().unwrap();
@@ -1060,19 +1060,19 @@ fn decode_forward_compatibility() {
     iq1.try_reserve_response_slot().unwrap();
 
     // Expected `InputQueue`.
-    let mut expected_iq1 = InputQueue::new(10);
+    let mut expected_iq1 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
     expected_iq1.push(req.clone().into()).unwrap();
     expected_iq1.reserve_slot().unwrap();
     expected_iq1.push(rep.clone().into()).unwrap();
     expected_iq1.reserve_slot().unwrap();
 
     // An output queue with a stale request and a reserved slot.
-    let mut oq1 = CanisterQueue::new(10);
+    let mut oq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     oq1.push_request(stale_request_id);
     oq1.try_reserve_response_slot().unwrap();
 
     // Expected `OutputQueue`.
-    let mut expected_oq1 = OutputQueue::new(10);
+    let mut expected_oq1 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
     expected_oq1.reserve_slot().unwrap();
 
     queues_proto
@@ -1098,15 +1098,15 @@ fn decode_forward_compatibility() {
     //
 
     // Input queue with a reserved slot.
-    let mut iq2 = CanisterQueue::new(10);
+    let mut iq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     iq2.try_reserve_response_slot().unwrap();
 
     // Expected `InputQueue`.
-    let mut expected_iq2 = InputQueue::new(10);
+    let mut expected_iq2 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
     expected_iq2.reserve_slot().unwrap();
 
     // Empty output queue.
-    let oq2 = CanisterQueue::new(10);
+    let oq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
 
     queues_proto
         .canister_queues
@@ -1116,9 +1116,10 @@ fn decode_forward_compatibility() {
             output_queue: Some((&oq2).into()),
         });
     queues_proto.guaranteed_response_memory_reservations += 1;
-    expected_queues
-        .canister_queues
-        .insert(remote_canister, (expected_iq2, OutputQueue::new(10)));
+    expected_queues.canister_queues.insert(
+        remote_canister,
+        (expected_iq2, OutputQueue::new(DEFAULT_QUEUE_CAPACITY)),
+    );
 
     //
     // Persist pool, adjust stats.
