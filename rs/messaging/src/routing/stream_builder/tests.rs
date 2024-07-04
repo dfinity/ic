@@ -1003,9 +1003,10 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
         let sender = canister_test_id(snd);
         let mut next_callback_id = 0;
         let payment = Cycles::new(100);
-        for rcv in 700..(700 + receivers) {
-            let receiver = canister_test_id(rcv);
-            for i in snd..2 * snd {
+        // Round robin across receivers, to emulate the ordering of `output_into_iter()`.
+        for i in snd..2 * snd {
+            for rcv in 700..(700 + receivers) {
+                let receiver = canister_test_id(rcv);
                 next_callback_id += 1;
                 messages.push(generate_message_for_test(
                     sender,
