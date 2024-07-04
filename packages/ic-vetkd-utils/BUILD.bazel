@@ -7,7 +7,7 @@ COMMON_DEPS = [
     "@crate_index//:rand_chacha",
     "@crate_index//:lazy_static",
     "@crate_index//:ic_bls12_381",
-    "@crate_index//:sha2_0_9_1",
+    "@crate_index//:sha2",
     "@crate_index//:sha3",
     "@crate_index//:pairing",
     "@crate_index//:subtle",

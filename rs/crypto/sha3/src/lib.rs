@@ -83,7 +83,7 @@ impl Shake256 {
     /// Updates the state using the provided `data`.
     pub fn update(&mut self, data: impl AsRef<[u8]>) -> &mut Self {
         use sha3::digest::Update;
-        self.state.update(data);
+        self.state.update(data.as_ref());
         self
     }
 
@@ -98,7 +98,7 @@ impl Shake256 {
 
 /// SHAKE256 reader state.
 pub struct Shake256XofReader {
-    state: sha3::Sha3XofReader,
+    state: sha3::Shake256Reader,
 }
 
 impl Shake256XofReader {

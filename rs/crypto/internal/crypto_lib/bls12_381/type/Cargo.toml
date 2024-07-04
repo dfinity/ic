@@ -9,7 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ic_bls12_381 = { version = "0.8.0", default-features = false, features = [
+ic_bls12_381 = { version = "0.9.2", default-features = false, features = [
     "groups",
     "pairings",
     "alloc",
@@ -17,10 +17,10 @@ ic_bls12_381 = { version = "0.8.0", default-features = false, features = [
     "zeroize",
 ] }
 itertools = { workspace = true }
-pairing = "0.22"
+pairing = "0.23"
 paste = "1.0.7"
 subtle = "2.4"
-sha2 = "0.9"
+sha2 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 lazy_static = { workspace = true }
