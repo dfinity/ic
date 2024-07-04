@@ -33,7 +33,7 @@ jobs:
     steps:
       - run: |
           echo 'CI Main workflow failed'
-          echo "CI Main URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
+          echo "CI Main URL: https://github.com/dfinity/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
           exit 1
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
