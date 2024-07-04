@@ -6,7 +6,9 @@ use ic_prep_lib::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    farm::{CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType},
+    farm::{
+        AttachImageSpec, CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType,
+    },
     ic::{Subnet, VmAllocationStrategy},
 };
 use ic_types::ReplicaVersion;
@@ -188,8 +190,13 @@ fn main() {
         .unwrap();
 
     // Attach image
-    farm.attach_disk_images(&group_name, vm_name, "usb-storage", vec![image_id])
-        .unwrap();
+    farm.attach_disk_images(
+        &group_name,
+        vm_name,
+        "usb-storage",
+        vec![AttachImageSpec::new(image_id)],
+    )
+    .unwrap();
 
     // Start VM
     farm.start_vm(&group_name, vm_name).unwrap();

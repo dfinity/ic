@@ -339,7 +339,7 @@ impl From<&CertificationMessage> for CertificationMessageHash {
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 
-pub type EcdsaMessageId = EcdsaArtifactId;
+pub type IDkgMessageId = EcdsaArtifactId;
 
 // -----------------------------------------------------------------------------
 // CanisterHttp artifacts

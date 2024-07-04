@@ -209,11 +209,17 @@ pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
 /// Max character length for the field "description" in KnownNeuronData.
 pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 
-// The number of seconds between automated Node Provider reward events
-// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
+/// The number of seconds between automated Node Provider reward events
+/// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
+
+/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap.
+/// Given the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count),
+/// this constant can be used to obtain an upper bound for the number of SNS neurons created
+/// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
+const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
@@ -7225,6 +7231,24 @@ impl Governance {
             swap_participation_limits,
             neurons_fund,
         )?;
+        // Check that the maximum number of Neurons' Fund participants is not too high. Otherwise,
+        // the SNS may be unable to distribute SNS tokens to all participants after the swap.
+        {
+            let maximum_neurons_fund_participants = initial_neurons_fund_participation
+                .snapshot()
+                .neurons()
+                .len() as u64;
+            if maximum_neurons_fund_participants > MAX_NEURONS_FUND_PARTICIPANTS {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "The maximum number of Neurons' Fund participants ({}) must not exceed \
+                        MAX_NEURONS_FUND_PARTICIPANTS ({}).",
+                        maximum_neurons_fund_participants, MAX_NEURONS_FUND_PARTICIPANTS,
+                    ),
+                ));
+            };
+        }
         let constraints = initial_neurons_fund_participation.compute_constraints()?;
         let initial_neurons_fund_participation_snapshot =
             initial_neurons_fund_participation.snapshot_cloned();
@@ -7234,7 +7258,10 @@ impl Governance {
         if self.get_proposal_data(*proposal_id).is_none() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "Expected ProposalData.neurons_fund_data to be unset.",
+                format!(
+                    "ProposalData must be present for proposal {:?}.",
+                    proposal_id
+                ),
             ));
         }
         self.neuron_store

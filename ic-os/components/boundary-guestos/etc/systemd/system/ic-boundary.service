@@ -22,6 +22,7 @@ ExecStart=/bin/bash -c ' \
         --log-stdout \
         --log-failed-requests-only \
         --nftables-system-replicas-path /run/ic-node/etc/nftables/system_replicas.ruleset \
+        --disable-latency-routing \
         ${RPS_LIMIT_SUBNET:+ --rate-limit-per-second-per-subnet "${RPS_LIMIT_SUBNET}"} \
         ${CACHE_SIZE:+ --cache-size-bytes "${CACHE_SIZE}"} \
         ${CACHE_ITEM_MAX_SIZE:+ --cache-max-item-size-bytes "${CACHE_ITEM_MAX_SIZE}"} \
