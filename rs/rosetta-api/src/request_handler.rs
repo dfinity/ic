@@ -15,8 +15,8 @@ use crate::request_types::GetProposalInfo;
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
-use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlock;
 use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
+use ic_ledger_canister_blocks_synchronizer::rosetta_block::RosettaBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use rosetta_core::objects::ObjectMap;
@@ -299,13 +299,11 @@ impl RosettaRequestHandler {
                 index: parent_block_index,
                 hash: hex::encode(parent_block.hash()),
             })
+        } else if blocks.is_verified_by_idx(&parent_block_index)? {
+            let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
+            convert::block_id(parent_block)
         } else {
-            if blocks.is_verified_by_idx(&parent_block_index)? {
-                let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
-                convert::block_id(parent_block)
-            } else {
-                Err(ApiError::InvalidBlockId(true, Default::default()))
-            }
+            Err(ApiError::InvalidBlockId(true, Default::default()))
         }
     }
 

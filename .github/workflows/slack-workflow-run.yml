@@ -1,10 +1,4 @@
-name: Slack CI Main
-
-# Send Slack Notification on completed "CI Main" Workflow
-#  * success
-#    - rc--* branch
-#  * failure,timed_out
-#    - rc--* and master branch
+name: Slack Workflow Run
 
 on:
   workflow_run:
@@ -14,10 +8,13 @@ on:
       - master
       - rc--*
     workflows:
-      - CI Main
+      - Schedule Hourly
+      - Schedule Daily
+      - Schedule Weekly
+      - Release Testing
 
 jobs:
-  slack-ci-main:
+  slack-workflow-run:
     name: Send Notification
     runs-on: ubuntu-latest
     steps:
@@ -25,26 +22,26 @@ jobs:
         id: setup
         shell: bash
         run: |
-          # TODO: change to 'eng-idx-bots,release-management-alerts'
-          CHANNEL="eng-idx-bots"
+          # TODO: change to 'eng-idx-alerts,release-management-alerts'
+          CHANNEL="eng-idx-alerts"
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
 
-          FULL_MESSAGE=""
+          FULL_MESSAGE="nothing"
           if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
             if [[ "$BRANCH_NAME" =~ rc--.* ]]; then
-              FULL_MESSAGE=":white_check_mark: ${MESSAGE}"
+              FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
             fi
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
-            FULL_MESSAGE=":fire: ${MESSAGE}"
+            FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
           fi
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
         env:
           BRANCH_NAME: "${{ github.head_ref || github.ref_name }}"
-          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} in <${{github.server_url}}/${{github.repository}}/${{github.event.workflow_run.head_branch}}|${{github.repository}}>"
+          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
 
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
-        if: steps.setup.outputs.message != '""'
+        if: ${{ steps.setup.outputs.message != 'nothing' }}
         with:
           channel-id: ${{ steps.setup.outputs.channel }}
           slack-message: "${{ steps.setup.outputs.message }}"

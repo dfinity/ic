@@ -4,7 +4,7 @@ use crate::wasmtime_embedder::{
 };
 
 use ic_config::{
-    embedders::{FeatureFlags, StableMemoryDirtyPageLimit},
+    embedders::{FeatureFlags, StableMemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
@@ -140,18 +140,13 @@ fn charge_for_stable_write(
     mut overhead: NumInstructions,
     offset: u64,
     size: u64,
-    dirty_page_limit_message: NumOsPages,
-    dirty_page_limit_upgrade: NumOsPages,
+    dirty_page_limit: StableMemoryPageLimit,
 ) -> HypervisorResult<()> {
     let system_api = caller.data().system_api()?;
     let (new_stable_dirty_pages, dirty_page_cost) =
         system_api.dirty_pages_from_stable_write(offset, size)?;
 
-    let dirty_page_limit = if system_api.is_install_or_upgrade_message() {
-        dirty_page_limit_upgrade
-    } else {
-        dirty_page_limit_message
-    };
+    let dirty_page_limit = system_api.get_page_limit(&dirty_page_limit);
 
     overhead = overhead
         .get()
@@ -309,8 +304,8 @@ pub(crate) fn syscalls<
 >(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit,
-    stable_memory_access_page_limit: NumOsPages,
+    stable_memory_dirty_page_limit: StableMemoryPageLimit,
+    stable_memory_access_page_limit: StableMemoryPageLimit,
     main_memory_type: WasmMemoryType,
 ) where
     <I as TryInto<usize>>::Error: std::fmt::Display,
@@ -834,8 +829,7 @@ pub(crate) fn syscalls<
                     overhead::STABLE_WRITE,
                     offset as u64,
                     size as u64,
-                    stable_memory_dirty_page_limit.message,
-                    stable_memory_dirty_page_limit.upgrade,
+                    stable_memory_dirty_page_limit,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -905,8 +899,7 @@ pub(crate) fn syscalls<
                     overhead::STABLE64_WRITE,
                     offset,
                     size,
-                    stable_memory_dirty_page_limit.message,
-                    stable_memory_dirty_page_limit.upgrade,
+                    stable_memory_dirty_page_limit,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -1311,15 +1304,17 @@ pub(crate) fn syscalls<
                     }
                     InternalErrorCode::MemoryWriteLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
-                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
+                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages, {} KB for upgrade messages and {} KB for queries.",
+                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_dirty_page_limit.query.get() * (PAGE_SIZE as u64 / 1024)
                             )
                         )
                     }
                     InternalErrorCode::MemoryAccessLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of accessed pages in the stable memory in a single message execution: limit: {} KB.",
-                                    stable_memory_access_page_limit * (PAGE_SIZE as u64 / 1024),
+                            format!("Exceeded the limit for the number of accessed pages in the stable memory in a single message execution: limit {} KB for regular messages and {} KB for queries.",
+                                    stable_memory_access_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
                             )
                         )
                     }

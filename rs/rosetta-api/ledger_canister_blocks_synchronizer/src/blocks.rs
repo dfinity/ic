@@ -1,7 +1,6 @@
 use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
+use crate::rosetta_block::RosettaBlock;
 use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
-use ic_crypto_sha2::Sha256;
-use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
@@ -853,7 +852,7 @@ impl Blocks {
             tx.execute(
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks (
-                    idx INTEGER NOT NULL PRIMARY KEY,
+                    rosetta_block_idx INTEGER NOT NULL PRIMARY KEY,
                     parent_hash BLOB,
                     hash BLOB NOT NULL,
                     timestamp TEXT
@@ -864,9 +863,9 @@ impl Blocks {
             tx.execute(
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks_transactions (
-                    idx INTEGER NOT NULL REFERENCES rosetta_blocks(idx),
+                    rosetta_block_idx INTEGER NOT NULL REFERENCES rosetta_blocks(rosetta_block_idx),
                     block_idx INTEGER NOT NULL REFERENCES blocks(idx),
-                    PRIMARY KEY(idx, block_idx)
+                    PRIMARY KEY(rosetta_block_idx, block_idx)
                 )
                 "#,
                 [],
@@ -910,10 +909,11 @@ impl Blocks {
         //     in the blocks table + 1, i.e. the next incoming block.
         //  3. else the first rosetta block index will be
         //     the lowest possible block index, i.e. 0.
-        let first_rosetta_block_index =
-            connection.query_row("SELECT min(idx) FROM rosetta_blocks", [], |row| {
-                row.get::<_, Option<u64>>(0)
-            })?;
+        let first_rosetta_block_index = connection.query_row(
+            "SELECT min(rosetta_block_idx) FROM rosetta_blocks",
+            [],
+            |row| row.get::<_, Option<u64>>(0),
+        )?;
         let first_rosetta_block_index = match first_rosetta_block_index {
             Some(first_rosetta_block_index) => first_rosetta_block_index,
             None => connection
@@ -1392,7 +1392,7 @@ impl Blocks {
                 first_rosetta_block_index,
             } => self
                 .get_next_rosetta_block_indices()?
-                .unwrap_or_else(|| RosettaBlockIndices {
+                .unwrap_or(RosettaBlockIndices {
                     rosetta_block_index: first_rosetta_block_index,
                     first_block_index: first_rosetta_block_index,
                 }),
@@ -1468,7 +1468,7 @@ impl Blocks {
         {
             let mut statement = transaction
                 .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks (idx, hash, timestamp)
+                    r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
                                 VALUES (:idx, :hash, :timestamp)"#,
                 )
                 .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
@@ -1485,7 +1485,7 @@ impl Blocks {
         {
             let mut statement = transaction
                 .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks_transactions (idx, block_idx)
+                    r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
                     VALUES (:idx, :block_idx)"#,
                 )
                 .map_err(|e| {
@@ -1503,7 +1503,7 @@ impl Blocks {
             }
         }
 
-        let _ = transaction.commit().map_err(|e| {
+        transaction.commit().map_err(|e| {
             format!("Error while finishing the transaction to store a rosetta block: {e:?}")
         })?;
         Ok(())
@@ -1533,7 +1533,9 @@ impl Blocks {
             .lock()
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
         let mut statement = connection
-            .prepare_cached("SELECT parent_hash, timestamp FROM rosetta_blocks WHERE idx=:idx")
+            .prepare_cached(
+                "SELECT parent_hash, timestamp FROM rosetta_blocks WHERE rosetta_block_idx=:idx",
+            )
             .map_err(|e| format!("Unable to prepare query: {e:?}"))?;
         let mut blocks = statement
             .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
@@ -1563,7 +1565,7 @@ impl Blocks {
                 r#"SELECT blocks.idx, block
                    FROM rosetta_blocks_transactions JOIN blocks
                    ON rosetta_blocks_transactions.block_idx = blocks.idx
-                   WHERE rosetta_blocks_transactions.idx=:idx"#,
+                   WHERE rosetta_blocks_transactions.rosetta_block_idx=:idx"#,
             )
             .map_err(|e| format!("Unable to select block: {e:?}"))?;
         let blocks = statement
@@ -1600,60 +1602,71 @@ struct RosettaBlockIndices {
     pub first_block_index: BlockIndex,
 }
 
-#[derive(Debug)]
-pub struct RosettaBlock {
-    pub index: BlockIndex,
-    pub parent_hash: Option<[u8; 32]>,
-    pub timestamp: TimeStamp,
-    pub transactions: BTreeMap<BlockIndex, Transaction>,
-}
+#[cfg(test)]
+mod tests {
+    use super::Blocks;
+    use crate::rosetta_block::RosettaBlock;
+    use candid::Principal;
+    use ic_ledger_core::block::BlockType;
+    use icp_ledger::{AccountIdentifier, Block, Memo, Operation, TimeStamp, Tokens, Transaction};
 
-impl RosettaBlock {
-    pub fn hash(&self) -> [u8; 32] {
-        // The hash of a rosetta block is calculated
-        // using representation-independent hashing.
-        // https://internetcomputer.org/docs/current/references/ic-interface-spec#hash-of-map
+    #[test]
+    fn test_store_load_rosetta_block() {
+        let to = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
+        let transaction0 = Transaction {
+            operation: Operation::Mint {
+                to,
+                amount: Tokens::from_e8s(1),
+            },
+            memo: Memo(0),
+            created_at_time: None,
+            icrc1_memo: None,
+        };
+        let block0 = Block {
+            parent_hash: None,
+            transaction: transaction0.clone(),
+            timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+        };
+        let encoded_block0 = block0.clone().encode();
+        let hashed_block0 = crate::blocks::HashedBlock::hash_block(
+            encoded_block0.clone(),
+            block0.parent_hash,
+            0,
+            block0.timestamp,
+        );
+        let transaction1 = Transaction {
+            operation: Operation::Mint {
+                to,
+                amount: Tokens::from_e8s(2),
+            },
+            memo: Memo(1),
+            created_at_time: None,
+            icrc1_memo: None,
+        };
+        let block1 = Block {
+            parent_hash: Some(Block::block_hash(&encoded_block0)),
+            transaction: transaction1.clone(),
+            timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+        };
+        let encoded_block1 = block1.clone().encode();
+        let hashed_block1 = crate::blocks::HashedBlock::hash_block(
+            encoded_block1,
+            block1.parent_hash,
+            1,
+            block1.timestamp,
+        );
+        let rosetta_block = RosettaBlock {
+            index: 0,
+            parent_hash: None,
+            timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+            transactions: [(0, transaction0), (1, transaction1)].into_iter().collect(),
+        };
 
-        fn hash_nat(n: u64) -> [u8; 32] {
-            let mut buf = vec![];
-            let _ = leb128::write::unsigned(&mut buf, n).expect("Unable to leb128 encode number");
-            Sha256::hash(&buf)
-        }
-
-        fn hash_field(name: &str, value: &[u8]) -> Vec<u8> {
-            let mut field_hash = Sha256::hash(name.as_bytes()).to_vec();
-            field_hash.extend(value);
-            field_hash
-        }
-
-        // The transactions field is encoded as vector of tuples
-        // (block_id, transaction) where the tuples are encoded
-        // as arrays of two elements.
-        let mut transactions_hashes = vec![];
-        for (block_index, transaction) in &self.transactions {
-            let mut hash = hash_nat(*block_index).to_vec();
-            hash.extend(transaction.hash().as_slice());
-            transactions_hashes.append(&mut hash);
-        }
-
-        let mut fields = vec![
-            hash_field("index", &hash_nat(self.index)),
-            hash_field(
-                "timestamp",
-                &hash_nat(self.timestamp.as_nanos_since_unix_epoch()),
-            ),
-            hash_field("transactions", &Sha256::hash(&transactions_hashes)),
-        ];
-        if let Some(parent_hash) = self.parent_hash {
-            fields.push(hash_field("parent_hash", &parent_hash));
-        }
-
-        fields.sort();
-
-        let mut sha256 = Sha256::new();
-        for field in fields.into_iter() {
-            sha256.write(&field);
-        }
-        sha256.finish()
+        let mut blocks = Blocks::new_in_memory(true).unwrap();
+        blocks.push(&hashed_block0).unwrap();
+        blocks.push(&hashed_block1).unwrap();
+        blocks.store_rosetta_block(rosetta_block.clone()).unwrap();
+        let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
+        assert_eq!(rosetta_block, actual_rosetta_block);
     }
 }
