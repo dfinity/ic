@@ -569,6 +569,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
             ),
+            "ic-canister-sig-creation": crate.spec(
+                version = "^1.0.1",
+            ),
             "ic-cbor": crate.spec(
                 version = "2.3.0",
             ),
@@ -609,6 +612,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-utils": crate.spec(
                 version = "^0.35.0",
                 features = ["raw"],
+            ),
+            "ic-verify-bls-signature": crate.spec(
+                version = "^0.2.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.7.1",

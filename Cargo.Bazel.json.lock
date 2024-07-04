@@ -1,5 +1,5 @@
 {
-  "checksum": "155331ab7a4c4674902378506c3d12e5c7cd02fd80bca5297d7195a68019eff7",
+  "checksum": "cf9080f6855d0987113f2d9b539900b9f0619f675faea64a30afcf2d9195d3b5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17191,6 +17191,10 @@
               "target": "ic_canister_log"
             },
             {
+              "id": "ic-canister-sig-creation 1.0.1",
+              "target": "ic_canister_sig_creation"
+            },
+            {
               "id": "ic-cbor 2.3.0",
               "target": "ic_cbor"
             },
@@ -17203,7 +17207,7 @@
               "target": "ic_cdk_timers"
             },
             {
-              "id": "ic-certification 2.3.0",
+              "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
             {
@@ -17233,6 +17237,10 @@
             {
               "id": "ic-utils 0.35.0",
               "target": "ic_utils"
+            },
+            {
+              "id": "ic-verify-bls-signature 0.2.0",
+              "target": "ic_verify_bls_signature"
             },
             {
               "id": "ic-wasm 0.7.1",
@@ -27485,7 +27493,7 @@
               "target": "hyper"
             },
             {
-              "id": "ic-certification 2.3.0",
+              "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
             {
@@ -27816,6 +27824,93 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-canister-sig-creation 1.0.1": {
+      "name": "ic-canister-sig-creation",
+      "version": "1.0.1",
+      "package_url": "https://github.com/dfinity/ic-canister-sig-creation",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-canister-sig-creation/1.0.1/download",
+          "sha256": "5d1fc58d747480967a25810d8a90d460e7e9ea4c669ab0286541a148736513f9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_canister_sig_creation",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_canister_sig_creation",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-cdk 0.14.0",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "ic-certification 2.5.0",
+              "target": "ic_certification"
+            },
+            {
+              "id": "ic-representation-independent-hash 2.5.0",
+              "target": "ic_representation_independent_hash"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.14",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "serde_cbor 0.11.2",
+              "target": "serde_cbor"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cbor 2.3.0": {
       "name": "ic-cbor",
       "version": "2.3.0",
@@ -27852,7 +27947,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-certification 2.3.0",
+              "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
             {
@@ -28008,6 +28103,74 @@
           "selects": {}
         },
         "version": "0.13.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk 0.14.0": {
+      "name": "ic-cdk",
+      "version": "0.14.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.14.0/download",
+          "sha256": "ff384f182459bec490a7f50a58bbdf8f7a6934de4dcc259e30c70641bcbcb917"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.23.0",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.14",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.14.0",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.14.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28216,6 +28379,73 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-cdk-macros 0.14.0": {
+      "name": "ic-cdk-macros",
+      "version": "0.14.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.14.0/download",
+          "sha256": "01dc6bc425ec048d6ac4137c7c0f2cfbd6f8b0be8efc568feae2b265f566117c"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.14.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cdk-timers 0.7.0": {
       "name": "ic-cdk-timers",
       "version": "0.7.0",
@@ -28327,7 +28557,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-certification 2.3.0",
+              "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
             {
@@ -28370,14 +28600,14 @@
       ],
       "license_file": null
     },
-    "ic-certification 2.3.0": {
+    "ic-certification 2.5.0": {
       "name": "ic-certification",
-      "version": "2.3.0",
+      "version": "2.5.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-certification/2.3.0/download",
-          "sha256": "b79fd38f674173bd0af3c80b9dab6fedd3391b81a2fc0f87a2e393fb723fe13b"
+          "url": "https://static.crates.io/crates/ic-certification/2.5.0/download",
+          "sha256": "20052ce9255fbe2de7041a4f6996fddd095ba1f31ae83b6c0ccdee5be6e7bbcf"
         }
       },
       "targets": [
@@ -28429,7 +28659,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.3.0"
+        "version": "2.5.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28532,11 +28762,11 @@
               "target": "http"
             },
             {
-              "id": "ic-certification 2.3.0",
+              "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
             {
-              "id": "ic-representation-independent-hash 2.3.0",
+              "id": "ic-representation-independent-hash 2.5.0",
               "target": "ic_representation_independent_hash"
             },
             {
@@ -28601,14 +28831,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-representation-independent-hash 2.3.0": {
+    "ic-representation-independent-hash 2.5.0": {
       "name": "ic-representation-independent-hash",
-      "version": "2.3.0",
+      "version": "2.5.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-representation-independent-hash/2.3.0/download",
-          "sha256": "be48db2f8b954b9b2a0f46424ddedda2728703d7b361bc65328ed17dcacd1e21"
+          "url": "https://static.crates.io/crates/ic-representation-independent-hash/2.5.0/download",
+          "sha256": "b4d9c969c80e9b445255341da79772680f503ef856b95b3ddf162b41d096df1f"
         }
       },
       "targets": [
@@ -28644,7 +28874,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.3.0"
+        "version": "2.5.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28712,7 +28942,7 @@
               "target": "ic_certificate_verification"
             },
             {
-              "id": "ic-certification 2.3.0",
+              "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
             {
@@ -28720,7 +28950,7 @@
               "target": "ic_http_certification"
             },
             {
-              "id": "ic-representation-independent-hash 2.3.0",
+              "id": "ic-representation-independent-hash 2.5.0",
               "target": "ic_representation_independent_hash"
             },
             {
@@ -28905,7 +29135,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-certification 2.3.0",
+              "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
             {
@@ -29111,6 +29341,73 @@
         },
         "edition": "2021",
         "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-verify-bls-signature 0.2.0": {
+      "name": "ic-verify-bls-signature",
+      "version": "0.2.0",
+      "package_url": null,
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-verify-bls-signature/0.2.0/download",
+          "sha256": "dd0f1f8d75f50002970cc2136f909287bf1d59024fbc80ebffbee871afcbd237"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_verify_bls_signature",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_verify_bls_signature",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bls12_381 0.7.1",
+              "target": "bls12_381"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "pairing 0.22.0",
+              "target": "pairing"
+            },
+            {
+              "id": "rand 0.6.5",
+              "target": "rand"
+            },
+            {
+              "id": "sha2 0.9.9",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -29338,6 +29635,44 @@
         ],
         "edition": "2021",
         "version": "0.21.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic0 0.23.0": {
+      "name": "ic0",
+      "version": "0.23.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic0/0.23.0/download",
+          "sha256": "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic0",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic0",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.23.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35055,30 +35390,38 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
@@ -35091,10 +35434,14 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ]
@@ -48388,6 +48735,7 @@
         "crate_features": {
           "common": [
             "alloc",
+            "default",
             "rand_os",
             "std"
           ],
@@ -57021,6 +57369,65 @@
       ],
       "license_file": "LICENSE"
     },
+    "serde_tokenstream 0.2.1": {
+      "name": "serde_tokenstream",
+      "version": "0.2.1",
+      "package_url": "https://github.com/oxidecomputer/serde_tokenstream",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/serde_tokenstream/0.2.1/download",
+          "sha256": "8790a7c3fe883e443eaa2af6f705952bc5d6e8671a220b9335c8cae92c037e74"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_tokenstream",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "serde_tokenstream",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "serde_urlencoded 0.7.1": {
       "name": "serde_urlencoded",
       "version": "0.7.1",
@@ -61369,6 +61776,7 @@
             "default",
             "derive",
             "extra-traits",
+            "fold",
             "full",
             "parsing",
             "printing",
@@ -76573,11 +76981,12 @@
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
+    "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.3.0",
     "ic-cdk 0.13.2",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
-    "ic-certification 2.3.0",
+    "ic-certification 2.5.0",
     "ic-certified-map 0.3.4",
     "ic-http-certification 2.3.0",
     "ic-metrics-encoder 1.1.1",
@@ -76585,6 +76994,7 @@
     "ic-stable-structures 0.6.4",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.35.0",
+    "ic-verify-bls-signature 0.2.0",
     "ic-wasm 0.7.1",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",

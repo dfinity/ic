@@ -9,6 +9,7 @@ rust_library(
     ],
     version = "0.9.0",
     visibility = [
+        "//packages/ic-signature-verification:__pkg__",
         "//rs/certification:__pkg__",
         "//rs/certification/test-utils:__pkg__",
         "//rs/crypto:__subpackages__",

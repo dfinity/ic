@@ -10857,17 +10857,16 @@ name = "ic-signature-verification"
 version = "0.1.0"
 dependencies = [
  "assert_matches",
- "candid",
  "hex",
  "ic-canister-sig-creation",
  "ic-cbor",
  "ic-certification 2.5.0",
- "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "ic-verify-bls-signature 0.2.0",
+ "ic_principal",
  "serde",
  "serde_bytes",
  "serde_cbor",

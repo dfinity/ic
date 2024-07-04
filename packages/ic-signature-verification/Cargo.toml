@@ -13,10 +13,10 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.10"
 ic-cbor = "2.5"
 ic-canister-sig-creation = "1.0"
 ic-certification = "2.5"
+ic_principal = "0.1"
 ic-verify-bls-signature = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
@@ -26,7 +26,6 @@ sha2 = "0.10"
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
-ic-crypto-internal-test-vectors = { path = "../../rs/crypto/internal/test_vectors" }
 ic-crypto-internal-types = { path = "../../rs/crypto/internal/crypto_lib/types" }
 ic-crypto-test-utils-canister-sigs = { path = "../../rs/crypto/test_utils/canister_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../rs/crypto/test_utils/reproducible_rng" }
