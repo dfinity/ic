@@ -1,6 +1,5 @@
 load("//bazel:fixtures.bzl", "rust_fixture_generator", "release_fixture_name")
 load("@rules_rust//rust:defs.bzl", "rust_test")
-#load("@bazel_skylib//lib:labels.bzl", "Label")
 
 rust_fixture_generator(
     name = "dummy_fixture",
