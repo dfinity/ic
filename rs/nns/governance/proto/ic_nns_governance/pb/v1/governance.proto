@@ -1219,6 +1219,8 @@ message GovernanceError {
     ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
     // The neuron attempted to leave the community fund but is not a member.
     ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
+    // The neuron attempted to vote on a proposal that it has already voted on before.
+    ERROR_TYPE_NEURON_ALREADY_VOTED = 19;
   }
 
   ErrorType error_type = 1;

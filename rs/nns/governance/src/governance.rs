@@ -5567,7 +5567,7 @@ impl Governance {
         if neuron_ballot.vote != (Vote::Unspecified as i32) {
             // Already voted.
             return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
+                ErrorType::NeuronAlreadyVoted,
                 "Neuron already voted on proposal.",
             ));
         }
