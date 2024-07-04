@@ -215,7 +215,7 @@ message KeyTranscriptCreation {
   UnmaskedTranscript created = 9;
 }
 
-message EcdsaMessage {
+message IDkgMessage {
   oneof msg {
     registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
     IDkgDealingSupport dealing_support = 2;

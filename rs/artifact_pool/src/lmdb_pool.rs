@@ -16,14 +16,14 @@ use ic_types::consensus::certification::CertificationMessageHash;
 use ic_types::consensus::idkg::SigShare;
 use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
-    artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
+    artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         idkg::{
-            EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
-            EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare, SchnorrSigShare,
+            EcdsaArtifactId, EcdsaComplaint, EcdsaOpening, EcdsaPrefix, EcdsaPrefixOf,
+            EcdsaSigShare, IDkgMessage, IDkgMessageType, SchnorrSigShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
@@ -1578,8 +1578,8 @@ impl From<&[u8]> for EcdsaIdKey {
     }
 }
 
-impl From<&EcdsaMessageId> for EcdsaIdKey {
-    fn from(msg_id: &EcdsaMessageId) -> EcdsaIdKey {
+impl From<&IDkgMessageId> for EcdsaIdKey {
+    fn from(msg_id: &IDkgMessageId) -> EcdsaIdKey {
         let prefix = msg_id.prefix();
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
@@ -1600,7 +1600,7 @@ impl From<&EcdsaPrefix> for EcdsaIdKey {
     }
 }
 
-fn deser_ecdsa_message_id(message_type: EcdsaMessageType, id_key: EcdsaIdKey) -> EcdsaMessageId {
+fn deser_idkg_message_id(message_type: IDkgMessageType, id_key: EcdsaIdKey) -> IDkgMessageId {
     let mut group_tag_bytes = [0; 8];
     group_tag_bytes.copy_from_slice(&id_key.0[0..8]);
 
@@ -1625,19 +1625,19 @@ fn deser_ecdsa_message_id(message_type: EcdsaMessageType, id_key: EcdsaIdKey) ->
 }
 
 /// The per-message type DB
-struct EcdsaMessageDb {
+struct IDkgMessageDb {
     db_env: Arc<Environment>,
     db: Database,
-    object_type: EcdsaMessageType,
+    object_type: IDkgMessageType,
     metrics: EcdsaPoolMetrics,
     log: ReplicaLogger,
 }
 
-impl EcdsaMessageDb {
+impl IDkgMessageDb {
     fn new(
         db_env: Arc<Environment>,
         db: Database,
-        object_type: EcdsaMessageType,
+        object_type: IDkgMessageType,
         metrics: EcdsaPoolMetrics,
         log: ReplicaLogger,
     ) -> Self {
@@ -1652,15 +1652,15 @@ impl EcdsaMessageDb {
 
     /// Adds the serialized <key, vale> to be added to the transaction. Returns true on success,
     /// false otherwise.
-    fn insert_txn(&self, message: EcdsaMessage, tx: &mut RwTransaction) -> bool {
-        assert_eq!(EcdsaMessageType::from(&message), self.object_type);
+    fn insert_txn(&self, message: IDkgMessage, tx: &mut RwTransaction) -> bool {
+        assert_eq!(IDkgMessageType::from(&message), self.object_type);
         let key = EcdsaIdKey::from(&EcdsaArtifactId::from(&message));
-        let bytes = match bincode::serialize::<EcdsaMessage>(&message) {
+        let bytes = match bincode::serialize::<IDkgMessage>(&message) {
             Ok(bytes) => bytes,
             Err(err) => {
                 error!(
                     self.log,
-                    "EcdsaMessageDb::insert_txn(): serialize(): {:?}/{:?}", key, err
+                    "IDkgMessageDb::insert_txn(): serialize(): {:?}/{:?}", key, err
                 );
                 self.metrics.persistence_error("insert_serialize");
                 return false;
@@ -1670,7 +1670,7 @@ impl EcdsaMessageDb {
         if let Err(err) = tx.put(self.db, &key, &bytes, WriteFlags::empty()) {
             error!(
                 self.log,
-                "EcdsaMessageDb::insert_txn(): tx.put(): {:?}/{:?}", key, err
+                "IDkgMessageDb::insert_txn(): tx.put(): {:?}/{:?}", key, err
             );
             self.metrics.persistence_error("insert_tx_put");
             return false;
@@ -1679,14 +1679,14 @@ impl EcdsaMessageDb {
         true
     }
 
-    fn get_object(&self, id: &EcdsaMessageId) -> Option<EcdsaMessage> {
+    fn get_object(&self, id: &IDkgMessageId) -> Option<IDkgMessage> {
         let key = EcdsaIdKey::from(id);
         let tx = match self.db_env.begin_ro_txn() {
             Ok(tx) => tx,
             Err(err) => {
                 error!(
                     self.log,
-                    "EcdsaMessageDb::get(): begin_ro_txn(): {:?}/{:?}", key, err
+                    "IDkgMessageDb::get(): begin_ro_txn(): {:?}/{:?}", key, err
                 );
                 self.metrics.persistence_error("get_begin_ro_txn");
                 return None;
@@ -1699,19 +1699,19 @@ impl EcdsaMessageDb {
             Err(err) => {
                 error!(
                     self.log,
-                    "EcdsaMessageDb::get(): tx.get(): {:?}/{:?}", key, err
+                    "IDkgMessageDb::get(): tx.get(): {:?}/{:?}", key, err
                 );
                 self.metrics.persistence_error("get_tx_get");
                 return None;
             }
         };
 
-        match bincode::deserialize::<EcdsaMessage>(bytes) {
+        match bincode::deserialize::<IDkgMessage>(bytes) {
             Ok(msg) => Some(msg),
             Err(err) => {
                 error!(
                     self.log,
-                    "EcdsaMessageDb::get(): deserialize(): {:?}/{:?}", key, err
+                    "IDkgMessageDb::get(): deserialize(): {:?}/{:?}", key, err
                 );
                 self.metrics.persistence_error("get_deserialize");
                 None
@@ -1721,12 +1721,12 @@ impl EcdsaMessageDb {
 
     /// Adds the serialized <key> to be removed to the transaction. Returns true on success,
     /// false otherwise.
-    fn remove_txn(&self, id: &EcdsaMessageId, tx: &mut RwTransaction) -> bool {
+    fn remove_txn(&self, id: &IDkgMessageId, tx: &mut RwTransaction) -> bool {
         let key = EcdsaIdKey::from(id);
         if let Err(err) = tx.del(self.db, &key, None) {
             error!(
                 self.log,
-                "EcdsaMessageDb::remove_txn(): tx.del(): {:?}/{:?}", key, err
+                "IDkgMessageDb::remove_txn(): tx.del(): {:?}/{:?}", key, err
             );
             self.metrics.persistence_error("remove_tx_del");
             return false;
@@ -1734,22 +1734,22 @@ impl EcdsaMessageDb {
         true
     }
 
-    fn iter<T: TryFrom<EcdsaMessage>>(
+    fn iter<T: TryFrom<IDkgMessage>>(
         &self,
         prefix: Option<EcdsaPrefixOf<T>>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, T)> + '_>
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
-        <T as TryFrom<EcdsaMessage>>::Error: Debug,
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
         let message_type = self.object_type;
         let log = self.log.clone();
         let prefix_cl = prefix.as_ref().map(|p| p.as_ref().clone());
         let deserialize_fn = move |key: &[u8], bytes: &[u8]| {
-            // Convert key bytes to EcdsaMessageId
+            // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
             key_bytes.extend_from_slice(key);
             let id_key = EcdsaIdKey(key_bytes);
-            let id = deser_ecdsa_message_id(message_type, id_key);
+            let id = deser_idkg_message_id(message_type, id_key);
 
             // Stop iterating if we hit a different prefix.
             if let Some(prefix) = &prefix_cl {
@@ -1759,12 +1759,12 @@ impl EcdsaMessageDb {
             }
 
             // Deserialize value bytes and convert to inner type
-            let message = match bincode::deserialize::<EcdsaMessage>(bytes) {
+            let message = match bincode::deserialize::<IDkgMessage>(bytes) {
                 Ok(message) => message,
                 Err(err) => {
                     error!(
                         log,
-                        "EcdsaMessageDb::iter(): deserialize() failed: {:?}/{:?}/{}/{}",
+                        "IDkgMessageDb::iter(): deserialize() failed: {:?}/{:?}/{}/{}",
                         id,
                         err,
                         key.len(),
@@ -1779,7 +1779,7 @@ impl EcdsaMessageDb {
                 Err(err) => {
                     error!(
                         log,
-                        "EcdsaMessageDb::iter(): failed to convert to inner type: {:?}/{:?}/{}/{}",
+                        "IDkgMessageDb::iter(): failed to convert to inner type: {:?}/{:?}/{}/{}",
                         id,
                         err,
                         key.len(),
@@ -1806,7 +1806,7 @@ impl EcdsaMessageDb {
 pub(crate) struct PersistentEcdsaPoolSection {
     // Per message type data base
     db_env: Arc<Environment>,
-    message_dbs: Vec<(EcdsaMessageType, EcdsaMessageDb)>,
+    message_dbs: Vec<(IDkgMessageType, IDkgMessageDb)>,
     metrics: EcdsaPoolMetrics,
     log: ReplicaLogger,
 }
@@ -1821,7 +1821,7 @@ impl PersistentEcdsaPoolSection {
         pool_type: &str,
     ) -> Self {
         let mut type_keys = Vec::new();
-        for message_type in EcdsaMessageType::iter() {
+        for message_type in IDkgMessageType::iter() {
             type_keys.push((message_type, Self::get_type_key(message_type)));
         }
 
@@ -1852,7 +1852,7 @@ impl PersistentEcdsaPoolSection {
             };
             message_dbs.push((
                 *message_type,
-                EcdsaMessageDb::new(
+                IDkgMessageDb::new(
                     db_env.clone(),
                     db,
                     *message_type,
@@ -1876,7 +1876,7 @@ impl PersistentEcdsaPoolSection {
         }
     }
 
-    fn get_message_db(&self, message_type: EcdsaMessageType) -> &EcdsaMessageDb {
+    fn get_message_db(&self, message_type: IDkgMessageType) -> &IDkgMessageDb {
         self.message_dbs
             .iter()
             .find(|(db_type, _)| *db_type == message_type)
@@ -1884,93 +1884,91 @@ impl PersistentEcdsaPoolSection {
             .unwrap()
     }
 
-    fn get_type_key(message_type: EcdsaMessageType) -> TypeKey {
+    fn get_type_key(message_type: IDkgMessageType) -> TypeKey {
         match message_type {
-            EcdsaMessageType::Dealing => TypeKey::EcdsaDealing,
-            EcdsaMessageType::DealingSupport => TypeKey::EcdsaDealingSupport,
-            EcdsaMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
-            EcdsaMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
-            EcdsaMessageType::Complaint => TypeKey::EcdsaComplaint,
-            EcdsaMessageType::Opening => TypeKey::EcdsaOpening,
+            IDkgMessageType::Dealing => TypeKey::EcdsaDealing,
+            IDkgMessageType::DealingSupport => TypeKey::EcdsaDealingSupport,
+            IDkgMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
+            IDkgMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
+            IDkgMessageType::Complaint => TypeKey::EcdsaComplaint,
+            IDkgMessageType::Opening => TypeKey::EcdsaOpening,
         }
     }
 }
 
 impl EcdsaPoolSection for PersistentEcdsaPoolSection {
-    fn contains(&self, msg_id: &EcdsaMessageId) -> bool {
-        self.get_message_db(EcdsaMessageType::from(msg_id))
+    fn contains(&self, msg_id: &IDkgMessageId) -> bool {
+        self.get_message_db(IDkgMessageType::from(msg_id))
             .get_object(msg_id)
             .is_some()
     }
 
-    fn get(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
-        self.get_message_db(EcdsaMessageType::from(msg_id))
+    fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
+        self.get_message_db(IDkgMessageType::from(msg_id))
             .get_object(msg_id)
     }
 
-    fn signed_dealings(
-        &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::Dealing);
+    fn signed_dealings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Dealing);
         message_db.iter(None)
     }
 
     fn signed_dealings_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<SignedIDkgDealing>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::Dealing);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Dealing);
         message_db.iter(Some(prefix))
     }
 
     fn dealing_support(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::DealingSupport);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
         message_db.iter(None)
     }
 
     fn dealing_support_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<IDkgDealingSupport>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::DealingSupport);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
         message_db.iter(Some(prefix))
     }
 
     fn ecdsa_signature_shares(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::EcdsaSigShare);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
         message_db.iter(None)
     }
 
     fn ecdsa_signature_shares_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<EcdsaSigShare>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::EcdsaSigShare);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
         message_db.iter(Some(prefix))
     }
 
     fn schnorr_signature_shares(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
         message_db.iter(None)
     }
 
     fn schnorr_signature_shares_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<SchnorrSigShare>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
         message_db.iter(Some(prefix))
     }
 
-    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, SigShare)> + '_> {
-        let ecdsa_db = self.get_message_db(EcdsaMessageType::EcdsaSigShare);
-        let schnorr_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
+        let ecdsa_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
+        let schnorr_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
         Box::new(
             ecdsa_db
                 .iter(None)
@@ -1983,29 +1981,29 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
         )
     }
 
-    fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::Complaint);
+    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Complaint);
         message_db.iter(None)
     }
 
     fn complaints_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<EcdsaComplaint>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::Complaint);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Complaint);
         message_db.iter(Some(prefix))
     }
 
-    fn openings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::Opening);
+    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Opening);
         message_db.iter(None)
     }
 
     fn openings_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<EcdsaOpening>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::Opening);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Opening);
         message_db.iter(Some(prefix))
     }
 }
@@ -2031,7 +2029,7 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
         for op in ops.ops {
             match op {
                 EcdsaPoolSectionOp::Insert(message) => {
-                    let message_type = EcdsaMessageType::from(&message);
+                    let message_type = IDkgMessageType::from(&message);
                     let db = self.get_message_db(message_type);
                     if !db.insert_txn(message, &mut tx) {
                         return;
@@ -2039,7 +2037,7 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
                     self.metrics.observe_insert(message_type.as_str());
                 }
                 EcdsaPoolSectionOp::Remove(id) => {
-                    let message_type = EcdsaMessageType::from(&id);
+                    let message_type = IDkgMessageType::from(&id);
                     let db = self.get_message_db(message_type);
                     if !db.remove_txn(&id, &mut tx) {
                         return;

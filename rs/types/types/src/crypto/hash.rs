@@ -9,7 +9,7 @@ use crate::consensus::{
     },
     dkg as consensus_dkg,
     idkg::{
-        EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
+        EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript, IDkgMessage,
         SchnorrSigShare,
     },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
@@ -111,7 +111,7 @@ mod private {
     impl CryptoHashDomainSeal for ConsensusMessage {}
     impl CryptoHashDomainSeal for CertificationMessage {}
 
-    impl CryptoHashDomainSeal for EcdsaMessage {}
+    impl CryptoHashDomainSeal for IDkgMessage {}
 
     impl CryptoHashDomainSeal for IDkgDealing {}
 
@@ -341,9 +341,9 @@ impl CryptoHashDomain for CertificationMessage {
     }
 }
 
-impl CryptoHashDomain for EcdsaMessage {
+impl CryptoHashDomain for IDkgMessage {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaMessage.to_string()
+        DomainSeparator::IDkgMessage.to_string()
     }
 }
 

@@ -710,12 +710,12 @@ pub struct KeyTranscriptCreation {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaMessage {
-    #[prost(oneof = "ecdsa_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
-    pub msg: ::core::option::Option<ecdsa_message::Msg>,
+pub struct IDkgMessage {
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
+    pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
-/// Nested message and enum types in `EcdsaMessage`.
-pub mod ecdsa_message {
+/// Nested message and enum types in `IDkgMessage`.
+pub mod i_dkg_message {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
@@ -1370,12 +1370,12 @@ pub mod canister_http_response_message {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaMessageAttribute {
-    #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5, 6")]
-    pub kind: ::core::option::Option<ecdsa_message_attribute::Kind>,
+pub struct IDkgMessageAttribute {
+    #[prost(oneof = "i_dkg_message_attribute::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    pub kind: ::core::option::Option<i_dkg_message_attribute::Kind>,
 }
-/// Nested message and enum types in `EcdsaMessageAttribute`.
-pub mod ecdsa_message_attribute {
+/// Nested message and enum types in `IDkgMessageAttribute`.
+pub mod i_dkg_message_attribute {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
