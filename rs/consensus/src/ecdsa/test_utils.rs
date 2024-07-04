@@ -30,7 +30,7 @@ use ic_test_utilities_consensus::{fake::*, EcdsaStatsNoOp};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::artifact::EcdsaMessageId;
+use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::idkg::{
     self,
@@ -38,7 +38,7 @@ use ic_types::consensus::idkg::{
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
-    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare,
+    EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare, IDkgMessage,
     IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
     IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId,
     ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
@@ -1343,16 +1343,16 @@ pub(crate) fn create_signature_share_with_nonce(
     signer_id: NodeId,
     request_id: RequestId,
     nonce: u8,
-) -> EcdsaMessage {
+) -> IDkgMessage {
     match key_id {
-        MasterPublicKeyId::Ecdsa(_) => EcdsaMessage::EcdsaSigShare(EcdsaSigShare {
+        MasterPublicKeyId::Ecdsa(_) => IDkgMessage::EcdsaSigShare(EcdsaSigShare {
             signer_id,
             request_id,
             share: ThresholdEcdsaSigShare {
                 sig_share_raw: vec![nonce],
             },
         }),
-        MasterPublicKeyId::Schnorr(_) => EcdsaMessage::SchnorrSigShare(SchnorrSigShare {
+        MasterPublicKeyId::Schnorr(_) => IDkgMessage::SchnorrSigShare(SchnorrSigShare {
             signer_id,
             request_id,
             share: ThresholdSchnorrSigShare {
@@ -1367,7 +1367,7 @@ pub(crate) fn create_signature_share(
     key_id: &MasterPublicKeyId,
     signer_id: NodeId,
     request_id: RequestId,
-) -> EcdsaMessage {
+) -> IDkgMessage {
     create_signature_share_with_nonce(key_id, signer_id, request_id, 0)
 }
 
@@ -1436,7 +1436,7 @@ pub(crate) fn is_dealing_added_to_validated(
     transcript_id: &IDkgTranscriptId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(signed_dealing)) =
+        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(signed_dealing)) =
             action
         {
             let dealing = signed_dealing.idkg_dealing();
@@ -1456,8 +1456,7 @@ pub(crate) fn is_dealing_support_added_to_validated(
     dealer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support)) =
-            action
+        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaDealingSupport(support)) = action
         {
             if support.transcript_id == *transcript_id
                 && support.dealer_id == *dealer_id
@@ -1478,7 +1477,7 @@ pub(crate) fn is_complaint_added_to_validated(
     complainer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaComplaint(signed_complaint)) =
+        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(signed_complaint)) =
             action
         {
             let complaint = signed_complaint.get();
@@ -1501,8 +1500,7 @@ pub(crate) fn is_opening_added_to_validated(
     opener_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaOpening(signed_opening)) =
-            action
+        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(signed_opening)) = action
         {
             let opening = signed_opening.get();
             if opening.idkg_opening.transcript_id == *transcript_id
@@ -1524,7 +1522,7 @@ pub(crate) fn is_signature_share_added_to_validated(
     requested_height: Height,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share)) = action {
+        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share)) = action {
             if share.request_id.height == requested_height
                 && share.request_id == *request_id
                 && share.signer_id == NODE_1
@@ -1532,7 +1530,7 @@ pub(crate) fn is_signature_share_added_to_validated(
                 return true;
             }
         }
-        if let EcdsaChangeAction::AddToValidated(EcdsaMessage::SchnorrSigShare(share)) = action {
+        if let EcdsaChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share)) = action {
             if share.request_id.height == requested_height
                 && share.request_id == *request_id
                 && share.signer_id == NODE_1
@@ -1547,7 +1545,7 @@ pub(crate) fn is_signature_share_added_to_validated(
 // Checks that artifact is being moved from unvalidated to validated pool
 pub(crate) fn is_moved_to_validated(
     change_set: &[EcdsaChangeAction],
-    msg_id: &EcdsaMessageId,
+    msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
         if let EcdsaChangeAction::MoveToValidated(msg) = action {
@@ -1562,7 +1560,7 @@ pub(crate) fn is_moved_to_validated(
 // Checks that artifact is being removed from validated pool
 pub(crate) fn is_removed_from_validated(
     change_set: &[EcdsaChangeAction],
-    msg_id: &EcdsaMessageId,
+    msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
         if let EcdsaChangeAction::RemoveValidated(id) = action {
@@ -1577,7 +1575,7 @@ pub(crate) fn is_removed_from_validated(
 // Checks that artifact is being removed from unvalidated pool
 pub(crate) fn is_removed_from_unvalidated(
     change_set: &[EcdsaChangeAction],
-    msg_id: &EcdsaMessageId,
+    msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
         if let EcdsaChangeAction::RemoveUnvalidated(id) = action {
@@ -1590,7 +1588,7 @@ pub(crate) fn is_removed_from_unvalidated(
 }
 
 // Checks that artifact is being dropped as invalid
-pub(crate) fn is_handle_invalid(change_set: &[EcdsaChangeAction], msg_id: &EcdsaMessageId) -> bool {
+pub(crate) fn is_handle_invalid(change_set: &[EcdsaChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
         if let EcdsaChangeAction::HandleInvalid(id, _) = action {
             if *id == *msg_id {

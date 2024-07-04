@@ -11,7 +11,7 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::node::RegistryVersion;
 use ic_types::{
-    consensus::idkg::{EcdsaBlockReader, EcdsaMessage},
+    consensus::idkg::{EcdsaBlockReader, IDkgMessage},
     crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams, SignedIDkgDealing},
     crypto::{BasicSigOf, CryptoResult},
     malicious_flags::MaliciousFlags,
@@ -56,7 +56,7 @@ pub fn maliciously_alter_changeset(
     changeset
         .into_iter()
         .flat_map(|action| match action {
-            EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing))
+            EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
                 if malicious_flags.maliciously_corrupt_ecdsa_dealings =>
             {
                 let transcript_id = dealing.idkg_dealing().transcript_id;
@@ -75,7 +75,7 @@ pub fn maliciously_alter_changeset(
                             &pre_signer.log,
                             &pre_signer.metrics,
                         );
-                        EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing))
+                        EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
                     })
             }
             _ => Some(action),

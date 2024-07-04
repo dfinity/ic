@@ -801,7 +801,7 @@ impl EcdsaUIDGenerator {
 
 /// The ECDSA artifact.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub enum EcdsaMessage {
+pub enum IDkgMessage {
     EcdsaSignedDealing(SignedIDkgDealing),
     EcdsaDealingSupport(IDkgDealingSupport),
     EcdsaSigShare(EcdsaSigShare),
@@ -810,49 +810,49 @@ pub enum EcdsaMessage {
     EcdsaOpening(EcdsaOpening),
 }
 
-impl EcdsaMessage {
+impl IDkgMessage {
     pub fn message_id(&self) -> EcdsaArtifactId {
         match self {
-            EcdsaMessage::EcdsaSignedDealing(x) => x.message_id(),
-            EcdsaMessage::EcdsaDealingSupport(x) => x.message_id(),
-            EcdsaMessage::EcdsaSigShare(x) => x.message_id(),
-            EcdsaMessage::SchnorrSigShare(x) => x.message_id(),
-            EcdsaMessage::EcdsaComplaint(x) => x.message_id(),
-            EcdsaMessage::EcdsaOpening(x) => x.message_id(),
+            IDkgMessage::EcdsaSignedDealing(x) => x.message_id(),
+            IDkgMessage::EcdsaDealingSupport(x) => x.message_id(),
+            IDkgMessage::EcdsaSigShare(x) => x.message_id(),
+            IDkgMessage::SchnorrSigShare(x) => x.message_id(),
+            IDkgMessage::EcdsaComplaint(x) => x.message_id(),
+            IDkgMessage::EcdsaOpening(x) => x.message_id(),
         }
     }
 }
 
-impl From<EcdsaMessage> for pb::EcdsaMessage {
-    fn from(value: EcdsaMessage) -> Self {
-        use pb::ecdsa_message::Msg;
+impl From<IDkgMessage> for pb::IDkgMessage {
+    fn from(value: IDkgMessage) -> Self {
+        use pb::i_dkg_message::Msg;
         let msg = match &value {
-            EcdsaMessage::EcdsaSignedDealing(x) => Msg::SignedDealing(x.into()),
-            EcdsaMessage::EcdsaDealingSupport(x) => Msg::DealingSupport(x.into()),
-            EcdsaMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
-            EcdsaMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
-            EcdsaMessage::EcdsaComplaint(x) => Msg::Complaint(x.into()),
-            EcdsaMessage::EcdsaOpening(x) => Msg::Opening(x.into()),
+            IDkgMessage::EcdsaSignedDealing(x) => Msg::SignedDealing(x.into()),
+            IDkgMessage::EcdsaDealingSupport(x) => Msg::DealingSupport(x.into()),
+            IDkgMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
+            IDkgMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
+            IDkgMessage::EcdsaComplaint(x) => Msg::Complaint(x.into()),
+            IDkgMessage::EcdsaOpening(x) => Msg::Opening(x.into()),
         };
         Self { msg: Some(msg) }
     }
 }
 
-impl TryFrom<pb::EcdsaMessage> for EcdsaMessage {
+impl TryFrom<pb::IDkgMessage> for IDkgMessage {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: pb::EcdsaMessage) -> Result<Self, Self::Error> {
-        use pb::ecdsa_message::Msg;
+    fn try_from(proto: pb::IDkgMessage) -> Result<Self, Self::Error> {
+        use pb::i_dkg_message::Msg;
         let Some(msg) = &proto.msg else {
-            return Err(ProxyDecodeError::MissingField("EcdsaMessage::msg"));
+            return Err(ProxyDecodeError::MissingField("IDkgMessage::msg"));
         };
         Ok(match &msg {
-            Msg::SignedDealing(x) => EcdsaMessage::EcdsaSignedDealing(x.try_into()?),
-            Msg::DealingSupport(x) => EcdsaMessage::EcdsaDealingSupport(x.try_into()?),
-            Msg::EcdsaSigShare(x) => EcdsaMessage::EcdsaSigShare(x.try_into()?),
-            Msg::SchnorrSigShare(x) => EcdsaMessage::SchnorrSigShare(x.try_into()?),
-            Msg::Complaint(x) => EcdsaMessage::EcdsaComplaint(x.try_into()?),
-            Msg::Opening(x) => EcdsaMessage::EcdsaOpening(x.try_into()?),
+            Msg::SignedDealing(x) => IDkgMessage::EcdsaSignedDealing(x.try_into()?),
+            Msg::DealingSupport(x) => IDkgMessage::EcdsaDealingSupport(x.try_into()?),
+            Msg::EcdsaSigShare(x) => IDkgMessage::EcdsaSigShare(x.try_into()?),
+            Msg::SchnorrSigShare(x) => IDkgMessage::SchnorrSigShare(x.try_into()?),
+            Msg::Complaint(x) => IDkgMessage::EcdsaComplaint(x.try_into()?),
+            Msg::Opening(x) => IDkgMessage::EcdsaOpening(x.try_into()?),
         })
     }
 }
@@ -1101,31 +1101,31 @@ impl EcdsaArtifactId {
     }
 }
 
-impl From<(EcdsaMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
+impl From<(IDkgMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
     fn from(
-        (message_type, prefix, crypto_hash): (EcdsaMessageType, EcdsaPrefix, CryptoHash),
+        (message_type, prefix, crypto_hash): (IDkgMessageType, EcdsaPrefix, CryptoHash),
     ) -> EcdsaArtifactId {
         match message_type {
-            EcdsaMessageType::Dealing => {
+            IDkgMessageType::Dealing => {
                 EcdsaArtifactId::Dealing(EcdsaPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
             }
-            EcdsaMessageType::DealingSupport => EcdsaArtifactId::DealingSupport(
+            IDkgMessageType::DealingSupport => EcdsaArtifactId::DealingSupport(
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            EcdsaMessageType::EcdsaSigShare => EcdsaArtifactId::EcdsaSigShare(
+            IDkgMessageType::EcdsaSigShare => EcdsaArtifactId::EcdsaSigShare(
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            EcdsaMessageType::SchnorrSigShare => EcdsaArtifactId::SchnorrSigShare(
+            IDkgMessageType::SchnorrSigShare => EcdsaArtifactId::SchnorrSigShare(
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            EcdsaMessageType::Complaint => EcdsaArtifactId::Complaint(
+            IDkgMessageType::Complaint => EcdsaArtifactId::Complaint(
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            EcdsaMessageType::Opening => {
+            IDkgMessageType::Opening => {
                 EcdsaArtifactId::Opening(EcdsaPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
             }
         }
@@ -1218,7 +1218,7 @@ impl TryFrom<pb::EcdsaArtifactId> for EcdsaArtifactId {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, EnumIter,
 )]
-pub enum EcdsaMessageType {
+pub enum IDkgMessageType {
     Dealing,
     DealingSupport,
     EcdsaSigShare,
@@ -1227,33 +1227,33 @@ pub enum EcdsaMessageType {
     Opening,
 }
 
-impl From<&EcdsaMessage> for EcdsaMessageType {
-    fn from(msg: &EcdsaMessage) -> EcdsaMessageType {
+impl From<&IDkgMessage> for IDkgMessageType {
+    fn from(msg: &IDkgMessage) -> IDkgMessageType {
         match msg {
-            EcdsaMessage::EcdsaSignedDealing(_) => EcdsaMessageType::Dealing,
-            EcdsaMessage::EcdsaDealingSupport(_) => EcdsaMessageType::DealingSupport,
-            EcdsaMessage::EcdsaSigShare(_) => EcdsaMessageType::EcdsaSigShare,
-            EcdsaMessage::SchnorrSigShare(_) => EcdsaMessageType::SchnorrSigShare,
-            EcdsaMessage::EcdsaComplaint(_) => EcdsaMessageType::Complaint,
-            EcdsaMessage::EcdsaOpening(_) => EcdsaMessageType::Opening,
+            IDkgMessage::EcdsaSignedDealing(_) => IDkgMessageType::Dealing,
+            IDkgMessage::EcdsaDealingSupport(_) => IDkgMessageType::DealingSupport,
+            IDkgMessage::EcdsaSigShare(_) => IDkgMessageType::EcdsaSigShare,
+            IDkgMessage::SchnorrSigShare(_) => IDkgMessageType::SchnorrSigShare,
+            IDkgMessage::EcdsaComplaint(_) => IDkgMessageType::Complaint,
+            IDkgMessage::EcdsaOpening(_) => IDkgMessageType::Opening,
         }
     }
 }
 
-impl From<&EcdsaArtifactId> for EcdsaMessageType {
-    fn from(id: &EcdsaArtifactId) -> EcdsaMessageType {
+impl From<&EcdsaArtifactId> for IDkgMessageType {
+    fn from(id: &EcdsaArtifactId) -> IDkgMessageType {
         match id {
-            EcdsaArtifactId::Dealing(..) => EcdsaMessageType::Dealing,
-            EcdsaArtifactId::DealingSupport(..) => EcdsaMessageType::DealingSupport,
-            EcdsaArtifactId::EcdsaSigShare(..) => EcdsaMessageType::EcdsaSigShare,
-            EcdsaArtifactId::SchnorrSigShare(..) => EcdsaMessageType::SchnorrSigShare,
-            EcdsaArtifactId::Complaint(..) => EcdsaMessageType::Complaint,
-            EcdsaArtifactId::Opening(..) => EcdsaMessageType::Opening,
+            EcdsaArtifactId::Dealing(..) => IDkgMessageType::Dealing,
+            EcdsaArtifactId::DealingSupport(..) => IDkgMessageType::DealingSupport,
+            EcdsaArtifactId::EcdsaSigShare(..) => IDkgMessageType::EcdsaSigShare,
+            EcdsaArtifactId::SchnorrSigShare(..) => IDkgMessageType::SchnorrSigShare,
+            EcdsaArtifactId::Complaint(..) => IDkgMessageType::Complaint,
+            EcdsaArtifactId::Opening(..) => IDkgMessageType::Opening,
         }
     }
 }
 
-impl EcdsaMessageType {
+impl IDkgMessageType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Dealing => "signed_dealing",
@@ -1560,7 +1560,7 @@ impl SignedBytesWithoutDomainSeparator for EcdsaOpening {
 pub type EcdsaTranscript = IDkgTranscript;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EcdsaMessageAttribute {
+pub enum IDkgMessageAttribute {
     EcdsaSignedDealing(IDkgTranscriptId),
     EcdsaDealingSupport(IDkgTranscriptId),
     EcdsaSigShare(RequestId),
@@ -1569,67 +1569,65 @@ pub enum EcdsaMessageAttribute {
     EcdsaOpening(IDkgTranscriptId),
 }
 
-impl From<EcdsaMessageAttribute> for pb::EcdsaMessageAttribute {
-    fn from(value: EcdsaMessageAttribute) -> Self {
-        use pb::ecdsa_message_attribute::Kind;
+impl From<IDkgMessageAttribute> for pb::IDkgMessageAttribute {
+    fn from(value: IDkgMessageAttribute) -> Self {
+        use pb::i_dkg_message_attribute::Kind;
         let kind = match value {
-            EcdsaMessageAttribute::EcdsaSignedDealing(id) => Kind::SignedDealing((&id).into()),
-            EcdsaMessageAttribute::EcdsaDealingSupport(id) => Kind::DealingSupport((&id).into()),
-            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::EcdsaSigShare(id.into()),
-            EcdsaMessageAttribute::SchnorrSigShare(id) => Kind::SchnorrSigShare(id.into()),
-            EcdsaMessageAttribute::EcdsaComplaint(id) => Kind::Complaint((&id).into()),
-            EcdsaMessageAttribute::EcdsaOpening(id) => Kind::Opening((&id).into()),
+            IDkgMessageAttribute::EcdsaSignedDealing(id) => Kind::SignedDealing((&id).into()),
+            IDkgMessageAttribute::EcdsaDealingSupport(id) => Kind::DealingSupport((&id).into()),
+            IDkgMessageAttribute::EcdsaSigShare(id) => Kind::EcdsaSigShare(id.into()),
+            IDkgMessageAttribute::SchnorrSigShare(id) => Kind::SchnorrSigShare(id.into()),
+            IDkgMessageAttribute::EcdsaComplaint(id) => Kind::Complaint((&id).into()),
+            IDkgMessageAttribute::EcdsaOpening(id) => Kind::Opening((&id).into()),
         };
         Self { kind: Some(kind) }
     }
 }
 
-impl TryFrom<pb::EcdsaMessageAttribute> for EcdsaMessageAttribute {
+impl TryFrom<pb::IDkgMessageAttribute> for IDkgMessageAttribute {
     type Error = ProxyDecodeError;
-    fn try_from(value: pb::EcdsaMessageAttribute) -> Result<Self, Self::Error> {
-        use pb::ecdsa_message_attribute::Kind;
+    fn try_from(value: pb::IDkgMessageAttribute) -> Result<Self, Self::Error> {
+        use pb::i_dkg_message_attribute::Kind;
         let Some(kind) = &value.kind else {
-            return Err(ProxyDecodeError::MissingField(
-                "EcdsaMessageAttribute::kind",
-            ));
+            return Err(ProxyDecodeError::MissingField("IDkgMessageAttribute::kind"));
         };
         Ok(match &kind {
-            Kind::SignedDealing(id) => EcdsaMessageAttribute::EcdsaSignedDealing(id.try_into()?),
-            Kind::DealingSupport(id) => EcdsaMessageAttribute::EcdsaDealingSupport(id.try_into()?),
-            Kind::EcdsaSigShare(id) => EcdsaMessageAttribute::EcdsaSigShare(id.try_into()?),
-            Kind::SchnorrSigShare(id) => EcdsaMessageAttribute::SchnorrSigShare(id.try_into()?),
-            Kind::Complaint(id) => EcdsaMessageAttribute::EcdsaComplaint(id.try_into()?),
-            Kind::Opening(id) => EcdsaMessageAttribute::EcdsaOpening(id.try_into()?),
+            Kind::SignedDealing(id) => IDkgMessageAttribute::EcdsaSignedDealing(id.try_into()?),
+            Kind::DealingSupport(id) => IDkgMessageAttribute::EcdsaDealingSupport(id.try_into()?),
+            Kind::EcdsaSigShare(id) => IDkgMessageAttribute::EcdsaSigShare(id.try_into()?),
+            Kind::SchnorrSigShare(id) => IDkgMessageAttribute::SchnorrSigShare(id.try_into()?),
+            Kind::Complaint(id) => IDkgMessageAttribute::EcdsaComplaint(id.try_into()?),
+            Kind::Opening(id) => IDkgMessageAttribute::EcdsaOpening(id.try_into()?),
         })
     }
 }
 
-impl From<&EcdsaMessage> for EcdsaMessageAttribute {
-    fn from(msg: &EcdsaMessage) -> EcdsaMessageAttribute {
+impl From<&IDkgMessage> for IDkgMessageAttribute {
+    fn from(msg: &IDkgMessage) -> IDkgMessageAttribute {
         match msg {
-            EcdsaMessage::EcdsaSignedDealing(dealing) => {
-                EcdsaMessageAttribute::EcdsaSignedDealing(dealing.content.transcript_id)
+            IDkgMessage::EcdsaSignedDealing(dealing) => {
+                IDkgMessageAttribute::EcdsaSignedDealing(dealing.content.transcript_id)
             }
-            EcdsaMessage::EcdsaDealingSupport(support) => {
-                EcdsaMessageAttribute::EcdsaDealingSupport(support.transcript_id)
+            IDkgMessage::EcdsaDealingSupport(support) => {
+                IDkgMessageAttribute::EcdsaDealingSupport(support.transcript_id)
             }
-            EcdsaMessage::EcdsaSigShare(share) => {
-                EcdsaMessageAttribute::EcdsaSigShare(share.request_id.clone())
+            IDkgMessage::EcdsaSigShare(share) => {
+                IDkgMessageAttribute::EcdsaSigShare(share.request_id.clone())
             }
-            EcdsaMessage::SchnorrSigShare(share) => {
-                EcdsaMessageAttribute::SchnorrSigShare(share.request_id.clone())
+            IDkgMessage::SchnorrSigShare(share) => {
+                IDkgMessageAttribute::SchnorrSigShare(share.request_id.clone())
             }
-            EcdsaMessage::EcdsaComplaint(complaint) => EcdsaMessageAttribute::EcdsaComplaint(
-                complaint.content.idkg_complaint.transcript_id,
-            ),
-            EcdsaMessage::EcdsaOpening(opening) => {
-                EcdsaMessageAttribute::EcdsaOpening(opening.content.idkg_opening.transcript_id)
+            IDkgMessage::EcdsaComplaint(complaint) => {
+                IDkgMessageAttribute::EcdsaComplaint(complaint.content.idkg_complaint.transcript_id)
+            }
+            IDkgMessage::EcdsaOpening(opening) => {
+                IDkgMessageAttribute::EcdsaOpening(opening.content.idkg_opening.transcript_id)
             }
         }
     }
 }
 
-impl EcdsaMessageAttribute {
+impl IDkgMessageAttribute {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::EcdsaSignedDealing(_) => "signed_dealing",
@@ -1642,61 +1640,61 @@ impl EcdsaMessageAttribute {
     }
 }
 
-impl TryFrom<EcdsaMessage> for SignedIDkgDealing {
-    type Error = EcdsaMessage;
-    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+impl TryFrom<IDkgMessage> for SignedIDkgDealing {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
-            EcdsaMessage::EcdsaSignedDealing(x) => Ok(x),
+            IDkgMessage::EcdsaSignedDealing(x) => Ok(x),
             _ => Err(msg),
         }
     }
 }
 
-impl TryFrom<EcdsaMessage> for IDkgDealingSupport {
-    type Error = EcdsaMessage;
-    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+impl TryFrom<IDkgMessage> for IDkgDealingSupport {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
-            EcdsaMessage::EcdsaDealingSupport(x) => Ok(x),
+            IDkgMessage::EcdsaDealingSupport(x) => Ok(x),
             _ => Err(msg),
         }
     }
 }
 
-impl TryFrom<EcdsaMessage> for EcdsaSigShare {
-    type Error = EcdsaMessage;
-    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+impl TryFrom<IDkgMessage> for EcdsaSigShare {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
-            EcdsaMessage::EcdsaSigShare(x) => Ok(x),
+            IDkgMessage::EcdsaSigShare(x) => Ok(x),
             _ => Err(msg),
         }
     }
 }
 
-impl TryFrom<EcdsaMessage> for SchnorrSigShare {
-    type Error = EcdsaMessage;
-    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+impl TryFrom<IDkgMessage> for SchnorrSigShare {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
-            EcdsaMessage::SchnorrSigShare(x) => Ok(x),
+            IDkgMessage::SchnorrSigShare(x) => Ok(x),
             _ => Err(msg),
         }
     }
 }
 
-impl TryFrom<EcdsaMessage> for EcdsaComplaint {
-    type Error = EcdsaMessage;
-    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+impl TryFrom<IDkgMessage> for EcdsaComplaint {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
-            EcdsaMessage::EcdsaComplaint(x) => Ok(x),
+            IDkgMessage::EcdsaComplaint(x) => Ok(x),
             _ => Err(msg),
         }
     }
 }
 
-impl TryFrom<EcdsaMessage> for EcdsaOpening {
-    type Error = EcdsaMessage;
-    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+impl TryFrom<IDkgMessage> for EcdsaOpening {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
-            EcdsaMessage::EcdsaOpening(x) => Ok(x),
+            IDkgMessage::EcdsaOpening(x) => Ok(x),
             _ => Err(msg),
         }
     }
@@ -2057,15 +2055,15 @@ impl EcdsaObject for EcdsaOpening {
     }
 }
 
-impl From<&EcdsaMessage> for EcdsaArtifactId {
-    fn from(msg: &EcdsaMessage) -> EcdsaArtifactId {
+impl From<&IDkgMessage> for EcdsaArtifactId {
+    fn from(msg: &IDkgMessage) -> EcdsaArtifactId {
         match msg {
-            EcdsaMessage::EcdsaSignedDealing(object) => object.message_id(),
-            EcdsaMessage::EcdsaDealingSupport(object) => object.message_id(),
-            EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
-            EcdsaMessage::SchnorrSigShare(object) => object.message_id(),
-            EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
-            EcdsaMessage::EcdsaOpening(object) => object.message_id(),
+            IDkgMessage::EcdsaSignedDealing(object) => object.message_id(),
+            IDkgMessage::EcdsaDealingSupport(object) => object.message_id(),
+            IDkgMessage::EcdsaSigShare(object) => object.message_id(),
+            IDkgMessage::SchnorrSigShare(object) => object.message_id(),
+            IDkgMessage::EcdsaComplaint(object) => object.message_id(),
+            IDkgMessage::EcdsaOpening(object) => object.message_id(),
         }
     }
 }
