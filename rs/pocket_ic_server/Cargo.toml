@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 axum-extra = { version = "^0.9.2", features = ["typed-header"] }
 axum = { workspace = true }
+axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 candid = { workspace = true }
 ed25519-consensus = "2.0.1"
@@ -23,14 +24,17 @@ ic-utils = { workspace = true }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-config = { path = "../config" }
+ic-registry-keys = { path = "../registry/keys" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
+ic-protobuf = { path = "../protobuf" }
 ic-utils-thread = { path = "../utils/thread" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-interfaces = { path = "../interfaces" }
@@ -56,3 +60,4 @@ serde_cbor = { workspace = true }
 [dev-dependencies]
 reqwest = { workspace = true }
 spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
+rcgen = { workspace = true }

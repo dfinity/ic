@@ -5,11 +5,11 @@ Goal:: Test the robustness of the replica by sending invalid requests to its HTT
 
 
 end::catalog[] */
-use crate::driver::{
+use ic_base_types::CanisterId;
+use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
 };
-use ic_base_types::CanisterId;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };

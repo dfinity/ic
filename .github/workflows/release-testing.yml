@@ -1,6 +1,9 @@
 name: Release Testing
 on:
-  push:
+  workflow_run:
+    workflows: ["CI Main"]
+    types:
+      - completed
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
@@ -23,13 +26,23 @@ env:
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
+  ci-main-failure:
+    name: Check CI Main Failure
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - run: |
+          echo 'CI Main workflow failed'
+          exit 1
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 180 # 3 hours
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,10 +63,12 @@ jobs:
     name: Bazel System Test Staging
     continue-on-error: True
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 180 # 3 hours
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,10 +88,12 @@ jobs:
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

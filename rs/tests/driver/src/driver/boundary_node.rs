@@ -11,15 +11,15 @@ use crate::{
     driver::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{
-            Certificate, CreateVmRequest, DnsRecord, DnsRecordType, Farm, HostFeature,
-            ImageLocation, VMCreateResponse, VmType,
+            AttachImageSpec, Certificate, CreateVmRequest, DnsRecord, DnsRecordType, Farm,
+            HostFeature, ImageLocation, VMCreateResponse, VmType,
         },
         ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
         log_events,
         resource::{DiskImage, ImageType},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_ssh_session_from_env, retry, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
+            get_ssh_session_from_env, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
             HasDependencies, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot, HasVmName,
             IcNodeContainer, RetrieveIpv4Addr, SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
         },
@@ -298,16 +298,16 @@ impl BoundaryNodeWithVm {
         )?;
 
         if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-            let image_id = farm.upload_file(
+            let image_spec = AttachImageSpec::new(farm.upload_file(
                 &pot_setup.infra_group_name,
                 compressed_img_path,
                 &mk_compressed_img_path(),
-            )?;
+            )?);
             farm.attach_disk_images(
                 &pot_setup.infra_group_name,
                 &self.name,
                 "usb-storage",
-                vec![image_id],
+                vec![image_spec],
             )?;
             farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
         } else {

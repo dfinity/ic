@@ -90,7 +90,7 @@ Swap:
         - CH
 
     VestingSchedule:
-        events: 83
+        events: 9
         interval: 17 days
 
     start_time: 12:00 UTC

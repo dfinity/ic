@@ -1998,7 +1998,10 @@ pub mod sns {
 
     pub mod root {
         use super::*;
-        use ic_sns_root::pb::v1::ListSnsCanistersRequest;
+        use ic_sns_root::{
+            pb::v1::ListSnsCanistersRequest, GetSnsCanistersSummaryRequest,
+            GetSnsCanistersSummaryResponse,
+        };
 
         pub fn list_sns_canisters(
             pocket_ic: &PocketIc,
@@ -2017,6 +2020,30 @@ pub mod sns {
                 WasmResult::Reject(s) => panic!("Call to list_sns_canisters failed: {:#?}", s),
             };
             Decode!(&result, ListSnsCanistersResponse).unwrap()
+        }
+
+        pub fn get_sns_canisters_summary(
+            pocket_ic: &PocketIc,
+            sns_root_canister_id: PrincipalId,
+        ) -> GetSnsCanistersSummaryResponse {
+            let result = pocket_ic
+                .update_call(
+                    sns_root_canister_id.into(),
+                    Principal::anonymous(),
+                    "get_sns_canisters_summary",
+                    Encode!(&GetSnsCanistersSummaryRequest {
+                        update_canister_list: Some(false),
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => {
+                    panic!("Call to get_sns_canisters_summary failed: {:#?}", s)
+                }
+            };
+            Decode!(&result, GetSnsCanistersSummaryResponse).unwrap()
         }
     }
 
@@ -2120,7 +2147,10 @@ pub mod sns {
         use super::*;
         use assert_matches::assert_matches;
         use ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters;
-        use ic_sns_swap::{pb::v1::BuyerState, swap::principal_to_subaccount};
+        use ic_sns_swap::{
+            pb::v1::{BuyerState, GetOpenTicketRequest, GetOpenTicketResponse},
+            swap::principal_to_subaccount,
+        };
         use icp_ledger::DEFAULT_TRANSFER_FEE;
 
         pub fn get_init(pocket_ic: &PocketIc, canister_id: PrincipalId) -> GetInitResponse {
@@ -2234,6 +2264,26 @@ pub mod sns {
                 WasmResult::Reject(s) => panic!("Call to get_buyer_state failed: {:#?}", s),
             };
             Ok(Decode!(&result, GetBuyerStateResponse).unwrap())
+        }
+
+        pub fn get_open_ticket(
+            pocket_ic: &PocketIc,
+            swap_canister_id: PrincipalId,
+            buyer: PrincipalId,
+        ) -> Result<GetOpenTicketResponse, String> {
+            let result = pocket_ic
+                .query_call(
+                    swap_canister_id.into(),
+                    buyer.into(),
+                    "get_open_ticket",
+                    Encode!(&GetOpenTicketRequest {}).unwrap(),
+                )
+                .map_err(|err| err.to_string())?;
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => panic!("Call to get_open_ticket failed: {:#?}", s),
+            };
+            Ok(Decode!(&result, GetOpenTicketResponse).unwrap())
         }
 
         pub fn error_refund_icp(

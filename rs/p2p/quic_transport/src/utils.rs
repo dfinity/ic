@@ -177,6 +177,7 @@ async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
         .await?
     {
         if assembler.add_chunk(offset as usize, bytes) {
+            recv_stream.stop(VarInt::from_u32(1)).unwrap();
             return Ok(assembler.assemble());
         }
     }

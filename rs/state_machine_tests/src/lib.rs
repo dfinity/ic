@@ -86,7 +86,7 @@ use ic_replicated_state::{
     page_map::Buffer,
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
-use ic_state_layout::{CheckpointLayout, RwPolicy};
+use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::FakeConsensusPoolCache;
@@ -242,7 +242,12 @@ fn make_nodes_registry(
     public_key: ThresholdSigPublicKey,
     ni_dkg_transcript: NiDkgTranscript,
 ) -> FakeRegistryClient {
-    let registry_version = INITIAL_REGISTRY_VERSION;
+    let registry_version = if registry_data_provider.is_empty() {
+        INITIAL_REGISTRY_VERSION
+    } else {
+        let latest_registry_version = registry_data_provider.latest_version();
+        RegistryVersion::from(latest_registry_version.get() + 1)
+    };
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
     let subnet_id_proto = SubnetIdProto {
@@ -336,7 +341,7 @@ fn make_nodes_registry(
     registry_data_provider
         .add(
             &make_catch_up_package_contents_key(subnet_id),
-            INITIAL_REGISTRY_VERSION,
+            registry_version,
             Some(cup_contents),
         )
         .expect("Failed to add subnet record.");
@@ -657,7 +662,7 @@ pub struct StateMachineBuilder {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     lsmt_override: Option<LsmtConfig>,
     is_root_subnet: bool,
-    seq_no: u8,
+    seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
 }
@@ -689,7 +694,7 @@ impl StateMachineBuilder {
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
             lsmt_override: None,
             is_root_subnet: false,
-            seq_no: 0,
+            seed: [42; 32],
             with_extra_canister_range: None,
             dts: true,
         }
@@ -808,7 +813,7 @@ impl StateMachineBuilder {
         Self {
             ecdsa_keys: vec![EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
-                name: format!("master_ecdsa_public_key_{}", self.seq_no),
+                name: format!("master_ecdsa_public_key_{}", hex::encode(self.seed)),
             }],
             ..self
         }
@@ -835,8 +840,8 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_subnet_seq_no(self, seq_no: u8) -> Self {
-        Self { seq_no, ..self }
+    pub fn with_subnet_seed(self, seed: [u8; 32]) -> Self {
+        Self { seed, ..self }
     }
 
     pub fn with_root_subnet_config(self) -> Self {
@@ -874,7 +879,7 @@ impl StateMachineBuilder {
             self.registry_data_provider,
             self.lsmt_override,
             self.is_root_subnet,
-            self.seq_no,
+            self.seed,
             self.dts,
         )
     }
@@ -1123,7 +1128,7 @@ impl StateMachine {
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
-        seq_no: u8,
+        seed: [u8; 32],
         dts: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
@@ -1139,12 +1144,12 @@ impl StateMachine {
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
 
-        let node_offset: u64 = StdRng::seed_from_u64(seq_no.into()).gen();
+        let node_offset: u64 = StdRng::from_seed(seed).gen();
         let nodes: Vec<StateMachineNode> = (0..subnet_size as u64)
             .map(|i| (node_offset + i).into())
             .collect();
         let (ni_dkg_transcript, secret_key) =
-            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(seq_no.into()));
+            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
         let public_key = (&ni_dkg_transcript).try_into().unwrap();
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
         let subnet_id =
@@ -1995,14 +2000,16 @@ impl StateMachine {
             canister_directory.display()
         );
 
-        let tip: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
+        let tip: CheckpointLayout<ReadOnly> = CheckpointLayout::new_untracked(
             self.state_manager.state_layout().raw_path().join("tip"),
             ic_types::Height::new(0),
         )
         .expect("failed to obtain tip");
         let tip_canister_layout = tip
             .canister(&canister_id)
-            .expect("failed to obtain writeable canister layout");
+            .expect("failed to obtain canister layout");
+        std::fs::create_dir_all(tip_canister_layout.raw_path())
+            .expect("Failed to create checkpoint dir");
 
         fn copy_as_writeable(src: &Path, dst: &Path) {
             assert!(

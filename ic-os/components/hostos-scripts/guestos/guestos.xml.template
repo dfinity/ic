@@ -9,7 +9,7 @@
   <memory unit='GiB'>{{ resources_memory }}</memory>
   <currentMemory unit='GiB'>{{ resources_memory }}</currentMemory>
   <vcpu placement='static'>64</vcpu>
-{{ cpu_spec }}
+  {{ cpu_spec }}
   <resource>
     <partition>/machine</partition>
   </resource>
@@ -135,6 +135,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
+      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

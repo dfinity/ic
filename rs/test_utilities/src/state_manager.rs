@@ -394,12 +394,24 @@ impl From<SerializableStreamHeader> for StreamHeader {
 #[derive(Serialize, Deserialize)]
 pub enum SerializableRejectReason {
     CanisterMigrating = 1,
+    CanisterNotFound = 2,
+    CanisterStopped = 3,
+    CanisterStopping = 4,
+    QueueFull = 5,
+    OutOfMemory = 6,
+    Unknown = 7,
 }
 
 impl From<&RejectReason> for SerializableRejectReason {
     fn from(reason: &RejectReason) -> Self {
         match reason {
             RejectReason::CanisterMigrating => Self::CanisterMigrating,
+            RejectReason::CanisterNotFound => Self::CanisterNotFound,
+            RejectReason::CanisterStopped => Self::CanisterStopped,
+            RejectReason::CanisterStopping => Self::CanisterStopping,
+            RejectReason::QueueFull => Self::QueueFull,
+            RejectReason::OutOfMemory => Self::OutOfMemory,
+            RejectReason::Unknown => Self::Unknown,
         }
     }
 }
@@ -408,6 +420,12 @@ impl From<SerializableRejectReason> for RejectReason {
     fn from(reason: SerializableRejectReason) -> RejectReason {
         match reason {
             SerializableRejectReason::CanisterMigrating => RejectReason::CanisterMigrating,
+            SerializableRejectReason::CanisterNotFound => RejectReason::CanisterNotFound,
+            SerializableRejectReason::CanisterStopped => RejectReason::CanisterStopped,
+            SerializableRejectReason::CanisterStopping => RejectReason::CanisterStopping,
+            SerializableRejectReason::QueueFull => RejectReason::QueueFull,
+            SerializableRejectReason::OutOfMemory => RejectReason::OutOfMemory,
+            SerializableRejectReason::Unknown => RejectReason::Unknown,
         }
     }
 }

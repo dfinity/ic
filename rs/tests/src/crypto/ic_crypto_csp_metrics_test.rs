@@ -19,13 +19,13 @@ Coverage::
 
 end::catalog[] */
 
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer,
 };
-use crate::util::MetricsFetcher;
-use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::MetricsFetcher;
 use slog::info;
 use std::iter;
 
@@ -47,7 +47,7 @@ pub fn ic_crypto_csp_metrics_test(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
 
-    crate::util::block_on(async move {
+    ic_system_test_driver::util::block_on(async move {
         let mut count = 0;
         let mut found = false;
         let metrics = MetricsFetcher::new(

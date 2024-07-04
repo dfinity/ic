@@ -122,6 +122,12 @@ impl CreateServiceNervousSystemBuilder {
         self
     }
 
+    pub fn with_minimum_participants(mut self, minimum_participants: u64) -> Self {
+        let swap_parameters = self.0.swap_parameters.as_mut().unwrap();
+        swap_parameters.minimum_participants = Some(minimum_participants);
+        self
+    }
+
     pub fn build(self) -> CreateServiceNervousSystem {
         self.0
     }

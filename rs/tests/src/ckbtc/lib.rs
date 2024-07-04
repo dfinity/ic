@@ -1,15 +1,6 @@
 use crate::{
-    driver::{
-        test_env::TestEnv,
-        test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationBuilder, SubnetSnapshot,
-        },
-    },
     icrc1_agent_test::install_icrc1_ledger,
-    nns::vote_and_execute_proposal,
     tecdsa::{get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature},
-    util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
@@ -43,6 +34,17 @@ use ic_nns_test_utils::{
 };
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{
+            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsInstallationBuilder, SubnetSnapshot,
+        },
+    },
+    nns::vote_and_execute_proposal,
+    util::{assert_create_agent, runtime_from_url, MessageCanister},
+};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;

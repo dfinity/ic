@@ -55,6 +55,7 @@ pub fn generate_custom_registry_snapshot(
                 tls_certificate: valid_tls_certificate_and_validation_time()
                     .0
                     .certificate_der,
+                avg_latency_secs: f64::MAX,
             };
             let node = Arc::new(node);
 
@@ -285,8 +286,13 @@ async fn test_runner() -> Result<(), Error> {
 
     let rt = routes.load_full().unwrap();
     assert_eq!(rt.node_count, snapshot.nodes.len() as u32);
-    assert_eq!(rt.subnets[0].nodes, snapshot.subnets[1].nodes);
-    assert_eq!(rt.subnets[1].nodes, snapshot.subnets[0].nodes);
+    for (i, j) in [(0, 1), (1, 0)].iter() {
+        let mut nodes_left = rt.subnets[*i].nodes.clone();
+        let mut nodes_right = snapshot.subnets[*j].nodes.clone();
+        nodes_left.sort_by_key(|n| n.id);
+        nodes_right.sort_by_key(|n| n.id);
+        assert_eq!(nodes_left, nodes_right);
+    }
 
     Ok(())
 }

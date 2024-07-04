@@ -36,11 +36,7 @@ impl ArtifactKind for U64Artifact {
     /// U64Artifact.
     fn message_to_advert(msg: &Self::Message) -> Advert<U64Artifact> {
         let id = u64::from_le_bytes(msg[..8].try_into().unwrap());
-        Advert {
-            attribute: (),
-            size: msg.len(),
-            id,
-        }
+        Advert { attribute: (), id }
     }
 }
 
@@ -150,7 +146,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
                 .0
                 .into_iter()
                 .map(|m| ArtifactWithOpt {
-                    advert: U64Artifact::message_to_advert(&self.id_to_msg(m)),
+                    artifact: self.id_to_msg(m),
                     is_latency_sensitive: self.latency_sensitive,
                 })
                 .collect(),

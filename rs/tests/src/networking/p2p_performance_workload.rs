@@ -1,4 +1,4 @@
-use crate::{
+use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
@@ -6,12 +6,11 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsInstallationBuilder, SshSession, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
-    retry_with_msg_async,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
 
@@ -107,13 +106,13 @@ pub fn config(
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)
-                .with_initial_notary_delay(Duration::from_millis(300))
+                .with_initial_notary_delay(Duration::from_millis(100))
                 .add_nodes(nodes_nns_subnet),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
-                .with_initial_notary_delay(Duration::from_millis(300))
+                .with_initial_notary_delay(Duration::from_millis(100))
                 .add_nodes(nodes_app_subnet),
         )
         .setup_and_start(&env)
@@ -190,7 +189,7 @@ pub fn test(
     );
     block_on(async {
         for agent in app_agents.iter() {
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!("observing canister module {}", app_canister.to_string()),
                 &log,
                 READY_WAIT_TIMEOUT,

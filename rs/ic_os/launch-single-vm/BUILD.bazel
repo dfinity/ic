@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:url",
-    "//rs/tests",
+    "//rs/tests/driver:ic-system-test-driver",
     "//rs/prep",
     "//rs/registry/subnet_type",
     "//rs/types/types",

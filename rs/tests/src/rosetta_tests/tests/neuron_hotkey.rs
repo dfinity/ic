@@ -1,17 +1,17 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::lib::{
     acc_id, assert_ic_error, create_ledger_client, create_neuron, do_multiple_txn, make_user,
     make_user_ed25519, one_day_from_now_nanos, prepare_txn, sign_txn, NeuronDetails,
 };
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::{setup, TRANSFER_FEE};
-use crate::util::block_on;
 use ic_ledger_core::Tokens;
 use ic_rosetta_api::models::SignedTransaction;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, PublicKeyOrPrincipal, RemoveHotKey, Status};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use icp_ledger::Operation;
 use slog::Logger;
 use std::collections::{BTreeMap, HashMap};

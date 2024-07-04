@@ -1,16 +1,15 @@
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{
+use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::nns::{
+use ic_system_test_driver::nns::{
     change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
     get_governance_canister, set_authorized_subnetwork_list,
     set_authorized_subnetwork_list_with_failure, submit_external_proposal_with_test_id,
     update_subnet_type, update_xdr_per_icp,
 };
-use crate::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 
-use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, Project, Wasm};
 use cycles_minting_canister::{
     create_canister_txn, top_up_canister_txn, CreateCanisterResult,
@@ -41,6 +40,7 @@ use ic_nns_test_utils::governance::{
     submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use icp_ledger::protobuf::TipOfChainRequest;
 use icp_ledger::{
