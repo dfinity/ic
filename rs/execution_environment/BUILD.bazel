@@ -111,9 +111,11 @@ rust_ic_test(
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "test_macos",
-    ],
+    # TODO(IDX-3164): enable when flakiness issues is resolved
+    #                 or we have new darwin runners in use
+    # tags = [
+    #     "test_macos",
+    # ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
