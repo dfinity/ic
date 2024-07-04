@@ -454,19 +454,18 @@ impl UnwrapCandid for WasmResult {
 async fn test_rosetta_blocks_enabled_after_first_block() {
     let mut env = TestEnv::setup_or_panic(false).await;
 
-    // enable rosetta blocks mode
+    // Enable rosetta blocks mode
     env.restart_rosetta_node(true).await;
-    env.pocket_ic.advance_time(Duration::from_nanos(1)).await;
     env.pocket_ic.stop_progress().await;
 
-    // create block 1 and Rosetta Block 1
+    // Create block 1 and Rosetta Block 1
     let from = test_identity()
         .sender()
         .expect("Unable to create the test sender");
     let id1 = env
         .submit_transfer_or_panic(from, Principal::anonymous(), 1u64)
         .await;
-    // create block 2 which will go inside Rosetta Block 1
+    // Create block 2 which will go inside Rosetta Block 1
     let id2 = env
         .submit_transfer_or_panic(from, Principal::anonymous(), 2u64)
         .await;
@@ -576,4 +575,129 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
             .unwrap(),
         );
     }
+}
+
+#[tokio::test]
+async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
+    let env = TestEnv::setup_or_panic(true).await;
+
+    // Rosetta block 0 contains transaction 0
+
+    env.pocket_ic.stop_progress().await;
+
+    // Create block 1 and Rosetta Block 1
+    let from = test_identity()
+        .sender()
+        .expect("Unable to create the test sender");
+    let id1 = env
+        .submit_transfer_or_panic(from, Principal::anonymous(), 1u64)
+        .await;
+    // Create block 2 with the same transaction as block 1.
+    // This must create a new Rosetta Block at index 2
+    let id2 = env
+        .submit_transfer_or_panic(from, Principal::anonymous(), 1u64)
+        .await;
+    // Create block 3 with a different transaction than the one in block 2.
+    // block 3 will therefore go inside Rosetta Block 2
+    let id3 = env
+        .submit_transfer_or_panic(from, Principal::anonymous(), 2u64)
+        .await;
+    // Create block 4 with the same transaction as block 2.
+    // This must create a new Rosetta Block at index 3
+    let id4 = env
+        .submit_transfer_or_panic(from, Principal::anonymous(), 1u64)
+        .await;
+
+    for id in [id1, id2, id3, id4] {
+        env.pocket_ic
+            .await_call(id)
+            .await
+            .unwrap()
+            .unwrap_as::<Result<BlockIndex, TransferError>>()
+            .expect("Unable to mint");
+    }
+
+    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let rosetta_block1_expected_time_millis =
+        rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
+
+    env.pocket_ic.auto_progress().await;
+
+    // wait for all the blocks to be processed by rosetta
+    for i in 0..1000 {
+        match env
+            .rosetta
+            .rosetta_client
+            .block(
+                env.rosetta.network_or_panic().await,
+                PartialBlockIdentifier {
+                    index: Some(3),
+                    hash: None,
+                },
+            )
+            .await
+        {
+            Ok(_) => break,
+            Err(_) if i == 999 => {
+                panic!("Timeout waiting for block 3 to be synced by Roseta")
+            }
+            Err(_) => {
+                sleep(Duration::from_millis(100));
+            }
+        }
+    }
+
+    let block0 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await;
+    let block1 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(1),
+            hash: None,
+        })
+        .await;
+    assert_eq!(block1.block_identifier.index, 1);
+    assert_eq!(block1.parent_block_identifier, block0.block_identifier);
+    assert_eq!(block1.timestamp, rosetta_block1_expected_time_millis);
+    assert_eq!(block1.metadata, None);
+    assert_eq!(block1.transactions.len(), 1);
+    assert_eq!(
+        block1.transactions.first().unwrap(),
+        &convert::to_rosetta_core_transaction(
+            /* block_index: */ 1,
+            Transaction {
+                operation: Operation::Mint {
+                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                    amount: Tokens::from_e8s(1u64),
+                },
+                memo: Memo(0),
+                created_at_time: None,
+                icrc1_memo: None,
+            },
+            rosetta_block1_expected_time_ts,
+            "ICP"
+        )
+        .unwrap(),
+    );
+
+    // let block2 = env
+    //     .rosetta
+    //     .block_or_panic(PartialBlockIdentifier {
+    //         index: Some(2),
+    //         hash: None,
+    //     })
+    //     .await;
+
+    // let block3 = env
+    //     .rosetta
+    //     .block_or_panic(PartialBlockIdentifier {
+    //         index: Some(3),
+    //         hash: None,
+    //     })
+    //     .await;
 }
