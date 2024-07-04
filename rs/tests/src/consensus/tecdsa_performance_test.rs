@@ -1,8 +1,14 @@
-use crate::canister_agent::HasCanisterAgentCapability;
-use crate::canister_api::{CallMode, Request};
-use crate::canister_requests;
-use crate::driver::test_env_api::{HasPublicApiUrl, SshSession};
-use crate::driver::{
+use crate::nns_dapp::set_authorized_subnets;
+use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use crate::orchestrator::utils::subnet_recovery::{
+    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
+};
+use crate::tecdsa::{make_key, KEY_ID1};
+use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::canister_api::{CallMode, Request};
+use ic_system_test_driver::canister_requests;
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, SshSession};
+use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -11,24 +17,23 @@ use crate::driver::{
         HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
     },
 };
-use crate::generic_workload_engine::engine::Engine;
-use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
-use crate::nns_dapp::set_authorized_subnets;
-use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::orchestrator::utils::subnet_recovery::{
-    enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
+use ic_system_test_driver::generic_workload_engine::engine::Engine;
+use ic_system_test_driver::generic_workload_engine::metrics::{
+    LoadTestMetricsProvider, RequestOutcome,
 };
-use crate::tecdsa::{make_key, KEY_ID1};
-use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanister};
+use ic_system_test_driver::util::{
+    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
+};
 
 use candid::{Encode, Principal};
 use futures::future::join_all;
-use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
 use ic_management_canister_types::{
-    DerivationPath, Payload, SignWithECDSAArgs, SignWithECDSAReply,
+    DerivationPath, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrKeyId, SignWithECDSAArgs,
+    SignWithECDSAReply, SignWithSchnorrArgs,
 };
 use ic_message::ForwardParams;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::{error, info};
@@ -84,10 +89,12 @@ pub fn setup(env: TestEnv) {
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_ecdsa_config(EcdsaConfig {
-                    quadruples_to_create_in_advance: QUADRUPLES_TO_CREATE,
-                    key_ids: vec![make_key(KEY_ID1)],
-                    max_queue_size: Some(MAX_QUEUE_SIZE),
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        max_queue_size: MAX_QUEUE_SIZE,
+                        pre_signatures_to_create_in_advance: QUADRUPLES_TO_CREATE,
+                        key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+                    }],
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 })
@@ -106,34 +113,59 @@ pub fn setup(env: TestEnv) {
 }
 
 #[derive(Clone)]
-pub struct EcdsaSignatureRequest {
+pub struct ChainSignatureRequest {
     pub principal: Principal,
     pub payload: Vec<u8>,
 }
 
-impl EcdsaSignatureRequest {
-    pub fn new(principal: Principal, key_id: &str) -> Self {
-        let message_hash = [1; 32];
-        let signature_request = SignWithECDSAArgs {
-            message_hash,
-            derivation_path: DerivationPath::new(Vec::new()),
-            key_id: make_key(key_id),
+impl ChainSignatureRequest {
+    pub fn new(principal: Principal, key_id: MasterPublicKeyId) -> Self {
+        let params = match key_id {
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => Self::ecdsa_params(ecdsa_key_id),
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => Self::schnorr_params(schnorr_key_id),
         };
-        let signature_payload = Encode!(&signature_request).unwrap();
 
-        let params = ForwardParams {
-            receiver: Principal::management_canister(),
-            method: "sign_with_ecdsa".to_string(),
-            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
-            payload: signature_payload,
-        };
         let payload = Encode!(&params).unwrap();
 
         Self { principal, payload }
     }
+
+    fn ecdsa_params(ecdsa_key_id: EcdsaKeyId) -> ForwardParams {
+        let signature_request = SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: ecdsa_key_id,
+        };
+
+        let signature_payload = Encode!(&signature_request).unwrap();
+
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_ecdsa".to_string(),
+            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
+            payload: signature_payload,
+        }
+    }
+
+    fn schnorr_params(schnorr_key_id: SchnorrKeyId) -> ForwardParams {
+        let signature_request = SignWithSchnorrArgs {
+            message: [1; 32].to_vec(),
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: schnorr_key_id,
+        };
+
+        let signature_payload = Encode!(&signature_request).unwrap();
+
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_schnorr".to_string(),
+            cycles: SCHNORR_SIGNATURE_FEE.get() * 2,
+            payload: signature_payload,
+        }
+    }
 }
 
-impl Request<SignWithECDSAReply> for EcdsaSignatureRequest {
+impl Request<SignWithECDSAReply> for ChainSignatureRequest {
     fn mode(&self) -> CallMode {
         CallMode::Update
     }
@@ -176,9 +208,19 @@ pub fn tecdsa_performance_test(
     let (app_subnet, app_node) = get_app_subnet_and_node(&topology_snapshot);
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
 
+    let key_ids = vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))];
     info!(log, "Step 1: Enabling tECDSA signing and ensuring it works");
-    let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, app_subnet.subnet_id, &log);
-    run_ecdsa_signature_test(&nns_canister, &log, key);
+    let keys = enable_chain_key_signing_on_subnet(
+        &nns_node,
+        &nns_canister,
+        app_subnet.subnet_id,
+        key_ids.clone(),
+        &log,
+    );
+
+    for (key_id, public_key) in keys {
+        run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
+    }
 
     info!(log, "Step 2: Installing Message canisters");
     let requests = (0..CANISTER_COUNT)
@@ -189,7 +231,7 @@ pub fn tecdsa_performance_test(
                 u128::MAX,
             ))
             .canister_id();
-            EcdsaSignatureRequest::new(principal, KEY_ID1)
+            ChainSignatureRequest::new(principal, MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)))
         })
         .collect::<Vec<_>>();
 
@@ -255,19 +297,25 @@ pub fn tecdsa_performance_test(
             "Minimal expected number of success calls {}", min_expected_success_calls,
         );
 
-        let json_report = format!(
-            "{{
-                \"benchmark_name\": \"tecdsa_performance_test\",
-                \"success_calls\": {},
-                \"failure_calls\": {},
-                \"success_rps\": {}
-            }}",
-            metrics.success_calls() as f32,
-            metrics.failure_calls() as f32,
-            metrics.success_calls() as f32 / TESTING_PERIOD.as_secs() as f32
+        let timestamp =
+            chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
+
+        let json_report = serde_json::json!(
+            {
+                "benchmark_name": "tecdsa_performance_test",
+                "timestamp": timestamp,
+                "package": "replica-benchmarks",
+                "benchmark_results": {
+                    "success_calls": metrics.success_calls() as f32,
+                    "failure_calls": metrics.failure_calls() as f32,
+                    "success_rps": metrics.success_calls() as f32 / TESTING_PERIOD.as_secs() as f32
+                }
+            }
         );
 
-        info!(log, "json benchmark report: {json_report}");
+        let json_report_str = serde_json::to_string_pretty(&json_report).unwrap();
+
+        info!(log, "json benchmark report:\n{json_report_str}");
 
         let report_path = env.base_path().join(BENCHMARK_REPORT_FILE);
 
@@ -277,11 +325,41 @@ pub fn tecdsa_performance_test(
         };
 
         let open_and_write_to_file_result =
-            ic_sys::fs::write_atomically(&report_path, |f| f.write_all(json_report.as_bytes()));
+            ic_sys::fs::write_atomically(&report_path, |f| f.write_all(json_report_str.as_bytes()));
 
         match create_dir_result.and(open_and_write_to_file_result) {
             Ok(()) => info!(log, "Benchmark report written to {}", report_path.display()),
             Err(e) => error!(log, "Failed to write benchmark report: {}", e),
+        }
+
+        if cfg!(feature = "upload_perf_systest_results") {
+            // elastic search url
+            const ES_URL: &str =
+                "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc";
+            const NUM_UPLOAD_ATTEMPS: usize = 3;
+            info!(
+                log,
+                "Starting to upload performance test results to {ES_URL}"
+            );
+
+            for i in 1..=NUM_UPLOAD_ATTEMPS {
+                info!(
+                    log,
+                    "Uploading performance test results attempt {}/{}", i, NUM_UPLOAD_ATTEMPS
+                );
+
+                let client = reqwest::Client::new();
+                match client.post(ES_URL).json(&json_report).send().await {
+                    Ok(response) => {
+                        info!(
+                            log,
+                            "Successfully uploaded performance test results: {response:?}"
+                        );
+                        break;
+                    }
+                    Err(e) => error!(log, "Failed to upload performance test results: {e:?}"),
+                }
+            }
         }
 
         if download_p8s_data {
@@ -304,7 +382,7 @@ pub fn tecdsa_performance_test(
  * 6. Read the active tc rules.
  */
 fn limit_tc_ssh_command() -> String {
-    let cfg = crate::util::get_config();
+    let cfg = ic_system_test_driver::util::get_config();
     let p2p_listen_port = cfg.transport.unwrap().listening_port;
     format!(
         r#"set -euo pipefail

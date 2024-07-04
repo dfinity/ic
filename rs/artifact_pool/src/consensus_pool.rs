@@ -25,8 +25,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
 use ic_types::{
-    artifact::ArtifactKind, artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact,
-    consensus::*, Height, SubnetId, Time,
+    artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId,
+    Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
@@ -714,7 +714,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: ConsensusArtifact::message_to_advert(&to_add.msg),
+                        artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
                     });
                     validated_ops.insert(to_add);
@@ -725,7 +725,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
                         artifacts_with_opt.push(ArtifactWithOpt {
-                            advert: ConsensusArtifact::message_to_advert(&to_move),
+                            artifact: to_move.clone(),
                             is_latency_sensitive: false,
                         });
                     }
@@ -821,6 +821,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
         ConsensusMessage::NotarizationShare(_) => true,
         ConsensusMessage::RandomBeaconShare(_) => true,
         ConsensusMessage::RandomTapeShare(_) => true,
+        ConsensusMessage::EquivocationProof(_) => true,
         // Might be big and is relayed and can cause excessive BW usage.
         ConsensusMessage::CatchUpPackage(_) => false,
         ConsensusMessage::CatchUpPackageShare(_) => true,
@@ -1027,6 +1028,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        artifact::ArtifactKind,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},
         crypto::{crypto_hash, CryptoHash, CryptoHashOf},
@@ -1189,11 +1191,11 @@ mod tests {
             assert_eq!(result.artifacts_with_opt.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
+                ConsensusArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
                 random_beacon_2.get_id()
             );
             assert_eq!(
-                result.artifacts_with_opt[1].advert.id,
+                ConsensusArtifact::message_to_advert(&result.artifacts_with_opt[1].artifact).id,
                 random_beacon_3.get_id()
             );
 
@@ -1271,7 +1273,7 @@ mod tests {
             assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.poll_immediately);
             assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
+                ConsensusArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
                 random_beacon_share_3.get_id()
             );
 
@@ -1813,7 +1815,7 @@ mod tests {
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
             );
-            // notarization at height 2 was not backed up becasue this is height is not
+            // notarization at height 2 was not backed up because this height is not
             // finalized
             assert!(!notarization_path.exists());
             assert_eq!(

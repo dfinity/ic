@@ -409,6 +409,7 @@ pub fn start_test_processor(
         MetricsRegistry::default(),
         Box::new(client),
         tx,
+        vec![],
     );
     (jh, rx, sender)
 }

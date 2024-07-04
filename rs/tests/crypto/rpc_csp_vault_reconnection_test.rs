@@ -2,10 +2,10 @@
 
 use anyhow::Result;
 use core::time::Duration;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::crypto::rpc_csp_vault_reconnection_test::rpc_csp_vault_reconnection_test;
 use ic_tests::crypto::rpc_csp_vault_reconnection_test::setup_with_single_node;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 
 const FIFTEEN_MINUTES: Duration = Duration::from_secs(15 * 60);
 

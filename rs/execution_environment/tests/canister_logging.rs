@@ -234,6 +234,71 @@ fn test_fetch_canister_logs_via_query_call() {
 }
 
 #[test]
+fn test_fetch_canister_logs_via_composite_query_call() {
+    // Test that fetch_canister_logs API is not accessible via composite query call.
+    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
+    let test_cases = vec![
+        (
+            FlagStatus::Disabled,
+            // This is expected to fail, because the feature flag is disabled.
+            // TODO(EXC-1655): fix reject response propagation.
+            ErrorCode::CanisterDidNotReply,
+            "did not produce a response",
+        ),
+        (
+            FlagStatus::Enabled,
+            // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
+            // TODO(EXC-1655): fix reject response propagation.
+            ErrorCode::CanisterDidNotReply,
+            "did not produce a response",
+        ),
+    ];
+
+    for (feature_flag, expected_error_code, expected_error_message) in test_cases {
+        let (env, canister_a, user) =
+            setup_with_controller(feature_flag, UNIVERSAL_CANISTER_WASM.to_vec());
+
+        // Create canister_b controlled by canister_a.
+        let canister_b = env.create_canister_with_cycles(
+            None,
+            Cycles::from(100_000_000_000_u128),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![canister_a.get()])
+                    .build(),
+            ),
+        );
+
+        // User attempts to fetch logs of canister_b via canister_a.
+        let actual_result = env.query_as(
+            user,
+            canister_a,
+            "composite_query",
+            wasm()
+                .call_simple(
+                    CanisterId::ic_00(),
+                    "fetch_canister_logs",
+                    call_args()
+                        .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                        .on_reject(wasm().reject_message().reject()),
+                )
+                .build(),
+        );
+
+        // Expect fetching logs via composite_query to fail.
+        let error = actual_result.unwrap_err();
+        assert_eq!(error.code(), expected_error_code);
+        assert!(
+            error.description().contains(expected_error_message),
+            "Expected: {}\nActual: {}",
+            expected_error_message,
+            error.description()
+        );
+    }
+}
+
+#[test]
 fn test_log_visibility_of_fetch_canister_logs() {
     // Test combinations of log_visibility and sender for fetch_canister_logs API call.
     let controller = PrincipalId::new_user_test_id(27);
@@ -506,9 +571,13 @@ fn test_canister_log_stays_within_limit() {
     }
     let result = fetch_canister_logs(&env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
-    // Expect that the total size of the log records is less than the limit.
+    // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
-        response.canister_log_records.data_size(),
+        response
+            .canister_log_records
+            .iter()
+            .map(|r| r.data_size())
+            .sum::<usize>(),
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
     );
 }

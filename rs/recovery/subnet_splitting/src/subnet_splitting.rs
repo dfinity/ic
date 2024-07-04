@@ -178,11 +178,11 @@ impl SubnetSplitting {
     ///
     /// Source Subnet:
     /// 1) Is an `Application` subnet
-    /// 2) Is not an ECDSA subnet
+    /// 2) Is not a Chain key subnet
     ///
     /// Destination Subnet:
     /// 1) Is an `Application` subnet
-    /// 2) Is not an ECDSA subnet
+    /// 2) Is not a Chain key subnet
     /// 3) Is halted
     /// 4) Hasn't produced any block yet
     /// 5) Has the same size as the Source Subnet
@@ -235,11 +235,11 @@ impl SubnetSplitting {
         };
 
         if subnet_record
-            .ecdsa_config
+            .chain_key_config
             .as_ref()
-            .is_some_and(|ecdsa_config| !ecdsa_config.key_ids.is_empty())
+            .is_some_and(|chain_key_config| !chain_key_config.key_configs.is_empty())
         {
-            return validation_error("Subnet should not be an ECDSA subnet".to_string());
+            return validation_error("Subnet should not be a Chain key subnet".to_string());
         }
 
         let subnet_type = subnet_record
@@ -339,7 +339,7 @@ impl SubnetSplitting {
             state_hash,
             /*replacement_nodes=*/ &[],
             /*registry_params=*/ None,
-            /*ecdsa_subnet_id=*/ None,
+            /*chain_key_subnet_id=*/ None,
         )
     }
 

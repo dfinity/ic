@@ -2529,8 +2529,10 @@ where
             Encode!(&approve_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(err.description().ends_with("self approval is not allowed"));
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "self approval is not allowed",
+    );
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
@@ -2729,10 +2731,10 @@ where
             Encode!(&approve_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(err
-        .description()
-        .ends_with("the minting account cannot delegate mints"));
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "the minting account cannot delegate mints",
+    );
 }
 
 pub fn expect_icrc2_disabled(
@@ -2751,12 +2753,9 @@ pub fn expect_icrc2_disabled(
             Encode!(&approve_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(
-        err.description()
-            .ends_with("ICRC-2 features are not enabled on the ledger."),
-        "Expected ICRC-2 disabled error, got: {}",
-        err.description()
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ICRC-2 features are not enabled on the ledger.",
     );
     let err = env
         .execute_ingress_as(
@@ -2766,12 +2765,9 @@ pub fn expect_icrc2_disabled(
             Encode!(&allowance_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(
-        err.description()
-            .ends_with("ICRC-2 features are not enabled on the ledger."),
-        "Expected ICRC-2 disabled error, got: {}",
-        err.description()
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ICRC-2 features are not enabled on the ledger.",
     );
     let err = env
         .execute_ingress_as(
@@ -2781,12 +2777,9 @@ pub fn expect_icrc2_disabled(
             Encode!(&transfer_from_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(
-        err.description()
-            .ends_with("ICRC-2 features are not enabled on the ledger."),
-        "Expected ICRC-2 disabled error, got: {}",
-        err.description()
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ICRC-2 features are not enabled on the ledger.",
     );
     let standards = supported_standards(env, canister_id);
     assert_eq!(standards.len(), 2);
@@ -3008,10 +3001,10 @@ where
             Encode!(&transfer_from_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(err
-        .description()
-        .ends_with("the minter account cannot delegate mints"));
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "the minter account cannot delegate mints",
+    );
     assert_eq!(balance_of(&env, canister_id, to.0), 0);
 }
 

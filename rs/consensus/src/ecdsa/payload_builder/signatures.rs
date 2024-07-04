@@ -11,7 +11,7 @@ use ic_types::{
     Time,
 };
 
-use crate::{consensus::metrics::EcdsaPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
+use crate::{ecdsa::metrics::EcdsaPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message
@@ -166,15 +166,18 @@ mod tests {
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{EcdsaPayload, RequestId},
-        crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature,
+        crypto::canister_threshold_sig::{
+            ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
+        },
         Height,
     };
 
     use crate::ecdsa::test_utils::{
         create_available_pre_signature, empty_ecdsa_payload_with_key_ids, empty_response,
         fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
-        fake_signature_request_context, fake_signature_request_context_with_pre_sig,
-        set_up_ecdsa_payload, TestEcdsaSignatureBuilder,
+        fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,
+        fake_signature_request_context_with_pre_sig, set_up_ecdsa_payload,
+        TestEcdsaSignatureBuilder,
     };
 
     use super::*;
@@ -250,15 +253,21 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_update_signature_agreements_success() {
+    fn test_update_signature_agreements_success_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_update_signature_agreements_success(key_id);
+        }
+    }
+
+    fn test_update_signature_agreements_success(key_id: MasterPublicKeyId) {
         let subnet_id = subnet_test_id(0);
-        let key_id = fake_ecdsa_master_public_key_id();
         let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let pre_sig_ids = (0..4)
             .map(|i| create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
-        let missing_quadruple = ecdsa_payload.uid_generator.next_pre_signature_id();
+        let missing_pre_signature = ecdsa_payload.uid_generator.next_pre_signature_id();
 
         let contexts = BTreeMap::from([
             // insert request without completed signature
@@ -267,10 +276,14 @@ mod tests {
             fake_completed_signature_request_context(1, key_id.clone(), pre_sig_ids[1]),
             // insert request that was already completed
             fake_completed_signature_request_context(2, key_id.clone(), pre_sig_ids[2]),
-            // insert request without a matched quadruple
+            // insert request without a matched pre-signature
             fake_signature_request_context_with_pre_sig(3, key_id.clone(), None),
-            // insert request matched to a non-existent quadruple
-            fake_signature_request_context_with_pre_sig(4, key_id.clone(), Some(missing_quadruple)),
+            // insert request matched to a non-existent pre-signature
+            fake_signature_request_context_with_pre_sig(
+                4,
+                key_id.clone(),
+                Some(missing_pre_signature),
+            ),
         ]);
 
         // insert agreement for completed request
@@ -287,13 +300,22 @@ mod tests {
                     pseudo_random_id: [i as u8; 32],
                     height: Height::from(1),
                 },
-                CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
-                    signature: vec![i as u8; 32],
-                }),
+                match key_id {
+                    MasterPublicKeyId::Ecdsa(_) => {
+                        CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
+                            signature: vec![i as u8; 32],
+                        })
+                    }
+                    MasterPublicKeyId::Schnorr(_) => {
+                        CombinedSignature::Schnorr(ThresholdSchnorrCombinedSignature {
+                            signature: vec![i as u8; 32],
+                        })
+                    }
+                },
             );
         }
 
-        // Only the uncompleted request with available quadruple should be completed
+        // Only the uncompleted request with available pre-signature should be completed
         update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -303,7 +325,7 @@ mod tests {
             None,
         );
 
-        // Only the quadruple for the completed request should be removed
+        // Only the pre-signature for the completed request should be removed
         assert_eq!(ecdsa_payload.available_pre_signatures.len(), 3);
         assert!(!ecdsa_payload
             .available_pre_signatures

@@ -14,7 +14,7 @@ rust_library(
     crate_name = "sdk_system_tests",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
-        "//rs/tests",
+        "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:backoff",
         "@crate_index//:candid",
@@ -23,14 +23,6 @@ rust_library(
         "@crate_index//:slog",
     ],
 )
-
-RUNNER_DEPENDENCIES = [
-    "sdk-system-tests",
-    "//rs/registry/subnet_type",
-    "//rs/tests",
-    "@crate_index//:anyhow",
-    "@crate_index//:slog",
-]
 
 RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + [
     "@dfx",
@@ -45,7 +37,14 @@ system_test(
     flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + BOUNDARY_NODE_RUNTIME_DEPS,
-    deps = RUNNER_DEPENDENCIES,
+    deps = [
+        "sdk-system-tests",
+        "//rs/registry/subnet_type",
+        "//rs/tests",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test(
@@ -55,5 +54,11 @@ system_test(
     runtime_deps = RUNTIME_DEPS + [
         "@wallet_canister_0.7.2//file",
     ],
-    deps = RUNNER_DEPENDENCIES,
+    deps = [
+        "sdk-system-tests",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )

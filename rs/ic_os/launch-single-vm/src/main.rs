@@ -1,26 +1,26 @@
-use std::collections::BTreeMap;
-use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
-use std::process::Command;
-
 use clap::Parser;
-use reqwest::blocking::Client;
-use serde::Serialize;
-use slog::{o, Drain};
-use tempfile::tempdir;
-use url::Url;
-
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::NodeConfiguration,
     subnet_configuration::SubnetConfig,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
-    farm::{CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType},
+use ic_system_test_driver::driver::{
+    farm::{
+        AttachImageSpec, CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType,
+    },
     ic::{Subnet, VmAllocationStrategy},
 };
 use ic_types::ReplicaVersion;
+use reqwest::blocking::Client;
+use serde::Serialize;
+use slog::{o, Drain};
+use std::collections::BTreeMap;
+use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
+use std::process::Command;
+use tempfile::tempdir;
+use url::Url;
 
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
@@ -190,8 +190,13 @@ fn main() {
         .unwrap();
 
     // Attach image
-    farm.attach_disk_images(&group_name, vm_name, "usb-storage", vec![image_id])
-        .unwrap();
+    farm.attach_disk_images(
+        &group_name,
+        vm_name,
+        "usb-storage",
+        vec![AttachImageSpec::new(image_id)],
+    )
+    .unwrap();
 
     // Start VM
     farm.start_vm(&group_name, vm_name).unwrap();
@@ -219,7 +224,6 @@ fn subnet_to_subnet_config(
         subnet.max_instructions_per_round,
         subnet.max_instructions_per_install_code,
         subnet.features,
-        None,
         None,
         subnet.max_number_of_canisters,
         subnet.ssh_readonly_access,

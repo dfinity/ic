@@ -178,32 +178,47 @@ fn test_get() {
 fn test_take() {
     let mut pool = MessagePool::default();
 
-    let request: RequestOrResponse = request(time(13)).into();
-    let response: RequestOrResponse = response(time(14)).into();
+    for deadline in [NO_DEADLINE, time(13)] {
+        for context in [Context::Inbound, Context::Outbound] {
+            let request = request(deadline);
+            let response = response(deadline);
 
-    // Insert the two messages.
-    let request_id = pool.insert_inbound(request.clone());
-    let response_id = pool.insert_inbound(response.clone());
+            // Insert the two messages.
+            let (request_id, response_id) = match context {
+                Context::Inbound => (
+                    pool.insert_inbound(request.clone().into()),
+                    pool.insert_inbound(response.clone().into()),
+                ),
+                Context::Outbound => (
+                    pool.insert_outbound_request(request.clone().into(), time(14).into()),
+                    pool.insert_outbound_response(response.clone().into()),
+                ),
+            };
 
-    // Ensure that the messages are now in the pool.
-    assert_eq!(Some(&request), pool.get(request_id));
-    assert_eq!(Some(&response), pool.get(response_id));
+            let request: RequestOrResponse = request.into();
+            let response: RequestOrResponse = response.into();
 
-    // Messages are still in the pool.
-    assert_eq!(Some(&request), pool.get(request_id));
-    assert_eq!(Some(&response), pool.get(response_id));
+            // Ensure that the messages are now in the pool.
+            assert_eq!(Some(&request), pool.get(request_id));
+            assert_eq!(Some(&response), pool.get(response_id));
 
-    // Actually take the messages.
-    assert_eq!(Some(request), pool.take(request_id));
-    assert_eq!(Some(response), pool.take(response_id));
+            // Actually take the messages.
+            assert_eq!(Some(request), pool.take(request_id));
+            assert_eq!(Some(response), pool.take(response_id));
 
-    // Messages are gone.
-    assert_eq!(None, pool.get(request_id));
-    assert_eq!(None, pool.get(response_id));
+            // Messages are gone.
+            assert_eq!(None, pool.get(request_id));
+            assert_eq!(None, pool.get(response_id));
 
-    // And cannot be taken out again.
-    assert_eq!(None, pool.take(request_id));
-    assert_eq!(None, pool.take(response_id));
+            // And cannot be taken out again.
+            assert_eq!(None, pool.take(request_id));
+            assert_eq!(None, pool.take(response_id));
+        }
+    }
+
+    // After resetting `message_id_generator`, pool is equal to default, i.e. empty.
+    pool.message_id_generator = 0;
+    assert_eq!(MessagePool::default(), pool);
 }
 
 #[test]
@@ -816,6 +831,17 @@ fn encode_roundtrip() {
     pool.insert_outbound_request(request_with_payload(600, time(60)).into(), time(65).into());
     pool.insert_outbound_response(response_with_payload(700, NO_DEADLINE).into());
     pool.insert_outbound_response(response_with_payload(800, time(80)).into());
+
+    let encoded: pb_queues::MessagePool = (&pool).into();
+    let decoded = encoded.try_into().unwrap();
+
+    assert_eq!(pool, decoded);
+}
+
+/// Tests an encode-decode roundtrip of an empty `MessagePool`.
+#[test]
+fn encode_roundtrip_empty() {
+    let pool = MessagePool::default();
 
     let encoded: pb_queues::MessagePool = (&pool).into();
     let decoded = encoded.try_into().unwrap();

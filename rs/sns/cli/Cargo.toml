@@ -39,6 +39,7 @@ serde_yaml = { workspace = true }
 json-patch = "0.2.6"
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+itertools = { workspace = true }
 
 [dev-dependencies]
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }

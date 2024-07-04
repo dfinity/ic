@@ -10,9 +10,7 @@ use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_management_canister_types::{
-    EcdsaKeyId, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
-};
+use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
@@ -42,7 +40,10 @@ use ic_types::{
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
     subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
-    xnet::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{
+        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+        StreamSlice,
+    },
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use ic_wasm_types::WasmHash;
@@ -255,25 +256,6 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
             canister_migrations: Some(item.canister_migrations.as_ref().into()),
-            // Serialize both `ecdsa_signing_subnets` and `idkg_signing_subnets` with the same ECDSA entries.
-            ecdsa_signing_subnets: item
-                .idkg_signing_subnets
-                .iter()
-                .filter_map(|(key_id, subnet_ids)| {
-                    if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
-                        let subnet_ids = subnet_ids
-                            .iter()
-                            .map(|id| subnet_id_into_protobuf(*id))
-                            .collect();
-                        Some(pb_metadata::EcdsaKeyEntry {
-                            key_id: Some(ecdsa_key_id.into()),
-                            subnet_ids,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
             bitcoin_testnet_canister_ids: match item.bitcoin_testnet_canister_id {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
@@ -319,36 +301,16 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             "NetworkTopology::nns_subnet_id",
         )?)?;
 
-        let mut ecdsa_signing_subnets = BTreeMap::new();
-        for entry in item.ecdsa_signing_subnets {
+        let mut idkg_signing_subnets = BTreeMap::new();
+        for entry in item.idkg_signing_subnets {
             let mut subnet_ids = vec![];
             for subnet_id in entry.subnet_ids {
                 subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
             }
-            ecdsa_signing_subnets.insert(
-                try_from_option_field(entry.key_id, "EcdsaKeyEntry::key_id")?,
+            idkg_signing_subnets.insert(
+                try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
                 subnet_ids,
             );
-        }
-
-        // First try to deserialize `ecdsa_signing_subnets` and if it is empty
-        // then try to deserialize `idkg_signing_subnets`.
-        let mut idkg_signing_subnets = BTreeMap::new();
-        if !ecdsa_signing_subnets.is_empty() {
-            for (key_id, subnet_ids) in ecdsa_signing_subnets {
-                idkg_signing_subnets.insert(MasterPublicKeyId::Ecdsa(key_id), subnet_ids);
-            }
-        } else {
-            for entry in item.idkg_signing_subnets {
-                let mut subnet_ids = vec![];
-                for subnet_id in entry.subnet_ids {
-                    subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
-                }
-                idkg_signing_subnets.insert(
-                    try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
-                    subnet_ids,
-                );
-            }
         }
 
         let bitcoin_testnet_canister_id = match item.bitcoin_testnet_canister_ids.first() {
@@ -412,18 +374,6 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
-            // Serialize both `ecdsa_keys_held` and `idkg_keys_held` with the same ECDSA entries.
-            ecdsa_keys_held: item
-                .idkg_keys_held
-                .iter()
-                .filter_map(|k| {
-                    if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = k {
-                        Some(ecdsa_key_id.into())
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
             idkg_keys_held: item.idkg_keys_held.iter().map(|k| k.into()).collect(),
         }
     }
@@ -437,16 +387,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             nodes.insert(node_id_try_from_option(entry.node_id)?);
         }
 
-        let mut ecdsa_keys_held = BTreeSet::new();
-
-        for key in item.ecdsa_keys_held {
-            ecdsa_keys_held.insert(EcdsaKeyId::try_from(key)?);
-        }
-
         let mut idkg_keys_held = BTreeSet::new();
-        for key in ecdsa_keys_held {
-            idkg_keys_held.insert(MasterPublicKeyId::Ecdsa(key));
-        }
         for key in item.idkg_keys_held {
             idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
         }
@@ -1250,7 +1191,7 @@ impl SystemMetadata {
 /// Conceptually we use a gap-free queue containing one signal for each inducted
 /// message; but because most signals are `Accept` we represent that queue as a
 /// combination of `signals_end` (pointing just beyond the last signal) plus a
-/// collection of `reject_signals`.
+/// collection of exceptions, i.e. `reject_signals`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
@@ -1264,8 +1205,8 @@ pub struct Stream {
     /// represented by its end index (pointing just beyond the last signal).
     signals_end: StreamIndex,
 
-    /// Stream indices of rejected messages, in ascending order.
-    reject_signals: VecDeque<StreamIndex>,
+    /// Reject signals, in ascending stream index order.
+    reject_signals: VecDeque<RejectSignal>,
 
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
@@ -1295,7 +1236,15 @@ impl Default for Stream {
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        let reject_signals = item.reject_signals.iter().map(|i| i.get()).collect();
+        // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
+        let reject_signals = item
+            .reject_signals()
+            .iter()
+            .map(|signal| pb_queues::RejectSignal {
+                reason: pb_queues::RejectReason::from(signal.reason).into(),
+                index: signal.index.get(),
+            })
+            .collect();
         Self {
             messages_begin: item.messages.begin().get(),
             messages: item
@@ -1304,6 +1253,7 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
+            deprecated_reject_signals: Vec::new(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
@@ -1322,15 +1272,61 @@ impl TryFrom<pb_queues::Stream> for Stream {
         }
         let messages_size_bytes = Self::size_bytes(&messages);
 
-        let reject_signals = item
-            .reject_signals
-            .iter()
-            .map(|i| StreamIndex::new(*i))
-            .collect();
+        let signals_end = item.signals_end.into();
+        // TODO: MR-577 Remove `deprecated_reject_signals` cases once all replicas are updated.
+        let reject_signals = match (
+            item.reject_signals.as_slice(),
+            item.deprecated_reject_signals.as_slice(),
+        ) {
+            // No reject signals.
+            ([], []) => VecDeque::new(),
+
+            // Only contemporary reject signals.
+            (reject_signals, []) => reject_signals
+                .iter()
+                .map(|signal| {
+                    Ok(RejectSignal {
+                        reason: pb_queues::RejectReason::try_from(signal.reason)
+                            .map_err(ProxyDecodeError::DecodeError)?
+                            .try_into()?,
+                        index: signal.index.into(),
+                    })
+                })
+                .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?,
+
+            // Only deprecated reject signals.
+            ([], deprecated_reject_signals) => deprecated_reject_signals
+                .iter()
+                .map(|index| RejectSignal::new(RejectReason::CanisterMigrating, (*index).into()))
+                .collect(),
+
+            // Both contemporary and deprecated reject signals.
+            ([_, ..], [_, ..]) => {
+                return Err(ProxyDecodeError::Other(format!(
+                    "both contemporary and deprecated signals are populated \
+                    got `reject_signals` {:?}, `deprecated_reject_signals` {:?}",
+                    item.reject_signals, item.deprecated_reject_signals,
+                )));
+            }
+        };
+
+        // Check reject signals are sorted and below `signals_end`.
+        let iter = reject_signals.iter().map(|signal| signal.index);
+        for (index, next_index) in iter
+            .clone()
+            .zip(iter.skip(1).chain(std::iter::once(item.signals_end.into())))
+        {
+            if index >= next_index {
+                return Err(ProxyDecodeError::Other(format!(
+                    "reject signals not strictly sorted, received [{:?}, {:?}]",
+                    index, next_index,
+                )));
+            }
+        }
 
         Ok(Self {
             messages,
-            signals_end: item.signals_end.into(),
+            signals_end,
             reject_signals,
             messages_size_bytes,
             reverse_stream_flags: item
@@ -1356,11 +1352,11 @@ impl Stream {
         }
     }
 
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
         messages: StreamIndexedQueue<RequestOrResponse>,
         signals_end: StreamIndex,
-        reject_signals: VecDeque<StreamIndex>,
+        reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
         Self {
@@ -1417,8 +1413,8 @@ impl Stream {
     pub fn discard_messages_before(
         &mut self,
         new_begin: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+        reject_signals: &VecDeque<RejectSignal>,
+    ) -> Vec<(RejectReason, RequestOrResponse)> {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -1439,8 +1435,8 @@ impl Stream {
         let messages_begin = self.messages.begin();
         let mut reject_signals = reject_signals
             .iter()
-            .skip_while(|&reject_signal| reject_signal < &messages_begin);
-        let mut next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            .skip_while(|reject_signal| reject_signal.index < messages_begin)
+            .peekable();
 
         // Garbage collect all messages up to `new_begin`.
         let mut rejected_messages = Vec::new();
@@ -1453,9 +1449,11 @@ impl Stream {
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
-            if next_reject_signal == &index {
-                rejected_messages.push(msg);
-                next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            if let Some(reject_signal) = reject_signals.peek() {
+                if reject_signal.index == index {
+                    rejected_messages.push((reject_signal.reason, msg));
+                    reject_signals.next();
+                }
             }
         }
         rejected_messages
@@ -1463,8 +1461,8 @@ impl Stream {
 
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
-        while let Some(signal_index) = self.reject_signals.front() {
-            if *signal_index < new_signals_begin {
+        while let Some(reject_signal) = self.reject_signals.front() {
+            if reject_signal.index < new_signals_begin {
                 self.reject_signals.pop_front();
             } else {
                 break;
@@ -1473,7 +1471,7 @@ impl Stream {
     }
 
     /// Returns a reference to the reject signals.
-    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         &self.reject_signals
     }
 
@@ -1482,23 +1480,18 @@ impl Stream {
         self.signals_end
     }
 
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
+    /// Pushes an accept signal. Since these are not explicitly encoded, this
+    /// just increments `signals_end`.
+    pub fn push_accept_signal(&mut self) {
         self.signals_end.inc_assign()
     }
 
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        assert_eq!(index, self.signals_end);
-        if let Some(&last_signal) = self.reject_signals.back() {
-            assert!(
-                last_signal < index,
-                "The signal to be pushed ({}) should be larger than the last signal ({})",
-                index,
-                last_signal
-            );
-        }
-        self.reject_signals.push_back(index)
+    /// Appends a reject signal (the current `signals_end`) to the tail of the
+    /// reject signals; and then increments `signals_end`.
+    pub fn push_reject_signal(&mut self, reason: RejectReason) {
+        self.reject_signals
+            .push_back(RejectSignal::new(reason, self.signals_end));
+        self.signals_end.inc_assign();
     }
 
     /// Calculates the estimated byte size of the given messages.
@@ -1687,7 +1680,7 @@ impl<'a> StreamHandle<'a> {
     }
 
     /// Returns a reference to the reject signals.
-    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         self.stream.reject_signals()
     }
 
@@ -1711,14 +1704,16 @@ impl<'a> StreamHandle<'a> {
         size_bytes
     }
 
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
-        self.stream.increment_signals_end();
+    /// Pushes an accept signal. Since these are not explicitly encoded, this
+    /// just increments `signals_end`.
+    pub fn push_accept_signal(&mut self) {
+        self.stream.push_accept_signal();
     }
 
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        self.stream.push_reject_signal(index)
+    /// Appends a reject signal (the current `signals_end`) to the tail of the
+    /// reject signals; and then increments `signals_end`.
+    pub fn push_reject_signal(&mut self, reason: RejectReason) {
+        self.stream.push_reject_signal(reason);
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all
@@ -1726,8 +1721,8 @@ impl<'a> StreamHandle<'a> {
     pub fn discard_messages_before(
         &mut self,
         new_begin: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+        reject_signals: &VecDeque<RejectSignal>,
+    ) -> Vec<(RejectReason, RequestOrResponse)> {
         // Update stats for each discarded message.
         for (index, msg) in self.stream.messages().iter() {
             if index >= new_begin {

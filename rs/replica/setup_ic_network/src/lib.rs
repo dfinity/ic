@@ -4,7 +4,7 @@
 //! time source.
 
 use either::Either;
-use ic_artifact_manager::*;
+use ic_artifact_manager::{create_artifact_handler, create_ingress_handlers};
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl,
     certification_pool::CertificationPoolImpl,
@@ -57,14 +57,14 @@ use ic_types::{
     consensus::HasHeight,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
-    NodeId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use std::{
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, watch};
 use tower_http::trace::TraceLayer;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
@@ -116,6 +116,7 @@ pub fn setup_consensus_and_p2p(
     cycles_account_manager: Arc<CyclesAccountManager>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
+    max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -149,6 +150,7 @@ pub fn setup_consensus_and_p2p(
         registry_poll_delay_duration_ms,
         canister_http_adapter_client,
         time_source.clone(),
+        max_certified_height_tx,
     );
 
     // StateSync
@@ -232,6 +234,7 @@ fn start_consensus(
     registry_poll_delay_duration_ms: u64,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     time_source: Arc<dyn TimeSource>,
+    max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -251,6 +254,7 @@ fn start_consensus(
         metrics_registry,
         log,
         catch_up_package,
+        time_source.as_ref(),
     );
 
     let mut join_handles = vec![];
@@ -259,12 +263,6 @@ fn start_consensus(
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
     let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
     let replica_config = ReplicaConfig { node_id, subnet_id };
-    let membership = Arc::new(Membership::new(
-        consensus_pool_cache.clone(),
-        Arc::clone(&registry_client),
-        subnet_id,
-    ));
-
     let ingress_manager = Arc::new(IngressManager::new(
         time_source.clone(),
         consensus_time,
@@ -287,7 +285,6 @@ fn start_consensus(
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
         state_reader.clone(),
-        membership.clone(),
         subnet_id,
         registry_client.clone(),
         metrics_registry,
@@ -309,6 +306,11 @@ fn start_consensus(
     let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
 
     {
+        let membership = Arc::new(Membership::new(
+            consensus_pool_cache.clone(),
+            registry_client.clone(),
+            subnet_id,
+        ));
         let (consensus_setup, consensus_gossip) = consensus_setup(
             replica_config.clone(),
             Arc::clone(&registry_client),
@@ -373,12 +375,13 @@ fn start_consensus(
     {
         let (certifier, certifier_gossip) = certification_setup(
             replica_config,
-            Arc::clone(&membership) as Arc<_>,
+            Arc::clone(&registry_client),
             Arc::clone(&certifier_crypto),
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_pool_cache) as Arc<_>,
             metrics_registry.clone(),
             log.clone(),
+            max_certified_height_tx,
         );
 
         let certifier_gossip = Arc::new(certifier_gossip);
@@ -477,7 +480,6 @@ fn start_consensus(
                 Arc::clone(&state_reader),
                 Arc::new(Mutex::new(canister_http_adapter_client)),
                 Arc::clone(&consensus_crypto),
-                Arc::clone(&membership),
                 Arc::clone(&consensus_pool_cache),
                 ReplicaConfig { subnet_id, node_id },
                 Arc::clone(&registry_client),
@@ -512,6 +514,7 @@ fn init_artifact_pools(
     metrics_registry: &MetricsRegistry,
     log: &ReplicaLogger,
     catch_up_package: CatchUpPackage,
+    time_source: &dyn TimeSource,
 ) -> ArtifactPools {
     let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
         node_id,
@@ -526,7 +529,7 @@ fn init_artifact_pools(
         metrics_registry.clone(),
         Box::new(ecdsa::EcdsaStatsImpl::new(metrics_registry.clone())),
     );
-    ecdsa_pool.add_initial_dealings(&catch_up_package);
+    ecdsa_pool.add_initial_dealings(&catch_up_package, time_source);
     let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
 
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(

@@ -21,23 +21,25 @@ Success::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry, HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot,
-    IcNodeContainer, SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-};
 use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
-use crate::orchestrator::utils::subnet_recovery::{get_ecdsa_pub_key, run_ecdsa_signature_test};
-use crate::tecdsa::{create_new_subnet_with_keys, make_key};
-use crate::{retry_with_msg, tecdsa::KEY_ID1, util::*};
+use crate::orchestrator::utils::subnet_recovery::{
+    get_master_public_key, run_chain_key_signature_test,
+};
+use crate::tecdsa::{create_new_subnet_with_keys, make_key, KEY_ID1};
 use anyhow::bail;
 use canister_test::Canister;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
+    SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
+use ic_system_test_driver::util::*;
 use ic_types::{Height, SubnetId};
-use registry_canister::mutations::do_create_subnet::EcdsaKeyRequest;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};
 
@@ -53,10 +55,12 @@ pub fn config(env: TestEnv) {
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NODES_COUNT)
-                .with_ecdsa_config(EcdsaConfig {
-                    quadruples_to_create_in_advance: 5,
-                    key_ids: vec![make_key(KEY_ID1)],
-                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                        pre_signatures_to_create_in_advance: 5,
+                        key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+                    }],
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 }),
@@ -71,7 +75,7 @@ pub fn config(env: TestEnv) {
 fn enable_signing(governance: &Canister<'_>, subnet_id: SubnetId, logger: &Logger) {
     let enable_signing_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_key_signing_enable: Some(vec![make_key(KEY_ID1)]),
+        chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))]),
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
@@ -85,7 +89,7 @@ fn enable_signing(governance: &Canister<'_>, subnet_id: SubnetId, logger: &Logge
 fn disable_signing(governance: &Canister<'_>, subnet_id: SubnetId, logger: &Logger) {
     let disable_signing_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_key_signing_disable: Some(vec![make_key(KEY_ID1)]),
+        chain_key_signing_disable: Some(vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))]),
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
@@ -118,7 +122,7 @@ fn wait_until_subnet_mr_version(
         subnet.subnet_id,
     );
     let metrics = MetricsFetcher::new(subnet.nodes().take(1), vec![MR_REGISTRY_VERSION.into()]);
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!(
             "check if message routing registry version {} on subnet {}",
             target_registry_version, subnet.subnet_id,
@@ -165,15 +169,12 @@ pub fn test(env: TestEnv) {
     let root_subnet_id = snapshot.root_subnet_id();
 
     let unassigned_node_ids = snapshot.unassigned_nodes().map(|n| n.node_id).collect();
-
+    let key_id = MasterPublicKeyId::Ecdsa(make_key(KEY_ID1));
     info!(logger, "Creating new subnet with keys.");
     block_on(create_new_subnet_with_keys(
         &governance,
         unassigned_node_ids,
-        vec![EcdsaKeyRequest {
-            key_id: make_key(KEY_ID1),
-            subnet_id: Some(root_subnet_id.get()),
-        }],
+        vec![(key_id.clone(), root_subnet_id.get())],
         replica_version,
         &logger,
     ));
@@ -193,18 +194,18 @@ pub fn test(env: TestEnv) {
     info!(logger, "Enabling signing on NNS.");
     enable_signing(&governance, root_subnet_id, &logger);
     registry_version.inc_assign();
-    let pub_key = get_ecdsa_pub_key(&nns_canister, &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    let pub_key = get_master_public_key(&nns_canister, &key_id, &logger);
+    run_chain_key_signature_test(&nns_canister, &logger, &key_id, pub_key.clone());
 
     info!(logger, "Enabling signing on App subnet.");
     enable_signing(&governance, app_subnet.subnet_id, &logger);
     registry_version.inc_assign();
     wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    run_chain_key_signature_test(&nns_canister, &logger, &key_id, pub_key.clone());
 
     info!(logger, "Disabling signing on NNS.");
     disable_signing(&governance, root_subnet_id, &logger);
     registry_version.inc_assign();
     wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    run_chain_key_signature_test(&nns_canister, &logger, &key_id, pub_key);
 }

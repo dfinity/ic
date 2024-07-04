@@ -100,6 +100,7 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
 
     run_ic_ref_test(
         None,
+        None,
         ic_ref_test_path.into_os_string().into_string().unwrap(),
         ic_test_data_path,
         endpoint.to_string(),

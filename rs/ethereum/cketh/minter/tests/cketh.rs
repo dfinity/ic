@@ -41,7 +41,7 @@ use std::str::FromStr;
 
 #[test]
 fn should_deposit_and_withdraw() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
@@ -101,55 +101,55 @@ fn should_deposit_and_withdraw() {
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
     cketh.assert_has_unique_events_in_order(&vec![
-        EventPayload::AcceptedEthWithdrawalRequest {
-            withdrawal_amount: withdrawal_amount.clone(),
-            destination: destination.clone(),
-            ledger_burn_index: withdrawal_id.clone(),
-            from: caller,
-            from_subaccount: None,
-            created_at: Some(time),
-        },
-        EventPayload::CreatedTransaction {
-            withdrawal_id: withdrawal_id.clone(),
-            transaction: UnsignedTransaction {
-                chain_id: Nat::from(1_u8),
-                nonce: Nat::from(0_u8),
-                max_priority_fee_per_gas,
-                max_fee_per_gas: max_fee_per_gas.clone(),
-                gas_limit: gas_limit.clone(),
-                destination,
-                value: withdrawal_amount - max_fee_per_gas * gas_limit,
-                data: Default::default(),
-                access_list: vec![],
+            EventPayload::AcceptedEthWithdrawalRequest {
+                withdrawal_amount: withdrawal_amount.clone(),
+                destination: destination.clone(),
+                ledger_burn_index: withdrawal_id.clone(),
+                from: caller,
+                from_subaccount: None,
+                created_at: Some(time),
             },
-        },
-        EventPayload::SignedTransaction {
-            withdrawal_id: withdrawal_id.clone(),
-            raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
-        },
-        EventPayload::FinalizedTransaction {
-            withdrawal_id,
-            transaction_receipt: TransactionReceipt {
-                block_hash: DEFAULT_BLOCK_HASH.to_string(),
-                block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                effective_gas_price: Nat::from(4277923390u64),
-                gas_used: Nat::from(21_000_u32),
-                status: TransactionStatus::Success,
-                transaction_hash:
-                "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+            EventPayload::CreatedTransaction {
+                withdrawal_id: withdrawal_id.clone(),
+                transaction: UnsignedTransaction {
+                    chain_id: Nat::from(1_u8),
+                    nonce: Nat::from(0_u8),
+                    max_priority_fee_per_gas,
+                    max_fee_per_gas: max_fee_per_gas.clone(),
+                    gas_limit: gas_limit.clone(),
+                    destination,
+                    value: withdrawal_amount - max_fee_per_gas * gas_limit,
+                    data: Default::default(),
+                    access_list: vec![],
+                },
             },
-        },
-    ]);
+            EventPayload::SignedTransaction {
+                withdrawal_id: withdrawal_id.clone(),
+                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+            },
+            EventPayload::FinalizedTransaction {
+                withdrawal_id,
+                transaction_receipt: TransactionReceipt {
+                    block_hash: DEFAULT_BLOCK_HASH.to_string(),
+                    block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
+                    effective_gas_price: Nat::from(4277923390u64),
+                    gas_used: Nat::from(21_000_u32),
+                    status: TransactionStatus::Success,
+                    transaction_hash:
+                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                },
+            },
+        ]);
 }
 
 #[test]
 fn should_retrieve_cache_transaction_price() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
-    let result = cketh.eip_1559_transaction_price();
+    let result = cketh.eip_1559_transaction_price(None);
     assert_matches!(result, Err(e) if e.code() == ic_state_machine_tests::ErrorCode::CanisterCalledTrap);
 
     let cketh = cketh
@@ -171,19 +171,23 @@ fn should_retrieve_cache_transaction_price() {
         })
         .expect("missing CreatedTransaction event");
 
-    let price = cketh.eip_1559_transaction_price_expecting_ok();
+    let price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(price.max_priority_fee_per_gas, tx.max_priority_fee_per_gas);
     assert_eq!(price.max_fee_per_gas, tx.max_fee_per_gas);
     assert_eq!(price.gas_limit, tx.gas_limit);
 
     cketh.env.tick();
-    let second_price = cketh.eip_1559_transaction_price_expecting_ok();
+    let second_price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(price, second_price);
+
+    let price_using_ledger_id =
+        cketh.eip_1559_transaction_price_expecting_ok(Some(cketh.ledger_id.into()));
+    assert_eq!(price, price_using_ledger_id);
 }
 
 #[test]
 fn should_block_deposit_from_blocked_address() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
         .parse()
         .unwrap();
@@ -217,7 +221,7 @@ fn should_not_mint_when_logs_inconsistent() {
     };
     assert_ne!(ankr_logs, public_node_logs);
 
-    CkEthSetup::default()
+    CkEthSetup::default_with_maybe_evm_rpc()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
@@ -228,7 +232,7 @@ fn should_not_mint_when_logs_inconsistent() {
 
 #[test]
 fn should_block_withdrawal_to_blocked_address() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string();
@@ -246,7 +250,7 @@ fn should_block_withdrawal_to_blocked_address() {
 
 #[test]
 fn should_fail_to_withdraw_without_approval() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
 
     cketh
@@ -264,7 +268,7 @@ fn should_fail_to_withdraw_without_approval() {
 
 #[test]
 fn should_fail_to_withdraw_when_insufficient_funds() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let deposit_amount = CKETH_MINIMUM_WITHDRAWAL_AMOUNT + CKETH_TRANSFER_FEE;
     let amount_after_approval = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
@@ -290,7 +294,7 @@ fn should_fail_to_withdraw_when_insufficient_funds() {
 
 #[test]
 fn should_fail_to_withdraw_too_small_amount() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     cketh
         .deposit(DepositParams::default())
@@ -309,7 +313,7 @@ fn should_fail_to_withdraw_too_small_amount() {
 
 #[test]
 fn should_not_finalize_transaction_when_receipts_do_not_match() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
 
@@ -334,7 +338,7 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
 
 #[test]
 fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
 
@@ -375,7 +379,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
 
 #[test]
 fn should_reimburse() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
@@ -538,7 +542,7 @@ fn should_reimburse() {
 
 #[test]
 fn should_resubmit_transaction_as_is_when_price_still_actual() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
@@ -562,7 +566,7 @@ fn should_resubmit_transaction_as_is_when_price_still_actual() {
 
 #[test]
 fn should_resubmit_new_transaction_when_price_increased() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
@@ -637,7 +641,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
 
 #[test]
 fn should_not_overlap_when_scrapping_logs() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -686,7 +690,8 @@ fn should_not_overlap_when_scrapping_logs() {
 
 #[test]
 fn should_retry_from_same_block_when_scrapping_fails() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let prev_events_len = cketh.get_all_events().len();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -711,6 +716,8 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
     let cketh = cketh
         .check_audit_logs_and_upgrade(Default::default())
+        .check_events()
+        .skip(prev_events_len)
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
@@ -740,7 +747,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
 #[test]
 fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -762,7 +769,8 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 
 #[test]
 fn should_panic_when_last_finalized_block_in_the_past() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let prev_events_len = cketh.get_all_events().len();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -772,6 +780,8 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 
     let cketh = cketh
         .check_audit_logs_and_upgrade(Default::default())
+        .check_events()
+        .skip(prev_events_len)
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
@@ -807,7 +817,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
     let safe_block_number = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 100;
     let finalized_block_number = safe_block_number - 32;
-    let cketh = CkEthSetup::default().check_audit_logs_and_upgrade(UpgradeArg {
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc().check_audit_logs_and_upgrade(UpgradeArg {
         ethereum_block_height: Some(CandidBlockTag::Safe),
         ..Default::default()
     });
@@ -858,7 +868,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
 
 #[test]
 fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let deposit = DepositParams::default().eth_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
@@ -914,7 +924,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
 #[test]
 fn should_skip_single_block_containing_too_many_events() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let deposit = DepositParams::default().eth_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
@@ -1001,7 +1011,7 @@ fn should_skip_single_block_containing_too_many_events() {
 #[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
@@ -1053,7 +1063,7 @@ fn should_retrieve_minter_info() {
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .setup;
     let info_after_withdrawal = cketh.get_minter_info();
-    let price = cketh.eip_1559_transaction_price_expecting_ok();
+    let price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(
         info_after_withdrawal,
         MinterInfo {
@@ -1069,4 +1079,19 @@ fn should_retrieve_minter_info() {
 
 fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
+}
+
+/// Tests with the EVM RPC canister
+mod cketh_evm_rpc {
+    use super::*;
+
+    #[test]
+    fn should_retrieve_block_number() {
+        let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
+            .build()
+            .expect_rpc_calls(&cketh);
+    }
 }

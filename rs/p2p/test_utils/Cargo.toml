@@ -10,7 +10,7 @@ axum = { workspace = true }
 bytes = { workspace = true }
 either = "1.6.0"
 futures = { workspace = true }
-ic-artifact-manager = { path = "../../artifact_manager" }
+ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-consensus-manager = { path = "../consensus_manager" }
@@ -32,7 +32,6 @@ ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../state_sync_manager" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 mockall = { workspace = true }

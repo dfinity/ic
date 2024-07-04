@@ -1,28 +1,28 @@
 //! ECDSA related public interfaces.
 
-use ic_types::artifact::EcdsaMessageId;
+use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
-    SchnorrSigShare,
+    EcdsaComplaint, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, IDkgMessage,
+    SchnorrSigShare, SigShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
 // TODO: purge/remove from validated
 #[derive(Debug)]
 pub enum EcdsaChangeAction {
-    AddToValidated(EcdsaMessage),
-    MoveToValidated(EcdsaMessage),
-    RemoveValidated(EcdsaMessageId),
-    RemoveUnvalidated(EcdsaMessageId),
-    HandleInvalid(EcdsaMessageId, String),
+    AddToValidated(IDkgMessage),
+    MoveToValidated(IDkgMessage),
+    RemoveValidated(IDkgMessageId),
+    RemoveUnvalidated(IDkgMessageId),
+    HandleInvalid(IDkgMessageId, String),
 }
 
 pub type EcdsaChangeSet = Vec<EcdsaChangeAction>;
 
 #[derive(Debug, Clone)]
 pub enum EcdsaPoolSectionOp {
-    Insert(EcdsaMessage),
-    Remove(EcdsaMessageId),
+    Insert(IDkgMessage),
+    Remove(IDkgMessageId),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -35,11 +35,11 @@ impl EcdsaPoolSectionOps {
         Self { ops: Vec::new() }
     }
 
-    pub fn insert(&mut self, message: EcdsaMessage) {
+    pub fn insert(&mut self, message: IDkgMessage) {
         self.ops.push(EcdsaPoolSectionOp::Insert(message));
     }
 
-    pub fn remove(&mut self, id: EcdsaMessageId) {
+    pub fn remove(&mut self, id: IDkgMessageId) {
         self.ops.push(EcdsaPoolSectionOp::Remove(id));
     }
 }
@@ -47,81 +47,81 @@ impl EcdsaPoolSectionOps {
 /// The validated/unvalidated parts of the artifact pool.
 pub trait EcdsaPoolSection: Send + Sync {
     /// Checks if the artifact present in the pool.
-    fn contains(&self, msg_id: &EcdsaMessageId) -> bool;
+    fn contains(&self, msg_id: &IDkgMessageId) -> bool;
 
     /// Looks up an artifact by the Id.
-    fn get(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage>;
+    fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage>;
 
     /// Iterator for signed dealing objects.
-    fn signed_dealings(&self)
-        -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_>;
+    fn signed_dealings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_>;
 
     /// Iterator for signed dealing objects matching the prefix.
     fn signed_dealings_by_prefix(
         &self,
         _prefix: EcdsaPrefixOf<SignedIDkgDealing>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         unimplemented!()
     }
 
     /// Iterator for dealing support objects.
-    fn dealing_support(
-        &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_>;
+    fn dealing_support(&self)
+        -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_>;
 
     /// Iterator for dealing support objects matching the prefix.
     fn dealing_support_by_prefix(
         &self,
         _prefix: EcdsaPrefixOf<IDkgDealingSupport>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         unimplemented!()
     }
 
     /// Iterator for signature share objects.
     fn ecdsa_signature_shares(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_>;
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_>;
 
     /// Iterator for signature share objects matching the prefix.
     fn ecdsa_signature_shares_by_prefix(
         &self,
         _prefix: EcdsaPrefixOf<EcdsaSigShare>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         unimplemented!()
     }
 
     /// Iterator for signature share objects.
     fn schnorr_signature_shares(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_>;
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_>;
 
     /// Iterator for signature share objects matching the prefix.
     fn schnorr_signature_shares_by_prefix(
         &self,
         _prefix: EcdsaPrefixOf<SchnorrSigShare>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         unimplemented!()
     }
 
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_>;
+
     /// Iterator for complaint objects.
-    fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_>;
+    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_>;
 
     /// Iterator for complaint objects matching the prefix.
     fn complaints_by_prefix(
         &self,
         _prefix: EcdsaPrefixOf<EcdsaComplaint>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
         unimplemented!()
     }
 
     /// Iterator for opening objects.
-    fn openings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_>;
+    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_>;
 
     /// Iterator for opening objects matching the prefix.
     fn openings_by_prefix(
         &self,
         _prefix: EcdsaPrefixOf<EcdsaOpening>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_> {
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
         unimplemented!()
     }
 }

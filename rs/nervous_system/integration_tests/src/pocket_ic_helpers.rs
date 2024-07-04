@@ -116,7 +116,26 @@ pub fn install_canister(
     wasm: Wasm,
     controller: Option<PrincipalId>,
 ) {
-    let controller_principal = controller.map(|c| c.0);
+    install_canister_with_controllers(
+        pocket_ic,
+        name,
+        canister_id,
+        arg,
+        wasm,
+        controller.into_iter().collect(),
+    )
+}
+
+pub fn install_canister_with_controllers(
+    pocket_ic: &PocketIc,
+    name: &str,
+    canister_id: CanisterId,
+    arg: Vec<u8>,
+    wasm: Wasm,
+    controllers: Vec<PrincipalId>,
+) {
+    let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
+    let controller_principal = controllers.first().cloned();
     let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
         let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
         Some(Nat::from(memory_allocation_bytes))
@@ -125,6 +144,7 @@ pub fn install_canister(
     };
     let settings = Some(CanisterSettings {
         memory_allocation,
+        controllers: Some(controllers),
         ..Default::default()
     });
     let canister_id = pocket_ic
@@ -656,6 +676,7 @@ pub mod nns {
                     Encode!(&ListNeurons {
                         neuron_ids: vec![],
                         include_neurons_readable_by_caller: true,
+                        include_empty_neurons_readable_by_caller: None,
                     })
                     .unwrap(),
                 )
@@ -1977,7 +1998,10 @@ pub mod sns {
 
     pub mod root {
         use super::*;
-        use ic_sns_root::pb::v1::ListSnsCanistersRequest;
+        use ic_sns_root::{
+            pb::v1::ListSnsCanistersRequest, GetSnsCanistersSummaryRequest,
+            GetSnsCanistersSummaryResponse,
+        };
 
         pub fn list_sns_canisters(
             pocket_ic: &PocketIc,
@@ -1996,6 +2020,30 @@ pub mod sns {
                 WasmResult::Reject(s) => panic!("Call to list_sns_canisters failed: {:#?}", s),
             };
             Decode!(&result, ListSnsCanistersResponse).unwrap()
+        }
+
+        pub fn get_sns_canisters_summary(
+            pocket_ic: &PocketIc,
+            sns_root_canister_id: PrincipalId,
+        ) -> GetSnsCanistersSummaryResponse {
+            let result = pocket_ic
+                .update_call(
+                    sns_root_canister_id.into(),
+                    Principal::anonymous(),
+                    "get_sns_canisters_summary",
+                    Encode!(&GetSnsCanistersSummaryRequest {
+                        update_canister_list: Some(false),
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => {
+                    panic!("Call to get_sns_canisters_summary failed: {:#?}", s)
+                }
+            };
+            Decode!(&result, GetSnsCanistersSummaryResponse).unwrap()
         }
     }
 
@@ -2099,7 +2147,10 @@ pub mod sns {
         use super::*;
         use assert_matches::assert_matches;
         use ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters;
-        use ic_sns_swap::{pb::v1::BuyerState, swap::principal_to_subaccount};
+        use ic_sns_swap::{
+            pb::v1::{BuyerState, GetOpenTicketRequest, GetOpenTicketResponse},
+            swap::principal_to_subaccount,
+        };
         use icp_ledger::DEFAULT_TRANSFER_FEE;
 
         pub fn get_init(pocket_ic: &PocketIc, canister_id: PrincipalId) -> GetInitResponse {
@@ -2213,6 +2264,26 @@ pub mod sns {
                 WasmResult::Reject(s) => panic!("Call to get_buyer_state failed: {:#?}", s),
             };
             Ok(Decode!(&result, GetBuyerStateResponse).unwrap())
+        }
+
+        pub fn get_open_ticket(
+            pocket_ic: &PocketIc,
+            swap_canister_id: PrincipalId,
+            buyer: PrincipalId,
+        ) -> Result<GetOpenTicketResponse, String> {
+            let result = pocket_ic
+                .query_call(
+                    swap_canister_id.into(),
+                    buyer.into(),
+                    "get_open_ticket",
+                    Encode!(&GetOpenTicketRequest {}).unwrap(),
+                )
+                .map_err(|err| err.to_string())?;
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => panic!("Call to get_open_ticket failed: {:#?}", s),
+            };
+            Ok(Decode!(&result, GetOpenTicketResponse).unwrap())
         }
 
         pub fn error_refund_icp(
@@ -2337,7 +2408,7 @@ pub mod sns {
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for a *committed* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:
-        ///        - `set_dapp_controllers_call_result` must be `None`,
+        ///        - `set_dapp_controllers_call_result` must be `Some`
         ///        - `sweep_sns_result` must be `Some`.
         /// * `Err` if `auto_finalize_swap_response` contains any errors.
         pub fn is_auto_finalization_status_committed_or_err(
@@ -2359,7 +2430,7 @@ pub mod sns {
                     sweep_sns_result: Some(_),
                     claim_neuron_result: Some(_),
                     set_mode_call_result: Some(_),
-                    set_dapp_controllers_call_result: None,
+                    set_dapp_controllers_call_result: Some(_),
                     settle_community_fund_participation_result: None,
                     error_message: None,
                 }
@@ -2478,8 +2549,7 @@ pub mod sns {
                 last_auto_finalization_status = Some(auto_finalization_status);
             }
             Err(format!(
-                "Looks like the expected SNS auto-finalization status is never going to be reached: {:#?}",
-                last_auto_finalization_status,
+                "Looks like the expected SNS auto-finalization status of {status:?} is never going to be reached: {last_auto_finalization_status:#?}",
             ))
         }
 

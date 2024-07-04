@@ -1,6 +1,8 @@
 use std::{
     collections::BTreeMap,
+    io::Write,
     net::{Ipv6Addr, SocketAddr},
+    path::PathBuf,
     str::FromStr,
     sync::Arc,
 };
@@ -192,13 +194,16 @@ async fn fallback() -> Redirect {
 struct Cli {
     /// The port to listen on.
     #[clap(long)]
-    port: u16,
+    port: Option<u16>,
     /// The path to cert.pem file.
     #[clap(long)]
-    cert_file: std::path::PathBuf,
+    cert_file: Option<std::path::PathBuf>,
     /// The path to key.pem file.
     #[clap(long)]
-    key_file: std::path::PathBuf,
+    key_file: Option<std::path::PathBuf>,
+    /// The file to which the httpbin server port should be written
+    #[clap(long)]
+    port_file: Option<PathBuf>,
 }
 
 /// The headers must be deterministic because the compliance tests are making use
@@ -208,26 +213,8 @@ async fn add_deterministic_headers(res: Response) -> impl IntoResponse {
     (DETERMINISTIC_HEADERS, res)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args = Cli::parse();
-
-    // Load public certificate.
-    let cert_file = tokio::fs::read(args.cert_file).await?;
-    let certs = rustls_pemfile::certs(&mut cert_file.as_ref()).collect::<Result<Vec<_>, _>>()?;
-
-    // Load private key.
-    let key_file = tokio::fs::read(args.key_file).await?;
-    let key = rustls_pemfile::private_key(&mut key_file.as_ref())?.unwrap();
-
-    let mut config = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)?;
-
-    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec(), b"http/1.0".to_vec()];
-    let tls_acceptor = TlsAcceptor::from(Arc::new(config));
-
-    let router = Router::new()
+fn router() -> Router {
+    Router::new()
         .route("/", get(root_handler))
         .route("/bytes/:size", get(bytes_or_equal_bytes_handler))
         .route("/equal_bytes/:size", get(bytes_or_equal_bytes_handler))
@@ -266,35 +253,70 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             get(large_response_total_header_size_handler),
         )
         .fallback(fallback)
-        .layer(map_response(add_deterministic_headers));
+        .layer(map_response(add_deterministic_headers))
+}
 
-    let addr = SocketAddr::from((Ipv6Addr::UNSPECIFIED, args.port));
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let args = Cli::parse();
+
+    let addr = SocketAddr::from((Ipv6Addr::UNSPECIFIED, args.port.unwrap_or(0)));
     let listener = TcpListener::bind(&addr).await?;
 
-    loop {
-        let (tcp_stream, _remote_addr) = listener.accept().await?;
-
-        let tls_acceptor = tls_acceptor.clone();
-
-        let router = router.clone();
-        let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
-            router.clone().call(request)
-        });
-
-        tokio::spawn(async move {
-            let tls_stream = match tls_acceptor.accept(tcp_stream).await {
-                Ok(tls_stream) => tls_stream,
-                Err(err) => {
-                    eprintln!("failed to perform tls handshake: {err:#}");
-                    return;
-                }
-            };
-            if let Err(err) = Builder::new(TokioExecutor::new())
-                .serve_connection(TokioIo::new(tls_stream), hyper_service)
-                .await
-            {
-                eprintln!("failed to serve connection: {err:#}");
-            }
-        });
+    if let Some(port_file) = args.port_file {
+        let mut port_file = std::fs::File::create(port_file)?;
+        let real_port = listener.local_addr()?.port();
+        port_file.write_all(real_port.to_string().as_bytes())?;
     }
+
+    match (args.cert_file, args.key_file) {
+        (Some(cert_file), Some(key_file)) => {
+            // Load public certificate.
+            let cert_file = tokio::fs::read(cert_file).await?;
+            let certs =
+                rustls_pemfile::certs(&mut cert_file.as_ref()).collect::<Result<Vec<_>, _>>()?;
+
+            // Load private key.
+            let key_file = tokio::fs::read(key_file).await?;
+            let key = rustls_pemfile::private_key(&mut key_file.as_ref())?.unwrap();
+
+            let mut config = ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)?;
+
+            config.alpn_protocols =
+                vec![b"h2".to_vec(), b"http/1.1".to_vec(), b"http/1.0".to_vec()];
+            let tls_acceptor = TlsAcceptor::from(Arc::new(config));
+
+            loop {
+                let (tcp_stream, _remote_addr) = listener.accept().await?;
+
+                let tls_acceptor = tls_acceptor.clone();
+
+                let router = router();
+                let hyper_service =
+                    hyper::service::service_fn(move |request: Request<Incoming>| {
+                        router.clone().call(request)
+                    });
+
+                tokio::spawn(async move {
+                    let tls_stream = match tls_acceptor.accept(tcp_stream).await {
+                        Ok(tls_stream) => tls_stream,
+                        Err(err) => {
+                            eprintln!("failed to perform tls handshake: {err:#}");
+                            return;
+                        }
+                    };
+                    if let Err(err) = Builder::new(TokioExecutor::new())
+                        .serve_connection(TokioIo::new(tls_stream), hyper_service)
+                        .await
+                    {
+                        eprintln!("failed to serve connection: {err:#}");
+                    }
+                });
+            }
+        }
+        _ => axum::serve(listener, router()).await?,
+    };
+    Ok(())
 }

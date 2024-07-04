@@ -111,6 +111,10 @@ pub(super) struct SchedulerMetrics {
     pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    pub(super) sign_with_ecdsa_contexts_len: IntGauge,
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    pub(super) sign_with_threshold_contexts_len: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -673,6 +677,14 @@ impl SchedulerMetrics {
             stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
                 "scheduler_stop_canister_calls_without_call_id",
                 "Number of stop canister calls with missing call ID.",
+            ),
+            sign_with_ecdsa_contexts_len: metrics_registry.int_gauge(
+                "replicated_state_sign_with_ecdsa_contexts_len",
+                "Total number of entries kept in sign_with_ecdsa_contexts.",
+            ),
+            sign_with_threshold_contexts_len: metrics_registry.int_gauge(
+                "replicated_state_sign_with_threshold_contexts_len",
+                "Total number of entries kept in sign_with_threshold_contexts.",
             ),
         }
     }

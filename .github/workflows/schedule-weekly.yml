@@ -5,17 +5,24 @@ on:
     - cron: "0 8 * * 3"
   workflow_dispatch:
 
+env:
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+
 jobs:
   bazel-build-fuzzers-weekly:
     runs-on:
-      labels: bazel-runner-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 60 # 1 hour
-    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Load Service Account Key to file
         env:
           FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}

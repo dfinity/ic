@@ -2,9 +2,9 @@
 
 use anyhow::Result;
 
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::consensus::catch_up_test::{catch_up_loop, test_catch_up_possible};
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_secs(30 * 60);

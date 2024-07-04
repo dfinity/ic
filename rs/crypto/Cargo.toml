@@ -8,11 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-bincode = "1.2.1"
+bincode = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
-ed25519-consensus = "2.0.1"
 hex = { workspace = true }
-ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics_server" }
+ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
@@ -36,10 +35,8 @@ ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
-ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-types = { path = "../types/types" }
 parking_lot = "0.12.1"
 # We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
@@ -54,8 +51,9 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 ic-certification-test-utils = { path = "../certification/test-utils" }
+ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
@@ -69,7 +67,7 @@ ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
 ic-crypto-node-key-generation = { path = "node_key_generation" }
 ic-crypto-node-key-validation = { path = "node_key_validation" }
 ic-crypto-sha2 = { path = "sha2" }
-ic-crypto-tecdsa = { path = "tecdsa" }
+ic-crypto-utils-canister-threshold-sig = { path = "utils/canister_threshold_sig" }
 ic-crypto-temp-crypto = { path = "temp_crypto" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-tls = { path = "test_utils/tls" }
@@ -86,6 +84,8 @@ ic-crypto-test-utils-reproducible-rng = { path = "test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "tree_hash" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-registry-client = { path = "../registry/client" }
+ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }

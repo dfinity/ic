@@ -8,12 +8,7 @@ default-run = "ic-rosetta-api"
 
 [dependencies]
 actix-rt = "2.2.0"
-actix-web = { version = "4.0.1", default-features = false, features = [
-    "compress-brotli",
-    "compress-gzip",
-    "cookies",
-    "macros",
-] }
+actix-web = "4.0.1"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
@@ -38,7 +33,7 @@ ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "icp_ledger" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 num-bigint = "0.4.4"
 on_wire = { path = "../rust_canisters/on_wire" }
 prometheus = { workspace = true }

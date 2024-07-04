@@ -22,31 +22,74 @@ use url::Url;
     Debug, Copy, Clone, PartialEq, EnumIter, EnumString, Serialize, Deserialize, EnumMessage,
 )]
 pub enum StepType {
-    /// Before we can start the recovery process, we need to prevent the subnet from attempting to finalize new blocks. This step issues a simple ic-admin command creating a proposal halting the consensus of the subnet we try to recover. It is recommended to add an SSH key which will be deployed to all nodes for a read-only access. This access will be needed later to download the subnet state from the most up to date node.
+    /// Before we can start the recovery process, we need to prevent the subnet from attempting to
+    /// finalize new blocks. This step issues a simple ic-admin command creating a proposal halting
+    /// the consensus of the subnet we try to recover. It is recommended to add an SSH key which
+    /// will be deployed to all nodes for a read-only access. This access will be needed later to
+    /// download the subnet state from the most up to date node.
     Halt,
-    /// In order to determine whether we had a possible state divergence during the subnet failure, we need to pull all certification pools from all nodes.
+    /// In order to determine whether we had a possible state divergence during the subnet failure,
+    /// we need to pull all certification pools from all nodes.
     DownloadCertifications,
-    /// In this step we will merge all found certifications and determine whether it is safe to continue without a manual intervention. In most cases, when a subnet happened due to a replica bug and not due to malicious actors, this step should not reveal any problems.
+    /// In this step we will merge all found certifications and determine whether it is safe to
+    /// continue without a manual intervention. In most cases, when a subnet happened due to a
+    /// replica bug and not due to malicious actors, this step should not reveal any problems.
     MergeCertificationPools,
-    /// In this step we will download the latest persisted subnet state and all finalized consensus artifacts. For that we should use a node, that is up to date with the highest certification and finalization height because this node should contain all we need for the recovery.
+    /// In this step we will download the latest persisted subnet state and all finalized consensus
+    /// artifacts. For that we should use a node, that is up to date with the highest certification
+    /// and finalization height because this node should contain all we need for the recovery.
     DownloadState,
-    /// In this step we will take the latest persisted subnet state downloaded in the previous step and apply the finalized consensus artifacts on it via the deterministic state machine part of the replica to hopefully obtain the exact state which existed in the memory of all subnet nodes at the moment when a subnet issue has occurred.
+    /// In this step we will take the latest persisted subnet state downloaded in the previous step
+    /// and apply the finalized consensus artifacts on it via the deterministic state machine part
+    /// of the replica to hopefully obtain the exact state which existed in the memory of all subnet
+    /// nodes at the moment when a subnet issue has occurred. Note that if the cause of this recovery
+    /// is a panic in the deterministic state machine when executing a certain height, we can specify
+    /// a "target replay height" in this step. This target height should be chosen such that it is
+    /// below the height causing the panic, but above or equal to the height of the last certification
+    /// (share). Specifying this parameter will instruct ic-replay to stop at the given height and
+    /// create a checkpoint, which will then be used to propose the recovery CUP.
     ICReplay,
-    /// Now we want to verify that the height of the locally obtained execution state matches the highest finalized height, which was agreed upon by the subnet.
+    /// Now we want to verify that the height of the locally obtained execution state matches the
+    /// highest finalized height, which was agreed upon by the subnet.
     ValidateReplayOutput,
-    /// This step is only required if we want to deploy a new replica version to the troubled subnet before we resume its computation. Obviously, this step should not be skipped if the subnet has stalled due to a deterministic bug. You can continue with this step, if a problem was already identified, fixed and a hotfix version is ready to be proposed as a blessed version. If a version exists that does not need to be blessed, this step can be skipped, as the actual subnet upgrade will happen in the next step.
+    /// This step is only required if we want to deploy a new replica version to the troubled subnet
+    /// before we resume its computation. Obviously, this step should not be skipped if the subnet
+    /// has stalled due to a deterministic bug. You can continue with this step, if a problem was
+    /// already identified, fixed and a hotfix version is ready to be proposed as a blessed version.
+    /// If a version exists that does not need to be blessed, this step can be skipped, as the
+    /// actual subnet upgrade will happen in the next step.
     BlessVersion,
-    /// This step issues an ic-admin command that will create an upgrade proposal for the troubled subnet. Note that the subnet nodes will only upgrade after we proposed the corresponding recovery CUP referencing the new registry version.
+    /// This step issues an ic-admin command that will create an upgrade proposal for the troubled
+    /// subnet. Note that the subnet nodes will only upgrade after we proposed the corresponding
+    /// recovery CUP referencing the new registry version.
     UpgradeVersion,
-    /// Now we are ready to restart the subnet's computation. In order to do that, we need to instruct the subnet to start the computation from a specific height and state with a specific hash. We can only do this by writing a special message for the subnet into the registry. This step generates an ic-admin command creating a proposal with such an instruction for the subnet containing the hash of the state we obtained in the previous step and with a height strictly higher that the latest finalized height. Potentially, if we want to recover the subnet on a new set of nodes, their IDs can be specified as well. If the subnet has an ECDSA key, we also need to specify a backup subnet to reshare the key from.
+    /// Now we are ready to restart the subnet's computation. In order to do that, we need to
+    /// instruct the subnet to start the computation from a specific height and state with a
+    /// specific hash. We can only do this by writing a special message for the subnet into the
+    /// registry. This step generates an ic-admin command creating a proposal with such an
+    /// instruction for the subnet containing the hash of the state we obtained in the previous
+    /// step and with a height strictly higher that the latest finalized height. Potentially, if
+    /// we want to recover the subnet on a new set of nodes, their IDs can be specified as well.
+    /// If the subnet has any Chain keys, we also need to specify a backup subnet to reshare the
+    /// key from.
     ProposeCup,
-    /// Our subnet should know by now that it's supposed to restart the computation from a state with the hash which we have written into the registry in the previous step. But the state with this hash only exists on our current machine. By uploading this state to any valid subnet node, we allow all other nodes to find and sync this state to their local disks. Pick a node where you have the admin access via SSH.
+    /// Our subnet should know by now that it's supposed to restart the computation from a state
+    /// with the hash which we have written into the registry in the previous step. But the state
+    /// with this hash only exists on our current machine. By uploading this state to any valid
+    /// subnet node, we allow all other nodes to find and sync this state to their local disks.
+    /// Pick a node where you have the admin access via SSH.
     UploadState,
-    /// In the next step we verify that the upload node has received the message from the registry and it is aware that computation needs to be restarted.
+    /// In the next step we verify that the upload node has received the message from the registry
+    /// and it is aware that computation needs to be restarted.
     WaitForCUP,
-    /// This step generates the last ic-admin command which creates a proposal instructing the subnet to resume its computation. This step is safe to execute even if not all nodes have synced the correct state we previously uploaded. If that's the case, the subnet will simply wait until enough nodes have synced the state and the subnet can finalize new blocks. This command also removes read-only SSH keys from all nodes of the subnet.
+    /// This step generates the last ic-admin command which creates a proposal instructing the
+    /// subnet to resume its computation. This step is safe to execute even if not all nodes have
+    /// synced the correct state we previously uploaded. If that's the case, the subnet will simply
+    /// wait until enough nodes have synced the state and the subnet can finalize new blocks. This
+    /// command also removes read-only SSH keys from all nodes of the subnet.
     Unhalt,
-    /// This step deletes the working directory with all data. This step is safe to run if the recovery went smooth and no teams need data for further debugging.
+    /// This step deletes the working directory with all data. This step is safe to run if the
+    /// recovery went smooth and no teams need data for further debugging.
     Cleanup,
 }
 
@@ -73,6 +116,10 @@ pub struct AppSubnetRecoveryArgs {
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
 
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
+
     /// Public ssh key to be deployed to the subnet for read only access
     #[clap(long)]
     pub pub_key: Option<String>,
@@ -89,9 +136,9 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long)]
     pub upload_node: Option<IpAddr>,
 
-    /// Id of the ecdsa subnet used for resharing ecdsa key of subnet to be recovered
+    /// Id of the chain key subnet used for resharing chain keys to the subnet to be recovered
     #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
-    pub ecdsa_subnet_id: Option<SubnetId>,
+    pub chain_key_subnet_id: Option<SubnetId>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
@@ -194,6 +241,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 ));
             }
 
+            StepType::ICReplay => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
+                }
+            }
+
             StepType::BlessVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
@@ -208,10 +262,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         "Enter space separated list of replacement nodes: ",
                     );
                 }
-                if self.params.ecdsa_subnet_id.is_none() {
-                    self.params.ecdsa_subnet_id = read_optional_subnet_id(
+                if self.params.chain_key_subnet_id.is_none() {
+                    self.params.chain_key_subnet_id = read_optional_subnet_id(
                         &self.logger,
-                        "Enter ID of subnet to reshare ECDSA key from: ",
+                        "Enter ID of subnet to reshare Chain keys from: ",
                     );
                 }
             }
@@ -278,6 +332,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 self.params.subnet_id,
                 None,
                 None,
+                self.params.replay_until_height,
             ))),
 
             StepType::ValidateReplayOutput => Ok(Box::new(
@@ -333,7 +388,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
                     None,
-                    self.params.ecdsa_subnet_id,
+                    self.params.chain_key_subnet_id,
                 )?))
             }
 

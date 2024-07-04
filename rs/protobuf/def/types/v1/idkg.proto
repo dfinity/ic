@@ -39,25 +39,6 @@ message EcdsaKeyTranscript {
   registry.crypto.v1.MasterPublicKeyId master_key_id = 4;
 }
 
-message OngoingSignature {
-  RequestId request_id = 1;
-  ThresholdEcdsaSigInputsRef sig_inputs = 2;
-}
-
-message AvailableQuadruple {
-  reserved 3;
-  reserved "key_id";
-  uint64 pre_signature_id = 1;
-  PreSignatureQuadrupleRef quadruple = 2;
-}
-
-message QuadrupleInProgress {
-  reserved 3;
-  reserved "key_id";
-  uint64 pre_signature_id = 1;
-  QuadrupleInCreation quadruple = 2;
-}
-
 message AvailablePreSignature {
   uint64 pre_signature_id = 1;
   PreSignatureRef pre_signature = 2;
@@ -188,14 +169,6 @@ message PreSignatureQuadrupleRef {
   registry.crypto.v1.EcdsaKeyId key_id = 6;
 }
 
-message ThresholdEcdsaSigInputsRef {
-  registry.subnet.v1.ExtendedDerivationPath derivation_path = 1;
-  bytes hashed_message = 2;
-  bytes nonce = 3;
-  PreSignatureQuadrupleRef presig_quadruple_ref = 4;
-  UnmaskedTranscript key_transcript_ref = 5;
-}
-
 message TranscriptInCreation {
   registry.crypto.v1.SchnorrKeyId key_id = 1;
   RandomUnmaskedTranscriptParams blinder_unmasked_config = 2;
@@ -242,7 +215,7 @@ message KeyTranscriptCreation {
   UnmaskedTranscript created = 9;
 }
 
-message EcdsaMessage {
+message IDkgMessage {
   oneof msg {
     registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
     IDkgDealingSupport dealing_support = 2;

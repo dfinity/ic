@@ -753,7 +753,11 @@ fn induct_messages_and_track_callback_ids(
                 .iter()
                 .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end())
             {
-                if !reverse_header.reject_signals().contains(&stream_index) {
+                if !reverse_header
+                    .reject_signals()
+                    .iter()
+                    .any(|signal| signal.index == stream_index)
+                {
                     update_callback_id_trackers(
                         msg,
                         add_callback_id_tracker,

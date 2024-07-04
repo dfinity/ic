@@ -34,11 +34,14 @@ pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServic
 use crate::{
     call::ingress_watcher::IngressWatcher,
     catch_up_package::CatchUpPackageService,
-    common::{get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response},
+    common::{
+        get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
+        MAX_REQUEST_RECEIVE_TIMEOUT,
+    },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
-        HttpHandlerMetrics, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE, LABEL_STATUS,
+        HttpHandlerMetrics, LABEL_HTTP_STATUS_CODE, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE,
         LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
         STATUS_SUCCESS,
     },
@@ -111,7 +114,7 @@ use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::UnboundedSender,
+    sync::mpsc::{Receiver, UnboundedSender},
     sync::watch,
     time::{sleep, timeout, Instant},
 };
@@ -298,11 +301,8 @@ pub fn start_server(
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
-    // TODO(NET-1620): Remove optional arguments to enable the sync call endpoint.
-    certified_height_watcher: Option<watch::Receiver<Height>>,
-    terminal_state_ingress_messages: Option<
-        tokio::sync::mpsc::UnboundedReceiver<(MessageId, Height)>,
-    >,
+    certified_height_watcher: watch::Receiver<Height>,
+    completed_execution_messages_rx: Receiver<(MessageId, Height)>,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -339,28 +339,23 @@ pub fn start_server(
     .build();
 
     let call_router = call::CallServiceV2::new_router(call_handler.clone());
+    let (ingress_watcher_handle, _) = IngressWatcher::start(
+        rt_handle.clone(),
+        log.clone(),
+        metrics.clone(),
+        certified_height_watcher,
+        completed_execution_messages_rx,
+        CancellationToken::new(),
+    );
 
-    let call_v3_router = match (certified_height_watcher, terminal_state_ingress_messages) {
-        (Some(certified_height_watcher), Some(terminal_state_ingress_messages)) => {
-            let (ingress_watcher_handle, _) = IngressWatcher::start(
-                rt_handle.clone(),
-                log.clone(),
-                metrics.clone(),
-                certified_height_watcher,
-                terminal_state_ingress_messages,
-                CancellationToken::new(),
-            );
-
-            call::CallServiceV3::new_router(
-                call_handler,
-                ingress_watcher_handle,
-                config.ingress_message_certificate_timeout_seconds,
-                delegation_from_nns.clone(),
-                state_reader.clone(),
-            )
-        }
-        _ => Router::new(),
-    };
+    let call_v3_router = call::CallServiceV3::new_router(
+        call_handler,
+        ingress_watcher_handle,
+        metrics.clone(),
+        config.ingress_message_certificate_timeout_seconds,
+        delegation_from_nns.clone(),
+        state_reader.clone(),
+    );
 
     let query_router = QueryServiceBuilder::builder(
         node_id,
@@ -776,7 +771,7 @@ async fn collect_timer_metric(
     // This is a workaround for `StatusCode::as_str()` not returning a `&'static
     // str`. It ensures `request_timer` is dropped before `status`.
     let mut timer = request_timer;
-    timer.set_label(LABEL_STATUS, status.as_str());
+    timer.set_label(LABEL_HTTP_STATUS_CODE, status.as_str());
 
     metrics
         .response_body_size_bytes
@@ -955,7 +950,7 @@ async fn try_fetch_delegation_from_nns(
     let raw_response_res = request_sender.send_request(nns_request).await?;
 
     let raw_response = match timeout(
-        Duration::from_secs(config.max_request_receive_seconds),
+        MAX_REQUEST_RECEIVE_TIMEOUT,
         http_body_util::Limited::new(
             raw_response_res.into_body(),
             config.max_delegation_certificate_size_bytes as usize,
@@ -976,7 +971,8 @@ async fn try_fetch_delegation_from_nns(
         Err(e) => {
             return Err(format!(
                 "Timeout of {}s reached while receiving http body: {}",
-                config.max_request_receive_seconds, e
+                MAX_REQUEST_RECEIVE_TIMEOUT.as_secs(),
+                e
             )
             .into())
         }

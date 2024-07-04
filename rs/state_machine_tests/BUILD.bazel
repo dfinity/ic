@@ -5,18 +5,20 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/artifact_pool",
     "//rs/config",
     "//rs/consensus",
+    "//rs/consensus/utils",
     "//rs/constants",
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/extended_bip32",
     "//rs/crypto/interfaces/sig_verification",
-    "//rs/crypto/test_utils/keys",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
+    "//rs/https_outcalls/consensus",
     "//rs/ingress_manager",
     "//rs/interfaces",
     "//rs/interfaces/certified_stream_store",
@@ -38,6 +40,7 @@ DEPENDENCIES = [
     "//rs/state_layout",
     "//rs/state_manager",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
@@ -130,7 +133,7 @@ rust_ic_test(
         "STATE_MACHINE_BIN": "$(rootpath //rs/state_machine_tests:ic-test-state-machine)",
     },
     deps = [
-        "//rs/crypto/tecdsa",
+        "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:ciborium",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -141,7 +144,7 @@ rust_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
     deps = [
-        "//rs/crypto/tecdsa",
+        "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:proptest",
     ],
 )

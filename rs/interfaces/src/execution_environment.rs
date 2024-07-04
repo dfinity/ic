@@ -735,9 +735,9 @@ pub trait SystemApi {
         name_src: usize,
         name_len: usize,
         reply_fun: u32,
-        reply_env: u32,
+        reply_env: u64,
         reject_fun: u32,
-        reject_env: u32,
+        reject_env: u64,
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
@@ -774,7 +774,7 @@ pub trait SystemApi {
     /// `ic0.call_perform`.
     ///
     /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call>
-    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()>;
+    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u64) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_call_cycles_add128` instead, as this API
     /// can only add a 64-bit value.
@@ -1161,6 +1161,22 @@ pub enum ExecutionRoundType {
     OrdinaryRound,
 }
 
+/// Execution round properties collected form the last DKG summary block.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExecutionRoundSummary {
+    /// The next checkpoint round height.
+    ///
+    /// In a case of a subnet recovery, the DSM will observe an instant
+    /// jump for the `batch_number` and `next_checkpoint_height` values.
+    /// The `next_checkpoint_height`, if set, should be always greater
+    /// than the `batch_number`.
+    pub next_checkpoint_round: ExecutionRound,
+    /// The current checkpoint interval length.
+    ///
+    /// The DKG interval length is normally 499 rounds (199 for system subnets).
+    pub current_interval_length: ExecutionRound,
+}
+
 /// Configuration of execution that comes from the registry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RegistryExecutionSettings {
@@ -1234,7 +1250,7 @@ pub trait Scheduler: Send {
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
-        next_checkpoint_round: Option<ExecutionRound>,
+        round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;

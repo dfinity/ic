@@ -40,7 +40,7 @@ ic-types = { path = "../types/types" }
 clap = { version = "3.2.25", features = ["derive"] }
 hex = { workspace = true }
 slog = { workspace = true }
-slog-term = "2.6.0"
+slog-term = { workspace = true }
 tokio = { workspace = true }
 rand = { workspace = true }
 tower = { workspace = true }

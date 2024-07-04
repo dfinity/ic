@@ -21,7 +21,11 @@ Coverage::
 
 end::catalog[] */
 
-use crate::{
+use futures::{join, stream::FuturesUnordered, StreamExt};
+use ic_agent::{Agent, AgentError};
+use ic_base_types::PrincipalId;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
@@ -29,10 +33,6 @@ use crate::{
     },
     util::UniversalCanister,
 };
-use futures::{join, stream::FuturesUnordered, StreamExt};
-use ic_agent::{Agent, AgentError};
-use ic_base_types::PrincipalId;
-use ic_registry_subnet_type::SubnetType;
 use ic_universal_canister::{call_args, wasm};
 use slog::{info, Logger};
 use std::sync::Arc;

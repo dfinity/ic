@@ -7,7 +7,7 @@ pub use call_v2::CallServiceV2;
 pub use call_v3::CallServiceV3;
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor},
+    common::{build_validator, validation_error_to_http_error},
     HttpError, IngressFilterService,
 };
 use hyper::StatusCode;
@@ -15,7 +15,7 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info_sample, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{error, replica_logger::no_op_logger, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -177,11 +177,13 @@ pub struct IngressValidator {
 }
 
 impl IngressValidator {
-    /// Validates that ingress message is valid
-    /// and that the canister is willing to accept it.
+    /// Validates that the IC can process the request by checking that:
+    /// - The ingress pool is not full.
+    /// - Ingress message is valid.
+    /// - The canister is willing to accept it.
     pub(crate) async fn validate_ingress_message(
         self,
-        Cbor(request): Cbor<HttpRequestEnvelope<HttpCallContent>>,
+        request: HttpRequestEnvelope<HttpCallContent>,
         effective_canister_id: CanisterId,
     ) -> Result<IngressMessageSubmitter, IngressError> {
         let Self {
@@ -194,6 +196,15 @@ impl IngressValidator {
             ingress_throttler,
             ingress_tx,
         } = self;
+
+        // Load shed the request if the ingress pool is full.
+        let ingress_pool_is_full = ingress_throttler.read().unwrap().exceeds_threshold();
+        if ingress_pool_is_full {
+            Err(HttpError {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                message: "Service is overloaded, try again later.".to_string(),
+            })?;
+        }
 
         let msg: SignedIngress = request.try_into().map_err(|e| HttpError {
             status: StatusCode::BAD_REQUEST,
@@ -265,8 +276,6 @@ impl IngressValidator {
         Ok(IngressMessageSubmitter {
             ingress_tx,
             node_id,
-            log,
-            ingress_throttler,
             message: msg,
         })
     }
@@ -275,9 +284,7 @@ impl IngressValidator {
 pub struct IngressMessageSubmitter {
     ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     node_id: NodeId,
-    log: ReplicaLogger,
     message: SignedIngress,
-    ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
 }
 
 impl IngressMessageSubmitter {
@@ -287,43 +294,27 @@ impl IngressMessageSubmitter {
     }
 
     /// Attempts to submit the ingress message to the ingress pool.
-    /// An [`HttpError`] is returned if the service is overloaded.
+    /// An [`HttpError`] is returned if P2P is not running.
     pub(crate) fn try_submit(self) -> Result<(), HttpError> {
         let Self {
             ingress_tx,
             node_id,
-            log,
             message,
-            ingress_throttler,
         } = self;
 
-        let message_id = message.id();
-        let ingress_log_entry = message.log_entry();
-
-        let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold();
-
-        let send_ingress_to_p2p_failed = is_overloaded
-            || ingress_tx
-                .send(UnvalidatedArtifactMutation::Insert((message, node_id)))
-                .is_err();
+        // Submission will fail if P2P is not running, meaning there is
+        // no receiver for the ingress message.
+        let send_ingress_to_p2p_failed = ingress_tx
+            .send(UnvalidatedArtifactMutation::Insert((message, node_id)))
+            .is_err();
 
         if send_ingress_to_p2p_failed {
-            Err(HttpError {
-                status: StatusCode::TOO_MANY_REQUESTS,
-                message: "Service is overloaded, try again later.".to_string(),
-            })
-        } else {
-            // We're pretty much done, just need to send the message to ingress and
-            // make_response to the client
-
-            info_sample!(
-                "message_id" => &message_id,
-                &log,
-                "ingress_message_submit";
-                ingress_message => ingress_log_entry
-            );
-            Ok(())
+            return Err(HttpError {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "P2P is not running on this node.".to_string(),
+            });
         }
+        Ok(())
     }
 }
 

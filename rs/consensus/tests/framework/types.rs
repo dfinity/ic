@@ -37,7 +37,7 @@ use ic_types::{
     artifact::{ArtifactKind, Priority, PriorityFn},
     artifact_kind::ConsensusArtifact,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::EcdsaMessage,
+        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
         CatchUpPackage, ConsensusMessage,
     },
     replica_config::ReplicaConfig,
@@ -113,7 +113,7 @@ pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
-    Ecdsa(EcdsaMessage),
+    Ecdsa(IDkgMessage),
 }
 
 /// A Message is a tuple of [`InputMessage`] with a timestamp.

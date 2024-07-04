@@ -9,12 +9,12 @@ use crate::consensus::{
     },
     dkg as consensus_dkg,
     idkg::{
-        EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
+        EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript, IDkgMessage,
         SchnorrSigShare,
     },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent,
-    RandomBeaconContent, RandomTapeContent,
+    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, SignedIDkgDealing,
@@ -71,7 +71,7 @@ mod private {
 
     impl CryptoHashDomainSeal for Block {}
     impl CryptoHashDomainSeal for Signed<HashedBlock, BasicSignature<BlockMetadata>> {}
-
+    impl CryptoHashDomainSeal for EquivocationProof {}
     impl CryptoHashDomainSeal for BlockPayload {}
 
     impl CryptoHashDomainSeal for RandomBeaconContent {}
@@ -111,7 +111,7 @@ mod private {
     impl CryptoHashDomainSeal for ConsensusMessage {}
     impl CryptoHashDomainSeal for CertificationMessage {}
 
-    impl CryptoHashDomainSeal for EcdsaMessage {}
+    impl CryptoHashDomainSeal for IDkgMessage {}
 
     impl CryptoHashDomainSeal for IDkgDealing {}
 
@@ -216,6 +216,12 @@ impl CryptoHashDomain for Block {
 impl CryptoHashDomain for Signed<HashedBlock, BasicSignature<BlockMetadata>> {
     fn domain(&self) -> String {
         DomainSeparator::BlockMetadataProposal.to_string()
+    }
+}
+
+impl CryptoHashDomain for EquivocationProof {
+    fn domain(&self) -> String {
+        DomainSeparator::EquivocationProof.to_string()
     }
 }
 
@@ -335,9 +341,9 @@ impl CryptoHashDomain for CertificationMessage {
     }
 }
 
-impl CryptoHashDomain for EcdsaMessage {
+impl CryptoHashDomain for IDkgMessage {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaMessage.to_string()
+        DomainSeparator::IDkgMessage.to_string()
     }
 }
 

@@ -97,6 +97,7 @@ PODMAN_RUN_ARGS=(
     --add-host devenv-container:127.0.0.1
     --entrypoint=
     --init
+    --pull=missing
 )
 
 if podman version | grep -qE 'Version:\s+4.'; then

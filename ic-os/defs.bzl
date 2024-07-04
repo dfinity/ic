@@ -70,8 +70,6 @@ def icos_build(
 
     # -------------------- Build the container image --------------------
 
-    build_container_filesystem_config_file = Label(image_deps.get("build_container_filesystem_config_file"))
-
     if build_local_base_image:
         base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
         package_files_arg = "PACKAGE_FILES=packages.common"
@@ -92,7 +90,9 @@ def icos_build(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
             component_files = image_deps["component_files"],
-            config_file = build_container_filesystem_config_file,
+            dockerfile = image_deps["dockerfile"],
+            build_args = image_deps["build_args"],
+            file_build_arg = image_deps["file_build_arg"],
             base_image_tar_file = ":base_image.tar",
             base_image_tar_file_tag = base_image_tag,
             target_compatible_with = ["@platforms//os:linux"],
@@ -103,7 +103,9 @@ def icos_build(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
             component_files = image_deps["component_files"],
-            config_file = build_container_filesystem_config_file,
+            dockerfile = image_deps["dockerfile"],
+            build_args = image_deps["build_args"],
+            file_build_arg = image_deps["file_build_arg"],
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual"],
         )
@@ -126,10 +128,14 @@ def icos_build(
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
+        # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
+        # there are only two in our build.
         strip_paths = [
             "/run",
             "/boot",
             "/var",
+            "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt",
+            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt",
         ],
         target_compatible_with = [
             "@platforms//os:linux",
@@ -144,7 +150,7 @@ def icos_build(
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
-        subdir = "boot/",
+        subdir = "boot",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -195,7 +201,7 @@ def icos_build(
             testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) -d $(location //rs/ic_os/dflate)",
+            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
             executable = False,
             tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
             tags = ["manual"],
@@ -218,7 +224,7 @@ def icos_build(
                 testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) -d $(location //rs/ic_os/dflate)",
+                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)",
                 tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
                 tags = ["manual"],
             )
@@ -670,13 +676,13 @@ def boundary_node_icos_build(
 
     build_grub_partition("partition-grub.tzst", tags = ["manual"])
 
-    build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
-
     build_container_filesystem(
         name = "rootfs-tree.tar",
         context_files = ["//ic-os/boundary-guestos/context:context-files"],
         component_files = boundary_component_files,
-        config_file = build_container_filesystem_config_file,
+        dockerfile = image_deps["dockerfile"],
+        build_args = image_deps["build_args"],
+        file_build_arg = image_deps["file_build_arg"],
         target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
@@ -778,7 +784,7 @@ EOF
         name = "partition-root-sign",
         srcs = ["partition-root-unsigned.tzst"],
         outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) -d $(location //rs/ic_os/dflate)",
+        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
         executable = False,
         tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
         tags = ["manual"],

@@ -55,6 +55,8 @@ pub enum WasmValidationError {
     InvalidImportSection(String),
     /// Module contains an invalid export section
     InvalidExportSection(String),
+    /// Module contains an invalid export section caused by a user error.
+    UserInvalidExportSection(String),
     /// Module contains an invalid data section
     InvalidDataSection(String),
     /// Module contains an invalid custom section
@@ -73,6 +75,8 @@ pub enum WasmValidationError {
         complexity: usize,
         allowed: usize,
     },
+    /// A function contains an unsupported Wasm instruction.
+    UnsupportedWasmInstruction { index: usize, instruction: String },
     /// A function was too large.
     FunctionTooLarge {
         index: usize,
@@ -81,64 +85,88 @@ pub enum WasmValidationError {
     },
     /// The code section is too large.
     CodeSectionTooLarge { size: u32, allowed: u32 },
+    /// The total module size is too large.
+    ModuleTooLarge { size: u64, allowed: u64 },
 }
 
 impl std::fmt::Display for WasmValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WasmtimeValidation(err) => {
-                write!(f, "Wasmtime failed to validate wasm module {}", err)
+                write!(f, "Wasmtime failed to validate wasm module {err}")
             }
             Self::DecodingError(err) => {
-                write!(f, "Failed to decode wasm module: {}", err)
+                write!(f, "Failed to decode wasm module: {err}")
             }
             Self::InvalidFunctionSignature(err) => {
-                write!(f, "Wasm module has an invalid function signature. {}", err)
+                write!(f, "Wasm module has an invalid function signature. {err}")
             }
             Self::InvalidImportSection(err) => {
-                write!(f, "Wasm module has an invalid import section. {}", err)
+                write!(f, "Wasm module has an invalid import section. {err}")
             }
             Self::InvalidExportSection(err) => {
+                write!(f, "Wasm module has an invalid export section. {err}")
+            }
+            Self::UserInvalidExportSection(err) => {
                 write!(f, "Wasm module has an invalid export section. {}", err)
             }
             Self::InvalidDataSection(err) => {
-                write!(f, "Wasm module has an invalid data section. {}", err)
+                write!(f, "Wasm module has an invalid data section. {err}")
             }
             Self::InvalidCustomSection(err) => {
-                write!(f, "Wasm module has an invalid custom section. {}", err)
-            },
+                write!(f, "Wasm module has an invalid custom section. {err}")
+            }
             Self::InvalidGlobalSection(err) => {
-                write!(f, "Wasm module has an invalid global section. {}", err)
+                write!(f, "Wasm module has an invalid global section. {err}")
             }
             Self::TooManyGlobals { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} globals which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    globals which exceeds the maximum number allowed {allowed}.",
             ),
             Self::TooManyFunctions { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} functions which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    functions which exceeds the maximum number allowed {allowed}.",
             ),
             Self::TooManyCustomSections { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} custom sections which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    custom sections which exceeds the maximum number allowed {allowed}.",
             ),
-            Self::FunctionComplexityTooHigh{ index, complexity, allowed } => write!(
+            Self::FunctionComplexityTooHigh {
+                index,
+                complexity,
+                allowed,
+            } => write!(
                 f,
-                "Wasm module contains a function at index {} with complexity {} which exceeds the maximum complexity allowed {}",
-                index, complexity, allowed
+                "Wasm module contains a function at index {index} \
+                    with complexity {complexity} \
+                    which exceeds the maximum complexity allowed {allowed}.",
             ),
-            Self::FunctionTooLarge{index, size, allowed} => write!(
+            Self::UnsupportedWasmInstruction { index, instruction } => write!(
                 f,
-                "Wasm module contains a function at index {} of size {} that exceeds the maximum allowed size of {}",
-                index, size, allowed,
+                "Wasm module contains a function at index {index} \
+                    with unsupported instruction {instruction}.",
             ),
-            Self::CodeSectionTooLarge{size, allowed} => write!(
+            Self::FunctionTooLarge {
+                index,
+                size,
+                allowed,
+            } => write!(
                 f,
-                "Wasm module code section size of {} exceeds the maximum allowed size of {}",
-                size, allowed,
+                "Wasm module contains a function at index {index} \
+                    of size {size} that exceeds the maximum allowed size of {allowed}.",
+            ),
+            Self::CodeSectionTooLarge { size, allowed } => write!(
+                f,
+                "Wasm module code section size of {size} \
+                    exceeds the maximum allowed size of {allowed}.",
+            ),
+            WasmValidationError::ModuleTooLarge { size, allowed } => write!(
+                f,
+                "Wasm module size of {size} exceeds the maximum \
+                    allowed size of {allowed}.",
             ),
         }
     }
@@ -147,20 +175,23 @@ impl std::fmt::Display for WasmValidationError {
 impl AsErrorHelp for WasmValidationError {
     fn error_help(&self) -> ErrorHelp {
         match self {
-            WasmValidationError::WasmtimeValidation(_)
+            WasmValidationError::DecodingError(_)
+            | WasmValidationError::WasmtimeValidation(_)
+            | WasmValidationError::InvalidExportSection(_)
             | WasmValidationError::InvalidFunctionSignature(_)
             | WasmValidationError::InvalidImportSection(_)
             | WasmValidationError::InvalidDataSection(_)
             | WasmValidationError::InvalidCustomSection(_)
             | WasmValidationError::InvalidGlobalSection(_)
-            | WasmValidationError::TooManyGlobals { .. }
+            | WasmValidationError::UnsupportedWasmInstruction { .. }
             | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
-            WasmValidationError::DecodingError(_)
-            | WasmValidationError::InvalidExportSection(_)
+            WasmValidationError::UserInvalidExportSection(_)
             | WasmValidationError::TooManyFunctions { .. }
+            | WasmValidationError::TooManyGlobals { .. }
             | WasmValidationError::FunctionComplexityTooHigh { .. }
             | WasmValidationError::FunctionTooLarge { .. }
-            | WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
+            | WasmValidationError::CodeSectionTooLarge { .. }
+            | WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
                 doc_link: "".to_string(),
             },

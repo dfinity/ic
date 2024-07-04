@@ -9,6 +9,7 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
+use evm_rpc_client::types::candid::HttpOutcallError as EvmHttpOutcallError;
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
@@ -556,6 +557,23 @@ pub enum HttpOutcallError {
         body: String,
         parsing_error: Option<String>,
     },
+}
+
+impl From<EvmHttpOutcallError> for HttpOutcallError {
+    fn from(value: EvmHttpOutcallError) -> Self {
+        match value {
+            EvmHttpOutcallError::IcError { code, message } => Self::IcError { code, message },
+            EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
+                status,
+                body,
+                parsing_error,
+            } => Self::InvalidHttpJsonRpcResponse {
+                status,
+                body,
+                parsing_error,
+            },
+        }
+    }
 }
 
 impl HttpOutcallError {

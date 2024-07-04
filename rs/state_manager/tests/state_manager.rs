@@ -45,7 +45,7 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
-use ic_test_utilities_state::{arb_stream, arb_stream_slice, arb_stream_with_config, canister_ids};
+use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
@@ -1302,6 +1302,68 @@ fn can_filter_by_certification_mask() {
             vec![height(0), height(3), height(4)]
         );
     })
+}
+
+#[test]
+fn should_archive_checkpoints_correctly() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let mut heights = vec![height(0)];
+        for i in 1..14 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone());
+        }
+
+        assert_eq!(height(13), state_manager.latest_state_height());
+        let latest_state = state_manager.get_latest_state();
+        assert_eq!(height(13), latest_state.height());
+
+        // Manually marks checkpoint at height 6 and 10 as unverified, and it should be archived on restart.
+        let marker_file_6 = state_manager
+            .state_layout()
+            .checkpoint_untracked(height(6))
+            .unwrap()
+            .unverified_checkpoint_marker();
+        std::fs::File::create(marker_file_6).expect("failed to write to marker file");
+
+        let marker_file_10 = state_manager
+            .state_layout()
+            .checkpoint_untracked(height(10))
+            .unwrap()
+            .unverified_checkpoint_marker();
+        std::fs::File::create(marker_file_10).expect("failed to write to marker file");
+
+        let state_manager = restart_fn(state_manager, Some(height(6)));
+
+        // The unverified checkpoints at height 6 and 10, and any checkpoints at or above height 8 are archived.
+        // However, at most one checkpoint will be stored in the backups directory after cleanup.
+        assert_eq!(
+            state_manager.state_layout().backup_heights().unwrap(),
+            vec![height(12)],
+        );
+
+        // The checkpoints at height 2 and 4 should not be accidentally archived.
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(2), height(4)],
+        );
+
+        // State manager should restart from checkpoint at height 4 instead of 6 or 8.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(2), height(4)],
+        );
+        assert_eq!(height(4), state_manager.latest_state_height());
+        let (latest_height, _) = state_manager.take_tip();
+        assert_eq!(height(4), latest_height);
+    });
 }
 
 #[test]
@@ -2719,7 +2781,7 @@ fn state_sync_can_reject_invalid_chunks() {
         let (_height, mut state) = src_state_manager.take_tip();
 
         // Insert large number of canisters so that the encoded manifest is larger than 1 MiB.
-        let num_canisters = 2000;
+        let num_canisters = 5000;
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
@@ -2736,6 +2798,12 @@ fn state_sync_can_reject_invalid_chunks() {
         let msg = src_state_sync
             .get(&id)
             .expect("failed to get state sync messages");
+
+        let meta_manifest = build_meta_manifest(&msg.manifest);
+        assert!(
+            meta_manifest.sub_manifest_hashes.len() >= 2,
+            "The test should run with the manifest chunked in multiple pieces."
+        );
 
         assert_error_counters(src_metrics);
 
@@ -4913,7 +4981,6 @@ fn can_reset_stable_memory() {
 #[test]
 fn can_reset_wasm_chunk_store() {
     state_manager_test(|metrics, state_manager| {
-        use ic_replicated_state::canister_state::system_state::wasm_chunk_store::DEFAULT_MAX_SIZE;
         let (_height, mut state) = state_manager.take_tip();
 
         // One canister with some data.
@@ -4948,9 +5015,7 @@ fn can_reset_wasm_chunk_store() {
 
         // Wipe data and write different data.
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        // Chunk size must be default because we cannot deserialize the value properly.
-        canister_state.system_state.wasm_chunk_store =
-            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
+        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing();
         canister_state
             .system_state
             .wasm_chunk_store
@@ -5011,8 +5076,7 @@ fn can_reset_wasm_chunk_store() {
         );
 
         // Wipe data completely.
-        canister_state.system_state.wasm_chunk_store =
-            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
+        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing();
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
@@ -5744,10 +5808,8 @@ fn lsmt_shard_size_is_stable() {
 }
 
 proptest! {
-    // TODO(MR-549) Go back to using plain `arb_stream()` once the canonical state
-    // encodes deadlines.
     #[test]
-    fn stream_store_encode_decode(stream in arb_stream_with_config(0, 10, 0, 10, true, false), size_limit in 0..20usize) {
+    fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,

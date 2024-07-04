@@ -24,7 +24,7 @@ struct Cli {
     image_path: PathBuf,
 
     #[command(flatten)]
-    network: NetworkConfig,
+    config_ini: ConfigIni,
 
     #[arg(long)]
     private_key_path: Option<PathBuf>,
@@ -37,7 +37,7 @@ struct Cli {
 }
 
 #[derive(Args)]
-struct NetworkConfig {
+struct ConfigIni {
     #[arg(long)]
     ipv6_prefix: Option<String>,
 
@@ -55,6 +55,9 @@ struct NetworkConfig {
 
     #[arg(long)]
     domain: Option<String>,
+
+    #[arg(long)]
+    verbose: Option<String>,
 
     #[arg(long)]
     mgmt_mac: Option<String>,
@@ -92,7 +95,7 @@ async fn main() -> Result<(), Error> {
 
     // Update config.ini
     let config_ini = NamedTempFile::new()?;
-    write_config(config_ini.path(), &cli.network)
+    write_config(config_ini.path(), &cli.config_ini)
         .await
         .context("failed to write config file")?;
     config
@@ -174,10 +177,10 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
+async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     let mut f = File::create(path).context("failed to create config file")?;
 
-    let NetworkConfig {
+    let ConfigIni {
         ipv6_prefix,
         ipv6_gateway,
         mgmt_mac,
@@ -185,6 +188,7 @@ async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
         ipv4_gateway,
         ipv4_prefix_length,
         domain,
+        verbose,
     } = cfg;
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
@@ -205,6 +209,10 @@ async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
 
     if let Some(mgmt_mac) = mgmt_mac {
         writeln!(&mut f, "mgmt_mac={}", mgmt_mac)?;
+    }
+
+    if let Some(verbose) = verbose {
+        writeln!(&mut f, "verbose={}", verbose)?;
     }
 
     Ok(())
@@ -229,7 +237,7 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
     };
 
     if let Some(nns_url) = &cfg.nns_url {
-        deployment_json.nns.url = nns_url.clone();
+        deployment_json.nns.url = vec![nns_url.clone()];
     }
 
     if let Some(memory) = cfg.memory_gb {

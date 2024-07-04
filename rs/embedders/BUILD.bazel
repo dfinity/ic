@@ -34,7 +34,6 @@ DEPENDENCIES = [
     "@crate_index//:wasmparser",
     "@crate_index//:wasmtime",
     "@crate_index//:wasmtime-environ",
-    "@crate_index//:wasmtime-runtime",
     "@crate_index//:wasmprinter",
 ]
 
@@ -44,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/rust_canisters/canister_test",
     "//rs/types/base_types",
+    "//rs/types/error_types",
     "//rs/test_utilities",
     "//rs/test_utilities/embedders",
     "//rs/test_utilities/execution_environment",

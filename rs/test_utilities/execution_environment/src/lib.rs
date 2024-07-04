@@ -1,12 +1,18 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryDirtyPageLimit};
+use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
-    subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
+    embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
+    execution_environment::Config,
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
+    subnet_config::SubnetConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_embedders::{
+    wasm_utils::{compile, decoding::decode_wasm},
+    WasmtimeEmbedder,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
@@ -44,7 +50,7 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
 };
 use ic_system_api::InstructionLimits;
-use ic_test_utilities::crypto::mock_random_number_generator;
+use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::{
     batch::QueryStats,
@@ -55,7 +61,7 @@ use ic_types::{
         RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, NumOsPages, QueryStatsEpoch, Time, UserId,
+    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -1720,8 +1726,7 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(key_id.clone(), true);
+        self.idkg_keys_with_signing_enabled.insert(key_id, true);
         self
     }
 
@@ -1928,15 +1933,22 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_dirty_page_limit(
         mut self,
-        stable_memory_dirty_page_limit_message: NumOsPages,
-        stable_memory_dirty_page_limit_upgrade: NumOsPages,
+        stable_memory_dirty_page_limit: StableMemoryPageLimit,
     ) -> Self {
         self.execution_config
             .embedders_config
-            .stable_memory_dirty_page_limit = StableMemoryDirtyPageLimit {
-            message: stable_memory_dirty_page_limit_message,
-            upgrade: stable_memory_dirty_page_limit_upgrade,
-        };
+            .stable_memory_dirty_page_limit = stable_memory_dirty_page_limit;
+
+        self
+    }
+
+    pub fn with_stable_memory_access_limit(
+        mut self,
+        stable_memory_access_limit: StableMemoryPageLimit,
+    ) -> Self {
+        self.execution_config
+            .embedders_config
+            .stable_memory_accessed_page_limit = stable_memory_access_limit;
 
         self
     }
@@ -2160,8 +2172,15 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+        let state_reader = Arc::new(FakeStateManager::new());
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            config.clone(),
+            self.log.clone(),
+            &metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironment::new(
@@ -2293,9 +2312,8 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     let mut output: Vec<(CanisterId, RequestOrResponse)> = vec![];
     let output_iter = state.output_into_iter();
 
-    for (queue_id, msg) in output_iter {
-        let canister_id = CanisterId::try_from(queue_id.dst_canister.get()).unwrap();
-        output.push((canister_id, msg));
+    for msg in output_iter {
+        output.push((msg.receiver(), msg));
     }
     output
 }
@@ -2325,7 +2343,7 @@ pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
 }
 
 pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
-    let wasm = BinaryEncodedWasm::new(wasm.to_vec());
+    let wasm = decode_wasm(WASM_MAX_SIZE, Arc::new(wasm.to_vec())).unwrap();
     let config = EmbeddersConfig::default();
     let (_, serialized_module) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm)
         .1

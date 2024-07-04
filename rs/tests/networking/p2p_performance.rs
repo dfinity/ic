@@ -1,13 +1,13 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::networking::p2p_performance_workload::{config, test, Latency};
-use ic_tests::systest;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
+use ic_tests::networking::p2p_performance_workload::{config, test, Latency, SubnetId};
 
 // Test parameters
-const RPS: usize = 20;
-const PAYLOAD_SIZE_BYTES: usize = 10_000;
+const RPS: usize = 1_000;
+const PAYLOAD_SIZE_BYTES: usize = 100;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 5;
 const APP_SUBNET_MAX_SIZE: usize = 13;
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
             RPS,
             PAYLOAD_SIZE_BYTES,
             WORKLOAD_RUNTIME,
-            Latency::Lhg73,
+            Latency::FromSubnetMetrics(SubnetId::Io67),
             DOWNLOAD_PROMETHEUS_DATA,
         )
     };

@@ -38,8 +38,9 @@ use ic_types::{
     consensus::{
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
-        FinalizationContent, HasCommittee, HasHeight, HasRank, HasVersion, Notarization,
-        NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare, Rank,
+        EquivocationProof, FinalizationContent, HasCommittee, HasHeight, HasRank, HasVersion,
+        Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
+        RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
@@ -112,6 +113,7 @@ enum InvalidArtifactReason {
     MismatchedRandomBeaconInCatchUpPackageShare,
     RepeatedSigner,
     ReplicaVersionMismatch,
+    NotABlockmaker,
 }
 
 impl From<CryptoError> for ValidationFailure {
@@ -315,6 +317,42 @@ impl SignatureVerify for CatchUpPackage {
                 membership.registry_client.get_latest_version(),
             )
             .map_err(ValidatorError::from)
+    }
+}
+
+impl SignatureVerify for EquivocationProof {
+    fn verify_signature(
+        &self,
+        membership: &Membership,
+        crypto: &dyn ConsensusCrypto,
+        pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
+    ) -> ValidationResult<ValidatorError> {
+        let height = self.height();
+        let previous_beacon = get_previous_beacon(pool, height)?;
+        let registry_version = get_registry_version(pool, height)?;
+        if membership
+            .get_block_maker_rank(height, &previous_beacon, self.signer)
+            .map_err(membership_error_to_validation_error)?
+            .is_none()
+        {
+            return Err(ValidationError::from(InvalidArtifactReason::NotABlockmaker));
+        }
+
+        let (first, second) = self.into_signed_metadata();
+        crypto.verify_basic_sig(
+            &first.signature.signature,
+            &first.content,
+            self.signer,
+            registry_version,
+        )?;
+        crypto.verify_basic_sig(
+            &second.signature.signature,
+            &second.content,
+            self.signer,
+            registry_version,
+        )?;
+        Ok(())
     }
 }
 
@@ -645,7 +683,8 @@ impl Validator {
         let validate_tape_shares = || self.validate_tape_shares(pool_reader);
         let validate_catch_up_package_shares =
             || self.validate_catch_up_package_shares(pool_reader);
-        let calls: [&'_ dyn Fn() -> ChangeSet; 11] = [
+        let validate_equivocation_proofs = || self.validate_equivocation_proofs(pool_reader);
+        let calls: [&'_ dyn Fn() -> ChangeSet; 12] = [
             &|| self.call_with_metrics("Finalization", validate_finalization),
             &|| self.call_with_metrics("Notarization", validate_notarization),
             &|| self.call_with_metrics("BlockProposal", validate_blocks),
@@ -657,6 +696,7 @@ impl Validator {
             &|| self.call_with_metrics("RandomBeaconShare", validate_beacon_shares),
             &|| self.call_with_metrics("RandomTapeShare", validate_tape_shares),
             &|| self.call_with_metrics("CUPShare", validate_catch_up_package_shares),
+            &|| self.call_with_metrics("EquivocationProof", validate_equivocation_proofs),
         ];
         self.schedule.call_next(&calls)
     }
@@ -1515,6 +1555,70 @@ impl Validator {
         Ok(block)
     }
 
+    /// Return a `ChangeSet` of `EquivocationProof` artifacts. This consists
+    /// of checking that both signatures are valid signatures of the two
+    /// derived block metadata instances, that the subnet is identical to
+    /// our current subnet, and that the signer was a blockmaker at that height.
+    fn validate_equivocation_proofs(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+        let finalized_height = pool_reader.get_finalized_height();
+        let range = match pool_reader
+            .pool()
+            .unvalidated()
+            .equivocation_proof()
+            .height_range()
+        {
+            Some(height) => height,
+            None => return ChangeSet::new(),
+        };
+
+        let range_to_validate = HeightRange::new(finalized_height.increment(), range.max);
+        let mut existing_proofs = HashSet::<(NodeId, Height)>::from_iter(
+            pool_reader
+                .pool()
+                .validated()
+                .equivocation_proof()
+                .get_by_height_range(range_to_validate.clone())
+                .map(|proof| (proof.signer, proof.height)),
+        );
+
+        pool_reader
+            .pool()
+            .unvalidated()
+            .equivocation_proof()
+            .get_by_height_range(range_to_validate)
+            .filter_map(|proof| {
+                let signer_height_pair = (proof.signer, proof.height);
+                if existing_proofs.contains(&signer_height_pair) {
+                    return Some(ChangeAction::RemoveFromUnvalidated(proof.into_message()));
+                }
+
+                let result = if proof.hash1 == proof.hash2 {
+                    Some(ChangeAction::HandleInvalid(
+                        proof.into_message(),
+                        "both block hashes in the equivocation proof are identical".to_string(),
+                    ))
+                } else if proof.subnet_id != self.replica_config.subnet_id {
+                    Some(ChangeAction::HandleInvalid(
+                        proof.into_message(),
+                        "equivocation proof has different subnet id".to_string(),
+                    ))
+                } else {
+                    let verification = self.verify_artifact(pool_reader, &proof);
+                    self.compute_action_from_artifact_verification(
+                        pool_reader,
+                        verification,
+                        proof.into_message(),
+                    )
+                };
+
+                if let Some(ChangeAction::MoveToValidated(_)) = result {
+                    existing_proofs.insert(signer_height_pair);
+                }
+                result
+            })
+            .collect()
+    }
+
     fn dedup_change_actions(&self, name: &str, actions: ChangeSet) -> ChangeSet {
         let mut change_set = ChangeSet::new();
         for action in actions {
@@ -1644,14 +1748,14 @@ impl Validator {
 
 #[cfg(test)]
 pub mod test {
+    use super::*;
     use crate::ecdsa::test_utils::{
         add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_master_public_key_id,
         fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };
-
-    use super::*;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
+    use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies, RefMockPayloadBuilder,
@@ -1672,17 +1776,21 @@ pub mod test {
     use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
+        batch::{BatchPayload, IngressPayload},
         consensus::{
-            idkg::PreSigId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
-            HashedBlock, HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent,
-            RandomTapeContent, SummaryPayload,
+            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
+            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
+            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
-        crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
-        CryptoHashOfState, ReplicaVersion,
+        CryptoHashOfState, ReplicaVersion, Time,
     };
     use std::{
         borrow::Borrow,
@@ -3279,5 +3387,203 @@ pub mod test {
             );
             pool.apply_changes(changeset);
         })
+    }
+
+    /// Returns a consensus pool and validator, along with a valid equivocation proof.
+    fn setup_equivocation_proof_test(
+        pool_config: ArtifactPoolConfig,
+    ) -> (TestConsensusPool, Validator, EquivocationProof) {
+        let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+        let ValidatorAndDependencies {
+            validator,
+            membership,
+            mut pool,
+            replica_config,
+            ..
+        } = setup_dependencies(pool_config, &subnet_members);
+
+        pool.advance_round_normal_operation();
+        pool.insert_validated(pool.make_next_beacon());
+
+        let original = pool.make_next_block();
+        let mut block = original.clone();
+        let correct_signer = get_block_maker_by_rank(
+            membership.borrow(),
+            &PoolReader::new(&pool),
+            block.height(),
+            &subnet_members,
+            Rank(0),
+        );
+
+        // Create two different blocks from the same block maker
+        let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
+            .method_payload(vec![0; 64])
+            .nonce(0)
+            .expiry_time(Time::from_nanos_since_unix_epoch(0))
+            .build()]);
+        block.content.as_mut().payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
+                    ingress,
+                    ..BatchPayload::default()
+                },
+                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                ecdsa: None,
+            }),
+        );
+        block.signature.signer = correct_signer;
+        block.update_content();
+        let first = block.clone();
+        block.content.as_mut().payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
+                    ingress: IngressPayload::from(vec![]),
+                    ..BatchPayload::default()
+                },
+                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                ecdsa: None,
+            }),
+        );
+        block.update_content();
+        let second = block.clone();
+
+        (
+            pool,
+            validator,
+            EquivocationProof {
+                signer: correct_signer,
+                version: block.content.as_ref().version.clone(),
+                height: Height::new(2),
+                subnet_id: replica_config.subnet_id,
+                hash1: first.content.get_hash().clone(),
+                signature1: BasicSigOf::new(BasicSig(vec![])),
+                hash2: second.content.get_hash().clone(),
+                signature2: BasicSigOf::new(BasicSig(vec![])),
+            },
+        )
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_identical_hashes() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Invalidate proof with identical hashes
+            proof.hash2 = proof.hash1.clone();
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("both block hashes in the equivocation proof are identical")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_wrong_subnet_id() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Invalidate proof with incorrect subnet ID
+            proof.subnet_id = subnet_test_id(1337);
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("equivocation proof has different subnet id")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_signer_not_in_subnet() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Don't validate if signer is not part of subnet
+            proof.signer = node_test_id(10);
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("NodeNotFound")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_signer_not_blockmaker() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Some test id that's different from the block maker, but still part of the subnet
+            let non_blockmaker_node = node_test_id(3);
+            assert!(non_blockmaker_node != proof.signer);
+
+            proof.signer = non_blockmaker_node;
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("NotABlockmaker")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_validates() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
+            // Validate a well-formed equivocation proof, with the correct subnet ID
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::EquivocationProof(_)
+                )]
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_ignored_if_below_finalized_height() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
+            pool.finalize(&block);
+            assert!(validator.on_state_change(&PoolReader::new(&pool))[..].is_empty());
+        });
+    }
+
+    #[test]
+    fn test_equivocation_validate_only_one_per_height_and_signer() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Insert two different proofs for the same height and signer
+            pool.insert_unvalidated(proof.clone());
+            let mut hash = proof.hash1.clone().get();
+            hash.0[0] = !hash.0[0];
+            proof.hash2 = CryptoHashOf::new(hash);
+            pool.insert_unvalidated(proof.clone());
+
+            // We should validate only a single equivocation proof, the other
+            // one is expected to be removed from the unvalidated pool.
+            let change_set = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                change_set[..],
+                [
+                    ChangeAction::MoveToValidated(ConsensusMessage::EquivocationProof(_)),
+                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::EquivocationProof(_))
+                ]
+            );
+        });
     }
 }

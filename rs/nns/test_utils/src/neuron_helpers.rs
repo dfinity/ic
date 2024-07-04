@@ -1,4 +1,4 @@
-use crate::state_test_helpers::{list_neurons, nns_governance_make_proposal};
+use crate::state_test_helpers::{list_neurons_by_principal, nns_governance_make_proposal};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
@@ -101,13 +101,16 @@ pub fn get_all_test_neurons(state_machine: &StateMachine) -> Vec<Neuron> {
     let mut neurons = vec![];
 
     // Get Test Neuron 1
-    neurons.extend(list_neurons(state_machine, get_neuron_1().principal_id).full_neurons);
+    neurons
+        .extend(list_neurons_by_principal(state_machine, get_neuron_1().principal_id).full_neurons);
 
     // Get Test Neuron 2
-    neurons.extend(list_neurons(state_machine, get_neuron_2().principal_id).full_neurons);
+    neurons
+        .extend(list_neurons_by_principal(state_machine, get_neuron_2().principal_id).full_neurons);
 
     // Get Test Neuron 3
-    neurons.extend(list_neurons(state_machine, get_neuron_3().principal_id).full_neurons);
+    neurons
+        .extend(list_neurons_by_principal(state_machine, get_neuron_3().principal_id).full_neurons);
 
     neurons
 }

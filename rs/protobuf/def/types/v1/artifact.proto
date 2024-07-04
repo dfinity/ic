@@ -7,7 +7,7 @@ import "registry/subnet/v1/subnet.proto";
 import "types/v1/canister_http.proto";
 import "types/v1/idkg.proto";
 
-message EcdsaMessageAttribute {
+message IDkgMessageAttribute {
   oneof kind {
     registry.subnet.v1.IDkgTranscriptId signed_dealing = 1;
     registry.subnet.v1.IDkgTranscriptId dealing_support = 2;
@@ -41,6 +41,7 @@ message ConsensusMessageHash {
     bytes random_tape_share = 9;
     bytes catch_up_package = 10;
     bytes catch_up_package_share = 11;
+    bytes equivocation_proof = 12;
   }
 }
 

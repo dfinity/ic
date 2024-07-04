@@ -195,7 +195,7 @@ pub fn run_canister_sandbox(
     // TODO(RUN-204): Get the logger config from the replica instead of
     // hardcoding the parameters.
     let logger_config = ic_config::logger::Config {
-        target: ic_config::logger::LogTarget::Stderr,
+        log_destination: ic_config::logger::LogDestination::Stderr,
         level: slog::Level::Warning,
         ..Default::default()
     };
@@ -228,7 +228,7 @@ pub fn run_canister_sandbox(
     // RPC service offered by this binary.
     let frame_handler = transport::Demux::<_, _, protocol::transport::ControllerToSandbox>::new(
         Arc::new(rpc::ServerStub::new(svc, reply_out_stream)),
-        reply_handler,
+        reply_handler.clone(),
     );
 
     // It is fine if we fail to spawn this thread. Used for fault
@@ -249,4 +249,5 @@ pub fn run_canister_sandbox(
         socket,
         SocketReaderConfig::for_sandbox(),
     );
+    reply_handler.flush_with_errors();
 }

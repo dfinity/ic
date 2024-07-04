@@ -264,6 +264,7 @@ message CanisterControllersChange {
 message CanisterLoadSnapshot {
   uint64 canister_version = 1;
   uint64 taken_at_timestamp = 2;
+  bytes snapshot_id = 3;
 }
 
 message CanisterChange {

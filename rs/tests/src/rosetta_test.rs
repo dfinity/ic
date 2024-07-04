@@ -21,12 +21,6 @@ use icp_ledger::{
     DEFAULT_TRANSFER_FEE,
 };
 
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
-};
-use crate::util::block_on;
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
@@ -38,6 +32,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::{
     assert_ic_error, make_user_ed25519, rosetta_api_serv::RosettaApiHandle, send_icpts,
 };
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
+};
+use ic_system_test_driver::util::block_on;
 use ic_types::{messages::Blob, CanisterId};
 use lazy_static::lazy_static;
 use slog::info;

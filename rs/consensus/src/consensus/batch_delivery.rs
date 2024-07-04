@@ -24,14 +24,16 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse},
+    batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
         idkg::{self, CompletedSignature},
         Block,
     },
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    crypto::threshold_sig::{
+        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        ThresholdSigPublicKey,
+    },
     messages::{CallbackId, Payload, RejectContext},
     Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
 };
@@ -215,9 +217,13 @@ pub fn deliver_batches(
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
         let next_checkpoint_height = dkg_summary.get_next_start_height();
+        let current_interval_length = dkg_summary.interval_length;
         let batch = Batch {
             batch_number: height,
-            next_checkpoint_height: Some(next_checkpoint_height),
+            batch_summary: Some(BatchSummary {
+                next_checkpoint_height,
+                current_interval_length,
+            }),
             requires_full_state_hash,
             messages: batch_messages,
             randomness,

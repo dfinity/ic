@@ -15,7 +15,8 @@ fn compile_and_serialize(
     embedder: &WasmtimeEmbedder,
     wasm_src: Vec<u8>,
 ) -> HypervisorResult<(CompilationResult, SerializedModule)> {
-    let wasm = wasm_utils::decoding::decode_wasm(Arc::new(wasm_src))?;
+    let wasm =
+        wasm_utils::decoding::decode_wasm(embedder.config().wasm_max_size, Arc::new(wasm_src))?;
     let (_cache, res) = wasm_utils::compile(embedder, &wasm);
     res
 }
@@ -155,7 +156,7 @@ impl Drop for WasmCompilerProxy {
 
 pub fn compiler_sandbox_main() {
     let logger_config = ic_config::logger::Config {
-        target: ic_config::logger::LogTarget::Stderr,
+        log_destination: ic_config::logger::LogDestination::Stderr,
         level: slog::Level::Warning,
         ..Default::default()
     };

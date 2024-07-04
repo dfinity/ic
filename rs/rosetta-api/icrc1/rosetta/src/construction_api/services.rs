@@ -243,6 +243,7 @@ mod tests {
     use ic_icrc1_test_utils::construction_payloads_request_metadata;
     use ic_icrc1_test_utils::minter_identity;
     use ic_icrc1_test_utils::valid_transactions_strategy;
+    use ic_icrc1_test_utils::KeyPairGenerator;
     use ic_icrc1_test_utils::LedgerEndpointArg;
     use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
     use ic_icrc1_tokens_u256::U256;
@@ -346,13 +347,13 @@ mod tests {
     proptest! {
         #[test]
         fn test_construction_derive_ed(seed in any::<u64>()) {
-            let key_pair = Ed25519KeyPair::generate_from_u64(seed);
+            let key_pair = Ed25519KeyPair::generate(seed);
             call_construction_derive(&key_pair);
         }
 
         #[test]
         fn test_construction_derive_sepc(seed in any::<u64>()) {
-            let key_pair = Secp256k1KeyPair::generate_from_u64(seed);
+            let key_pair = Secp256k1KeyPair::generate(seed);
             call_construction_derive(&key_pair);
         }
     }

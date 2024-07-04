@@ -314,8 +314,13 @@ fn check_memo() {
     }
 
     for memo_size_bytes in 33..40 {
-        assert_eq!(Err(UserError::new(ErrorCode::CanisterCalledTrap, "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: the memo field is too large")),
-            mint_with_memo(memo_size_bytes));
+        mint_with_memo(memo_size_bytes)
+            .unwrap_err()
+            .assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
+                `ic0.trap` with message: the memo field is too large",
+            );
     }
 }
 
@@ -1326,12 +1331,30 @@ fn test_icrc21_standard() {
 
 mod metrics {
     use crate::{encode_init_args, ledger_wasm};
+    use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
+
+    #[test]
+    fn should_export_num_archives_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_num_archives_metric(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
 
     #[test]
     fn should_export_total_memory_usage_metrics() {
         ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
             ledger_wasm(),
             encode_init_args,
+        );
+    }
+
+    #[test]
+    fn should_export_ledger_total_blocks_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_transactions_metric(
+            ledger_wasm(),
+            encode_init_args,
+            LedgerSuiteType::ICP,
         );
     }
 }

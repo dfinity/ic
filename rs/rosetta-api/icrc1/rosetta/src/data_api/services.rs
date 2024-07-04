@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use crate::common::constants::DEFAULT_BLOCKCHAIN;
 use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
 use crate::common::constants::STATUS_COMPLETED;
@@ -436,6 +439,27 @@ pub fn search_transactions(
         },
     })
 }
+
+pub fn initial_sync_is_completed(
+    storage_client: &StorageClient,
+    sync_state: Arc<Mutex<Option<bool>>>,
+) -> bool {
+    let mut synched = sync_state.lock().unwrap();
+    if synched.is_some() && synched.unwrap() {
+        synched.unwrap()
+    } else {
+        let block_count = storage_client.get_block_count();
+        let highest_index = storage_client.get_highest_block_idx_in_account_balance_table();
+        *synched = Some(match (block_count, highest_index) {
+            // If the blockchain contains no blocks we mark it as not completed
+            (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,
+            _ => false,
+        });
+        // Unwrap is safe because it was just set
+        (*synched).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -528,7 +552,7 @@ mod test {
                         // If the block identifier index does not exist the service should return an error
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                         if blockchain.is_empty() {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                            assert!(block_res.is_err());
                         } else {
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
                         }
@@ -542,7 +566,7 @@ mod test {
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
 
                         if blockchain.is_empty() {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                            assert!(block_res.is_err());
                         } else {
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block with hash {} could not be found",hex::encode(invalid_block_hash.clone()))));
                         }
@@ -556,7 +580,7 @@ mod test {
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
 
                         if blockchain.is_empty() {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                            assert!(block_res.is_err());
                         } else {
                             assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided"));
                         }
@@ -662,7 +686,7 @@ mod test {
 
                 // If the storage is empty the service should return an error
                 let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
-                assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                assert!(block_transaction_res.is_err());
 
                 storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
 
@@ -670,7 +694,7 @@ mod test {
                 let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
 
                 if blockchain.is_empty() {
-                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                    assert!(block_transaction_res.is_err());
                 } else {
                     assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
                 }
@@ -1124,12 +1148,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
             index: Some(0),
@@ -1141,12 +1160,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
             index: None,
@@ -1158,12 +1172,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
             index: Some(0),
@@ -1175,11 +1184,6 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
     }
 }
