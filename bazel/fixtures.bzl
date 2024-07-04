@@ -3,8 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 def with_fixture_extension(basename):
     return basename + ".fixture"
 
-def release_fixture_name(name):
-    return "release_fixture_" + name
+def release_fixture_name(label):
+    return "release_fixture_" + label.name
 
 
 def rust_fixture_generator(name, **kwargs):
@@ -18,7 +18,7 @@ def rust_fixture_generator(name, **kwargs):
     `upload_fixtures` rule. When this is done, the CI will, on release, generate an 
     `http_file` target that can be used to download the fixture file (and later used in tests).
     To retrieve the name of the http_target, given a `rust_fixture_generator` called `name`,
-    use `release_fixture_name(name)`.
+    use `release_fixture_name(label)`.
     """
     binary_name = name + "_binary"
     rust_binary(

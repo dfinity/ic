@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/crypto/ed25519",
+    "//rs/types/types",
+    "@crate_index//:lazy_static",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
+]
+
+rust_library(
+    name = "release_fixtures",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_test_release_fixtures",
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)

@@ -1,0 +1,20 @@
+load("//bazel:fixtures.bzl", "rust_fixture_generator", "release_fixture_name")
+load("@rules_rust//rust:defs.bzl", "rust_test")
+#load("@bazel_skylib//lib:labels.bzl", "Label")
+
+rust_fixture_generator(
+    name = "dummy_fixture",
+    srcs = ["src/dummy_fixture.rs"],
+    edition = "2021",
+)
+
+# Enable once we have some actual URLs in release_fixtures.bzl (and thus WORKSPACE)
+#rust_test(
+#    name = "dummy_fixture_test",
+#    srcs = ["tests/dummy_fixture_test.rs"],
+#    edition = "2021",
+#    deps = ["//rs/test_utilities/release_fixtures:release_fixtures"],
+#    data = ["@{release_fixture}//file".format(
+#        release_fixture = release_fixture_name(package_relative_label(":dummy_fixture"))
+#    )],
+#)
