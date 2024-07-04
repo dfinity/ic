@@ -11,7 +11,7 @@ use crate::{
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-        MAX_LIST_NEURONS_RESULTS,
+        MAX_LIST_NEURONS_RESULTS, MAX_KEEP_REWARD_EVENTS_TO_NEURON_REWARD_E8S_PER_NEURON
     },
     pb::{
         sns_root_types::{
