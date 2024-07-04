@@ -11,7 +11,6 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 fs_extra = "1.2.0"
-ic-nns-common = { path = "../nns/common" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../crypto/node_key_validation" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }

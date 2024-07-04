@@ -14,6 +14,7 @@ use std::{
     str::FromStr,
 };
 
+use prost::Message;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
@@ -23,7 +24,6 @@ use x509_cert::spki; // re-export of spki crate
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
@@ -395,7 +395,7 @@ impl IcConfig {
 
             mutations.extend(vec![insert(
                 make_firewall_rules_record_key(&FirewallRulesScope::Global),
-                encode_or_panic(&FirewallRuleSet {
+                FirewallRuleSet {
                     entries: vec![FirewallRule {
                         ipv4_prefixes: Vec::new(),
                         ipv6_prefixes: prefixes.split(',').map(|v| v.to_string()).collect(),
@@ -405,7 +405,8 @@ impl IcConfig {
                         user: None,
                         direction: Some(FirewallRuleDirection::Inbound as i32),
                     }],
-                }),
+                }
+                .encode_to_vec(),
             )]);
         }
 
