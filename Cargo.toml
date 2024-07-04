@@ -568,6 +568,8 @@ serde_cbor = "0.11.2"
 serde_json = { version = "1.0.117", features = ["std"] }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
+sha2 = "0.10"
+sha3 = "0.10"
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
