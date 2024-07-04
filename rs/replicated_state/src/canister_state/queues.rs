@@ -943,13 +943,15 @@ impl CanisterQueues {
     /// Helper function to concisely validate stats adjustments in debug builds,
     /// by writing `debug_assert!(self.stats_ok())`.
     fn stats_ok(&self) -> bool {
-        debug_assert_eq!(
-            Self::calculate_queue_stats(
-                &self.canister_queues,
-                self.queue_stats.guaranteed_response_memory_reservations
-            ),
-            self.queue_stats
+        let mut calculated_stats = Self::calculate_queue_stats(
+            &self.canister_queues,
+            self.queue_stats.guaranteed_response_memory_reservations,
         );
+        // We must assume that `transient_stream_responses_size_bytes` is correct
+        // because there is no way to calculate it based on `self`.
+        calculated_stats.transient_stream_responses_size_bytes =
+            self.queue_stats.transient_stream_responses_size_bytes;
+        debug_assert_eq!(calculated_stats, self.queue_stats);
         true
     }
 
@@ -1365,7 +1367,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
-#[derive(Clone, Debug, Default, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct QueueStats {
     /// Count of guaranteed response memory reservations across input and output
     /// queues. This is equivalent to the number of outstanding (inbound or outbound)
@@ -1451,21 +1453,6 @@ impl QueueStats {
             debug_assert!(self.output_queues_reserved_slots > 0);
             self.output_queues_reserved_slots -= 1;
         }
-    }
-}
-
-// Custom `PartialEq`, ignoring `transient_stream_responses_size_bytes`.
-impl PartialEq for QueueStats {
-    fn eq(&self, rhs: &Self) -> bool {
-        let QueueStats {
-            guaranteed_response_memory_reservations,
-            input_queues_reserved_slots,
-            output_queues_reserved_slots,
-            transient_stream_responses_size_bytes: _,
-        } = self;
-        *guaranteed_response_memory_reservations == rhs.guaranteed_response_memory_reservations
-            && *input_queues_reserved_slots == rhs.input_queues_reserved_slots
-            && *output_queues_reserved_slots == rhs.output_queues_reserved_slots
     }
 }
 
