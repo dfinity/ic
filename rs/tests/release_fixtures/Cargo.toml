@@ -1,0 +1,10 @@
+[package]
+name = "dummy-fixture"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dev-dependencies]
+ic-test-release-fixtures = { path = "../../test_utilities/release_fixtures" }

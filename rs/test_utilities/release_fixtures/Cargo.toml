@@ -1,0 +1,7 @@
+[package]
+name = "ic_test_release_fixtures"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true

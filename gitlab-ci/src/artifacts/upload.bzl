@@ -133,7 +133,7 @@ def _generate_fixtures_bzl_impl(ctx):
     sha_extension = "SHA256SUM"
     # For each input, we find the corresponding files with the SHA256SUM and URL
     triples = [
-        (input.label.name,
+        (input.label,
         [f for f in ctx.files.uploaded_files if f.path.endswith(filesum_file(ctx.attr.upload_label.label.name, file))][0],
         [f for f in ctx.files.uploaded_files if f.path.endswith(url_file(ctx.attr.upload_label.label.name, file))][0] 
         ) for (input, file) in zip(ctx.attr.inputs, ctx.files.inputs)
@@ -141,10 +141,10 @@ def _generate_fixtures_bzl_impl(ctx):
     # As we're only constructing the rule and don't have access to the actual sha256/URLs right now, we create
     # a single large shell command that iterates over all the inputs and writes the corresponding information
     commands = ["echo 'RELEASE_FIXTURES = [' > {out_path}".format(out_path = out.path)]
-    for (name, sha256sum, url) in triples:
+    for (label, sha256sum, url) in triples:
         file_commands = [
             """echo   '    {'""",
-            """echo   '        "name": "{name}",'""".format(name = release_fixture_name(name)),
+            """echo   '        "name": "{name}",'""".format(name = release_fixture_name(label)),
             """printf '        "url": "%s",\n' $(cat {url_path})""".format(url_path = url.path),
             """printf '        "sha256": "%s\",\n' $(cut -d ' ' -f1 {sha256_path})""".format(sha256_path = sha256sum.path),
             """echo   '    },'"""
