@@ -74,8 +74,8 @@ fn execute_instance(
                     });
                 }
                 InputMessage::Ecdsa(msg) => {
-                    let mut ecdsa_pool = instance.driver.ecdsa_pool.write().unwrap();
-                    ecdsa_pool.insert(UnvalidatedArtifact {
+                    let mut idkg_pool = instance.driver.idkg_pool.write().unwrap();
+                    idkg_pool.insert(UnvalidatedArtifact {
                         message: msg,
                         peer_id: node_test_id(0),
                         timestamp,

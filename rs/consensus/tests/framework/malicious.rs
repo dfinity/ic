@@ -6,7 +6,7 @@ use ic_consensus::ecdsa::{malicious_pre_signer, EcdsaImpl};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
-    ecdsa::{EcdsaChangeSet, EcdsaPool},
+    ecdsa::{IDkgChangeSet, IDkgPool},
     p2p::consensus::ChangeSetProducer,
 };
 use ic_protobuf::types::v1 as pb;
@@ -123,9 +123,9 @@ pub struct EcdsaWithMaliciousFlags {
     malicious_flags: MaliciousFlags,
 }
 
-impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaWithMaliciousFlags {
-    type ChangeSet = EcdsaChangeSet;
-    fn on_state_change(&self, pool: &T) -> EcdsaChangeSet {
+impl<T: IDkgPool> ChangeSetProducer<T> for EcdsaWithMaliciousFlags {
+    type ChangeSet = IDkgChangeSet;
+    fn on_state_change(&self, pool: &T) -> IDkgChangeSet {
         let changeset = EcdsaImpl::on_state_change(&self.ecdsa.borrow(), pool);
         if self.malicious_flags.is_ecdsa_malicious() {
             malicious_pre_signer::maliciously_alter_changeset(

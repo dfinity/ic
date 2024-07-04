@@ -811,7 +811,7 @@ pub enum IDkgMessage {
 }
 
 impl IDkgMessage {
-    pub fn message_id(&self) -> EcdsaArtifactId {
+    pub fn message_id(&self) -> IDkgArtifactId {
         match self {
             IDkgMessage::EcdsaSignedDealing(x) => x.message_id(),
             IDkgMessage::EcdsaDealingSupport(x) => x.message_id(),
@@ -857,10 +857,10 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
     }
 }
 
-/// EcdsaArtifactId is the unique identifier for the artifacts. It is made of a prefix + crypto
+/// IDkgArtifactId is the unique identifier for the artifacts. It is made of a prefix + crypto
 /// hash of the message itself:
-/// EcdsaArtifactId = `<EcdsaPrefix, CryptoHash<Message>>`
-/// EcdsaPrefix     = <8 byte group tag, 8 byte meta info hash>
+/// IDkgArtifactId = `<IDkgPrefix, CryptoHash<Message>>`
+/// IDkgPrefix     = <8 byte group tag, 8 byte meta info hash>
 ///
 /// Two kinds of look up are possible with this:
 /// 1. Look up by full key of <prefix + crypto hash>, which would return the matching
@@ -892,13 +892,13 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
 /// be rare, and the prefix lookup should usually return a single entry.
 ///
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
-pub struct EcdsaPrefix {
+pub struct IDkgPrefix {
     group_tag: u64,
     meta_hash: u64,
     height: Height,
 }
 
-impl EcdsaPrefix {
+impl IDkgPrefix {
     pub fn new(group_tag: u64, hash: [u8; 32], height: Height) -> Self {
         let w1 = u64::from_be_bytes((&hash[0..8]).try_into().unwrap());
         let w2 = u64::from_be_bytes((&hash[8..16]).try_into().unwrap());
@@ -928,8 +928,8 @@ impl EcdsaPrefix {
     }
 }
 
-impl From<&EcdsaPrefix> for pb::EcdsaPrefix {
-    fn from(value: &EcdsaPrefix) -> Self {
+impl From<&IDkgPrefix> for pb::IDkgPrefix {
+    fn from(value: &IDkgPrefix) -> Self {
         Self {
             group_tag: value.group_tag,
             meta_hash: value.meta_hash,
@@ -938,8 +938,8 @@ impl From<&EcdsaPrefix> for pb::EcdsaPrefix {
     }
 }
 
-impl From<&pb::EcdsaPrefix> for EcdsaPrefix {
-    fn from(value: &pb::EcdsaPrefix) -> Self {
+impl From<&pb::IDkgPrefix> for IDkgPrefix {
+    fn from(value: &pb::IDkgPrefix) -> Self {
         Self {
             group_tag: value.group_tag,
             meta_hash: value.meta_hash,
@@ -948,17 +948,17 @@ impl From<&pb::EcdsaPrefix> for EcdsaPrefix {
     }
 }
 
-pub type EcdsaPrefixOf<T> = Id<T, EcdsaPrefix>;
+pub type IDkgPrefixOf<T> = Id<T, IDkgPrefix>;
 
 pub fn dealing_prefix(
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
-) -> EcdsaPrefixOf<SignedIDkgDealing> {
+) -> IDkgPrefixOf<SignedIDkgDealing> {
     // Group_tag: transcript Id, Meta info: <dealer_id>
     let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(
+    IDkgPrefixOf::new(IDkgPrefix::new(
         transcript_id.id(),
         hasher.finish(),
         transcript_id.source_height(),
@@ -969,13 +969,13 @@ pub fn dealing_support_prefix(
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
     support_node_id: &NodeId,
-) -> EcdsaPrefixOf<IDkgDealingSupport> {
+) -> IDkgPrefixOf<IDkgDealingSupport> {
     // Group_tag: transcript Id, Meta info: <dealer_id + support sender>
     let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
     support_node_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(
+    IDkgPrefixOf::new(IDkgPrefix::new(
         transcript_id.id(),
         hasher.finish(),
         transcript_id.source_height(),
@@ -985,12 +985,12 @@ pub fn dealing_support_prefix(
 pub fn ecdsa_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
-) -> EcdsaPrefixOf<EcdsaSigShare> {
+) -> IDkgPrefixOf<EcdsaSigShare> {
     // Group_tag: quadruple Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(
+    IDkgPrefixOf::new(IDkgPrefix::new(
         request_id.pre_signature_id.id(),
         hasher.finish(),
         request_id.height,
@@ -1000,12 +1000,12 @@ pub fn ecdsa_sig_share_prefix(
 pub fn schnorr_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
-) -> EcdsaPrefixOf<SchnorrSigShare> {
+) -> IDkgPrefixOf<SchnorrSigShare> {
     // Group_tag: pre-signature Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(
+    IDkgPrefixOf::new(IDkgPrefix::new(
         request_id.pre_signature_id.id(),
         hasher.finish(),
         request_id.height,
@@ -1016,13 +1016,13 @@ pub fn complaint_prefix(
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
     complainer_id: &NodeId,
-) -> EcdsaPrefixOf<EcdsaComplaint> {
+) -> IDkgPrefixOf<EcdsaComplaint> {
     // Group_tag: transcript Id, Meta info: <dealer_id + complainer_id>
     let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
     complainer_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(
+    IDkgPrefixOf::new(IDkgPrefix::new(
         transcript_id.id(),
         hasher.finish(),
         transcript_id.source_height(),
@@ -1033,13 +1033,13 @@ pub fn opening_prefix(
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
     opener_id: &NodeId,
-) -> EcdsaPrefixOf<EcdsaOpening> {
+) -> IDkgPrefixOf<EcdsaOpening> {
     // Group_tag: transcript Id, Meta info: <dealer_id + opener_id>
     let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
     opener_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(
+    IDkgPrefixOf::new(IDkgPrefix::new(
         transcript_id.id(),
         hasher.finish(),
         transcript_id.source_height(),
@@ -1048,44 +1048,41 @@ pub fn opening_prefix(
 
 /// The identifier for artifacts/messages.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
-pub enum EcdsaArtifactId {
+pub enum IDkgArtifactId {
     Dealing(
-        EcdsaPrefixOf<SignedIDkgDealing>,
+        IDkgPrefixOf<SignedIDkgDealing>,
         CryptoHashOf<SignedIDkgDealing>,
     ),
     DealingSupport(
-        EcdsaPrefixOf<IDkgDealingSupport>,
+        IDkgPrefixOf<IDkgDealingSupport>,
         CryptoHashOf<IDkgDealingSupport>,
     ),
-    EcdsaSigShare(EcdsaPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
-    SchnorrSigShare(
-        EcdsaPrefixOf<SchnorrSigShare>,
-        CryptoHashOf<SchnorrSigShare>,
-    ),
-    Complaint(EcdsaPrefixOf<EcdsaComplaint>, CryptoHashOf<EcdsaComplaint>),
-    Opening(EcdsaPrefixOf<EcdsaOpening>, CryptoHashOf<EcdsaOpening>),
+    EcdsaSigShare(IDkgPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
+    SchnorrSigShare(IDkgPrefixOf<SchnorrSigShare>, CryptoHashOf<SchnorrSigShare>),
+    Complaint(IDkgPrefixOf<EcdsaComplaint>, CryptoHashOf<EcdsaComplaint>),
+    Opening(IDkgPrefixOf<EcdsaOpening>, CryptoHashOf<EcdsaOpening>),
 }
 
-impl EcdsaArtifactId {
-    pub fn prefix(&self) -> EcdsaPrefix {
+impl IDkgArtifactId {
+    pub fn prefix(&self) -> IDkgPrefix {
         match self {
-            EcdsaArtifactId::Dealing(prefix, _) => prefix.as_ref().clone(),
-            EcdsaArtifactId::DealingSupport(prefix, _) => prefix.as_ref().clone(),
-            EcdsaArtifactId::EcdsaSigShare(prefix, _) => prefix.as_ref().clone(),
-            EcdsaArtifactId::SchnorrSigShare(prefix, _) => prefix.as_ref().clone(),
-            EcdsaArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
-            EcdsaArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::Dealing(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::DealingSupport(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::EcdsaSigShare(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::SchnorrSigShare(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
         }
     }
 
     pub fn hash(&self) -> CryptoHash {
         match self {
-            EcdsaArtifactId::Dealing(_, hash) => hash.as_ref().clone(),
-            EcdsaArtifactId::DealingSupport(_, hash) => hash.as_ref().clone(),
-            EcdsaArtifactId::EcdsaSigShare(_, hash) => hash.as_ref().clone(),
-            EcdsaArtifactId::SchnorrSigShare(_, hash) => hash.as_ref().clone(),
-            EcdsaArtifactId::Complaint(_, hash) => hash.as_ref().clone(),
-            EcdsaArtifactId::Opening(_, hash) => hash.as_ref().clone(),
+            IDkgArtifactId::Dealing(_, hash) => hash.as_ref().clone(),
+            IDkgArtifactId::DealingSupport(_, hash) => hash.as_ref().clone(),
+            IDkgArtifactId::EcdsaSigShare(_, hash) => hash.as_ref().clone(),
+            IDkgArtifactId::SchnorrSigShare(_, hash) => hash.as_ref().clone(),
+            IDkgArtifactId::Complaint(_, hash) => hash.as_ref().clone(),
+            IDkgArtifactId::Opening(_, hash) => hash.as_ref().clone(),
         }
     }
 
@@ -1101,62 +1098,61 @@ impl EcdsaArtifactId {
     }
 }
 
-impl From<(IDkgMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
+impl From<(IDkgMessageType, IDkgPrefix, CryptoHash)> for IDkgArtifactId {
     fn from(
-        (message_type, prefix, crypto_hash): (IDkgMessageType, EcdsaPrefix, CryptoHash),
-    ) -> EcdsaArtifactId {
+        (message_type, prefix, crypto_hash): (IDkgMessageType, IDkgPrefix, CryptoHash),
+    ) -> IDkgArtifactId {
         match message_type {
             IDkgMessageType::Dealing => {
-                EcdsaArtifactId::Dealing(EcdsaPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
+                IDkgArtifactId::Dealing(IDkgPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
             }
-            IDkgMessageType::DealingSupport => EcdsaArtifactId::DealingSupport(
-                EcdsaPrefixOf::new(prefix),
+            IDkgMessageType::DealingSupport => IDkgArtifactId::DealingSupport(
+                IDkgPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            IDkgMessageType::EcdsaSigShare => EcdsaArtifactId::EcdsaSigShare(
-                EcdsaPrefixOf::new(prefix),
+            IDkgMessageType::EcdsaSigShare => IDkgArtifactId::EcdsaSigShare(
+                IDkgPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            IDkgMessageType::SchnorrSigShare => EcdsaArtifactId::SchnorrSigShare(
-                EcdsaPrefixOf::new(prefix),
+            IDkgMessageType::SchnorrSigShare => IDkgArtifactId::SchnorrSigShare(
+                IDkgPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            IDkgMessageType::Complaint => EcdsaArtifactId::Complaint(
-                EcdsaPrefixOf::new(prefix),
-                CryptoHashOf::new(crypto_hash),
-            ),
+            IDkgMessageType::Complaint => {
+                IDkgArtifactId::Complaint(IDkgPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
+            }
             IDkgMessageType::Opening => {
-                EcdsaArtifactId::Opening(EcdsaPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
+                IDkgArtifactId::Opening(IDkgPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
             }
         }
     }
 }
 
-impl From<EcdsaArtifactId> for pb::EcdsaArtifactId {
-    fn from(value: EcdsaArtifactId) -> Self {
-        use pb::ecdsa_artifact_id::Kind;
+impl From<IDkgArtifactId> for pb::IDkgArtifactId {
+    fn from(value: IDkgArtifactId) -> Self {
+        use pb::i_dkg_artifact_id::Kind;
         let kind = match value.clone() {
-            EcdsaArtifactId::Dealing(p, h) => Kind::Dealing(pb::PrefixHashPair {
+            IDkgArtifactId::Dealing(p, h) => Kind::Dealing(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
-            EcdsaArtifactId::DealingSupport(p, h) => Kind::DealingSupport(pb::PrefixHashPair {
+            IDkgArtifactId::DealingSupport(p, h) => Kind::DealingSupport(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
-            EcdsaArtifactId::EcdsaSigShare(p, h) => Kind::EcdsaSigShare(pb::PrefixHashPair {
+            IDkgArtifactId::EcdsaSigShare(p, h) => Kind::EcdsaSigShare(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
-            EcdsaArtifactId::SchnorrSigShare(p, h) => Kind::SchnorrSigShare(pb::PrefixHashPair {
+            IDkgArtifactId::SchnorrSigShare(p, h) => Kind::SchnorrSigShare(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
-            EcdsaArtifactId::Complaint(p, h) => Kind::Complaint(pb::PrefixHashPair {
+            IDkgArtifactId::Complaint(p, h) => Kind::Complaint(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
-            EcdsaArtifactId::Opening(p, h) => Kind::Opening(pb::PrefixHashPair {
+            IDkgArtifactId::Opening(p, h) => Kind::Opening(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
@@ -1165,50 +1161,50 @@ impl From<EcdsaArtifactId> for pb::EcdsaArtifactId {
     }
 }
 
-impl TryFrom<pb::EcdsaArtifactId> for EcdsaArtifactId {
+impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
     type Error = ProxyDecodeError;
-    fn try_from(value: pb::EcdsaArtifactId) -> Result<Self, Self::Error> {
-        use pb::ecdsa_artifact_id::Kind;
+    fn try_from(value: pb::IDkgArtifactId) -> Result<Self, Self::Error> {
+        use pb::i_dkg_artifact_id::Kind;
         let kind = value
             .kind
             .clone()
-            .ok_or_else(|| ProxyDecodeError::MissingField("EcdsaArtifactId::kind"))?;
+            .ok_or_else(|| ProxyDecodeError::MissingField("IDkgArtifactId::kind"))?;
 
         Ok(match kind {
             Kind::Dealing(p) => Self::Dealing(
-                EcdsaPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Dealing::prefix")?),
+                IDkgPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Dealing::prefix")?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
             Kind::DealingSupport(p) => Self::DealingSupport(
-                EcdsaPrefixOf::new(try_from_option_field(
+                IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "DealingSupport::prefix",
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
             Kind::EcdsaSigShare(p) => Self::EcdsaSigShare(
-                EcdsaPrefixOf::new(try_from_option_field(
+                IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "EcdsaSigShare::prefix",
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
             Kind::SchnorrSigShare(p) => Self::SchnorrSigShare(
-                EcdsaPrefixOf::new(try_from_option_field(
+                IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "SchnorrSigShare::prefix",
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
             Kind::Complaint(p) => Self::Complaint(
-                EcdsaPrefixOf::new(try_from_option_field(
+                IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "Complaint::prefix",
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
             Kind::Opening(p) => Self::Opening(
-                EcdsaPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Opening::prefix")?),
+                IDkgPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Opening::prefix")?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
         })
@@ -1240,15 +1236,15 @@ impl From<&IDkgMessage> for IDkgMessageType {
     }
 }
 
-impl From<&EcdsaArtifactId> for IDkgMessageType {
-    fn from(id: &EcdsaArtifactId) -> IDkgMessageType {
+impl From<&IDkgArtifactId> for IDkgMessageType {
+    fn from(id: &IDkgArtifactId) -> IDkgMessageType {
         match id {
-            EcdsaArtifactId::Dealing(..) => IDkgMessageType::Dealing,
-            EcdsaArtifactId::DealingSupport(..) => IDkgMessageType::DealingSupport,
-            EcdsaArtifactId::EcdsaSigShare(..) => IDkgMessageType::EcdsaSigShare,
-            EcdsaArtifactId::SchnorrSigShare(..) => IDkgMessageType::SchnorrSigShare,
-            EcdsaArtifactId::Complaint(..) => IDkgMessageType::Complaint,
-            EcdsaArtifactId::Opening(..) => IDkgMessageType::Opening,
+            IDkgArtifactId::Dealing(..) => IDkgMessageType::Dealing,
+            IDkgArtifactId::DealingSupport(..) => IDkgMessageType::DealingSupport,
+            IDkgArtifactId::EcdsaSigShare(..) => IDkgMessageType::EcdsaSigShare,
+            IDkgArtifactId::SchnorrSigShare(..) => IDkgMessageType::SchnorrSigShare,
+            IDkgArtifactId::Complaint(..) => IDkgMessageType::Complaint,
+            IDkgArtifactId::Opening(..) => IDkgMessageType::Opening,
         }
     }
 }
@@ -1942,7 +1938,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
 /// from the different paths. This helps answer higher level queries
 /// (e.g) total time spent in stages like support share validation/ aggregation, per transcript.
 ///
-pub trait EcdsaStats: Send + Sync {
+pub trait IDkgStats: Send + Sync {
     /// Updates the set of transcripts being tracked currently.
     fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader);
 
@@ -1977,58 +1973,58 @@ pub trait EcdsaStats: Send + Sync {
     fn record_sig_share_aggregation(&self, request_id: &RequestId, duration: Duration);
 }
 
-/// EcdsaObject should be implemented by the ECDSA message types
+/// IDkgObject should be implemented by the ECDSA message types
 /// (e.g) EcdsaSignedDealing, EcdsaDealingSupport, etc
-pub trait EcdsaObject: CryptoHashable + Clone + Sized {
+pub trait IDkgObject: CryptoHashable + Clone + Sized {
     /// Returns the artifact prefix.
-    fn message_prefix(&self) -> EcdsaPrefixOf<Self>;
+    fn message_prefix(&self) -> IDkgPrefixOf<Self>;
 
     /// Returns the artifact Id.
-    fn message_id(&self) -> EcdsaArtifactId;
+    fn message_id(&self) -> IDkgArtifactId;
 }
 
-impl EcdsaObject for SignedIDkgDealing {
-    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+impl IDkgObject for SignedIDkgDealing {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         dealing_prefix(&self.idkg_dealing().transcript_id, &self.dealer_id())
     }
 
-    fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::Dealing(self.message_prefix(), crypto_hash(self))
+    fn message_id(&self) -> IDkgArtifactId {
+        IDkgArtifactId::Dealing(self.message_prefix(), crypto_hash(self))
     }
 }
 
-impl EcdsaObject for IDkgDealingSupport {
-    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+impl IDkgObject for IDkgDealingSupport {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         dealing_support_prefix(&self.transcript_id, &self.dealer_id, &self.sig_share.signer)
     }
 
-    fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::DealingSupport(self.message_prefix(), crypto_hash(self))
+    fn message_id(&self) -> IDkgArtifactId {
+        IDkgArtifactId::DealingSupport(self.message_prefix(), crypto_hash(self))
     }
 }
 
-impl EcdsaObject for EcdsaSigShare {
-    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+impl IDkgObject for EcdsaSigShare {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         ecdsa_sig_share_prefix(&self.request_id, &self.signer_id)
     }
 
-    fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::EcdsaSigShare(self.message_prefix(), crypto_hash(self))
+    fn message_id(&self) -> IDkgArtifactId {
+        IDkgArtifactId::EcdsaSigShare(self.message_prefix(), crypto_hash(self))
     }
 }
 
-impl EcdsaObject for SchnorrSigShare {
-    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+impl IDkgObject for SchnorrSigShare {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         schnorr_sig_share_prefix(&self.request_id, &self.signer_id)
     }
 
-    fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::SchnorrSigShare(self.message_prefix(), crypto_hash(self))
+    fn message_id(&self) -> IDkgArtifactId {
+        IDkgArtifactId::SchnorrSigShare(self.message_prefix(), crypto_hash(self))
     }
 }
 
-impl EcdsaObject for EcdsaComplaint {
-    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+impl IDkgObject for EcdsaComplaint {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         complaint_prefix(
             &self.content.idkg_complaint.transcript_id,
             &self.content.idkg_complaint.dealer_id,
@@ -2036,13 +2032,13 @@ impl EcdsaObject for EcdsaComplaint {
         )
     }
 
-    fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::Complaint(self.message_prefix(), crypto_hash(self))
+    fn message_id(&self) -> IDkgArtifactId {
+        IDkgArtifactId::Complaint(self.message_prefix(), crypto_hash(self))
     }
 }
 
-impl EcdsaObject for EcdsaOpening {
-    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+impl IDkgObject for EcdsaOpening {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         opening_prefix(
             &self.content.idkg_opening.transcript_id,
             &self.content.idkg_opening.dealer_id,
@@ -2050,13 +2046,13 @@ impl EcdsaObject for EcdsaOpening {
         )
     }
 
-    fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::Opening(self.message_prefix(), crypto_hash(self))
+    fn message_id(&self) -> IDkgArtifactId {
+        IDkgArtifactId::Opening(self.message_prefix(), crypto_hash(self))
     }
 }
 
-impl From<&IDkgMessage> for EcdsaArtifactId {
-    fn from(msg: &IDkgMessage) -> EcdsaArtifactId {
+impl From<&IDkgMessage> for IDkgArtifactId {
+    fn from(msg: &IDkgMessage) -> IDkgArtifactId {
         match msg {
             IDkgMessage::EcdsaSignedDealing(object) => object.message_id(),
             IDkgMessage::EcdsaDealingSupport(object) => object.message_id(),

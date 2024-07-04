@@ -5,7 +5,7 @@ use crate::ecdsa::metrics::EcdsaPayloadMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
-use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
+use ic_interfaces::ecdsa::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm};
@@ -317,18 +317,18 @@ pub(super) fn build_signature_inputs(
 /// Returns None if all the transcripts could be loaded successfully.
 /// Otherwise, returns the complaint change set to be added to the pool
 pub(super) fn load_transcripts(
-    ecdsa_pool: &dyn EcdsaPool,
+    idkg_pool: &dyn IDkgPool,
     transcript_loader: &dyn EcdsaTranscriptLoader,
     transcripts: &[&IDkgTranscript],
-) -> Option<EcdsaChangeSet> {
+) -> Option<IDkgChangeSet> {
     let mut new_complaints = Vec::new();
     for transcript in transcripts {
-        match transcript_loader.load_transcript(ecdsa_pool, transcript) {
+        match transcript_loader.load_transcript(idkg_pool, transcript) {
             TranscriptLoadStatus::Success => (),
             TranscriptLoadStatus::Failure => return Some(Default::default()),
             TranscriptLoadStatus::Complaints(complaints) => {
                 for complaint in complaints {
-                    new_complaints.push(EcdsaChangeAction::AddToValidated(
+                    new_complaints.push(IDkgChangeAction::AddToValidated(
                         IDkgMessage::EcdsaComplaint(complaint),
                     ));
                 }

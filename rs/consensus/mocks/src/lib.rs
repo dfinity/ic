@@ -1,6 +1,6 @@
 //! Contains mocks for traits internal to consensus
 use ic_artifact_pool::{
-    canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
+    canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::membership::Membership;
@@ -15,7 +15,7 @@ use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
-use ic_test_utilities_consensus::EcdsaStatsNoOp;
+use ic_test_utilities_consensus::IDkgStatsNoOp;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -100,7 +100,7 @@ pub struct Dependencies {
     pub replica_config: ReplicaConfig,
     pub state_manager: Arc<RefMockStateManager>,
     pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
-    pub ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+    pub idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
@@ -135,11 +135,11 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         ic_metrics::MetricsRegistry::new(),
         log.clone(),
     )));
-    let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(
+    let idkg_pool = Arc::new(RwLock::new(IDkgPoolImpl::new(
         pool_config.clone(),
         log.clone(),
         ic_metrics::MetricsRegistry::new(),
-        Box::new(EcdsaStatsNoOp {}),
+        Box::new(IDkgStatsNoOp {}),
     )));
     let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
         ic_metrics::MetricsRegistry::new(),
@@ -170,7 +170,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         replica_config,
         state_manager,
         dkg_pool,
-        ecdsa_pool,
+        idkg_pool,
         canister_http_pool,
     }
 }
@@ -194,7 +194,7 @@ pub fn dependencies_with_subnet_params(
         replica_config,
         state_manager,
         dkg_pool,
-        ecdsa_pool,
+        idkg_pool,
         canister_http_pool,
         ..
     } = dependencies_with_subnet_records_with_raw_state_manager(pool_config, subnet_id, records);
@@ -217,7 +217,7 @@ pub fn dependencies_with_subnet_params(
         replica_config,
         state_manager,
         dkg_pool,
-        ecdsa_pool,
+        idkg_pool,
         canister_http_pool,
     }
 }

@@ -183,7 +183,7 @@ use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
-    ecdsa::{EcdsaChangeSet, EcdsaPool},
+    ecdsa::{IDkgChangeSet, IDkgPool},
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
 };
 use ic_interfaces_state_manager::StateReader;
@@ -193,7 +193,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::{IDkgMessageId, Priority, PriorityFn},
-    artifact_kind::EcdsaArtifact,
+    artifact_kind::IDkgArtifact,
     consensus::idkg::{EcdsaBlockReader, IDkgMessageAttribute, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
@@ -224,7 +224,7 @@ pub(crate) use payload_builder::{
 pub(crate) use payload_verifier::{
     validate_payload, EcdsaPayloadValidationFailure, InvalidEcdsaPayloadReason,
 };
-pub use stats::EcdsaStatsImpl;
+pub use stats::IDkgStatsImpl;
 
 use self::utils::get_context_request_id;
 
@@ -369,17 +369,17 @@ impl EcdsaImpl {
     }
 }
 
-impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
-    type ChangeSet = EcdsaChangeSet;
+impl<T: IDkgPool> ChangeSetProducer<T> for EcdsaImpl {
+    type ChangeSet = IDkgChangeSet;
 
-    fn on_state_change(&self, ecdsa_pool: &T) -> EcdsaChangeSet {
+    fn on_state_change(&self, idkg_pool: &T) -> IDkgChangeSet {
         let metrics = self.metrics.clone();
         let pre_signer = || {
             let changeset = timed_call(
                 "pre_signer",
                 || {
                     self.pre_signer
-                        .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
+                        .on_state_change(idkg_pool, self.complaint_handler.as_transcript_loader())
                 },
                 &metrics.on_state_change_duration,
             );
@@ -398,7 +398,7 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
                 "signer",
                 || {
                     self.signer
-                        .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
+                        .on_state_change(idkg_pool, self.complaint_handler.as_transcript_loader())
                 },
                 &metrics.on_state_change_duration,
             )
@@ -406,12 +406,12 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
         let complaint_handler = || {
             timed_call(
                 "complaint_handler",
-                || self.complaint_handler.on_state_change(ecdsa_pool),
+                || self.complaint_handler.on_state_change(idkg_pool),
                 &metrics.on_state_change_duration,
             )
         };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] = [&pre_signer, &signer, &complaint_handler];
+        let calls: [&'_ dyn Fn() -> IDkgChangeSet; 3] = [&pre_signer, &signer, &complaint_handler];
         let ret = self.schedule.call_next(&calls);
 
         if self.last_transcript_purge_ts.borrow().elapsed() >= INACTIVE_TRANSCRIPT_PURGE_SECS {
@@ -501,10 +501,10 @@ impl EcdsaPriorityFnArgs {
     }
 }
 
-impl<Pool: EcdsaPool> PriorityFnAndFilterProducer<EcdsaArtifact, Pool> for EcdsaGossipImpl {
+impl<Pool: IDkgPool> PriorityFnAndFilterProducer<IDkgArtifact, Pool> for EcdsaGossipImpl {
     fn get_priority_function(
         &self,
-        _ecdsa_pool: &Pool,
+        _idkg_pool: &Pool,
     ) -> PriorityFn<IDkgMessageId, IDkgMessageAttribute> {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;

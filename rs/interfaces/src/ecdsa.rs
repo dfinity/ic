@@ -2,14 +2,14 @@
 
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    EcdsaComplaint, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, IDkgMessage,
+    EcdsaComplaint, EcdsaOpening, EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats,
     SchnorrSigShare, SigShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
 // TODO: purge/remove from validated
 #[derive(Debug)]
-pub enum EcdsaChangeAction {
+pub enum IDkgChangeAction {
     AddToValidated(IDkgMessage),
     MoveToValidated(IDkgMessage),
     RemoveValidated(IDkgMessageId),
@@ -17,35 +17,35 @@ pub enum EcdsaChangeAction {
     HandleInvalid(IDkgMessageId, String),
 }
 
-pub type EcdsaChangeSet = Vec<EcdsaChangeAction>;
+pub type IDkgChangeSet = Vec<IDkgChangeAction>;
 
 #[derive(Debug, Clone)]
-pub enum EcdsaPoolSectionOp {
+pub enum IDkgPoolSectionOp {
     Insert(IDkgMessage),
     Remove(IDkgMessageId),
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct EcdsaPoolSectionOps {
-    pub ops: Vec<EcdsaPoolSectionOp>,
+pub struct IDkgPoolSectionOps {
+    pub ops: Vec<IDkgPoolSectionOp>,
 }
 
-impl EcdsaPoolSectionOps {
+impl IDkgPoolSectionOps {
     pub fn new() -> Self {
         Self { ops: Vec::new() }
     }
 
     pub fn insert(&mut self, message: IDkgMessage) {
-        self.ops.push(EcdsaPoolSectionOp::Insert(message));
+        self.ops.push(IDkgPoolSectionOp::Insert(message));
     }
 
     pub fn remove(&mut self, id: IDkgMessageId) {
-        self.ops.push(EcdsaPoolSectionOp::Remove(id));
+        self.ops.push(IDkgPoolSectionOp::Remove(id));
     }
 }
 
 /// The validated/unvalidated parts of the artifact pool.
-pub trait EcdsaPoolSection: Send + Sync {
+pub trait IDkgPoolSection: Send + Sync {
     /// Checks if the artifact present in the pool.
     fn contains(&self, msg_id: &IDkgMessageId) -> bool;
 
@@ -58,7 +58,7 @@ pub trait EcdsaPoolSection: Send + Sync {
     /// Iterator for signed dealing objects matching the prefix.
     fn signed_dealings_by_prefix(
         &self,
-        _prefix: EcdsaPrefixOf<SignedIDkgDealing>,
+        _prefix: IDkgPrefixOf<SignedIDkgDealing>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         unimplemented!()
     }
@@ -70,7 +70,7 @@ pub trait EcdsaPoolSection: Send + Sync {
     /// Iterator for dealing support objects matching the prefix.
     fn dealing_support_by_prefix(
         &self,
-        _prefix: EcdsaPrefixOf<IDkgDealingSupport>,
+        _prefix: IDkgPrefixOf<IDkgDealingSupport>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         unimplemented!()
     }
@@ -83,7 +83,7 @@ pub trait EcdsaPoolSection: Send + Sync {
     /// Iterator for signature share objects matching the prefix.
     fn ecdsa_signature_shares_by_prefix(
         &self,
-        _prefix: EcdsaPrefixOf<EcdsaSigShare>,
+        _prefix: IDkgPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         unimplemented!()
     }
@@ -96,7 +96,7 @@ pub trait EcdsaPoolSection: Send + Sync {
     /// Iterator for signature share objects matching the prefix.
     fn schnorr_signature_shares_by_prefix(
         &self,
-        _prefix: EcdsaPrefixOf<SchnorrSigShare>,
+        _prefix: IDkgPrefixOf<SchnorrSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         unimplemented!()
     }
@@ -109,7 +109,7 @@ pub trait EcdsaPoolSection: Send + Sync {
     /// Iterator for complaint objects matching the prefix.
     fn complaints_by_prefix(
         &self,
-        _prefix: EcdsaPrefixOf<EcdsaComplaint>,
+        _prefix: IDkgPrefixOf<EcdsaComplaint>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
         unimplemented!()
     }
@@ -120,29 +120,29 @@ pub trait EcdsaPoolSection: Send + Sync {
     /// Iterator for opening objects matching the prefix.
     fn openings_by_prefix(
         &self,
-        _prefix: EcdsaPrefixOf<EcdsaOpening>,
+        _prefix: IDkgPrefixOf<EcdsaOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
         unimplemented!()
     }
 }
 
 /// The mutable interface for validated/unvalidated parts of the artifact pool.
-pub trait MutableEcdsaPoolSection: Send + Sync {
+pub trait MutableIDkgPoolSection: Send + Sync {
     /// Applies the changes to the pool.
-    fn mutate(&mut self, ops: EcdsaPoolSectionOps);
+    fn mutate(&mut self, ops: IDkgPoolSectionOps);
 
     /// Get the immutable handle.
-    fn as_pool_section(&self) -> &dyn EcdsaPoolSection;
+    fn as_pool_section(&self) -> &dyn IDkgPoolSection;
 }
 
 /// Artifact pool for the ECDSA messages (query interface)
-pub trait EcdsaPool: Send + Sync {
+pub trait IDkgPool: Send + Sync {
     /// Return a reference to the validated PoolSection.
-    fn validated(&self) -> &dyn EcdsaPoolSection;
+    fn validated(&self) -> &dyn IDkgPoolSection;
 
     /// Return a reference to the unvalidated PoolSection.
-    fn unvalidated(&self) -> &dyn EcdsaPoolSection;
+    fn unvalidated(&self) -> &dyn IDkgPoolSection;
 
     /// Returns reference to the stats. The stats are not persisted.
-    fn stats(&self) -> &dyn EcdsaStats;
+    fn stats(&self) -> &dyn IDkgStats;
 }

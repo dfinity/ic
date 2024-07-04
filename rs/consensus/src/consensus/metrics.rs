@@ -115,7 +115,7 @@ pub struct BlockStats {
     pub block_hash: String,
     pub block_height: u64,
     pub block_context_certified_height: u64,
-    pub ecdsa_stats: Option<EcdsaStats>,
+    pub idkg_stats: Option<IDkgStats>,
 }
 
 impl From<&Block> for BlockStats {
@@ -124,7 +124,7 @@ impl From<&Block> for BlockStats {
             block_hash: get_block_hash_string(block),
             block_height: block.height().get(),
             block_context_certified_height: block.context.certified_height.get(),
-            ecdsa_stats: block.payload.as_ref().as_ecdsa().map(EcdsaStats::from),
+            idkg_stats: block.payload.as_ref().as_ecdsa().map(IDkgStats::from),
         }
     }
 }
@@ -157,8 +157,8 @@ impl BatchStats {
     }
 }
 
-// Ecdsa payload stats
-pub struct EcdsaStats {
+// IDKG payload stats
+pub struct IDkgStats {
     pub signature_agreements: usize,
     pub key_transcript_created: CounterPerMasterPublicKeyId,
     pub available_quadruples: CounterPerMasterPublicKeyId,
@@ -167,7 +167,7 @@ pub struct EcdsaStats {
     pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
 }
 
-impl From<&EcdsaPayload> for EcdsaStats {
+impl From<&EcdsaPayload> for IDkgStats {
     fn from(payload: &EcdsaPayload) -> Self {
         let mut key_transcript_created = CounterPerMasterPublicKeyId::new();
 
@@ -337,7 +337,7 @@ impl FinalizerMetrics {
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
 
-        if let Some(ecdsa) = &block_stats.ecdsa_stats {
+        if let Some(ecdsa) = &block_stats.idkg_stats {
             let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
