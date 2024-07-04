@@ -1365,7 +1365,11 @@ impl Blocks {
             .lock()
             .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
         let last_rosetta_block_index: Option<BlockIndex> = connection
-            .query_row("SELECT max(idx) FROM rosetta_blocks", [], |row| row.get(0))
+            .query_row(
+                "SELECT max(rosetta_block_idx) FROM rosetta_blocks",
+                [],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Unable to get the max index from the rosetta_blocks: {e:?}"))?;
         let last_rosetta_block_index = match last_rosetta_block_index {
             None => return Ok(None),
