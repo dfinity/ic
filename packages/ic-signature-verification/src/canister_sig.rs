@@ -23,25 +23,23 @@ pub fn verify_canister_sig(
     let signature = parse_signature_cbor(signature_cbor)?;
     let public_key = CanisterSigPublicKey::try_from(public_key_der)
         .map_err(|e| format!("failed to parse canister sig public key: {}", e))?;
-    let certificate = check_certified_data_and_get_certificate(&signature, &public_key, message)?;
+    let certificate =
+        check_certified_data_and_get_certificate(&signature, &public_key.canister_id)?;
+    check_sig_path(&signature, &public_key, message)?;
     verify_certificate(&certificate, public_key.canister_id, ic_root_public_key_raw)
 }
 
+// Check that signature.certificate's tree contains for the canister identified by
+// signing_canister_id an entry for certified_data that matches signature.tree.digest.
 fn check_certified_data_and_get_certificate(
     signature: &CanisterSignature,
-    canister_sig_pk: &CanisterSigPublicKey,
-    msg: &[u8],
+    signing_canister_id: &Principal,
 ) -> Result<Certificate, String> {
     let certificate = Certificate::from_cbor(&signature.certificate)
         .map_err(|e| format!("failed to parse certificate CBOR: {}", e))?;
-    let seed_hash = hash_sha256(&canister_sig_pk.seed);
-    let msg_hash = hash_sha256(msg);
-
-    // Check that signature.certificate's tree contains for the canister identified by
-    // canister_sig_pk an entry for certified_data that matches signature.tree.digest.
     let cert_data_path = [
         "canister".as_bytes(),
-        canister_sig_pk.canister_id.as_slice(),
+        signing_canister_id.as_slice(),
         "certified_data".as_bytes(),
     ];
     let SubtreeLookupResult::Found(cert_data_leaf) =
@@ -52,8 +50,18 @@ fn check_certified_data_and_get_certificate(
     if cert_data_leaf != leaf(signature.tree.digest()) {
         return Err("certified_data doesn't match sig tree digest".to_string());
     }
+    Ok(certificate)
+}
 
-    // Check that signature.tree contains an empty leaf at correct "sig"-path
+// Check that signature.tree contains an empty leaf at correct "sig"-path,
+// where the path is determined by hashes of canister_sig_pk.seed and msg.
+fn check_sig_path(
+    signature: &CanisterSignature,
+    canister_sig_pk: &CanisterSigPublicKey,
+    msg: &[u8],
+) -> Result<(), String> {
+    let seed_hash = hash_sha256(&canister_sig_pk.seed);
+    let msg_hash = hash_sha256(msg);
     let sig_path = ["sig".as_bytes(), &seed_hash, &msg_hash];
     let SubtreeLookupResult::Found(sig_leaf) = signature.tree.lookup_subtree(&sig_path) else {
         return Err("signature entry not found".to_string());
@@ -61,7 +69,7 @@ fn check_certified_data_and_get_certificate(
     if sig_leaf != leaf(b"") {
         return Err("signature entry is not an empty leaf".to_string());
     }
-    Ok(certificate)
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -89,7 +97,7 @@ fn verify_certificate(
         Some(delegation) => {
             verify_delegation(delegation, signing_canister_id, root_public_key_raw)?
         }
-        _ => root_public_key_raw.into(),
+        _ => root_public_key_raw.to_vec(),
     };
     check_bls_signature(certificate, &bls_pk_raw)
 }
@@ -119,8 +127,8 @@ fn verify_delegation(
         return Err("canister_ranges-entry not found".to_string());
     };
 
-    let canister_ranges: Vec<(Principal, Principal)> =
-        serde_cbor::from_slice(canister_range).unwrap();
+    let canister_ranges: Vec<(Principal, Principal)> = serde_cbor::from_slice(canister_range)
+        .map_err(|e| format!("invalid canister range: {}", e))?;
     if !principal_is_within_ranges(&signing_canister_id, &canister_ranges[..]) {
         return Err("signing canister id not in canister_ranges".to_string());
     }
@@ -140,7 +148,7 @@ fn verify_delegation(
 fn principal_is_within_ranges(principal: &Principal, ranges: &[(Principal, Principal)]) -> bool {
     ranges
         .iter()
-        .any(|r| principal >= &r.0 && principal <= &r.1)
+        .any(|(start, end)| (start..=end).contains(&principal))
 }
 
 const SHA256_DIGEST_LEN: usize = 32;
