@@ -1377,7 +1377,7 @@ impl Blocks {
             Some(last_rosetta_block_index) => last_rosetta_block_index,
         };
         let last_block_index_in_rosetta_block: BlockIndex = connection.query_row(
-            "SELECT max(block_idx) FROM rosetta_blocks_transactions WHERE idx = :idx",
+            "SELECT max(block_idx) FROM rosetta_blocks_transactions WHERE rosetta_block_idx = :idx",
             named_params! { ":idx": last_rosetta_block_index },
             |row| row.get(0),
         ).map_err(|e| format!("Unable to get the max block index for the rosetta block {last_rosetta_block_index}: {e:?}"))?;
