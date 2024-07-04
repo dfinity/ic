@@ -33,5 +33,6 @@ def rust_fixture_generator(name, **kwargs):
         ],
         outs = [with_fixture_extension(name)],
         cmd = "$(location :{binary_name}) > $@".format(binary_name = binary_name),
+        visibility = ["//visibility:public"],
     )
 
