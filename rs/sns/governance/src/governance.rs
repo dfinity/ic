@@ -4941,7 +4941,7 @@ impl Governance {
                     neuron_reward_e8s
                 );
                 // prune
-                while neuron.reward_events_to_neuron_reward_e8s.len() > 10 {
+                while neuron.reward_events_to_neuron_reward_e8s.len() > MAX_KEEP_REWARD_EVENTS_TO_NEURON_REWARD_E8S_PER_NEURON {
                     // prune earliest. 
                     neuron.reward_events_to_neuron_reward_e8s.remove(
                         neuron.reward_events_to_neuron_reward_e8s.keys().min().clone()
