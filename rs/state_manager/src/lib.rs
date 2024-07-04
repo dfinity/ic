@@ -1411,6 +1411,27 @@ impl StateManagerImpl {
         info!(log, "Loading metadata took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
+        let checkpoint_heights = state_layout
+            .checkpoint_heights()
+            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
+
+        for h in checkpoint_heights {
+            let cp_layout = state_layout.checkpoint_untracked(h).unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create untracked checkpoint layout @{}: {}",
+                    h,
+                    err
+                )
+            });
+            if cp_layout.unverified_checkpoint_marker().exists() {
+                info!(log, "Archiving unverified checkpoint {} ", h);
+                state_layout
+                    .archive_checkpoint(h)
+                    .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+            }
+        }
+
         let mut checkpoint_heights = state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
@@ -2426,12 +2447,15 @@ impl StateManagerImpl {
                 .start_timer();
             switch_to_checkpoint(state, &checkpointed_state);
             #[cfg(debug_assertions)]
-            self.tip_channel
-                .send(TipRequest::ValidateReplicatedState {
-                    checkpointed_state: Box::new(checkpointed_state.clone()),
-                    execution_state: Box::new(state.clone()),
-                })
-                .expect("Failed to send Validate request");
+            {
+                self.tip_channel
+                    .send(TipRequest::ValidateReplicatedState {
+                        checkpointed_state: Box::new(checkpointed_state.clone()),
+                        execution_state: Box::new(state.clone()),
+                    })
+                    .expect("Failed to send Validate request");
+                self.flush_tip_channel();
+            }
         }
 
         // On the NNS subnet we never allow incremental manifest computation

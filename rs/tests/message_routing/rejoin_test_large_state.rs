@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::message_routing::rejoin_test_large_state::Config;
-use ic_tests::systest;
 use std::time::Duration;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600 * 2);

@@ -8,11 +8,10 @@ use crate::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
-        idkg::{EcdsaMessage, EcdsaMessageAttribute},
+        idkg::{IDkgMessage, IDkgMessageAttribute},
         ConsensusMessage,
     },
     messages::SignedIngress,
-    CountBytes,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use prost::bytes::Bytes;
@@ -41,7 +40,6 @@ impl ArtifactKind for ConsensusArtifact {
         Advert {
             id: ConsensusMessageId::from(msg),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
@@ -69,7 +67,6 @@ impl ArtifactKind for IngressArtifact {
         Advert {
             id: IngressMessageId::from(msg),
             attribute: (),
-            size: msg.count_bytes(),
         }
     }
 }
@@ -97,7 +94,6 @@ impl ArtifactKind for CertificationArtifact {
         Advert {
             id: CertificationMessageId::from(msg),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
@@ -125,7 +121,6 @@ impl ArtifactKind for DkgArtifact {
         Advert {
             id: DkgMessageId::from(msg),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
@@ -139,21 +134,20 @@ impl ArtifactKind for EcdsaArtifact {
     const TAG: ArtifactTag = ArtifactTag::EcdsaArtifact;
     type PbId = ic_protobuf::types::v1::EcdsaArtifactId;
     type PbIdError = ProxyDecodeError;
-    type Id = EcdsaMessageId;
-    type PbMessage = ic_protobuf::types::v1::EcdsaMessage;
+    type Id = IDkgMessageId;
+    type PbMessage = ic_protobuf::types::v1::IDkgMessage;
     type PbMessageError = ProxyDecodeError;
-    type Message = EcdsaMessage;
-    type PbAttribute = ic_protobuf::types::v1::EcdsaMessageAttribute;
+    type Message = IDkgMessage;
+    type PbAttribute = ic_protobuf::types::v1::IDkgMessageAttribute;
     type PbAttributeError = ProxyDecodeError;
-    type Attribute = EcdsaMessageAttribute;
+    type Attribute = IDkgMessageAttribute;
 
-    /// The function converts a `EcdsaMessage` into an advert for a
+    /// The function converts a `IDkgMessage` into an advert for a
     /// `EcdsaArtifact`.
-    fn message_to_advert(msg: &EcdsaMessage) -> Advert<EcdsaArtifact> {
+    fn message_to_advert(msg: &IDkgMessage) -> Advert<EcdsaArtifact> {
         Advert {
-            id: EcdsaMessageId::from(msg),
-            attribute: EcdsaMessageAttribute::from(msg),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
+            id: IDkgMessageId::from(msg),
+            attribute: IDkgMessageAttribute::from(msg),
         }
     }
 }
@@ -181,7 +175,6 @@ impl ArtifactKind for CanisterHttpArtifact {
         Advert {
             id: msg.clone(),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }

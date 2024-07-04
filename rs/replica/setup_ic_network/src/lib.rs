@@ -254,6 +254,7 @@ fn start_consensus(
         metrics_registry,
         log,
         catch_up_package,
+        time_source.as_ref(),
     );
 
     let mut join_handles = vec![];
@@ -513,6 +514,7 @@ fn init_artifact_pools(
     metrics_registry: &MetricsRegistry,
     log: &ReplicaLogger,
     catch_up_package: CatchUpPackage,
+    time_source: &dyn TimeSource,
 ) -> ArtifactPools {
     let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
         node_id,
@@ -527,7 +529,7 @@ fn init_artifact_pools(
         metrics_registry.clone(),
         Box::new(ecdsa::EcdsaStatsImpl::new(metrics_registry.clone())),
     );
-    ecdsa_pool.add_initial_dealings(&catch_up_package);
+    ecdsa_pool.add_initial_dealings(&catch_up_package, time_source);
     let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
 
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(

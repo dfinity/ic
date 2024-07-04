@@ -29,19 +29,21 @@ use ic_recovery::nns_recovery_failover_nodes::{
 };
 use ic_recovery::{get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::constants::SSH_USERNAME;
-use ic_tests::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::ic::{InternetComputer, Subnet};
-use ic_tests::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
-use ic_tests::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
+use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::universal_vm::{
+    insert_file_to_config, UniversalVm, UniversalVms,
+};
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::{block_on, MessageCanister};
 use ic_tests::orchestrator::utils::rw_message::install_nns_and_check_progress;
 use ic_tests::orchestrator::utils::rw_message::{
     can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use ic_tests::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
-use ic_tests::systest;
-use ic_tests::util::{block_on, MessageCanister};
 use ic_types::Height;
 use slog::info;
 use std::fs;
@@ -175,6 +177,7 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
         replica_version: Some(ic_version),
+        replay_until_height: None,
         aux_ip: None,
         aux_user: None,
         registry_url: None,

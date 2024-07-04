@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Principal};
 use clap::{Args, Parser};
+use create_subnet::ProposeToCreateSubnetCmd;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
@@ -15,13 +16,12 @@ use helpers::{
 use ic_btc_interface::{Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
 use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
-use ic_management_canister_types::{CanisterInstallMode, EcdsaKeyId};
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -66,7 +66,6 @@ use ic_nns_governance::{
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
-use ic_prep_lib::subnet_configuration;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -107,8 +106,6 @@ use ic_registry_routing_table::{
     CanisterIdRange, CanisterMigrations as OtherCanisterMigrations,
     RoutingTable as OtherRoutingTable,
 };
-use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
 use ic_sns_wasm::pb::v1::{
@@ -117,12 +114,13 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use indexmap::IndexMap;
 use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
+use recover_subnet::ProposeToUpdateRecoveryCupCmd;
 use registry_canister::mutations::{
     common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
@@ -130,10 +128,8 @@ use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
-    do_recover_subnet::RecoverSubnetPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
@@ -178,7 +174,9 @@ extern crate ic_admin_derive;
 
 extern crate chrono;
 
+mod create_subnet;
 mod helpers;
+mod recover_subnet;
 mod types;
 mod update_subnet;
 
@@ -248,29 +246,6 @@ struct Opts {
     /// Return the output in JSON format.
     #[clap(long = "json", global = true)]
     json: bool,
-}
-
-impl ProposeToCreateSubnetCmd {
-    /// Set fields (that were not provided by the user explicitly) to defaults.
-    fn apply_defaults_for_unset_fields(&mut self) {
-        let subnet_config =
-            subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
-        // set subnet params
-        self.max_ingress_bytes_per_message
-            .get_or_insert(subnet_config.max_ingress_bytes_per_message);
-        self.max_ingress_messages_per_block
-            .get_or_insert(subnet_config.max_ingress_messages_per_block);
-        self.max_block_payload_size
-            .get_or_insert(subnet_config.max_block_payload_size);
-        self.unit_delay_millis
-            .get_or_insert(subnet_config.unit_delay.as_millis() as u64);
-        self.initial_notary_delay_millis
-            .get_or_insert(subnet_config.initial_notary_delay.as_millis() as u64);
-        self.dkg_dealings_per_block
-            .get_or_insert(subnet_config.dkg_dealings_per_block as u64);
-        self.dkg_interval_length
-            .get_or_insert(subnet_config.dkg_interval_length.get());
-    }
 }
 
 /// List of sub-commands accepted by `ic-admin`.
@@ -515,25 +490,6 @@ struct GetTlsCertificateCmd {
 /// Trait to extract the title for proposal type.
 pub trait ProposalTitle {
     fn title(&self) -> String;
-}
-
-/// Shortens the provided `PrincipalId`s to make them easier to display.
-fn shortened_pids_string(pids: &[PrincipalId]) -> String {
-    let mut pids_string = "[".to_string();
-    pids_string.push_str(
-        &pids
-            .to_vec()
-            .iter()
-            .map(PrincipalId::to_string)
-            .map(|mut s| {
-                s.truncate(5);
-                s
-            })
-            .collect::<Vec<String>>()
-            .join(", "),
-    );
-    pids_string.push(']');
-    pids_string
 }
 
 /// Sub-command to submit a proposal to remove nodes from a subnet.
@@ -956,282 +912,6 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
     }
 }
 
-/// Sub-command to submit a proposal to create a new subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToCreateSubnetCmd {
-    #[clap(long)]
-    #[allow(dead_code)]
-    /// Obsolete. Does nothing. Exists for compatibility with legacy scripts.
-    subnet_handler_id: Option<String>,
-
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
-    /// The node IDs of the nodes that will be part of the new subnet.
-    pub node_ids: Vec<PrincipalId>,
-
-    #[clap(long)]
-    // Assigns this subnet ID to the newly created subnet
-    pub subnet_id_override: Option<PrincipalId>,
-
-    #[clap(long)]
-    /// Maximum amount of bytes per message. This is a hard cap.
-    pub max_ingress_bytes_per_message: Option<u64>,
-
-    #[clap(long)]
-    /// Maximum number of ingress messages per block. This is a hard cap.
-    pub max_ingress_messages_per_block: Option<u64>,
-
-    #[clap(long)]
-    /// Maximum size in bytes ingress and xnet messages can occupy in a block.
-    pub max_block_payload_size: Option<u64>,
-
-    // the default is from subnet_configuration.rs from ic-prep
-    #[clap(long)]
-    ///  Unit delay for blockmaker (in milliseconds).
-    pub unit_delay_millis: Option<u64>,
-
-    #[clap(long)]
-    /// Initial delay for notary (in milliseconds), to give time to rank-0 block
-    /// propagation.
-    pub initial_notary_delay_millis: Option<u64>,
-
-    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
-    /// ID of the Replica version to run.
-    pub replica_version_id: Option<ReplicaVersion>,
-
-    #[clap(long)]
-    /// The length of all DKG intervals. The DKG interval length is the number
-    /// of rounds following the DKG summary.
-    pub dkg_interval_length: Option<u64>,
-
-    #[clap(long)]
-    /// The upper bound for the number of allowed DKG dealings in a block.
-    pub dkg_dealings_per_block: Option<u64>,
-
-    #[clap(long)]
-    /// if set, the subnet will start as (new) NNS.
-    pub start_as_nns: bool,
-
-    #[clap(long)]
-    /// The type of the subnet.
-    /// Can be either "application" or "system".
-    pub subnet_type: SubnetType,
-
-    /// If set, the created subnet will be halted: it will not create or execute
-    /// blocks
-    #[clap(long)]
-    pub is_halted: bool,
-
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_message: Option<u64>,
-
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_round: Option<u64>,
-
-    /// The maximum number of instructions an `install_code` message can
-    /// execute. See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_install_code: Option<u64>,
-
-    /// Configuration for ECDSA: the number of quadruples to create in advance.
-    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
-    /// signing process and are expensive to compute.  Having a store of them allows the subnet
-    /// to quickly sign bursts of requests before needing to regenerate them.
-    /// Defaults to 1, must be at least 1.
-    #[clap(long)]
-    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
-
-    /// Configuration for ECDSA:
-    /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
-    /// subnet, and (optionally) the subnet to request each key from.
-    ///
-    /// Keys must be given in AlgorithmID:KeyName format, like `Secp256k1:some_key_name`.
-    ///
-    /// Example:
-    /// '[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1",
-    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
-    ///     }
-    /// ]'
-    /// For keys with no subnet specified:
-    ///'[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1"
-    ///     }
-    /// ]'
-    #[clap(long)]
-    pub ecdsa_keys_to_request: Option<String>,
-
-    /// The maximum number of ECDSA signature requests that can be enqueued at a
-    /// given time. Signature requests will be rejected if the queue is full.
-    #[clap(long)]
-    pub max_ecdsa_queue_size: Option<u32>,
-
-    /// The number of nanoseconds that an ECDSA signature request will time out.
-    /// If none is specified, no request will time out.
-    #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
-
-    /// Configuration for ECDSA:
-    /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[clap(long)]
-    pub idkg_key_rotation_period_ms: Option<u64>,
-
-    /// The list of public keys whose owners have "readonly" SSH access to all
-    /// replicas on this subnet.
-    #[clap(long, multiple_values(true))]
-    ssh_readonly_access: Vec<String>,
-    /// The list of public keys whose owners have "backup" SSH access to nodes
-    /// on the NNS subnet.
-    #[clap(long, multiple_values(true))]
-    ssh_backup_access: Vec<String>,
-
-    /// The maximum number of canisters that are allowed to be created in this
-    /// subnet.
-    #[clap(long)]
-    pub max_number_of_canisters: Option<u64>,
-
-    /// The features that are enabled and disabled on the subnet.
-    #[clap(long)]
-    pub features: Option<SubnetFeatures>,
-}
-
-/// Parse the options that are used to create EcdsaInitialConfig option
-/// and optionally create an InitialEcdsaConfig object if one or both is set.
-/// `ecdsa_keys_to_request` is a JSON encoded object, whose schema is specified in the documentation
-/// for ProposeToCreateSubnetCmd and ProposeToUpdateRecoveryCupCmd.
-fn parse_initial_ecdsa_config_options(
-    ecdsa_quadruples_to_create_in_advance: &Option<u32>,
-    ecdsa_keys_to_request: &Option<String>,
-    max_ecdsa_queue_size: &Option<u32>,
-    signature_request_timeout_ns: &Option<u64>,
-    idkg_key_rotation_period_ms: &Option<u64>,
-) -> Option<EcdsaInitialConfig> {
-    if ecdsa_quadruples_to_create_in_advance.is_none() && ecdsa_keys_to_request.is_none() {
-        return None;
-    }
-    let quadruples_to_create_in_advance: u32 = ecdsa_quadruples_to_create_in_advance.unwrap_or(1);
-
-    if quadruples_to_create_in_advance < 1 {
-        panic!("--ecdsa-quadruples-to-create-in-advance must be at least 1");
-    }
-
-    Some(EcdsaInitialConfig {
-        quadruples_to_create_in_advance,
-        keys: ecdsa_keys_to_request
-            .as_ref()
-            .map_or_else(std::vec::Vec::new, |json| {
-                let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(json).unwrap();
-
-                raw.iter()
-                    .map(|btree| {
-                        let key_id = btree
-                            .get("key_id")
-                            .map(|key| {
-                                key.parse::<EcdsaKeyId>()
-                                    .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
-                            })
-                            .unwrap();
-
-                        let subnet_id = btree
-                            .get("subnet_id")
-                            .map(|x| Some(PrincipalId::from_str(x).unwrap()))
-                            .expect("subnet_id is required in EcdsaKeyRequest.");
-
-                        EcdsaKeyRequest { key_id, subnet_id }
-                    })
-                    .collect()
-            }),
-        max_queue_size: Some(max_ecdsa_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)),
-        signature_request_timeout_ns: *signature_request_timeout_ns,
-        idkg_key_rotation_period_ms: *idkg_key_rotation_period_ms,
-    })
-}
-
-impl ProposalTitle for ProposeToCreateSubnetCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Create new subnet with nodes: {}",
-                shortened_pids_string(&self.node_ids)
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
-    async fn payload(&self, _: &Agent) -> CreateSubnetPayload {
-        let node_ids = self
-            .node_ids
-            .clone()
-            .into_iter()
-            .map(NodeId::from)
-            .collect();
-
-        let ecdsa_config = parse_initial_ecdsa_config_options(
-            &self.ecdsa_quadruples_to_create_in_advance,
-            &self.ecdsa_keys_to_request,
-            &self.max_ecdsa_queue_size,
-            &self.signature_request_timeout_ns,
-            &self.idkg_key_rotation_period_ms,
-        );
-
-        let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
-        CreateSubnetPayload {
-            node_ids,
-            subnet_id_override: self.subnet_id_override,
-            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap(),
-            max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap(),
-            max_block_payload_size: self.max_block_payload_size.unwrap(),
-            replica_version_id: self
-                .replica_version_id
-                .clone()
-                .unwrap_or_default()
-                .to_string(),
-            unit_delay_millis: self.unit_delay_millis.unwrap(),
-            initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap(),
-            dkg_interval_length: self.dkg_interval_length.unwrap(),
-            dkg_dealings_per_block: self.dkg_dealings_per_block.unwrap(),
-            start_as_nns: self.start_as_nns,
-            subnet_type: self.subnet_type,
-            is_halted: self.is_halted,
-            max_instructions_per_message: self
-                .max_instructions_per_message
-                .unwrap_or_else(|| scheduler_config.max_instructions_per_message.get()),
-            max_instructions_per_round: self
-                .max_instructions_per_round
-                .unwrap_or_else(|| scheduler_config.max_instructions_per_round.get()),
-            max_instructions_per_install_code: self
-                .max_instructions_per_install_code
-                .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
-            features: self.features.unwrap_or_default().into(),
-            ssh_readonly_access: self.ssh_readonly_access.clone(),
-            ssh_backup_access: self.ssh_backup_access.clone(),
-            max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
-            ecdsa_config,
-            chain_key_config: None, // TODO[NNS1-3102]
-            // Unused section follows
-            ingress_bytes_per_block_soft_cap: Default::default(),
-            gossip_max_artifact_streams_per_peer: Default::default(),
-            gossip_max_chunk_wait_ms: Default::default(),
-            gossip_max_duplicity: Default::default(),
-            gossip_max_chunk_size: Default::default(),
-            gossip_receive_check_cache_size: Default::default(),
-            gossip_pfn_evaluation_period_ms: Default::default(),
-            gossip_registry_poll_period_ms: Default::default(),
-            gossip_retransmission_request_ms: Default::default(),
-        }
-    }
-}
-
 /// Sub-command to submit a proposal to add nodes to an existing subnet.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -1276,142 +956,6 @@ impl ProposalPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
         AddNodesToSubnetPayload {
             subnet_id: self.subnet.get_id(&registry_canister).await.get(),
             node_ids,
-        }
-    }
-}
-
-/// Sub-command to submit a proposal to update the recovery CUP of a subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateRecoveryCupCmd {
-    #[clap(long, required = true, alias = "subnet-index")]
-    /// The targeted subnet.
-    subnet: SubnetDescriptor,
-
-    #[clap(long, required = true)]
-    /// The height of the CUP
-    pub height: u64,
-
-    #[clap(long, required = true)]
-    /// The block time to start from (nanoseconds from Epoch)
-    pub time_ns: u64,
-
-    #[clap(long, required = true)]
-    /// The hash of the state
-    pub state_hash: String,
-
-    #[clap(long, multiple_values(true))]
-    /// Replace the members of the given subnet with these nodes
-    pub replacement_nodes: Option<Vec<PrincipalId>>,
-
-    /// A uri from which data to replace the registry local store should be
-    /// downloaded
-    #[clap(long)]
-    pub registry_store_uri: Option<String>,
-
-    /// The hash of the data that is to be retrieved at the registry store URI
-    #[clap(long)]
-    pub registry_store_hash: Option<String>,
-
-    /// The registry version that should be used for the recovery cup
-    #[clap(long)]
-    pub registry_version: Option<u64>,
-
-    /// Configuration for ECDSA: the number of quadruples to create in advance.
-    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
-    /// signing process and are expensive to compute.  Having a store of them allows the subnet
-    /// to quickly sign bursts of requests before needing to regenerate them.
-    /// Defaults to 1, must be at least 1.
-    #[clap(long)]
-    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
-
-    /// Configuration for ECDSA:
-    /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
-    /// subnet, and (optionally) the subnet to request each key from.
-    ///
-    /// Keys must be given in AlgorithmID:KeyName format, like `Secp256k1:some_key_name`.
-    ///
-    /// Example:
-    /// '[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1",
-    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
-    ///     }
-    /// ]'
-    /// For keys with no subnet specified:
-    ///'[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1"
-    ///     }
-    /// ]'
-    #[clap(long)]
-    pub ecdsa_keys_to_request: Option<String>,
-
-    /// Configuration for ECDSA:
-    /// The maximum number of signature requests that can be enqueued at any one
-    /// time. Requests will be rejected if the queue is full.
-    #[clap(long)]
-    pub max_ecdsa_queue_size: Option<u32>,
-
-    /// The number of nanoseconds that an ECDSA signature request will time out.
-    /// If none is specified, no request will time out.
-    #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
-
-    /// Configuration for ECDSA:
-    /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[clap(long)]
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
-impl ProposalTitle for ProposeToUpdateRecoveryCupCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Update recovery cup of subnet: {} to height: {}",
-                shortened_subnet_string(&self.subnet),
-                self.height
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
-    async fn payload(&self, agent: &Agent) -> RecoverSubnetPayload {
-        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
-        let subnet_id = self.subnet.get_id(&registry_canister).await.get();
-        let node_ids = self
-            .replacement_nodes
-            .clone()
-            .map(|nodes| nodes.into_iter().map(NodeId::from).collect());
-
-        let hash = self.registry_store_hash.clone().unwrap_or_default();
-
-        let registry_version = self.registry_version.unwrap_or(0);
-
-        let ecdsa_config = parse_initial_ecdsa_config_options(
-            &self.ecdsa_quadruples_to_create_in_advance,
-            &self.ecdsa_keys_to_request,
-            &self.max_ecdsa_queue_size,
-            &self.signature_request_timeout_ns,
-            &self.idkg_key_rotation_period_ms,
-        );
-        RecoverSubnetPayload {
-            subnet_id,
-            height: self.height,
-            time_ns: self.time_ns,
-            state_hash: hex::decode(self.state_hash.clone())
-                .expect("The provided state hash was invalid"),
-            replacement_nodes: node_ids,
-            registry_store_uri: self
-                .registry_store_uri
-                .clone()
-                .map(|uri| (uri, hash, registry_version)),
-            ecdsa_config,
-            chain_key_config: None, // TODO[NNS1-3102]
         }
     }
 }

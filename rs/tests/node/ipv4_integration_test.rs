@@ -23,7 +23,7 @@ end::catalog[] */
 
 use anyhow::Result;
 
-use ic_tests::{
+use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Node, Subnet},

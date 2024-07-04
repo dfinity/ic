@@ -169,7 +169,8 @@ fn get_valid_system_apis_32_only() -> HashMap<String, HashMap<String, FunctionSi
 }
 
 // Returns system api functions available both in wasm32 and wasm64
-fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSignature>> {
+#[allow(non_snake_case)]
+fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, FunctionSignature>> {
     let valid_system_apis = vec![
         (
             // Public methods
@@ -178,7 +179,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: vec![ValType::I32],
+                    return_type: vec![I],
                 },
             )],
         ),
@@ -187,7 +188,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -198,7 +199,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: vec![ValType::I32],
+                    return_type: vec![I],
                 },
             )],
         ),
@@ -207,7 +208,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -218,7 +219,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: vec![ValType::I32],
+                    return_type: vec![I],
                 },
             )],
         ),
@@ -227,7 +228,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -258,7 +259,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: vec![ValType::I32],
+                    return_type: vec![I],
                 },
             )],
         ),
@@ -267,7 +268,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -277,7 +278,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -297,7 +298,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -308,7 +309,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: vec![ValType::I32],
+                    return_type: vec![I],
                 },
             )],
         ),
@@ -317,7 +318,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -328,16 +329,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                    ],
+                    param_types: vec![I, I, I, I, I, I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -347,7 +339,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -357,7 +349,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -378,7 +370,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -468,7 +460,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -478,7 +470,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -499,7 +491,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: vec![ValType::I32],
+                    return_type: vec![I],
                 },
             )],
         ),
@@ -508,7 +500,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -558,7 +550,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32],
+                    param_types: vec![I],
                     return_type: vec![],
                 },
             )],
@@ -568,7 +560,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32],
+                    param_types: vec![I],
                     return_type: vec![],
                 },
             )],
@@ -578,7 +570,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32],
+                    param_types: vec![I],
                     return_type: vec![],
                 },
             )],
@@ -588,7 +580,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    param_types: vec![ValType::I64, ValType::I64, I],
                     return_type: vec![],
                 },
             )],
@@ -598,7 +590,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![ValType::I32],
                 },
             )],
@@ -618,7 +610,7 @@ fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSig
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    param_types: vec![ValType::I64, ValType::I64, I],
                     return_type: vec![],
                 },
             )],
@@ -787,8 +779,14 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
     let mut imports_details = WasmImportsDetails::default();
 
     if !module.imports.is_empty() {
-        let mut valid_system_apis = get_valid_system_apis_32_only();
-        valid_system_apis.extend(get_valid_system_apis_common());
+        let valid_system_apis = match main_memory_type(module) {
+            WasmMemoryType::Wasm32 => {
+                let mut all = get_valid_system_apis_common(ValType::I32);
+                all.extend(get_valid_system_apis_32_only());
+                all
+            }
+            WasmMemoryType::Wasm64 => get_valid_system_apis_common(ValType::I64),
+        };
         for entry in &module.imports {
             let import_module = entry.module;
             let field = entry.name;

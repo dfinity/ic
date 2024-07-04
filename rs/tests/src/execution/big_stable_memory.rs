@@ -1,11 +1,11 @@
-use crate::{
+use ic_agent::agent::RejectCode;
+use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
     },
     util::*,
 };
-use ic_agent::agent::RejectCode;
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
 

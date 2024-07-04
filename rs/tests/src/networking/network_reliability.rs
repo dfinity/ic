@@ -17,20 +17,22 @@ Runbook::
 
 end::catalog[] */
 
-use crate::canister_api::{CallMode, GenericRequest};
-use crate::driver::constants::DEVICE_NAME;
-use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_base_types::NodeId;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
+use ic_system_test_driver::driver::constants::DEVICE_NAME;
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
     SshSession,
 };
-use crate::util::{
+use ic_system_test_driver::util::{
     self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
     spawn_round_robin_workload_engine,
 };
-use ic_base_types::NodeId;
-use ic_registry_subnet_type::SubnetType;
 use rand::distributions::{Distribution, Uniform};
 use rand_chacha::ChaCha8Rng;
 use slog::{debug, info, Logger};

@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::mainnet_tests::mainnet_api::{mainnet_basic_test, mainnet_config};
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

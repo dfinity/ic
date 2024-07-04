@@ -209,11 +209,17 @@ pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
 /// Max character length for the field "description" in KnownNeuronData.
 pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 
-// The number of seconds between automated Node Provider reward events
-// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
+/// The number of seconds between automated Node Provider reward events
+/// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
+
+/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap.
+/// Given the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count),
+/// this constant can be used to obtain an upper bound for the number of SNS neurons created
+/// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
+const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
@@ -2049,7 +2055,16 @@ impl Governance {
     ) -> ListNeuronsResponse {
         let now = self.env.now();
         let implicitly_requested_neurons = if req.include_neurons_readable_by_caller {
-            self.get_neuron_ids_by_principal(caller)
+            // To maintain compatibility with the old API, we include all neurons readable by the
+            // caller when the param is not set.
+            let include_empty_neurons =
+                req.include_empty_neurons_readable_by_caller.unwrap_or(true);
+            if include_empty_neurons {
+                self.get_neuron_ids_by_principal(caller)
+            } else {
+                self.neuron_store
+                    .get_non_empty_neuron_ids_readable_by_caller(*caller)
+            }
         } else {
             Vec::new()
         };
@@ -3362,28 +3377,8 @@ impl Governance {
         by: &NeuronIdOrSubaccount,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        let neuron_clone =
-            self.with_neuron_by_neuron_id_or_subaccount(by, |neuron| neuron.clone())?;
-        // Check that the caller is authorized for the requested
-        // neuron (controller or hot key).
-        if !neuron_clone.is_authorized_to_vote(caller) {
-            // If not, check if the caller is authorized for any of
-            // the followees of the requested neuron.
-            let followee_neuron_ids = neuron_clone.neuron_managers();
-
-            let caller_can_vote_with_followee =
-                followee_neuron_ids.iter().any(|followee_neuron_id| {
-                    self.with_neuron(followee_neuron_id, |followee| {
-                        followee.is_authorized_to_vote(caller)
-                    })
-                    .unwrap_or_default()
-                });
-
-            if !caller_can_vote_with_followee {
-                return Err(GovernanceError::new(ErrorType::NotAuthorized));
-            }
-        }
-        Ok(neuron_clone.into())
+        let neuron_id = self.find_neuron_id(by)?;
+        self.get_full_neuron(&neuron_id, caller)
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -3396,7 +3391,10 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        self.get_full_neuron_by_id_or_subaccount(&NeuronIdOrSubaccount::NeuronId(*id), caller)
+        self.neuron_store
+            .get_full_neuron(*id, *caller)
+            .map(NeuronProto::from)
+            .map_err(GovernanceError::from)
     }
 
     // Returns the set of currently registered node providers.
@@ -7233,6 +7231,24 @@ impl Governance {
             swap_participation_limits,
             neurons_fund,
         )?;
+        // Check that the maximum number of Neurons' Fund participants is not too high. Otherwise,
+        // the SNS may be unable to distribute SNS tokens to all participants after the swap.
+        {
+            let maximum_neurons_fund_participants = initial_neurons_fund_participation
+                .snapshot()
+                .neurons()
+                .len() as u64;
+            if maximum_neurons_fund_participants > MAX_NEURONS_FUND_PARTICIPANTS {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "The maximum number of Neurons' Fund participants ({}) must not exceed \
+                        MAX_NEURONS_FUND_PARTICIPANTS ({}).",
+                        maximum_neurons_fund_participants, MAX_NEURONS_FUND_PARTICIPANTS,
+                    ),
+                ));
+            };
+        }
         let constraints = initial_neurons_fund_participation.compute_constraints()?;
         let initial_neurons_fund_participation_snapshot =
             initial_neurons_fund_participation.snapshot_cloned();
@@ -7242,7 +7258,10 @@ impl Governance {
         if self.get_proposal_data(*proposal_id).is_none() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "Expected ProposalData.neurons_fund_data to be unset.",
+                format!(
+                    "ProposalData must be present for proposal {:?}.",
+                    proposal_id
+                ),
             ));
         }
         self.neuron_store

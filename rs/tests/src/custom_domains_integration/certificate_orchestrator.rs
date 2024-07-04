@@ -15,17 +15,15 @@ Coverage:: End-to-end registration processing
 
 end::catalog[] */
 
-use crate::{
-    custom_domains_integration::setup::{
-        access_domain, create_bn_http_client, get_certificate_syncer_state,
-        get_registration_status, get_service_errors, remove_dns_records, remove_registration,
-        setup_asset_canister, setup_dns_records, submit_registration_request, update_dns_records,
-        update_registration, GetRequestState, RegistrationRequestState, RemoveRequestState,
-        UpdateRequestState, BOUNDARY_NODE_VM_ID,
-    },
-    driver::boundary_node::BoundaryNodeVm,
-    driver::test_env::TestEnv,
-    util::block_on,
+use crate::custom_domains_integration::setup::{
+    access_domain, create_bn_http_client, get_certificate_syncer_state, get_registration_status,
+    get_service_errors, remove_dns_records, remove_registration, setup_asset_canister,
+    setup_dns_records, submit_registration_request, update_dns_records, update_registration,
+    GetRequestState, RegistrationRequestState, RemoveRequestState, UpdateRequestState,
+    BOUNDARY_NODE_VM_ID,
+};
+use ic_system_test_driver::{
+    driver::boundary_node::BoundaryNodeVm, driver::test_env::TestEnv, util::block_on,
 };
 
 use slog::info;

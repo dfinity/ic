@@ -10,6 +10,7 @@ documentation.workspace = true
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 tests = { path = ".." }
+ic-system-test-driver = { path = "../driver" }
 canister_http = { path = "./canister_http" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 anyhow = { workspace = true }

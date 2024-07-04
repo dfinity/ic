@@ -56,7 +56,7 @@ pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 /// Change set for processing unvalidated ingress messages
 pub type ChangeSet = Vec<ChangeAction>;
 
-pub type IngressChangeArtifact = (IngressMessageId, NodeId, usize);
+pub type IngressChangeArtifact = (IngressMessageId, NodeId);
 
 /// Change actions applicable to the ingress pool.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

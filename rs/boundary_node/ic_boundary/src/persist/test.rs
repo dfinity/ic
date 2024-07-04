@@ -70,6 +70,7 @@ pub fn node(i: u64, subnet_id: Principal) -> Arc<Node> {
         tls_certificate: valid_tls_certificate_and_validation_time()
             .0
             .certificate_der,
+        avg_latency_secs: f64::MAX,
     })
 }
 

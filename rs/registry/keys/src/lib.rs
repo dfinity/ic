@@ -35,10 +35,6 @@ pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
 pub const ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "key_id_";
 pub const CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "master_public_key_id_";
 
-pub fn make_ecdsa_signing_subnet_list_key(key_id: &EcdsaKeyId) -> String {
-    format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, key_id)
-}
-
 pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
     signing_subnet_list_key: &str,
 ) -> Result<EcdsaKeyId, RegistryClientError> {
@@ -441,24 +437,6 @@ mod tests {
         let wrong_key = make_crypto_tls_cert_key(node_id);
         let parsed = maybe_parse_crypto_threshold_signing_pubkey_key(&wrong_key);
         assert!(parsed.is_none());
-    }
-
-    #[test]
-    fn ecdsa_signing_subnet_list_key_round_trips() {
-        for curve in EcdsaCurve::iter() {
-            for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
-                let key_id = EcdsaKeyId {
-                    curve,
-                    name: name.to_string(),
-                };
-                let signing_subnet_list_key = make_ecdsa_signing_subnet_list_key(&key_id);
-                assert_eq!(
-                    get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key)
-                        .unwrap(),
-                    key_id
-                );
-            }
-        }
     }
 
     #[test]

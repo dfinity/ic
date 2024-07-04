@@ -20,7 +20,7 @@ def main():
     parser.add_argument("-b", "--boot", help="The (tzst) boot filesystem image", type=str)
     parser.add_argument("-r", "--root", help="The (tzst) root filesystem image", type=str)
     parser.add_argument("-v", "--versionfile", help="The version file in the upgrade image", type=str)
-    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -41,6 +41,7 @@ def main():
     version_path = os.path.join(tmpdir, "VERSION.TXT")
     shutil.copy(version_file, version_path, follow_symlinks=True)
 
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
     subprocess.run(

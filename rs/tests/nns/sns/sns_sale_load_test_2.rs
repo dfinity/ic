@@ -1,8 +1,9 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_deployment::{
     add_one_participant, initiate_token_swap_with_oc_parameters, sns_setup,
     workload_rps1200_get_state_query, workload_rps1200_get_state_update,
@@ -11,7 +12,6 @@ use ic_tests::nns_tests::sns_deployment::{
     workload_rps800_get_state_query, workload_rps800_get_state_update,
     workload_rps800_refresh_buyer_tokens,
 };
-use ic_tests::systest;
 
 fn workload_rps400_refresh_buyer_tokens_before(env: TestEnv) {
     workload_rps400_refresh_buyer_tokens(env)

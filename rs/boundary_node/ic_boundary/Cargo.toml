@@ -36,7 +36,6 @@ humantime = "2.1"
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-btc-interface = { workspace = true }
 ic-config = { path = "../../config" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
@@ -56,7 +55,6 @@ ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
 instant-acme = "0.3.2"
 jemallocator = "0.3"
 jemalloc-ctl = "0.3"
@@ -88,6 +86,7 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 serde_regex = "1.1"
+simple_moving_average = "1.0.2"
 slog = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }

@@ -18,19 +18,19 @@ Success::
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
-use crate::driver::constants::SSH_USERNAME;
-use crate::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use crate::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
+use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 
-use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
-use crate::util::block_on;
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::util::block_on;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
@@ -119,6 +119,7 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
+        replay_until_height: None,
         upgrade_image_url: env.get_ic_os_update_img_test_url().ok(),
         upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),

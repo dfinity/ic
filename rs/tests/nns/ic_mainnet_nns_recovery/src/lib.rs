@@ -23,7 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_sns_wasm::pb::v1::{
     GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateSnsSubnetListRequest,
 };
-use ic_tests::{
+use ic_system_test_driver::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         constants::SSH_USERNAME,
@@ -32,7 +32,7 @@ use ic_tests::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            retry, HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
+            HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
             IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
             SshSession, TopologySnapshot,
         },
@@ -42,12 +42,11 @@ use ic_tests::{
         await_proposal_execution, get_canister, get_governance_canister,
         submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
     },
-    orchestrator::utils::{
-        rw_message::install_nns_with_customizations_and_check_progress,
-        subnet_recovery::set_sandbox_env_vars,
-    },
-    retry_with_msg,
     util::{block_on, runtime_from_url},
+};
+use ic_tests::orchestrator::utils::{
+    rw_message::install_nns_with_customizations_and_check_progress,
+    subnet_recovery::set_sandbox_env_vars,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use icp_ledger::AccountIdentifier;
@@ -874,7 +873,7 @@ fn wait_until_ready_for_interaction(logger: Logger, node: IcNodeSnapshot) {
         logger.clone(),
         "Waiting until node {node_ip:?} is ready for interaction ..."
     );
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!("Check if node {node_ip:?} is ready for interaction"),
         logger.clone(),
         Duration::from_secs(500),
@@ -923,7 +922,7 @@ fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapsho
 }
 
 fn package_registry_local_store(logger: Logger, recovered_nns_node: IcNodeSnapshot) {
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "package registry local store",
         logger,
         Duration::from_secs(120),
@@ -1080,7 +1079,7 @@ fn create_subnet(
         logger,
         "Waiting until the new subnet with node {new_subnet_node_id} appears in the registry local store ..."
     );
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "checl if the new subnet with node {new_subnet_node_id} appears in the registry local store",
         logger.clone(),
         Duration::from_secs(500),

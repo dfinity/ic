@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-system-test-driver = { path = "./driver" }
 anyhow = { workspace = true }
 assert-json-diff = "2.0.1"
 assert_matches = { workspace = true }
@@ -20,11 +21,9 @@ candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
 deterministic_ips = { path = "../ic_os/deterministic_ips" }
 discower_bowndary = { path = "../boundary_node/discower_bowndary" }
-proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 chrono = { workspace = true }
-cidr = "0.2.2"
 clap = { version = "3.2.25", features = ["derive"] }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
@@ -43,6 +42,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-backup = { path = "../backup" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
+ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
@@ -204,6 +204,10 @@ path = "consensus/orchestrator/rotate_ecdsa_idkg_key_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
 path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-tschnorr-message-sizes"
+path = "consensus/tecdsa/tschnorr_message_sizes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-key-rotation"

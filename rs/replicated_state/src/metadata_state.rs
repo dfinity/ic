@@ -1237,10 +1237,13 @@ impl Default for Stream {
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
         // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-        let deprecated_reject_signals = item
+        let reject_signals = item
             .reject_signals()
             .iter()
-            .map(|signal| signal.index.get())
+            .map(|signal| pb_queues::RejectSignal {
+                reason: pb_queues::RejectReason::from(signal.reason).into(),
+                index: signal.index.get(),
+            })
             .collect();
         Self {
             messages_begin: item.messages.begin().get(),
@@ -1250,8 +1253,8 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
-            deprecated_reject_signals,
-            reject_signals: Vec::new(),
+            deprecated_reject_signals: Vec::new(),
+            reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
             }),
@@ -1349,7 +1352,7 @@ impl Stream {
         }
     }
 
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
         messages: StreamIndexedQueue<RequestOrResponse>,
         signals_end: StreamIndex,

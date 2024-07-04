@@ -1,7 +1,7 @@
 //! The signature process manager
 
-use crate::consensus::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaSignerMetrics};
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
+use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaSignerMetrics};
 use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
@@ -16,12 +16,12 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_replicated_state::ReplicatedState;
-use ic_types::artifact::EcdsaMessageId;
+use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::common::{
     CombinedSignature, SignatureScheme, ThresholdSigInputs, ThresholdSigInputsRef,
 };
 use ic_types::consensus::idkg::{
-    ecdsa_sig_share_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, RequestId,
+    ecdsa_sig_share_prefix, EcdsaBlockReader, EcdsaSigShare, EcdsaStats, IDkgMessage, RequestId,
 };
 use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
@@ -239,7 +239,7 @@ impl EcdsaSignerImpl {
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
-        id: EcdsaMessageId,
+        id: IDkgMessageId,
         share: SigShare,
         inputs_ref: &ThresholdSigInputsRef,
     ) -> Option<EcdsaChangeAction> {
@@ -386,7 +386,7 @@ impl EcdsaSignerImpl {
         &self,
         request_id: &RequestId,
         sig_inputs: &ThresholdSigInputs,
-    ) -> Result<EcdsaMessage, CreateSigShareError> {
+    ) -> Result<IDkgMessage, CreateSigShareError> {
         match sig_inputs {
             ThresholdSigInputs::Ecdsa(inputs) => {
                 ThresholdEcdsaSigner::sign_share(&*self.crypto, inputs).map_or_else(
@@ -397,7 +397,7 @@ impl EcdsaSignerImpl {
                             request_id: request_id.clone(),
                             share,
                         };
-                        Ok(EcdsaMessage::EcdsaSigShare(sig_share))
+                        Ok(IDkgMessage::EcdsaSigShare(sig_share))
                     },
                 )
             }
@@ -410,7 +410,7 @@ impl EcdsaSignerImpl {
                             request_id: request_id.clone(),
                             share,
                         };
-                        Ok(EcdsaMessage::SchnorrSigShare(sig_share))
+                        Ok(IDkgMessage::SchnorrSigShare(sig_share))
                     },
                 )
             }
@@ -423,7 +423,7 @@ impl EcdsaSignerImpl {
         sig_inputs: &ThresholdSigInputs,
         share: SigShare,
         stats: &dyn EcdsaStats,
-    ) -> Result<EcdsaMessage, VerifySigShareError> {
+    ) -> Result<IDkgMessage, VerifySigShareError> {
         let start = std::time::Instant::now();
         let request_id = share.request_id();
         let ret = match (sig_inputs, share) {
@@ -436,7 +436,7 @@ impl EcdsaSignerImpl {
                 )
                 .map_or_else(
                     |err| Err(VerifySigShareError::Ecdsa(err)),
-                    |_| Ok(EcdsaMessage::EcdsaSigShare(share)),
+                    |_| Ok(IDkgMessage::EcdsaSigShare(share)),
                 )
             }
             (ThresholdSigInputs::Schnorr(inputs), SigShare::Schnorr(share)) => {
@@ -448,7 +448,7 @@ impl EcdsaSignerImpl {
                 )
                 .map_or_else(
                     |err| Err(VerifySigShareError::Schnorr(err)),
-                    |_| Ok(EcdsaMessage::SchnorrSigShare(share)),
+                    |_| Ok(IDkgMessage::SchnorrSigShare(share)),
                 )
             }
             _ => Err(VerifySigShareError::ThresholdSchemeMismatch),
@@ -1382,8 +1382,8 @@ mod tests {
                 let id = create_request_id(&mut uid_generator, Height::from(5));
                 let message = create_signature_share(&key_id, NODE_2, id);
                 let share = match message {
-                    EcdsaMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
-                    EcdsaMessage::SchnorrSigShare(share) => SigShare::Schnorr(share),
+                    IDkgMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
+                    IDkgMessage::SchnorrSigShare(share) => SigShare::Schnorr(share),
                     _ => panic!("Unexpected message type"),
                 };
                 let result = signer.crypto_verify_sig_share(&inputs, share, &(EcdsaStatsNoOp {}));
@@ -2021,7 +2021,7 @@ mod tests {
                         }
                     })
                     .map(|share| {
-                        EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share))
+                        EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share))
                     })
                     .collect::<Vec<_>>();
                 ecdsa_pool.apply_changes(change_set);
@@ -2159,7 +2159,7 @@ mod tests {
                         }
                     })
                     .map(|share| {
-                        EcdsaChangeAction::AddToValidated(EcdsaMessage::SchnorrSigShare(share))
+                        EcdsaChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share))
                     })
                     .collect::<Vec<_>>();
                 ecdsa_pool.apply_changes(change_set);

@@ -25,7 +25,6 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::CanisterId;
 use little_loadshedder::{LoadShedError, LoadShedLayer};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
@@ -44,7 +43,6 @@ use crate::{
     firewall::{FirewallGenerator, SystemdReloader},
     geoip,
     http::{HttpClient, ReqwestClient},
-    management,
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
@@ -85,8 +83,6 @@ const MB: usize = 1024 * KB;
 
 pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 15 * MB;
-
-pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
@@ -552,9 +548,13 @@ pub fn setup_router(
         })));
 
     let call_route = {
-        let mut route = Router::new().route(routes::PATH_CALL, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        });
+        let mut route = Router::new()
+            .route(routes::PATH_CALL, {
+                post(routes::handle_canister).with_state(proxy.clone())
+            })
+            .route(routes::PATH_CALL_V3, {
+                post(routes::handle_canister).with_state(proxy.clone())
+            });
 
         // will panic if ip_rate_limit is Some(0)
         if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
@@ -609,6 +609,7 @@ pub fn setup_router(
         RetryParams {
             retry_count: cli.retry.retry_count as usize,
             retry_update_call: cli.retry.retry_update_call,
+            disable_latency_routing: cli.retry.disable_latency_routing,
         },
         retry_request,
     );
@@ -635,14 +636,6 @@ pub fn setup_router(
             ))
     }));
 
-    let middleware_ledger_rate_limiting =
-        option_layer(cli.rate_limiting.rate_limit_ledger_transfer.map(|x| {
-            middleware::from_fn_with_state(
-                Arc::new(management::LedgerRatelimitState::new(x)),
-                management::ledger_ratelimit_transfer_mw,
-            )
-        }));
-
     let middlware_bouncer =
         option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
     let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
@@ -667,8 +660,6 @@ pub fn setup_router(
         .layer(middleware::from_fn(routes::validate_request))
         .layer(middleware::from_fn(routes::validate_canister_request))
         .layer(common_service_layers.clone())
-        .layer(middleware::from_fn(management::btc_mw))
-        .layer(middleware_ledger_rate_limiting)
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_retry.clone());
 

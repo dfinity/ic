@@ -41,6 +41,7 @@ sudo
 udev
 usbutils
 zstd
+logrotate
 
 # SELinux support
 selinux-policy-default

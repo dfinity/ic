@@ -1,7 +1,7 @@
 //! Common utils for the ECDSA implementation.
 
-use crate::consensus::metrics::EcdsaPayloadMetrics;
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
+use crate::ecdsa::metrics::EcdsaPayloadMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
@@ -22,7 +22,7 @@ use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
-        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, PreSigId, RequestId,
+        EcdsaBlockReader, IDkgMessage, IDkgTranscriptParamsRef, PreSigId, RequestId,
         TranscriptLookupError, TranscriptRef,
     },
     HasHeight,
@@ -329,7 +329,7 @@ pub(super) fn load_transcripts(
             TranscriptLoadStatus::Complaints(complaints) => {
                 for complaint in complaints {
                     new_complaints.push(EcdsaChangeAction::AddToValidated(
-                        EcdsaMessage::EcdsaComplaint(complaint),
+                        IDkgMessage::EcdsaComplaint(complaint),
                     ));
                 }
             }

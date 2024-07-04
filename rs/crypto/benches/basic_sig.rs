@@ -244,9 +244,9 @@ fn signature_from_random_keypair<R: Rng + CryptoRng>(
 
     let (signature_bytes, public_key_bytes) = match algorithm_id {
         AlgorithmId::Ed25519 => {
-            let signing_key = ed25519_consensus::SigningKey::new(rng);
-            let signature_bytes = signing_key.sign(&bytes_to_sign).to_bytes().to_vec();
-            let public_key_bytes = signing_key.verification_key().to_bytes().to_vec();
+            let private_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(rng);
+            let signature_bytes = private_key.sign_message(&bytes_to_sign).to_vec();
+            let public_key_bytes = private_key.public_key().serialize_raw().to_vec();
             (signature_bytes, public_key_bytes)
         }
         AlgorithmId::EcdsaP256 => ecdsa_secp256r1_signature_and_public_key(&bytes_to_sign, rng),
