@@ -54,9 +54,5 @@ name = "ic-systest-sns-launchpad-aggregator-load-test"
 path = "launchpad_aggregator_load_test.rs"
 
 [[bin]]
-name = "ic-systest-sns-one-proposal-neurons-fund-swap-participation-test"
-path = "neurons_fund_swap_participation_test.rs"
-
-[[bin]]
 name = "ic-systest-sns-payment-flow-load-test"
 path = "payment_flow_load_test.rs"
