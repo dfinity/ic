@@ -805,7 +805,7 @@ fn migrate_next_part() {
     use ic_cdk::api::instruction_counter;
     use ledger_canister::{AllowanceTableField::*, LedgerField::*};
 
-    const MAX_INSTRUCTIONS_PER_CALL: u64 = 5_000_000_000;
+    const MAX_INSTRUCTIONS_PER_CALL: u64 = 1_000_000_000;
 
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;

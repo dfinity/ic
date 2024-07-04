@@ -1134,6 +1134,8 @@ fn account(n: u64) -> Account {
     }
 }
 
+use rand::Rng;
+
 #[test]
 fn test_icp_upgrade() {
     let ledger_wasm_add_acc = get_file_as_byte_vec(
@@ -1164,7 +1166,7 @@ fn test_icp_upgrade() {
         )
         .expect("Unable to install the Ledger canister with the new init");
 
-    let num_approvals = 100_000;
+    let num_approvals = 70_000;
     let num_balances = 0;
 
     let balances_batch_size = 100_000u32;
@@ -1258,14 +1260,24 @@ fn test_icp_upgrade() {
 
     print_mem();
 
+    let mut spenders = vec![];
+    let mut rng = rand::thread_rng();
+    for _ in 0..30 {
+        spenders.push(rng.gen_range(0..num_approvals));
+    }
+    spenders.push(0);
+    spenders.push(1);
+    spenders.push(num_approvals);
+    spenders.sort();
+
     // collect the approvals before the upgrade
     let mut expected_allowances = vec![];
-    for spender in 0..20 {
+    for spender in &spenders {
         expected_allowances.push(ic_icrc1_ledger_sm_tests::get_allowance(
             &env,
             canister_id,
             from,
-            account(spender),
+            account(*spender as u64),
         ));
     }
 
@@ -1296,16 +1308,19 @@ fn test_icp_upgrade() {
 
     // verify that the approvals are still there
     let mut actual_allowances = vec![];
-    for spender in 0..20 {
-        let allowance =
-            ic_icrc1_ledger_sm_tests::get_allowance(&env, canister_id, from, account(spender));
+    for spender in spenders {
+        let allowance = ic_icrc1_ledger_sm_tests::get_allowance(
+            &env,
+            canister_id,
+            from,
+            account(spender as u64),
+        );
         println!("allowance for spender {}: {:?}", spender, allowance);
         actual_allowances.push(allowance);
     }
 
     assert_eq!(expected_allowances, actual_allowances);
 }
-
 
 fn max_length_principal(index: u32) -> [u8; 29] {
     const MAX_PRINCIPAL: [u8; 29] = [1_u8; 29];
