@@ -48,8 +48,8 @@ anchors:
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
 
 jobs:
-  name: Check CI Main Failure
   ci-main-failure:
+    name: Check CI Main Failure
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
