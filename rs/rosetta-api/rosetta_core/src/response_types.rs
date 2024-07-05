@@ -368,3 +368,20 @@ pub struct SearchTransactionsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_offset: Option<i64>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct CallResponse {
+    /// Result contains the result of the `/call` invocation. This result will not be inspected or interpreted by Rosetta tooling and is left to the caller to decode.
+    #[serde(rename = "result")]
+    pub result: ObjectMap,
+
+    /// Idempotent indicates that if `/call` is invoked with the same CallRequest again, at any point in time, it will return the same CallResponse. Integrators may cache the CallResponse if this is set to true to avoid making unnecessary calls to the Rosetta implementation. For this reason, implementers should be very conservative about returning true here or they could cause issues for the caller.
+    pub idempotent: bool,
+}
+
+impl CallResponse {
+    pub fn new(result: ObjectMap, idempotent: bool) -> CallResponse {
+        CallResponse { result, idempotent }
+    }
+}

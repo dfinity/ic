@@ -12,6 +12,7 @@ use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::models::RosettaSupportedKeyPair;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::objects::Operation;
 use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
@@ -689,6 +690,23 @@ impl RosettaClient {
                 network_identifier,
                 transaction,
                 signed: is_signed,
+            },
+        )
+        .await
+    }
+
+    pub async fn call(
+        &self,
+        network_identifier: NetworkIdentifier,
+        method_name: String,
+        parameters: ObjectMap,
+    ) -> Result<CallResponse, Error> {
+        self.call_endpoint(
+            "/call",
+            &CallRequest {
+                network_identifier,
+                method_name,
+                parameters,
             },
         )
         .await

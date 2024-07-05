@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Added
 - Added /ready endpoint which indicates whether Rosetta is finished with its initial block synch
+- /call endpoint with the method 'query_block_range' to fetch multiple blocks at once
 ### Fixes
 - Changed default database path to match /data/db.sqlite
 
