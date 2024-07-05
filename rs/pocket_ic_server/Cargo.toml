@@ -9,7 +9,6 @@ axum = { workspace = true }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 candid = { workspace = true }
-ed25519-consensus = "2.0.1"
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { version = "0.1.3", features = ["client"] }
@@ -24,6 +23,7 @@ ic-utils = { workspace = true }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-config = { path = "../config" }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }

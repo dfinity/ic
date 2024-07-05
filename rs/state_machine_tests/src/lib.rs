@@ -562,24 +562,24 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
 pub struct StateMachineNode {
     pub node_id: NodeId,
     pub node_pk_proto: PublicKeyProto,
-    pub signing_key: ed25519_consensus::SigningKey,
+    pub signing_key: ic_crypto_ed25519::PrivateKey,
 }
 
 impl From<u64> for StateMachineNode {
     fn from(i: u64) -> Self {
         let mut bytes = [0; 32];
         bytes[..8].copy_from_slice(&i.to_le_bytes());
-        let signing_key: ed25519_consensus::SigningKey = bytes.into();
+        let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
         let node_pk_proto = PublicKeyProto {
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: signing_key.verification_key().to_bytes().to_vec(),
+            key_value: signing_key.public_key().serialize_raw().to_vec(),
             version: 0,
             proof_data: None,
             timestamp: None,
         };
         Self {
             node_id: PrincipalId::new_self_authenticating(
-                &signing_key.verification_key().to_bytes(),
+                &signing_key.public_key().serialize_raw(),
             )
             .into(),
             node_pk_proto,

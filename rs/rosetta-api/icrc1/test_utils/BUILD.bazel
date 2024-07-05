@@ -15,7 +15,6 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/ed25519",
     "//rs/types/types",
     "@crate_index//:candid",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:ic-agent",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",

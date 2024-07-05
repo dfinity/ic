@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 LIB_DEPENDENCIES = [
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
+    "//rs/crypto/ed25519",
     "//rs/boundary_node/ic_boundary",
     "//rs/boundary_node/icx_proxy:icx_proxy_dev",
     "//rs/interfaces",
@@ -40,7 +41,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:candid",
     "@crate_index//:hyper",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:serde",
     "@crate_index//:hex",

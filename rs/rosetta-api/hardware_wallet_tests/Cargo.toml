@@ -7,9 +7,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ed25519-consensus = "2.0.1"
 hex = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-rosetta-api = { path = "../" }
