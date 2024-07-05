@@ -1034,15 +1034,27 @@ fn test_call_cycles_add_up_to() {
     );
 
     // Adding more cycles than available to call means the rest of the available balance gets added
-    let amount2 = Cycles::new(u128::MAX);
     assert_eq!(
-        call_cycles_add128_up_to_helper(&mut api, amount2),
+        call_cycles_add128_up_to_helper(&mut api, Cycles::new(u128::MAX)),
         Ok(cycles_amount - amount1)
     );
     // Check cycles balance
     assert_eq!(
         Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
         Cycles::zero()
+    );
+
+    assert_eq!(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]), Ok(()));
+    // Check cycles balance.
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        cycles_amount
+    );
+
+    // With some allocated memory the freezing threshold is no longer at 0.
+    api.try_grow_wasm_memory(0, 1).unwrap();
+    assert!(
+        call_cycles_add128_up_to_helper(&mut api, Cycles::new(u128::MAX)).unwrap() < cycles_amount
     );
 }
 
