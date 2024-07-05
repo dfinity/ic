@@ -16,7 +16,7 @@ pkcs8 = { workspace = true }
 sha2 = { workspace = true }
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
-num-bigint = "~0.4.3"
+num-bigint = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
