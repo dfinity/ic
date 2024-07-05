@@ -54,7 +54,7 @@ use icrc_ledger_types::{
 };
 use ledger_canister::{
     Ledger, LedgerState, LedgerStateType, ALLOWANCES_ARRIVALS_MEMORY,
-    ALLOWANCES_EXPIRATIONS_MEMORY, ALLOWANCES_MEMORY, LEDGER, MAX_MESSAGE_SIZE_BYTES,
+    ALLOWANCES_EXPIRATIONS_MEMORY, ALLOWANCES_MEMORY, BALANCES_MEMORY, LEDGER, MAX_MESSAGE_SIZE_BYTES,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -810,6 +810,7 @@ fn migrate_next_part() {
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
     let mut migrated_arrivals = 0;
+    let mut migrated_balances = 0;
 
     ic_cdk::println!("Migration started.");
     log!(DebugOutSink, "Migration started.");
@@ -852,13 +853,22 @@ fn migrate_next_part() {
                     migrated_arrivals += 1;
                 }
                 None => {
+                    ledger.state = LedgerState::Migrating(AllowanceTable(Balances));
+                }
+            },
+            AllowanceTable(Balances) => match ledger.balances.store.pop_first() {
+                Some((key, value)) => {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(key, value));
+                    migrated_balances += 1;
+                }
+                None => {
                     ledger.state = LedgerState::Ready;
                 }
             },
         }
     }
     ledger.rounds += 1;
-    let msg = format!("Round {}. Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations} arrivals:{migrated_arrivals}. Instructions used {}.",
+    let msg = format!("Round {}. Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations} arrivals:{migrated_arrivals} balances {migrated_balances}. Instructions used {}.",
             ledger.rounds,
             instruction_counter());
     if ledger.is_migrating() {

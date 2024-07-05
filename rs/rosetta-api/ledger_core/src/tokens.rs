@@ -1,8 +1,12 @@
 use candid::{CandidType, Nat};
+use ic_stable_structures::{storable::Bound, Storable};
 use num_traits::{Bounded, ToPrimitive};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
+use std::io::{Cursor, Read};
 
 /// Performs addition that returns `None` instead of wrapping around on
 /// overflow.
@@ -121,6 +125,34 @@ pub struct Tokens {
     /// Number of 10^-8 Tokens.
     /// Named because the equivalent part of a Bitcoin is called a Satoshi
     e8s: u64,
+}
+
+impl Storable for Tokens {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buffer: Vec<u8> = vec![];
+
+        buffer.extend(self.e8s.to_le_bytes());
+
+        Cow::Owned(buffer)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut cursor = Cursor::new(bytes.into_owned());
+
+        let mut e8s_at_bytes = [0u8; 8];
+        cursor
+            .read_exact(&mut e8s_at_bytes)
+            .expect("Unable to read e8s_at_bytes bytes");
+
+        Tokens {
+            e8s: u64::from_le_bytes(e8s_at_bytes),
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 8,
+        is_fixed_size: true,
+    };
 }
 
 pub const DECIMAL_PLACES: u32 = 8;

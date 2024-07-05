@@ -1166,8 +1166,8 @@ fn test_icp_upgrade() {
         )
         .expect("Unable to install the Ledger canister with the new init");
 
-    let num_approvals = 70_000;
-    let num_balances = 0;
+    let num_approvals = 10_000;
+    let num_balances = 10_000;
 
     let balances_batch_size = 100_000u32;
     let approvals_batch_size = 50_000u32;
@@ -1260,6 +1260,16 @@ fn test_icp_upgrade() {
 
     print_mem();
 
+    let mut accounts = vec![];
+    let mut rng = rand::thread_rng();
+    for _ in 0..30 {
+        accounts.push(rng.gen_range(0..num_balances));
+    }
+    accounts.push(0);
+    accounts.push(1);
+    accounts.push(num_approvals);
+    accounts.sort();
+
     let mut spenders = vec![];
     let mut rng = rand::thread_rng();
     for _ in 0..30 {
@@ -1269,6 +1279,16 @@ fn test_icp_upgrade() {
     spenders.push(1);
     spenders.push(num_approvals);
     spenders.sort();
+
+    // collect the balances before the upgrade
+    let mut expected_balances = vec![];
+    for acc in &accounts {
+        expected_balances.push(ic_icrc1_ledger_sm_tests::balance_of(
+            &env,
+            canister_id,
+            account(*acc as u64),
+        ));
+    }
 
     // collect the approvals before the upgrade
     let mut expected_allowances = vec![];
@@ -1306,6 +1326,14 @@ fn test_icp_upgrade() {
         panic!("Ledger is not ready");
     }
 
+    // verify that the balances are still there
+    let mut actual_balances = vec![];
+    for acc in accounts {
+        let balance = ic_icrc1_ledger_sm_tests::balance_of(&env, canister_id, account(acc as u64));
+        println!("balance for account {}: {:?}", acc, balance);
+        actual_balances.push(balance);
+    }
+
     // verify that the approvals are still there
     let mut actual_allowances = vec![];
     for spender in spenders {
@@ -1319,6 +1347,7 @@ fn test_icp_upgrade() {
         actual_allowances.push(allowance);
     }
 
+    assert_eq!(expected_balances, actual_balances);
     assert_eq!(expected_allowances, actual_allowances);
 }
 

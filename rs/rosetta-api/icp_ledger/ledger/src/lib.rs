@@ -7,6 +7,7 @@ use ic_ledger_canister_core::blockchain::Blockchain;
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
+use ic_ledger_core::balances::BalancesStore;
 use ic_ledger_core::tokens::{CheckedSub, Zero};
 use ic_ledger_core::{
     approvals::{
@@ -34,6 +35,7 @@ use intmap::IntMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
@@ -60,6 +62,7 @@ const UPGRADE_PAGES: u64 = UPGRADE_PAGES_SIZE / WASM_PAGE_SIZE;
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ALLOWANCES_ARRIVALS_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BALANCES_ID: MemoryId = MemoryId::new(4);
 
 type CanisterRestrictedMemory = RestrictedMemory<DefaultMemoryImpl>;
 type CanisterVirtualMemory = VirtualMemory<CanisterRestrictedMemory>;
@@ -81,6 +84,11 @@ thread_local! {
     // arrival_queue: BTreeSet<(TimeStamp, K)>,
     pub static ALLOWANCES_ARRIVALS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, ApprovalKey), (), CanisterVirtualMemory>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_ARRIVALS_MEMORY_ID))));
+
+    // balances: BTreeMap<AccountIdentifier, Tokens>,
+    pub static BALANCES_MEMORY: RefCell<StableBTreeMap<AccountIdentifier, Tokens, CanisterVirtualMemory>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_ID))));
+
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -88,6 +96,7 @@ pub enum AllowanceTableField {
     Allowances,
     Expirations,
     Arrivals,
+    Balances,
 }
 
 impl AllowanceTableField {
@@ -100,7 +109,8 @@ impl AllowanceTableField {
         match self {
             Self::Allowances => Some(Self::Expirations),
             Self::Expirations => Some(Self::Arrivals),
-            Self::Arrivals => None,
+            Self::Arrivals => Some(Self::Balances),
+            Self::Balances => None,
         }
     }
 }
@@ -178,6 +188,8 @@ fn unknown_token() -> String {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     pub balances: LedgerBalances,
+    #[serde(default)]
+    pub stable_balances: StableBalances,
     #[serde(default)]
     pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>,
     #[serde(default)]
@@ -331,6 +343,7 @@ impl Default for Ledger {
         Self {
             approvals: Default::default(),
             stable_approvals: Default::default(),
+            stable_balances: Default::default(),
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
             maximum_number_of_accounts: 28_000_000,
@@ -608,6 +621,8 @@ impl Ledger {
             Some(AllowanceTable(Expirations))
         } else if !self.approvals.arrival_queue.is_empty() {
             Some(AllowanceTable(Arrivals))
+        } else if !self.balances.store.is_empty() {
+            Some(AllowanceTable(Balances))
         } else {
             None
         }
@@ -637,6 +652,43 @@ pub fn change_notification_state(
         new_state,
         TimeStamp::from(now()),
     )
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct StableBalances {}
+
+impl BalancesStore for StableBalances {
+    type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
+
+    fn get_balance(&self, k: &AccountIdentifier) -> Option<Tokens> {
+        BALANCES_MEMORY.with_borrow(|balances| balances.get(k))
+    }
+
+    fn update<F, E>(&mut self, k: AccountIdentifier, mut f: F) -> Result<Tokens, E>
+    where
+        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>,
+    {
+        let entry = BALANCES_MEMORY.with_borrow(|balances| balances.get(&k));
+        match entry {
+            Some(v) => {
+                let new_v = f(Some(&v))?;
+                if !new_v.is_zero() {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                } else {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.remove(&k));
+                }
+                Ok(new_v)
+            }
+            None => {
+                let new_v = f(None)?;
+                if !new_v.is_zero() {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                }
+                Ok(new_v)
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
