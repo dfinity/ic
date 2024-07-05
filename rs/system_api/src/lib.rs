@@ -32,7 +32,9 @@ use ic_types::{
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{
+    CanisterStatusView, CyclesAmountType, SandboxSafeSystemState, SystemStateChanges,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -1224,8 +1226,8 @@ impl SystemApiImpl {
     fn ic0_call_cycles_add_helper(
         &mut self,
         method_name: &str,
-        amount: Cycles,
-    ) -> HypervisorResult<()> {
+        amount: CyclesAmountType,
+    ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -1260,15 +1262,16 @@ impl SystemApiImpl {
                         ),
                     }),
                     Some(request) => {
-                        self.sandbox_safe_system_state
+                        let amount_withdrawn = self
+                            .sandbox_safe_system_state
                             .withdraw_cycles_for_transfer(
                                 self.memory_usage.current_usage,
                                 self.memory_usage.current_message_usage,
                                 amount,
                                 false, // synchronous error => no need to reveal top up balance
                             )?;
-                        request.add_cycles(amount);
-                        Ok(())
+                        request.add_cycles(amount_withdrawn);
+                        Ok(amount_withdrawn)
                     }
                 }
             }
@@ -2218,13 +2221,20 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_call_cycles_add(&mut self, amount: u64) -> HypervisorResult<()> {
-        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount));
+        let result = self
+            .ic0_call_cycles_add_helper(
+                "ic0_call_cycles_add",
+                CyclesAmountType::Exact(Cycles::from(amount)),
+            )
+            .map(|_| ());
         trace_syscall!(self, CallCyclesAdd, result, amount);
         result
     }
 
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()> {
-        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount);
+        let result = self
+            .ic0_call_cycles_add_helper("ic0_call_cycles_add128", CyclesAmountType::Exact(amount))
+            .map(|_| ());
         trace_syscall!(self, CallCyclesAdd128, result, amount);
         result
     }
@@ -2235,54 +2245,14 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let result = match &mut self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_cycles_add128_up_to")),
-            ApiType::Update {
-                outgoing_request, ..
-            }
-            | ApiType::SystemTask {
-                outgoing_request, ..
-            }
-            | ApiType::ReplyCallback {
-                outgoing_request, ..
-            }
-            | ApiType::RejectCallback {
-                outgoing_request, ..
-            } => {
-                // Reply and reject callbacks can be executed in non-replicated mode
-                // iff from within a composite query call. Always disallow in that case.
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    return Err(self.error_for("ic0_call_cycles_add128_up_to"));
-                }
-
-                match outgoing_request {
-                    None => Err(HypervisorError::ToolchainContractViolation {
-                        error:
-                            "ic0_call_cycles_add128_up_to called when no call is under construction.".to_string()
-                        ,
-                    }),
-                    Some(request) => {
-                        let withdrawn_cycles = self.sandbox_safe_system_state
-                            .withdraw_up_to_cycles_for_transfer(
-                                self.memory_usage.current_usage,
-                                self.memory_usage.current_message_usage,
-                                amount,
-                            );
-                        request.add_cycles(withdrawn_cycles);
-                        copy_cycles_to_heap(withdrawn_cycles, dst, heap, "ic0_call_cycles_add128_up_to")?;
-                        Ok(())
-                    }
-                }
-            }
-        };
+        let result = self.ic0_call_cycles_add_helper(
+            "ic0_call_cycles_add128_up_to",
+            CyclesAmountType::UpTo(amount),
+        );
         trace_syscall!(self, CallCyclesAdd128UpTo, result, amount);
-        result
+        let withdrawn_cycles = result?;
+        copy_cycles_to_heap(withdrawn_cycles, dst, heap, "ic0_call_cycles_add128_up_to")?;
+        Ok(())
     }
 
     // Note that if this function returns an error, then the canister will be
