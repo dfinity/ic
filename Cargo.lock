@@ -10893,7 +10893,6 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-canister-sig-creation",
- "ic-cbor",
  "ic-certification 2.5.0",
  "ic-crypto-internal-types",
  "ic-crypto-test-utils-canister-sigs",

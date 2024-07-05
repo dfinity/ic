@@ -1,4 +1,3 @@
-use ic_cbor::CertificateToCbor;
 use ic_certification::{
     leaf, Certificate, Delegation, HashTree, LookupResult, SubtreeLookupResult,
 };
@@ -35,8 +34,7 @@ fn check_certified_data_and_get_certificate(
     signature: &CanisterSignature,
     signing_canister_id: &Principal,
 ) -> Result<Certificate, String> {
-    let certificate = Certificate::from_cbor(&signature.certificate)
-        .map_err(|e| format!("failed to parse certificate CBOR: {}", e))?;
+    let certificate = parse_certificate_cbor(&signature.certificate)?;
     let cert_data_path = [
         "canister".as_bytes(),
         signing_canister_id.as_slice(),
@@ -88,6 +86,16 @@ fn parse_signature_cbor(signature_cbor: &[u8]) -> Result<CanisterSignature, Stri
         .map_err(|e| format!("failed to parse signature CBOR: {}", e))
 }
 
+fn parse_certificate_cbor(certificate_cbor: &[u8]) -> Result<Certificate, String> {
+    // 0xd9d9f7 (cf. https://tools.ietf.org/html/rfc7049#section-2.4.5) is the
+    // self-describing CBOR tag required to be present by the interface spec.
+    if certificate_cbor.len() < 3 || certificate_cbor[0..3] != [0xd9, 0xd9, 0xf7] {
+        return Err("certificate CBOR doesn't have a self-describing tag".to_string());
+    }
+    serde_cbor::from_slice::<Certificate>(certificate_cbor)
+        .map_err(|e| format!("failed to parse certificate CBOR: {}", e))
+}
+
 fn verify_certificate(
     certificate: &Certificate,
     signing_canister_id: Principal,
@@ -107,7 +115,7 @@ fn verify_delegation(
     signing_canister_id: Principal,
     root_public_key: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let cert: Certificate = Certificate::from_cbor(&delegation.certificate)
+    let cert: Certificate = parse_certificate_cbor(&delegation.certificate)
         .map_err(|e| format!("invalid delegation certificate: {}", e))?;
 
     // disallow nested delegations
