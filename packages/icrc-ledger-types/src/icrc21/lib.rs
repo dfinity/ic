@@ -15,10 +15,6 @@ use serde_bytes::ByteBuf;
 use strum;
 use strum::EnumString;
 
-pub const ICRC1_TRANSFER_DISPLAY_MESSAGE: &str = "Transfers {AMOUNT} {TOKEN_SYMBOL} from {SENDER_ACCOUNT} to {RECEIVER_ACCOUNT}. Fee paid by {SENDER_ACCOUNT} is {LEDGER_FEE} {TOKEN_SYMBOL}.";
-pub const ICRC2_APPROVE_DISPLAY_MESSAGE: &str = "Approves {AMOUNT} {TOKEN_SYMBOL} from {APPROVER_ACCOUNT} to be spent by {SPENDER_ACCOUNT}. Fee paid by {SENDER_ACCOUNT} is {LEDGER_FEE} {TOKEN_SYMBOL}.";
-pub const ICRC2_TRANSFER_FROM_DISPLAY_MESSAGE: &str = "Transfers {AMOUNT} {TOKEN_SYMBOL} from {SENDER_ACCOUNT} to {RECEIVER_ACCOUNT}. The tokens are spent by {SPENDER_ACCOUNT}. Fee paid by {SENDER_ACCOUNT} is {LEDGER_FEE} {TOKEN_SYMBOL}.";
-
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;
 
@@ -37,16 +33,15 @@ pub struct ConsentMessageBuilder {
     display_type: Option<DisplayMessageType>,
     approver: Option<Account>,
     spender: Option<Account>,
-    sender: Option<Account>,
+    from: Option<Account>,
     receiver: Option<Account>,
     amount: Option<Nat>,
     token_symbol: Option<String>,
-    fee_set: Option<Nat>,
     ledger_fee: Option<Nat>,
     memo: Option<ByteBuf>,
-    created_at_time: Option<u64>,
     expected_allowance: Option<Nat>,
     expires_at: Option<u64>,
+    utc_offset_minutes: Option<i16>,
 }
 
 impl ConsentMessageBuilder {
@@ -64,35 +59,34 @@ impl ConsentMessageBuilder {
             display_type: None,
             approver: None,
             spender: None,
-            sender: None,
+            from: None,
             receiver: None,
             amount: None,
             token_symbol: None,
-            fee_set: None,
             ledger_fee: None,
+            utc_offset_minutes: None,
             memo: None,
-            created_at_time: None,
             expected_allowance: None,
             expires_at: None,
         })
     }
 
-    pub fn with_approver(mut self, approver: Account) -> Self {
+    pub fn with_approver_account(mut self, approver: Account) -> Self {
         self.approver = Some(approver);
         self
     }
 
-    pub fn with_spender(mut self, spender: Account) -> Self {
+    pub fn with_spender_account(mut self, spender: Account) -> Self {
         self.spender = Some(spender);
         self
     }
 
-    pub fn with_sender(mut self, sender: Account) -> Self {
-        self.sender = Some(sender);
+    pub fn with_from_account(mut self, from: Account) -> Self {
+        self.from = Some(from);
         self
     }
 
-    pub fn with_receiver(mut self, receiver: Account) -> Self {
+    pub fn with_receiver_account(mut self, receiver: Account) -> Self {
         self.receiver = Some(receiver);
         self
     }
@@ -107,11 +101,6 @@ impl ConsentMessageBuilder {
         self
     }
 
-    pub fn with_fee_set(mut self, fee_set: Nat) -> Self {
-        self.fee_set = Some(fee_set);
-        self
-    }
-
     pub fn with_ledger_fee(mut self, ledger_fee: Nat) -> Self {
         self.ledger_fee = Some(ledger_fee);
         self
@@ -119,11 +108,6 @@ impl ConsentMessageBuilder {
 
     pub fn with_memo(mut self, memo: ByteBuf) -> Self {
         self.memo = Some(memo);
-        self
-    }
-
-    pub fn with_created_at_time(mut self, created_at_time: u64) -> Self {
-        self.created_at_time = Some(created_at_time);
         self
     }
 
@@ -142,143 +126,254 @@ impl ConsentMessageBuilder {
         self
     }
 
+    pub fn with_utc_offset_minutes(mut self, utc_offset_minutes: i16) -> Self {
+        self.utc_offset_minutes = Some(utc_offset_minutes);
+        self
+    }
+
     pub fn build(self) -> Result<ConsentMessage, Icrc21Error> {
-        let mut message = match self.function {
-            Icrc21Function::Transfer => ICRC1_TRANSFER_DISPLAY_MESSAGE
-                .replace(
-                    "{SENDER_ACCOUNT}",
-                    &self
-                        .sender
-                        .ok_or(Icrc21Error::GenericError {
-                            error_code: Nat::from(500u64),
-                            description: "Sender Account has to be specified.".to_owned(),
-                        })?
-                        .to_string(),
-                )
-                .replace(
-                    "{RECEIVER_ACCOUNT}",
-                    &self
-                        .receiver
-                        .ok_or(Icrc21Error::GenericError {
-                            error_code: Nat::from(500u64),
-                            description: "Receiver Account has to be specified.".to_owned(),
-                        })?
-                        .to_string(),
-                ),
-            Icrc21Function::Approve => ICRC2_APPROVE_DISPLAY_MESSAGE
-                .replace(
-                    "{APPROVER_ACCOUNT}",
-                    &self
-                        .approver
-                        .ok_or(Icrc21Error::GenericError {
-                            error_code: Nat::from(500u64),
-                            description: "Approver Account has to be specified.".to_owned(),
-                        })?
-                        .to_string(),
-                )
-                .replace(
-                    "{SPENDER_ACCOUNT}",
-                    &self
-                        .spender
-                        .ok_or(Icrc21Error::GenericError {
-                            error_code: Nat::from(500u64),
-                            description: "Spender Account has to be specified.".to_owned(),
-                        })?
-                        .to_string(),
-                ),
-            Icrc21Function::TransferFrom => ICRC2_TRANSFER_FROM_DISPLAY_MESSAGE
-                .replace(
-                    "{SENDER_ACCOUNT}",
-                    &self
-                        .sender
-                        .ok_or(Icrc21Error::GenericError {
-                            error_code: Nat::from(500u64),
-                            description: "Sender Account has to be specified.".to_owned(),
-                        })?
-                        .to_string(),
-                )
-                .replace(
-                    "{RECEIVER_ACCOUNT}",
-                    &self
-                        .receiver
-                        .ok_or(Icrc21Error::GenericError {
-                            error_code: Nat::from(500u64),
-                            description: "Receiver Account has to be specified.".to_owned(),
-                        })?
-                        .to_string(),
-                )
-                .replace(
-                    "{SPENDER_ACCOUNT}",
-                    &self
-                        .spender
-                        .ok_or(Icrc21Error::GenericError {
-                            error_code: Nat::from(500u64),
-                            description: "Spender Account has to be specified.".to_owned(),
-                        })?
-                        .to_string(),
-                ),
+        let mut message = "".to_string();
+        match self.function {
+            Icrc21Function::Transfer => {
+                message.push_str("# Approve the transfer of funds");
+                let from_account = self.from.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "From Account has to be specified.".to_owned(),
+                })?;
+                let receiver_account = self.receiver.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Receiver Account has to be specified.".to_owned(),
+                })?;
+                let fee = self
+                    .ledger_fee
+                    .ok_or(Icrc21Error::GenericError {
+                        error_code: Nat::from(500u64),
+                        description: "Ledger Fee must be specified.".to_owned(),
+                    })?
+                    .to_string()
+                    .replace('_', "'");
+                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Symbol must be specified.".to_owned(),
+                })?;
+                let amount = self
+                    .amount
+                    .ok_or(Icrc21Error::GenericError {
+                        error_code: Nat::from(500u64),
+                        description: "Amount has to be specified.".to_owned(),
+                    })?
+                    .to_string()
+                    .replace('_', "'");
+
+                message.push_str(&format!("\n\n**Amount:**\n{} {}", amount, token_symbol));
+                if from_account.owner == Principal::anonymous() {
+                    message.push_str(&format!(
+                        "\n\n**From Subaccount:**\n{}",
+                        from_account.to_string().split('.').last().ok_or(
+                            Icrc21Error::GenericError {
+                                error_code: Nat::from(500u64),
+                                description: "Sender Subaccount has an unexpected format."
+                                    .to_owned(),
+                            }
+                        )?
+                    ));
+                } else {
+                    message.push_str(&format!("\n\n**From:**\n{}", from_account));
+                }
+                message.push_str(&format!("\n\n**To:**\n{}", receiver_account));
+                message.push_str(&format!("\n\n**Fee:**\n{} {}", fee, token_symbol));
+            }
+            Icrc21Function::Approve => {
+                message.push_str("# Authorize another address to withdraw from your account");
+                let approver_account = self.approver.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Approver Account has to be specified.".to_owned(),
+                })?;
+                let spender_account = self.spender.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Spender Account has to be specified.".to_owned(),
+                })?;
+                let fee = self
+                    .ledger_fee
+                    .ok_or(Icrc21Error::GenericError {
+                        error_code: Nat::from(500u64),
+                        description: "Ledger Fee must be specified.".to_owned(),
+                    })?
+                    .to_string()
+                    .replace('_', "'");
+                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Symbol must be specified.".to_owned(),
+                })?;
+                let amount = self
+                    .amount
+                    .ok_or(Icrc21Error::GenericError {
+                        error_code: Nat::from(500u64),
+                        description: "Amount has to be specified.".to_owned(),
+                    })?
+                    .to_string()
+                    .replace('_', "'");
+                let expires_at = self
+                    .expires_at
+                    .map(|ts| {
+                        let seconds = (ts as i64) / 10_i64.pow(9);
+                        let nanos = ((ts as i64) % 10_i64.pow(9)) as u32;
+
+                        let utc_dt = match (match time::OffsetDateTime::from_unix_timestamp(seconds)
+                        {
+                            Ok(dt) => dt,
+                            Err(_) => return format!("Invalid timestamp: {}", ts),
+                        })
+                        .replace_nanosecond(nanos)
+                        {
+                            Ok(dt) => dt,
+                            Err(_) => return format!("Invalid nanosecond: {}", nanos),
+                        };
+
+                        // Apply the offset minutes
+                        let offset = time::UtcOffset::from_whole_seconds(
+                            (self.utc_offset_minutes.unwrap_or(0) * 60).into(),
+                        )
+                        .expect("Invalid offset");
+                        let offset_dt = utc_dt.to_offset(offset);
+
+                        // Format as a string including the offset
+                        match offset_dt.format(&time::format_description::well_known::Rfc2822) {
+                            Ok(formatted) => formatted,
+                            Err(_) => format!("Invalid timestamp: {}", ts),
+                        }
+                    })
+                    .unwrap_or("No expiration.".to_owned());
+
+                message.push_str(&format!(
+                    "\n\n**The following address is allowed to withdraw from your account:**\n{}",
+                    spender_account
+                ));
+                if approver_account.owner == Principal::anonymous() {
+                    message.push_str(&format!(
+                        "\n\n**Your Subaccount:**\n{}",
+                        approver_account.to_string().split('.').last().ok_or(
+                            Icrc21Error::GenericError {
+                                error_code: Nat::from(500u64),
+                                description: "Approver Subaccount has an unexpected format."
+                                    .to_owned(),
+                            }
+                        )?
+                    ));
+                } else {
+                    message.push_str(&format!("\n\n**Your account:**\n{}", approver_account));
+                }
+                message.push_str(&format!(
+                    "\n\n**Requested withdrawal allowance:**\n{} {}",
+                    amount, token_symbol
+                ));
+                message.push_str(&self.expected_allowance.map(
+                    |expected_allowance| format!("\n\n**Current withdrawal allowance:**\n{} {}", expected_allowance.to_string().replace('_', "'"),token_symbol))
+                    .unwrap_or_else(|| format!("\u{26A0} The allowance will be set to {} {} independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",amount,token_symbol)));
+                message.push_str(&format!("\n\n**Expiration date:**\n{}", expires_at));
+                message.push_str(&format!("\n\n**Approval fee:**\n{} {}", fee, token_symbol));
+                if approver_account.owner == Principal::anonymous() {
+                    message.push_str(&format!(
+                        "\n\n**Transaction fees to be paid by your subaccount:**\n{}",
+                        approver_account.to_string().split('.').last().ok_or(
+                            Icrc21Error::GenericError {
+                                error_code: Nat::from(500u64),
+                                description: "Approver Subaccount has an unexpected format."
+                                    .to_owned(),
+                            }
+                        )?
+                    ));
+                } else {
+                    message.push_str(&format!(
+                        "\n\n**Transaction fees to be paid by:**\n{}",
+                        approver_account
+                    ));
+                }
+            }
+            Icrc21Function::TransferFrom => {
+                message.push_str("# Transfer from a withdrawal account");
+                let from_account = self.from.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "From Account has to be specified.".to_owned(),
+                })?;
+                let receiver_account = self.receiver.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Receiver Account has to be specified.".to_owned(),
+                })?;
+                let spender_account = self.spender.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Spender Account has to be specified.".to_owned(),
+                })?;
+                let fee = self
+                    .ledger_fee
+                    .ok_or(Icrc21Error::GenericError {
+                        error_code: Nat::from(500u64),
+                        description: "Ledger Fee must be specified.".to_owned(),
+                    })?
+                    .to_string()
+                    .replace('_', "'");
+                let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Symbol must be specified.".to_owned(),
+                })?;
+                let amount = self
+                    .amount
+                    .ok_or(Icrc21Error::GenericError {
+                        error_code: Nat::from(500u64),
+                        description: "Amount has to be specified.".to_owned(),
+                    })?
+                    .to_string()
+                    .replace('_', "'");
+
+                message.push_str(&format!("\n\n**Withdrawal Account:**\n{}", from_account));
+                if spender_account.owner == Principal::anonymous() {
+                    message.push_str(&format!(
+                        "\n\n**Subaccount sending the transfer request:**\n{}",
+                        spender_account.to_string().split('.').last().ok_or(
+                            Icrc21Error::GenericError {
+                                error_code: Nat::from(500u64),
+                                description: "Spender Subaccount has an unexpected format."
+                                    .to_owned(),
+                            }
+                        )?
+                    ));
+                } else {
+                    message.push_str(&format!(
+                        "\n\n**Account sending the transfer request:**\n{}",
+                        spender_account
+                    ));
+                }
+                message.push_str(&format!(
+                    "\n\n**Amount to withdraw:**\n{} {}",
+                    amount, token_symbol
+                ));
+                message.push_str(&format!("\n\n**To:**\n{}", receiver_account));
+                message.push_str(&format!(
+                    "\n\n**Fee paid by withdrawal account:**\n{} {}",
+                    fee, token_symbol
+                ));
+            }
+        };
+
+        if let Some(memo) = self.memo {
+            message.push_str(&format!(
+                "\n\n**Memo:**\n{}",
+                // Check if the memo is a valid UTF-8 string and display it as such if it is.
+                &match std::str::from_utf8(memo.as_slice()) {
+                    Ok(valid_str) => valid_str.to_string(),
+                    Err(_) => hex::encode(memo.as_slice()),
+                }
+            ));
         }
-        .replace(
-            "{AMOUNT}",
-            &self
-                .amount
-                .ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: "Amount has to be specified.".to_owned(),
-                })?
-                .to_string(),
-        )
-        .replace(
-            "{TOKEN_SYMBOL}",
-            &self.token_symbol.ok_or(Icrc21Error::GenericError {
-                error_code: Nat::from(500u64),
-                description: "Token Symbol must be specified.".to_owned(),
-            })?,
-        )
-        .replace(
-            "{LEDGER_FEE}",
-            &self
-                .ledger_fee
-                .ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: "Ledger Fee must be specified.".to_owned(),
-                })?
-                .to_string(),
-        );
 
         match self.display_type {
             Some(DisplayMessageType::GenericDisplay) | None => {
-                message.push_str("\n---\n Request Details\n");
-                if let Some(memo) = self.memo {
-                    message.push_str(&format!(
-                        "\n*Transaction Memo is: {}",
-                        String::from_utf8_lossy(&memo)
-                    ));
-                }
-                if let Some(created_at_time) = self.created_at_time {
-                    message.push_str(&format!(
-                        "\n*Transaction was created by the user at: {}",
-                        created_at_time
-                    ));
-                }
-                if let Some(expected_allowance) = self.expected_allowance {
-                    message.push_str(&format!(
-                        "\n*The expected allowance before approving the requested amount is: {}",
-                        expected_allowance
-                    ));
-                }
-                if let Some(expires_at) = self.expires_at {
-                    message.push_str(&format!("\n*The approval expires at: {}", expires_at));
-                }
                 Ok(ConsentMessage::GenericDisplayMessage(message))
             }
             Some(DisplayMessageType::LineDisplay {
                 lines_per_page,
                 characters_per_line,
             }) => {
-                if let Some(memo) = self.memo {
-                    message.push_str(&format!("\nMemo is {}", String::from_utf8_lossy(&memo)));
-                }
                 let pages = consent_msg_text_pages(&message, characters_per_line, lines_per_page);
                 Ok(ConsentMessage::LineDisplayMessage { pages })
             }
@@ -353,11 +448,24 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     // for now, respond in English regardless of what the client requested
     let metadata = ConsentMessageMetadata {
         language: "en".to_string(),
+        utc_offset_minutes: consent_msg_request
+            .user_preferences
+            .metadata
+            .utc_offset_minutes,
     };
 
     let mut display_message_builder = ConsentMessageBuilder::new(&consent_msg_request.method)?
         .with_ledger_fee(ledger_fee)
         .with_token_symbol(token_symbol);
+
+    if let Some(offset) = consent_msg_request
+        .user_preferences
+        .metadata
+        .utc_offset_minutes
+    {
+        display_message_builder = display_message_builder.with_utc_offset_minutes(offset);
+    }
+
     if let Some(display_type) = consent_msg_request.user_preferences.device_spec {
         if let DisplayMessageType::LineDisplay {
             lines_per_page,
@@ -378,10 +486,10 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             let TransferArg {
                 memo,
                 amount,
-                fee,
                 from_subaccount,
                 to,
-                created_at_time,
+                fee: _,
+                created_at_time: _,
             } = Decode!(&consent_msg_request.arg, TransferArg).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                     description: format!("Failed to decode TransferArg: {}", e),
@@ -393,18 +501,11 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             };
             display_message_builder = display_message_builder
                 .with_amount(amount)
-                .with_receiver(to)
-                .with_sender(sender);
+                .with_receiver_account(to)
+                .with_from_account(sender);
 
             if let Some(memo) = memo {
                 display_message_builder = display_message_builder.with_memo(memo.0);
-            }
-            if let Some(created_at_time) = created_at_time {
-                display_message_builder =
-                    display_message_builder.with_created_at_time(created_at_time);
-            }
-            if let Some(fee) = fee {
-                display_message_builder = display_message_builder.with_fee_set(fee);
             }
             display_message_builder.build()
         }
@@ -412,11 +513,11 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             let TransferFromArgs {
                 memo,
                 amount,
-                fee,
                 from,
                 to,
                 spender_subaccount,
-                created_at_time,
+                fee: _,
+                created_at_time: _,
             } = Decode!(&consent_msg_request.arg, TransferFromArgs).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                     description: format!("Failed to decode TransferFromArgs: {}", e),
@@ -428,19 +529,12 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             };
             display_message_builder = display_message_builder
                 .with_amount(amount)
-                .with_receiver(to)
-                .with_sender(from)
-                .with_spender(spender);
+                .with_receiver_account(to)
+                .with_from_account(from)
+                .with_spender_account(spender);
 
             if let Some(memo) = memo {
                 display_message_builder = display_message_builder.with_memo(memo.0);
-            }
-            if let Some(created_at_time) = created_at_time {
-                display_message_builder =
-                    display_message_builder.with_created_at_time(created_at_time);
-            }
-            if let Some(fee) = fee {
-                display_message_builder = display_message_builder.with_fee_set(fee);
             }
             display_message_builder.build()
         }
@@ -448,12 +542,12 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             let ApproveArgs {
                 memo,
                 amount,
-                fee,
                 from_subaccount,
                 spender,
-                created_at_time,
                 expires_at,
                 expected_allowance,
+                fee: _,
+                created_at_time: _,
             } = Decode!(&consent_msg_request.arg, ApproveArgs).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                     description: format!("Failed to decode ApproveArgs: {}", e),
@@ -469,15 +563,11 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             };
             display_message_builder = display_message_builder
                 .with_amount(amount)
-                .with_approver(approver)
-                .with_spender(spender);
+                .with_approver_account(approver)
+                .with_spender_account(spender);
 
             if let Some(memo) = memo {
                 display_message_builder = display_message_builder.with_memo(memo.0);
-            }
-            if let Some(created_at_time) = created_at_time {
-                display_message_builder =
-                    display_message_builder.with_created_at_time(created_at_time);
             }
             if let Some(expires_at) = expires_at {
                 display_message_builder = display_message_builder.with_expires_at(expires_at);
@@ -485,9 +575,6 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             if let Some(expected_allowance) = expected_allowance {
                 display_message_builder =
                     display_message_builder.with_expected_allowance(expected_allowance);
-            }
-            if let Some(fee) = fee {
-                display_message_builder = display_message_builder.with_fee_set(fee);
             }
             display_message_builder.build()
         }
