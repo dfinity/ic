@@ -1,7 +1,7 @@
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_BODY_RECEIVE_TIMEOUT, LABEL_CONNECT,
-    LABEL_DOWNLOAD, LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME,
-    LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
+    LABEL_DOWNLOAD, LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS,
+    LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use core::convert::TryFrom;
 use futures::StreamExt;
@@ -86,7 +86,9 @@ impl CanisterHttpService for CanisterHttp {
             )
         })?;
 
+        #[cfg(not(feature = "http"))]
         if url.scheme() != "https" {
+            use crate::metrics::LABEL_HTTP_SCHEME;
             debug!(
                 self.logger,
                 "Got request with no or http scheme specified. {}", url
