@@ -457,7 +457,7 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/blind-oracle/cloudflare-rs.git", rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc", feature = [
+cloudflare = { git = "https://github.com/blind-oracle/cloudflare-rs.git", rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc", default-features = false, feature = [
     "rustls-tls",
 ] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
