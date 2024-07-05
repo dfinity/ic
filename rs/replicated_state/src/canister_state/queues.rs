@@ -10,16 +10,18 @@ use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
-use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
+use ic_protobuf::state::queues::v1::canister_queues::{
+    CanisterQueuePair, NextInputQueue as ProtoNextInputQueue,
+};
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::{
     CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
-    MAX_RESPONSE_COUNT_BYTES,
+    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::{CanisterId, CountBytes, Cycles, Time};
-use message_pool::{Context, REQUEST_LIFETIME};
-use queue::{IngressQueue, InputQueue, OutputQueue};
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use message_pool::{Context, MessagePool, REQUEST_LIFETIME};
+use queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
@@ -106,6 +108,56 @@ pub struct CanisterQueues {
     memory_usage_stats: MemoryUsageStats,
 
     /// Round-robin across ingress and cross-net input queues for pop_input().
+    next_input_queue: NextInputQueue,
+}
+
+/// Wrapper around the induction pool (ingress and input queues); a priority
+/// queue used for round-robin scheduling of senders when consuming input
+/// messages; and output queues.
+///
+/// Responsible for queue lifetime management, fair scheduling of inputs across
+/// sender canisters and queue backpressure.
+///
+/// Encapsulates the `InductionPool` component described in the spec. The reason
+/// for bundling together the induction pool and output queues is to reliably
+/// implement backpressure via queue slot reservations for response messages.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NewCanisterQueues {
+    /// Queue of ingress (user) messages.
+    ingress_queue: IngressQueue,
+
+    /// Per remote canister input and output queues.
+    canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+
+    /// Pool holding all messages in `canister_queues`, with support for time-based
+    /// expiration and load shedding.
+    pool: MessagePool,
+
+    /// Slot and memory reservation stats. Message count and size stats are
+    /// maintained separately in the `MessagePool`.
+    queue_stats: QueueStats,
+
+    /// FIFO queue of local subnet sender canister IDs ensuring round-robin
+    /// consumption of input messages. Only senders with non-empty queues
+    /// are scheduled.
+    ///
+    /// We rely on `ReplicatedState::canister_states` to decide whether a canister
+    /// is local or not. This test is subject to race conditions (e.g. if the sender
+    /// has just been deleted), meaning that the separation into local and remote
+    /// senders is best effort.
+    local_subnet_input_schedule: VecDeque<CanisterId>,
+
+    /// FIFO queue of remote subnet sender canister IDs ensuring round-robin
+    /// consumption of input messages. Only senders with non-empty queues
+    /// are scheduled.
+    ///
+    /// We rely on `ReplicatedState::canister_states` to decide whether a canister
+    /// is local or not. This test is subject to race conditions (e.g. if the sender
+    /// has just been deleted), meaning that the separation into local and remote
+    /// senders is best effort.
+    remote_subnet_input_schedule: VecDeque<CanisterId>,
+
+    /// Round-robin across ingress and cross-net input queues for `pop_input()`.
     next_input_queue: NextInputQueue,
 }
 
@@ -1268,6 +1320,268 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
     }
 }
 
+impl NewCanisterQueues {
+    /// Helper function to concisely validate `CanisterQueues`' input schedules
+    /// during deserialization; or in debug builds, by writing
+    /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)`.
+    ///
+    /// Checks that all canister IDs of input queues that contain at least one message
+    /// are found exactly once in either the input schedule for the local subnet or the
+    /// input schedule for remote subnets.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    fn schedules_ok(
+        &self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> Result<(), String> {
+        let mut local_schedule: HashSet<_> = self.local_subnet_input_schedule.iter().collect();
+        let mut remote_schedule: HashSet<_> = self.remote_subnet_input_schedule.iter().collect();
+
+        if local_schedule.len() != self.local_subnet_input_schedule.len()
+            || remote_schedule.len() != self.remote_subnet_input_schedule.len()
+            || local_schedule.intersection(&remote_schedule).count() != 0
+        {
+            return Err(format!(
+                "Duplicate entries in local and/or remote input schedules:\n  `local_subnet_input_schedule`: {:?}\n  `remote_subnet_input_schedule`: {:?}",
+                self.local_subnet_input_schedule, self.remote_subnet_input_schedule,
+            ));
+        }
+
+        for (canister_id, (input_queue, _)) in self.canister_queues.iter() {
+            if input_queue.len() == 0 {
+                continue;
+            }
+
+            if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
+                // Definitely a local canister.
+                if !local_schedule.remove(canister_id) {
+                    return Err(format!(
+                        "Local canister with non-empty input queue ({:?}) absent from `local_subnet_input_schedule`",
+                        canister_id
+                    ));
+                }
+            } else {
+                // Remote canister or deleted local canister. Check in both schedules.
+                if !remote_schedule.remove(canister_id) && !local_schedule.remove(canister_id) {
+                    return Err(format!(
+                        "Canister with non-empty input queue ({:?}) absent from input schedules",
+                        canister_id
+                    ));
+                }
+            }
+        }
+
+        if !local_schedule.is_empty() || !remote_schedule.is_empty() {
+            return Err(format!(
+                "Canister(s) with no inputs enqueued in input schedule:\n  local: {:?}\n  remote: {:?}",
+                local_schedule, remote_schedule,
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Computes stats for the given canister queues. Used when deserializing and in
+    /// `debug_assert!()` checks. Takes the number of memory reservations from the
+    /// caller, as the queues have no need to track memory reservations, so it
+    /// cannot be computed.
+    ///
+    /// Time complexity: `O(canister_queues.len())`.
+    fn calculate_queue_stats(
+        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+        guaranteed_response_memory_reservations: usize,
+    ) -> QueueStats {
+        let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
+            .values()
+            .map(|(iq, oq)| (iq.reserved_slots(), oq.reserved_slots()))
+            .fold((0, 0), |(acc0, acc1), (item0, item1)| {
+                (acc0 + item0, acc1 + item1)
+            });
+        QueueStats {
+            guaranteed_response_memory_reservations,
+            input_queues_reserved_slots,
+            output_queues_reserved_slots,
+            transient_stream_responses_size_bytes: 0,
+        }
+    }
+}
+
+impl From<&NewCanisterQueues> for pb_queues::CanisterQueues {
+    fn from(item: &NewCanisterQueues) -> Self {
+        Self {
+            ingress_queue: (&item.ingress_queue).into(),
+            input_queues: Default::default(),
+            output_queues: Default::default(),
+            canister_queues: item
+                .canister_queues
+                .iter()
+                .map(|(canid, (iq, oq))| CanisterQueuePair {
+                    canister_id: Some(pb_types::CanisterId::from(*canid)),
+                    input_queue: Some(iq.into()),
+                    output_queue: Some(oq.into()),
+                })
+                .collect(),
+            pool: if item.pool != MessagePool::default() {
+                Some((&item.pool).into())
+            } else {
+                None
+            },
+            next_input_queue: ProtoNextInputQueue::from(&item.next_input_queue).into(),
+            local_subnet_input_schedule: item
+                .local_subnet_input_schedule
+                .iter()
+                .map(|canid| pb_types::CanisterId::from(*canid))
+                .collect(),
+            remote_subnet_input_schedule: item
+                .remote_subnet_input_schedule
+                .iter()
+                .map(|canid| pb_types::CanisterId::from(*canid))
+                .collect(),
+            guaranteed_response_memory_reservations: item
+                .queue_stats
+                .guaranteed_response_memory_reservations
+                as u64,
+        }
+    }
+}
+
+impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for NewCanisterQueues {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (item, metrics): (pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics),
+    ) -> Result<Self, Self::Error> {
+        let mut canister_queues = BTreeMap::new();
+        let mut pool = MessagePool::default();
+
+        if !item.input_queues.is_empty() || !item.output_queues.is_empty() {
+            // Backward compatibility: deserialize from `input_queues` and `output_queues`.
+
+            if item.pool.is_some() || !item.canister_queues.is_empty() {
+                return Err(ProxyDecodeError::Other(
+                    "Both `input_queues`/`output_queues` and `pool`/`canister_queues` are populated"
+                        .to_string(),
+                ));
+            }
+
+            if item.input_queues.len() != item.output_queues.len() {
+                return Err(ProxyDecodeError::Other(format!(
+                    "CanisterQueues: Mismatched input ({}) and output ({}) queue lengths",
+                    item.input_queues.len(),
+                    item.output_queues.len()
+                )));
+            }
+            for (ie, oe) in item
+                .input_queues
+                .into_iter()
+                .zip(item.output_queues.into_iter())
+            {
+                if ie.canister_id != oe.canister_id {
+                    return Err(ProxyDecodeError::Other(format!(
+                        "CanisterQueues: Mismatched input {:?} and output {:?} queue entries",
+                        ie.canister_id, oe.canister_id
+                    )));
+                }
+
+                let canister_id = try_from_option_field(ie.canister_id, "QueueEntry::canister_id")?;
+                let original_iq: queue::InputQueue =
+                    try_from_option_field(ie.queue, "QueueEntry::queue")?;
+                let original_oq: queue::OutputQueue =
+                    try_from_option_field(oe.queue, "QueueEntry::queue")?;
+                let iq = (original_iq, &mut pool).try_into()?;
+                let oq = (original_oq, &mut pool).try_into()?;
+
+                if canister_queues.insert(canister_id, (iq, oq)).is_some() {
+                    metrics.observe_broken_soft_invariant(format!(
+                        "CanisterQueues: Duplicate queues for canister {}",
+                        canister_id
+                    ));
+                }
+            }
+        } else {
+            pool = item.pool.unwrap_or_default().try_into()?;
+
+            let mut enqueued_pool_messages = BTreeSet::new();
+            canister_queues = item
+                .canister_queues
+                .into_iter()
+                .map(|qp| {
+                    let canister_id: CanisterId =
+                        try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
+                    let iq: CanisterQueue = try_from_option_field(
+                        qp.input_queue.map(|q| (q, Context::Inbound)),
+                        "CanisterQueuePair::input_queue",
+                    )?;
+                    let oq: CanisterQueue = try_from_option_field(
+                        qp.output_queue.map(|q| (q, Context::Outbound)),
+                        "CanisterQueuePair::output_queue",
+                    )?;
+
+                    iq.iter().chain(oq.iter()).for_each(|queue_item| {
+                        if pool.get(queue_item.id()).is_some()
+                            && !enqueued_pool_messages.insert(queue_item.id())
+                        {
+                            metrics.observe_broken_soft_invariant(format!(
+                                "CanisterQueues: Message {:?} enqueued more than once",
+                                queue_item.id()
+                            ));
+                        }
+                    });
+
+                    Ok((canister_id, (iq, oq)))
+                })
+                .collect::<Result<_, Self::Error>>()?;
+
+            if enqueued_pool_messages.len() != pool.len() {
+                metrics.observe_broken_soft_invariant(format!(
+                    "CanisterQueues: Pool holds {} messages, but only {} of them are enqueued",
+                    pool.len(),
+                    enqueued_pool_messages.len()
+                ));
+            }
+        }
+
+        let queue_stats = Self::calculate_queue_stats(
+            &canister_queues,
+            item.guaranteed_response_memory_reservations as usize,
+        );
+
+        let next_input_queue = NextInputQueue::from(
+            ProtoNextInputQueue::try_from(item.next_input_queue).unwrap_or_default(),
+        );
+
+        let mut local_subnet_input_schedule = VecDeque::new();
+        for canister_id in item.local_subnet_input_schedule.into_iter() {
+            local_subnet_input_schedule.push_back(canister_id.try_into()?);
+        }
+        let mut remote_subnet_input_schedule = VecDeque::new();
+        for canister_id in item.remote_subnet_input_schedule.into_iter() {
+            remote_subnet_input_schedule.push_back(canister_id.try_into()?);
+        }
+
+        let queues = Self {
+            ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
+            canister_queues,
+            pool,
+            queue_stats,
+            next_input_queue,
+            local_subnet_input_schedule,
+            remote_subnet_input_schedule,
+        };
+
+        // Safe to call with invalid `own_canister_id` and empty `local_canisters`, as
+        // the validation logic allows for deleted local canisters.
+        if let Err(e) = queues.schedules_ok(
+            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
+            &BTreeMap::new(),
+        ) {
+            metrics.observe_broken_soft_invariant(e.to_string());
+        }
+
+        Ok(queues)
+    }
+}
+
 /// Running message count and byte size stats across input queues.
 ///
 /// Separate from [`MemoryUsageStats`] because the resulting `stats_delta()`
@@ -1505,6 +1819,107 @@ impl PartialEq for MemoryUsageStats {
         self.responses_size_bytes == rhs.responses_size_bytes
             && self.reserved_slots == rhs.reserved_slots
             && self.oversized_requests_extra_bytes == rhs.oversized_requests_extra_bytes
+    }
+}
+
+/// Tracks slot and guaranteed response memory reservations across input and
+/// output queues; and holds a (transient) byte size of responses already routed
+/// into streams (tracked separately, at the replicated state level, as messages
+/// are routed to and GC-ed from streams).
+///
+/// Stats for the enqueued messages themselves (counts and sizes by kind,
+/// context and class) are tracked separately in `message_pool::MessageStats`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
+#[allow(dead_code)]
+struct QueueStats {
+    /// Count of guaranteed response memory reservations across input and output
+    /// queues. This is equivalent to the number of outstanding (inbound or outbound)
+    /// guaranteed response calls and is used for computing message memory
+    /// usage (as `MAX_RESPONSE_COUNT_BYTES` per request).
+    ///
+    /// Note that this is different from slots reserved for responses (whether
+    /// best effort or guaranteed), which are used to implement backpressure.
+    ///
+    /// This is a counter maintained by `CanisterQueues` / `QueueStats`, but not
+    /// computed from the queues themselves. Rather, it is validated against the
+    /// number of unresponded guaranteed response callbacks and call contexts in the
+    /// `CallContextManager`.
+    guaranteed_response_memory_reservations: usize,
+
+    /// Count of slots reserved in input queues. Note that this is different from
+    /// memory reservations for guaranteed responses.
+    input_queues_reserved_slots: usize,
+
+    /// Count of slots reserved in output queues. Note that this is different from
+    /// memory reservations for guaranteed responses.
+    output_queues_reserved_slots: usize,
+
+    /// Transient: size in bytes of responses routed from `output_queues` into
+    /// streams and not yet garbage collected.
+    ///
+    /// This is updated by `ReplicatedState::put_streams()`, called by MR after
+    /// every streams mutation (induction, routing, GC). And is (re)populated during
+    /// checkpoint loading by `ReplicatedState::new_from_checkpoint()`.
+    transient_stream_responses_size_bytes: usize,
+}
+
+// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
+#[allow(dead_code)]
+impl QueueStats {
+    /// Returns the memory usage of reservations for guaranteed responses plus
+    /// guaranteed responses in streans.
+    pub fn guaranteed_response_memory_usage(&self) -> usize {
+        self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
+            + self.transient_stream_responses_size_bytes
+    }
+
+    /// Updates the stats to reflect the enqueuing of the given message in the given
+    /// context.
+    fn on_push(&mut self, msg: &RequestOrResponse, context: Context) {
+        match msg {
+            RequestOrResponse::Request(request) => self.on_push_request(request, context),
+            RequestOrResponse::Response(response) => self.on_push_response(response, context),
+        }
+    }
+
+    /// Updates the stats to reflect the enqueuing of the given request in the given
+    /// context.
+    fn on_push_request(&mut self, request: &Request, context: Context) {
+        // If pushing a guaranteed response request, make a memory reservation.
+        if request.deadline == NO_DEADLINE {
+            self.guaranteed_response_memory_reservations += 1;
+        }
+
+        if context == Context::Outbound {
+            // If pushing a request into an output queue, reserve an input queue slot.
+            self.input_queues_reserved_slots += 1;
+        } else {
+            // And the other way around.
+            self.output_queues_reserved_slots += 1;
+        }
+    }
+
+    /// Updates the stats to reflect the enqueuing of the given response in the
+    /// given context.
+    fn on_push_response(&mut self, response: &Response, context: Context) {
+        // If pushing a guaranteed response, consume a memory reservation.
+        if response.deadline == NO_DEADLINE {
+            debug_assert!(self.guaranteed_response_memory_reservations > 0);
+            self.guaranteed_response_memory_reservations = self
+                .guaranteed_response_memory_reservations
+                .saturating_sub(1);
+        }
+
+        if context == Context::Inbound {
+            // If pushing a response into an input queue, consume an input queue slot.
+            debug_assert!(self.input_queues_reserved_slots > 0);
+            self.input_queues_reserved_slots -= 1;
+        } else {
+            // And the other way around.
+            debug_assert!(self.output_queues_reserved_slots > 0);
+            self.output_queues_reserved_slots -= 1;
+        }
     }
 }
 
