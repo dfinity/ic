@@ -1053,8 +1053,10 @@ fn test_call_cycles_add_up_to() {
 
     // With some allocated memory the freezing threshold is no longer at 0.
     api.try_grow_wasm_memory(0, 1).unwrap();
-    assert!(
-        call_cycles_add128_up_to_helper(&mut api, Cycles::new(u128::MAX)).unwrap() < cycles_amount
+    let freezing_threshold = api.get_freezing_threshold_cylces();
+    assert_eq!(
+        cycles_amount - freezing_threshold,
+        call_cycles_add128_up_to_helper(&mut api, Cycles::new(u128::MAX)).unwrap()
     );
 }
 

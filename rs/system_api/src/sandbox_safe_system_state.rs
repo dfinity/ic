@@ -572,7 +572,7 @@ pub struct SandboxSafeSystemState {
     reserved_balance_limit: Option<Cycles>,
     call_context_balance: Option<Cycles>,
     call_context_deadline: Option<CoarseTime>,
-    cycles_account_manager: CyclesAccountManager,
+    pub(super) cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
     // register callbacks (e.g. running the `start` method when installing a
     // canister.)
@@ -792,6 +792,23 @@ impl SandboxSafeSystemState {
     pub(super) fn cycles_balance(&self) -> Cycles {
         let cycles_change = self.system_state_changes.cycles_balance_change;
         cycles_change.apply(self.initial_cycles_balance)
+    }
+
+    /// Computes the current cycles limit under which the canister gets frozen.
+    pub(super) fn freezing_threshold_cycles(
+        &self,
+        memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
+    ) -> Cycles {
+        self.cycles_account_manager.freeze_threshold_cycles(
+            self.freeze_threshold,
+            self.memory_allocation,
+            memory_usage,
+            message_memory_usage,
+            self.compute_allocation,
+            self.subnet_size,
+            self.reserved_balance(),
+        )
     }
 
     /// Computes the current reserved balance of the canister based
