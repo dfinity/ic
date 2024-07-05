@@ -1,5 +1,5 @@
 {
-  "checksum": "66c8c0c9597884714ea63f2b3a9ecaecd202ec74a2711879c799ead67f828bfb",
+  "checksum": "b3b477d47217447564765efeb52d9b40799b4cea2ee7e1860d2a4bc4efb3d2e6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17400,10 +17400,6 @@
             {
               "id": "local-ip-address 0.5.6",
               "target": "local_ip_address"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
             },
             {
               "id": "lru 0.7.8",
@@ -77386,7 +77382,6 @@
     "libsecp256k1 0.7.1",
     "little-loadshedder 0.1.0",
     "local-ip-address 0.5.6",
-    "log 0.4.20",
     "lru 0.7.8",
     "mach2 0.4.2",
     "maplit 1.0.2",
