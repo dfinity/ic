@@ -423,7 +423,7 @@ pub fn asset_canister_test(env: TestEnv) {
                     .to_vec();
 
                 if res != req_body {
-                    bail!("8mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+                    bail!("6mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
                 }
 
                 Ok(())
