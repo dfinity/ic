@@ -712,9 +712,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
             ),
-            "log": crate.spec(
-                version = "^0.4.14",
-            ),
             "lru": crate.spec(
                 version = "^0.7.8",
                 default_features = False,

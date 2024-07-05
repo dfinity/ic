@@ -3038,7 +3038,6 @@ dependencies = [
  "libsecp256k1",
  "little-loadshedder",
  "local-ip-address",
- "log",
  "lru",
  "mach2",
  "maplit",
