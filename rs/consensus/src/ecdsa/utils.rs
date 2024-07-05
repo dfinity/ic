@@ -328,9 +328,9 @@ pub(super) fn load_transcripts(
             TranscriptLoadStatus::Failure => return Some(Default::default()),
             TranscriptLoadStatus::Complaints(complaints) => {
                 for complaint in complaints {
-                    new_complaints.push(IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaComplaint(complaint),
-                    ));
+                    new_complaints.push(IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                        complaint,
+                    )));
                 }
             }
         }

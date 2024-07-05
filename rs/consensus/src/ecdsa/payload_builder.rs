@@ -24,7 +24,7 @@ use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        idkg::{self, EcdsaBlockReader, EcdsaKeyTranscript, EcdsaPayload, TranscriptAttributes},
+        idkg::{self, EcdsaBlockReader, EcdsaPayload, MasterKeyTranscript, TranscriptAttributes},
         Block, HasHeight,
     },
     crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
@@ -51,7 +51,7 @@ pub(crate) fn make_bootstrap_summary(
 ) -> idkg::Summary {
     let key_transcripts = key_ids
         .into_iter()
-        .map(|key_id| EcdsaKeyTranscript::new(key_id, idkg::KeyTranscriptCreation::Begin))
+        .map(|key_id| MasterKeyTranscript::new(key_id, idkg::KeyTranscriptCreation::Begin))
         .collect();
 
     Some(EcdsaPayload::empty(height, subnet_id, key_transcripts))
@@ -73,7 +73,7 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
             Some((params, transcript)) => {
                 idkg_transcripts.insert(transcript.transcript_id, transcript);
 
-                key_transcripts.push(EcdsaKeyTranscript::new(
+                key_transcripts.push(MasterKeyTranscript::new(
                     key_id,
                     idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
                         Box::new(initial_dealings),
@@ -283,7 +283,7 @@ fn create_summary_payload_helper(
         if !ecdsa_summary.key_transcripts.contains_key(key_id) {
             ecdsa_summary.key_transcripts.insert(
                 key_id.clone(),
-                EcdsaKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin),
+                MasterKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin),
             );
         }
     }
@@ -458,7 +458,7 @@ pub(crate) fn create_data_payload(
     )?;
 
     if let Some(ecdsa_payload) = &new_payload {
-        let is_key_transcript_created = |key_transcript: &EcdsaKeyTranscript| {
+        let is_key_transcript_created = |key_transcript: &MasterKeyTranscript| {
             matches!(
                 key_transcript.next_in_creation,
                 idkg::KeyTranscriptCreation::Created(_)
@@ -1758,7 +1758,7 @@ mod tests {
             registry.update_to_latest_version();
 
             // We only have the current transcript initially
-            let key_transcript = idkg::EcdsaKeyTranscript {
+            let key_transcript = idkg::MasterKeyTranscript {
                 current: Some(current_key_transcript.clone()),
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
@@ -1796,7 +1796,7 @@ mod tests {
             );
 
             // Simulate successful creation of the next key transcript
-            let key_transcript = idkg::EcdsaKeyTranscript {
+            let key_transcript = idkg::MasterKeyTranscript {
                 current: Some(current_key_transcript.clone()),
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
@@ -1812,7 +1812,7 @@ mod tests {
                 .add_transcript(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
             // After the next key transcript was created, it should be carried over into the next payload.
-            let expected = idkg::EcdsaKeyTranscript {
+            let expected = idkg::MasterKeyTranscript {
                 current: Some(next_key_transcript.clone()),
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
@@ -1894,7 +1894,7 @@ mod tests {
             registry.update_to_latest_version();
 
             // We only have the current transcript initially
-            let key_transcripts = idkg::EcdsaKeyTranscript {
+            let key_transcripts = idkg::MasterKeyTranscript {
                 current: Some(current_key_transcript.clone()),
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),

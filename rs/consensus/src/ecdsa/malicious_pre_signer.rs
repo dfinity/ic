@@ -56,7 +56,7 @@ pub fn maliciously_alter_changeset(
     changeset
         .into_iter()
         .flat_map(|action| match action {
-            IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
+            IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing))
                 if malicious_flags.maliciously_corrupt_ecdsa_dealings =>
             {
                 let transcript_id = dealing.idkg_dealing().transcript_id;
@@ -75,7 +75,7 @@ pub fn maliciously_alter_changeset(
                             &pre_signer.log,
                             &pre_signer.metrics,
                         );
-                        IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing))
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing))
                     })
             }
             _ => Some(action),

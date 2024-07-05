@@ -157,7 +157,7 @@ impl BatchStats {
     }
 }
 
-// IDKG payload stats
+// Ecdsa payload stats
 pub struct IDkgStats {
     pub signature_agreements: usize,
     pub key_transcript_created: CounterPerMasterPublicKeyId,
