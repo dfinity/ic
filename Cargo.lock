@@ -12471,7 +12471,7 @@ dependencies = [
  "bls12_381",
  "hex",
  "lazy_static",
- "pairing",
+ "pairing 0.22.0",
  "rand 0.6.5",
  "sha2 0.9.9",
 ]
