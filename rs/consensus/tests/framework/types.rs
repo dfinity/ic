@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use ic_artifact_pool::{
     canister_http_pool, certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl, dkg_pool, ecdsa_pool,
+    consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
@@ -13,7 +13,7 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
-    ecdsa::EcdsaChangeSet,
+    ecdsa::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
@@ -32,7 +32,7 @@ use ic_test_utilities::{
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, EcdsaStatsNoOp};
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
 use ic_types::{
     artifact::{ArtifactKind, Priority, PriorityFn},
     artifact_kind::ConsensusArtifact,
@@ -173,7 +173,7 @@ pub struct ConsensusDependencies {
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
-    pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
+    pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<canister_http_pool::CanisterHttpPoolImpl>>,
     pub message_routing: Arc<FakeMessageRouting>,
     pub state_manager: Arc<FakeStateManager>,
@@ -205,11 +205,11 @@ impl ConsensusDependencies {
             time_source,
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
-        let ecdsa_pool = ecdsa_pool::EcdsaPoolImpl::new(
+        let idkg_pool = idkg_pool::IDkgPoolImpl::new(
             pool_config,
             no_op_logger(),
             metrics_registry.clone(),
-            Box::new(EcdsaStatsNoOp {}),
+            Box::new(IDkgStatsNoOp {}),
         );
         let canister_http_pool =
             canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
@@ -219,7 +219,7 @@ impl ConsensusDependencies {
             registry_client: Arc::clone(&registry_client),
             consensus_pool,
             dkg_pool: Arc::new(RwLock::new(dkg_pool)),
-            ecdsa_pool: Arc::new(RwLock::new(ecdsa_pool)),
+            idkg_pool: Arc::new(RwLock::new(idkg_pool)),
             canister_http_pool: Arc::new(RwLock::new(canister_http_pool)),
             message_routing: Arc::new(FakeMessageRouting::with_state_manager(
                 state_manager.clone(),
@@ -311,7 +311,7 @@ pub struct ComponentModifier {
         dyn Fn(
             ecdsa::EcdsaImpl,
         )
-            -> Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
+            -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     >,
 }
 
@@ -337,7 +337,7 @@ pub fn apply_modifier_consensus(
 pub fn apply_modifier_ecdsa(
     modifier: &Option<ComponentModifier>,
     ecdsa: ecdsa::EcdsaImpl,
-) -> Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>> {
+) -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>> {
     match modifier {
         Some(f) => (f.ecdsa)(ecdsa),
         _ => Box::new(ecdsa),
@@ -352,7 +352,7 @@ pub struct ConsensusDriver<'a> {
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
     pub(crate) ecdsa:
-        Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
+        Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,
@@ -360,7 +360,7 @@ pub struct ConsensusDriver<'a> {
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     pub ingress_pool: RefCell<TestIngressPool>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
-    pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
+    pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
     pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusArtifact>>,
 }
 

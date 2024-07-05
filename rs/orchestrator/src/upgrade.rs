@@ -831,7 +831,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            idkg::{self, EcdsaKeyTranscript, TranscriptAttributes},
+            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
@@ -862,7 +862,7 @@ mod tests {
         let mut ecdsa = idkg::EcdsaPayload::empty(
             h,
             subnet_test_id(0),
-            vec![EcdsaKeyTranscript {
+            vec![MasterKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),

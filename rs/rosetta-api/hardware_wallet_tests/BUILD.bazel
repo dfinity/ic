@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
-    "@crate_index//:log",
     "@crate_index//:nix",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",

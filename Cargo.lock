@@ -1261,7 +1261,7 @@ dependencies = [
  "digest 0.9.0",
  "ff 0.12.1",
  "group 0.12.1",
- "pairing",
+ "pairing 0.22.0",
  "rand_core 0.6.4",
  "subtle",
 ]
@@ -3152,12 +3152,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "destructure_traitobject"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c877555693c14d2f84191cfd3ad8582790fc52b5e2274b40b59cf5f5cea25c7"
-
-[[package]]
 name = "deterministic_ips"
 version = "0.1.0"
 dependencies = [
@@ -4449,7 +4443,6 @@ dependencies = [
  "ic-rosetta-test-utils",
  "ic-types",
  "icp-ledger",
- "log",
  "nix 0.24.3",
  "rand 0.8.5",
  "rand_distr",
@@ -5476,7 +5469,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_regex",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
  "simple_moving_average",
  "slog",
  "strum 0.26.2",
@@ -6803,11 +6796,11 @@ dependencies = [
  "ic_bls12_381",
  "itertools 0.12.0",
  "lazy_static",
- "pairing",
+ "pairing 0.23.0",
  "paste 1.0.14",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "subtle",
  "zeroize",
 ]
@@ -7234,7 +7227,7 @@ name = "ic-crypto-sha3"
 version = "0.9.0"
 dependencies = [
  "hex",
- "sha3 0.9.1",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -8791,10 +8784,12 @@ dependencies = [
  "async-trait",
  "candid",
  "chrono",
+ "ciborium",
  "clap 3.2.25",
  "dfn_protobuf",
  "ic-agent",
  "ic-certification 0.9.0",
+ "ic-crypto-sha2",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -8820,8 +8815,6 @@ dependencies = [
  "ic-ledger-core",
  "ic-types",
  "icp-ledger",
- "log",
- "log4rs",
  "rand 0.8.5",
  "rand_distr",
  "serde",
@@ -9273,7 +9266,7 @@ dependencies = [
  "lazy_static",
  "regex",
  "serde",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -10030,7 +10023,6 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types",
  "ic-metrics",
- "ic-nns-common",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-keys",
@@ -10842,7 +10834,6 @@ dependencies = [
  "ic-rosetta-api",
  "ic-types",
  "icp-ledger",
- "log",
  "nix 0.24.3",
  "rand 0.8.5",
  "reqwest 0.12.4",
@@ -10956,7 +10947,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
  "tempfile",
  "thiserror",
 ]
@@ -11113,7 +11104,7 @@ dependencies = [
  "num-traits",
  "prost",
  "serde",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
  "tempfile",
 ]
 
@@ -11180,7 +11171,7 @@ dependencies = [
  "rand 0.8.5",
  "rust_decimal",
  "rust_decimal_macros",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
  "tokio",
  "wat",
 ]
@@ -11874,7 +11865,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
  "sha2 0.10.8",
  "slog",
  "slog-async",
@@ -12472,7 +12463,7 @@ checksum = "583b1c03380cf86059160cc6c91dcbf56c7b5f141bf3a4f06bc79762d775fac4"
 dependencies = [
  "bls12_381",
  "lazy_static",
- "pairing",
+ "pairing 0.22.0",
  "sha2 0.9.9",
 ]
 
@@ -12498,11 +12489,11 @@ dependencies = [
  "hex",
  "ic_bls12_381",
  "lazy_static",
- "pairing",
+ "pairing 0.23.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "sha2 0.9.9",
- "sha3 0.9.1",
+ "sha2 0.10.8",
+ "sha3 0.10.8",
  "subtle",
  "wasm-bindgen",
  "zeroize",
@@ -12727,14 +12718,14 @@ checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 
 [[package]]
 name = "ic_bls12_381"
-version = "0.8.0"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c682cb199cd8fcb582a6023325d571a6464edda26c8063fe04b6f6082a1a363c"
+checksum = "3fb94c398e5a5bc56a8f0ff995b2679829e2bbc5f145d9c3ea58d303036e05f2"
 dependencies = [
- "digest 0.9.0",
- "ff 0.12.1",
- "group 0.12.1",
- "pairing",
+ "digest 0.10.7",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "pairing 0.23.0",
  "rand_core 0.6.4",
  "subtle",
  "zeroize",
@@ -12874,6 +12865,7 @@ dependencies = [
  "serde_bytes",
  "sha2 0.10.8",
  "strum 0.26.2",
+ "time",
 ]
 
 [[package]]
@@ -13463,7 +13455,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
  "thiserror",
  "tokio",
  "tokio-tungstenite",
@@ -14068,41 +14060,6 @@ name = "log"
 version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "log-mdc"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a94d21414c1f4a51209ad204c1776a3d0765002c76c6abcb602a6f09f1e881c7"
-
-[[package]]
-name = "log4rs"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d36ca1786d9e79b8193a68d480a0907b612f109537115c6ff655a3a1967533fd"
-dependencies = [
- "anyhow",
- "arc-swap",
- "chrono",
- "derivative",
- "fnv",
- "humantime",
- "libc",
- "log",
- "log-mdc",
- "parking_lot 0.12.1",
- "serde",
- "serde-value",
- "serde_json",
- "serde_yaml 0.8.26",
- "thiserror",
- "thread-id",
- "typemap-ors",
- "winapi 0.3.9",
-]
 
 [[package]]
 name = "logos"
@@ -14520,10 +14477,11 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "native-tls"
-version = "0.2.12"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8614eb2c83d59d1c8cc974dd3f920198647674a0a035e1af1fa58707e317466"
+checksum = "07226173c32f2926027b63cce4bcd8076c3552846cbe7925f3aaffeac0a3b92e"
 dependencies = [
+ "lazy_static",
  "libc",
  "log",
  "openssl",
@@ -15292,6 +15250,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "135590d8bdba2b31346f9cd1fb2a912329f5135e832a4f422942eb6ead8b6b3b"
 dependencies = [
  "group 0.12.1",
+]
+
+[[package]]
+name = "pairing"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81fec4625e73cf41ef4bb6846cafa6d44736525f442ba45e407c4a000a13996f"
+dependencies = [
+ "group 0.13.0",
 ]
 
 [[package]]
@@ -18074,18 +18041,6 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml"
-version = "0.8.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "578a7433b776b56a35785ed5ce9a7e777ac0598aac5a6dd1b4b18a307c7fc71b"
-dependencies = [
- "indexmap 1.9.2",
- "ryu",
- "serde",
- "yaml-rust",
-]
-
-[[package]]
-name = "serde_yaml"
 version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
@@ -19246,7 +19201,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "serde_yaml 0.9.34+deprecated",
+ "serde_yaml",
  "sha2 0.10.8",
  "slog",
  "slog-async",
@@ -19309,17 +19264,6 @@ name = "thousands"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bf63baf9f5039dadc247375c29eb13706706cfde997d0330d05aa63a77d8820"
-
-[[package]]
-name = "thread-id"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fdfe0627923f7411a43ec9ec9c39c3a9b4151be313e0922042581fb6c9b717f"
-dependencies = [
- "libc",
- "redox_syscall",
- "winapi 0.3.9",
-]
 
 [[package]]
 name = "thread_local"
@@ -20070,15 +20014,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
 
 [[package]]
-name = "typemap-ors"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a68c24b707f02dd18f1e4ccceb9d49f2058c2fb86384ef9972592904d7a28867"
-dependencies = [
- "unsafe-any-ors",
-]
-
-[[package]]
 name = "typenum"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20189,15 +20124,6 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common",
  "subtle",
-]
-
-[[package]]
-name = "unsafe-any-ors"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0a303d30665362d9680d7d91d78b23f5f899504d4f08b3c4cf08d055d87c0ad"
-dependencies = [
- "destructure_traitobject",
 ]
 
 [[package]]

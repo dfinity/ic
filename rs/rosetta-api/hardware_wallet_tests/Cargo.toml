@@ -16,7 +16,6 @@ ic-rosetta-api = { path = "../" }
 ic-rosetta-test-utils = { path = "../test_utils" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
-log = "0.4.14"
 nix = { workspace = true }
 rand = { workspace = true }
 rand_distr = "0.4"

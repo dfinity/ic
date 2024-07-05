@@ -601,8 +601,8 @@ mod tests {
     use ic_types::{
         consensus::idkg::{
             common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
-            schnorr::PreSignatureTranscriptRef, EcdsaKeyTranscript, KeyTranscriptCreation,
-            MaskedTranscript, PreSigId, UnmaskedTranscript,
+            schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
+            MasterKeyTranscript, PreSigId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -782,7 +782,7 @@ mod tests {
         EcdsaPayload::empty(
             Height::new(0),
             subnet_test_id(0),
-            vec![EcdsaKeyTranscript::new(
+            vec![MasterKeyTranscript::new(
                 key_id,
                 KeyTranscriptCreation::Begin,
             )],

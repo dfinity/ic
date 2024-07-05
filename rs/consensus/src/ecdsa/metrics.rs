@@ -293,13 +293,13 @@ where
 }
 
 #[derive(Clone)]
-pub struct EcdsaComplaintMetrics {
+pub struct IDkgComplaintMetrics {
     pub on_state_change_duration: HistogramVec,
     pub complaint_metrics: IntCounterVec,
     pub complaint_errors: IntCounterVec,
 }
 
-impl EcdsaComplaintMetrics {
+impl IDkgComplaintMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(

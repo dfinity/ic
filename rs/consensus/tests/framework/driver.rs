@@ -1,7 +1,7 @@
 pub use super::types::*;
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
-    dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
+    dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::ConsensusGossipImpl;
@@ -9,7 +9,7 @@ use ic_interfaces::{
     certification,
     consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
-    ecdsa::{EcdsaChangeAction, EcdsaChangeSet},
+    ecdsa::{IDkgChangeAction, IDkgChangeSet},
     p2p::consensus::{ChangeSetProducer, MutablePool},
 };
 use ic_logger::{debug, ReplicaLogger};
@@ -30,13 +30,13 @@ impl<'a> ConsensusDriver<'a> {
         consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
         consensus_gossip: ConsensusGossipImpl,
         dkg: ic_consensus::dkg::DkgImpl,
-        ecdsa: Box<dyn ChangeSetProducer<EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
+        ecdsa: Box<dyn ChangeSetProducer<IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
         certifier: Box<
             dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
         >,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         dkg_pool: Arc<RwLock<DkgPoolImpl>>,
-        ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+        idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
         logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> ConsensusDriver<'a> {
@@ -60,7 +60,7 @@ impl<'a> ConsensusDriver<'a> {
             certification_pool,
             ingress_pool,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             consensus_priority,
         }
     }
@@ -139,27 +139,25 @@ impl<'a> ConsensusDriver<'a> {
             }
         }
         loop {
-            let changeset = self
-                .ecdsa
-                .on_state_change(&*self.ecdsa_pool.read().unwrap());
+            let changeset = self.ecdsa.on_state_change(&*self.idkg_pool.read().unwrap());
             if changeset.is_empty() {
                 break;
             }
             {
                 for change_action in &changeset {
                     match change_action {
-                        EcdsaChangeAction::AddToValidated(msg) => {
+                        IDkgChangeAction::AddToValidated(msg) => {
                             debug!(self.logger, "Ecdsa Message Deliver {:?}", msg);
                             to_deliver.push(InputMessage::Ecdsa(msg.clone()));
                         }
-                        EcdsaChangeAction::MoveToValidated(msg) => {
+                        IDkgChangeAction::MoveToValidated(msg) => {
                             debug!(self.logger, "Ecdsa Message Validated {:?}", msg);
                         }
                         _ => {}
                     }
                 }
-                let mut ecdsa_pool = self.ecdsa_pool.write().unwrap();
-                ecdsa_pool.apply_changes(changeset);
+                let mut idkg_pool = self.idkg_pool.write().unwrap();
+                idkg_pool.apply_changes(changeset);
             }
         }
         to_deliver

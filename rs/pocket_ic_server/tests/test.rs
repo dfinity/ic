@@ -21,14 +21,29 @@ use tempfile::NamedTempFile;
 
 pub const LOCALHOST: &str = "127.0.0.1";
 
-pub fn start_server_helper(
-    parent_pid: u32,
+fn start_server_helper(
+    parent_pid: Option<u32>,
     ttl: Option<u64>,
     capture_stderr: bool,
 ) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    let port_file_path = if let Some(parent_pid) = parent_pid {
+        std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid))
+    } else {
+        NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
+    };
+    let ready_file_path = if let Some(parent_pid) = parent_pid {
+        std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid))
+    } else {
+        NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
+    };
     let mut cmd = Command::new(PathBuf::from(bin_path));
-    cmd.arg("--pid").arg(parent_pid.to_string());
+    if let Some(parent_pid) = parent_pid {
+        cmd.arg("--pid").arg(parent_pid.to_string());
+    } else {
+        cmd.arg("--port-file").arg(port_file_path.clone());
+        cmd.arg("--ready-file").arg(ready_file_path.clone());
+    }
     if let Some(ttl) = ttl {
         cmd.arg("--ttl").arg(ttl.to_string());
     }
@@ -36,8 +51,6 @@ pub fn start_server_helper(
         cmd.stderr(std::process::Stdio::piped());
     }
     let out = cmd.spawn().expect("Failed to start PocketIC binary");
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
     let start = Instant::now();
     let url = loop {
         match ready_file_path.try_exists() {
@@ -58,7 +71,7 @@ pub fn start_server_helper(
 
 pub fn start_server() -> Url {
     let parent_pid = std::os::unix::process::parent_id();
-    start_server_helper(parent_pid, None, false).0
+    start_server_helper(Some(parent_pid), None, false).0
 }
 
 #[test]
@@ -442,7 +455,7 @@ const CANISTER_LOGS_WAT: &str = r#"
 #[test]
 fn canister_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(0, Some(5), true);
+    let (server_url, mut out) = start_server_helper(None, Some(5), true);
     let subnet_config_set = SubnetConfigSet {
         application: 1,
         ..Default::default()

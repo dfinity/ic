@@ -234,7 +234,7 @@ pub fn finalize_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    ecdsa_keys: &[EcdsaKeyId],
+    idkg_keys: &[MasterPublicKeyId],
     features: SubnetFeatures,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
@@ -255,10 +255,10 @@ fn make_nodes_registry(
             raw: subnet_id.get_ref().to_vec(),
         }),
     };
-    for key_id in ecdsa_keys {
+    for key_id in idkg_keys {
         registry_data_provider
             .add(
-                &make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(key_id.clone())),
+                &make_chain_key_signing_subnet_list_key(key_id),
                 registry_version,
                 Some(ChainKeySigningSubnetList {
                     subnets: vec![subnet_id_proto.clone()],
@@ -318,10 +318,10 @@ fn make_nodes_registry(
         .with_max_block_payload_size(max_block_payload_size)
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: ecdsa_keys
+            key_configs: idkg_keys
                 .iter()
-                .map(|ecdsa_key| KeyConfig {
-                    key_id: MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                .map(|key_id| KeyConfig {
+                    key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
@@ -656,7 +656,7 @@ pub struct StateMachineBuilder {
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
     enable_canister_snapshots: bool,
-    ecdsa_keys: Vec<EcdsaKeyId>,
+    idkg_keys: Vec<MasterPublicKeyId>,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -682,10 +682,10 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            ecdsa_keys: vec![EcdsaKeyId {
+            idkg_keys: vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "master_ecdsa_public_key".to_string(),
-            }],
+            })],
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -803,20 +803,17 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
-        let mut ecdsa_keys = self.ecdsa_keys;
-        ecdsa_keys.push(key);
-        Self { ecdsa_keys, ..self }
+    pub fn with_multisubnet_ecdsa_key(self) -> Self {
+        let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: format!("master_ecdsa_public_key_{}", hex::encode(self.seed)),
+        });
+        self.with_idkg_key(key_id)
     }
 
-    pub fn with_multisubnet_ecdsa_key(self) -> Self {
-        Self {
-            ecdsa_keys: vec![EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: format!("master_ecdsa_public_key_{}", hex::encode(self.seed)),
-            }],
-            ..self
-        }
+    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys.push(key_id);
+        self
     }
 
     pub fn with_features(self, features: SubnetFeatures) -> Self {
@@ -868,7 +865,7 @@ impl StateMachineBuilder {
             self.subnet_id,
             self.use_cost_scaling_flag,
             self.enable_canister_snapshots,
-            self.ecdsa_keys,
+            self.idkg_keys,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1122,7 +1119,7 @@ impl StateMachine {
         subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
         enable_canister_snapshots: bool,
-        ecdsa_keys: Vec<EcdsaKeyId>,
+        idkg_keys: Vec<MasterPublicKeyId>,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1157,7 +1154,7 @@ impl StateMachine {
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            &ecdsa_keys,
+            &idkg_keys,
             features,
             registry_data_provider.clone(),
             &nodes,
@@ -1283,10 +1280,9 @@ impl StateMachine {
 
         let mut idkg_subnet_public_keys = BTreeMap::new();
 
-        //TODO: support schnorr keys
-        for ecdsa_key in ecdsa_keys {
+        for key_id in idkg_keys {
             idkg_subnet_public_keys.insert(
-                MasterPublicKeyId::Ecdsa(ecdsa_key),
+                key_id.clone(),
                 MasterPublicKey {
                     algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
                     public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
