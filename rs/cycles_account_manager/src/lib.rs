@@ -392,6 +392,13 @@ impl CyclesAccountManager {
             reveal_top_up,
         )
     }
+
+    /// Withdraws up to `cycles` worth of cycles from the canister's balance
+    /// without putting the canister below its freezing threshold.
+    ///
+    /// NOTE: This method is intended for use in inter-canister transfers.
+    ///       It doesn't report these cycles as consumed. To withdraw cycles
+    ///       and have them reported as consumed, use `consume_cycles`.
     #[allow(clippy::too_many_arguments)]
     pub fn withdraw_up_to_cycles_for_transfer(
         &self,

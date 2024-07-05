@@ -881,6 +881,67 @@ fn withdraw_cycles_for_transfer_checks_reserved_balance() {
 }
 
 #[test]
+fn withdraw_up_to_respects_freezing_threshold() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let initial_cycles = Cycles::new(2_000_000_000);
+    let mut system_state = SystemState::new_running_for_testing(
+        canister_test_id(1),
+        canister_test_id(2).get(),
+        initial_cycles,
+        NumSeconds::from(1_000),
+    );
+    let memory_usage = NumBytes::from(1_000_000);
+    let message_memory_usage = NumBytes::from(1_000);
+    let compute_allocation = ComputeAllocation::default();
+    system_state.memory_allocation = MemoryAllocation::try_from(NumBytes::from(1 << 20)).unwrap();
+    let freeze_threshold = cycles_account_manager.freeze_threshold_cycles(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        memory_usage,
+        message_memory_usage,
+        compute_allocation,
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    );
+
+    // full amount can be withdrawn
+    let mut new_balance = system_state.balance();
+    let withdraw_amount_1 = Cycles::new(1_000_000);
+    let withdrawn_amount_1 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        memory_usage,
+        message_memory_usage,
+        compute_allocation,
+        &mut new_balance,
+        withdraw_amount_1,
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    );
+    assert_eq!(withdraw_amount_1, withdrawn_amount_1);
+    assert_eq!(initial_cycles - withdraw_amount_1, new_balance);
+
+    // freezing threshold limits the amount that can be withdrawn
+    let withdraw_amount_2 = Cycles::new(u128::MAX);
+    let withdrawn_cycles_2 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        memory_usage,
+        message_memory_usage,
+        compute_allocation,
+        &mut new_balance,
+        withdraw_amount_2,
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    );
+    assert_eq!(
+        initial_cycles - withdrawn_amount_1 - freeze_threshold,
+        withdrawn_cycles_2
+    );
+    assert_eq!(freeze_threshold, new_balance);
+}
+
+#[test]
 fn freezing_threshold_uses_reserved_balance() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let threshold_without_reserved = cycles_account_manager.freeze_threshold_cycles(
