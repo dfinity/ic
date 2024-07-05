@@ -3,7 +3,7 @@ use crate::mutations::node_management::common::{
 };
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{check_ipv4_config, encode_or_panic, node_exists_or_panic},
+    mutations::common::{check_ipv4_config, node_exists_or_panic},
     registry::Registry,
 };
 
@@ -11,6 +11,7 @@ use candid::{CandidType, Deserialize};
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
+use prost::Message;
 use serde::Serialize;
 use std::fmt;
 
@@ -62,7 +63,7 @@ impl Registry {
         // Create the mutation
         let update_node_record = update(
             make_node_record_key(node_id).as_bytes(),
-            encode_or_panic(&node_record),
+            node_record.encode_to_vec(),
         );
         let mutations = vec![update_node_record];
 

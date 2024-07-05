@@ -1,10 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -46,7 +42,7 @@ impl Registry {
             .value;
 
         let mut node_operator_record =
-            decode_registry_value::<NodeOperatorRecord>(node_operator_record_vec.clone());
+            NodeOperatorRecord::decode(node_operator_record_vec.as_slice()).unwrap();
 
         // 2. Make sure that the caller is authorized to make the requested changes to node_operator_record.
         let caller = dfn_core::api::caller();
@@ -70,7 +66,7 @@ impl Registry {
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: node_operator_record_key,
-            value: encode_or_panic(&node_operator_record),
+            value: node_operator_record.encode_to_vec(),
         }];
 
         // Check invariants before applying mutations

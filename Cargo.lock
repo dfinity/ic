@@ -16616,7 +16616,6 @@ dependencies = [
  "candid",
  "candid_parser",
  "canister-test",
- "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
  "dfn_http_metrics",
