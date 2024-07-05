@@ -4,10 +4,7 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nns_common::{
-    registry::encode_or_panic,
-    types::{NeuronId, ProposalId},
-};
+use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance::{
     init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote},
@@ -21,6 +18,7 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::provisional_whitelist::v1::ProvisionalWhitelist;
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
+use prost::Message;
 use std::str::FromStr;
 
 #[test]
@@ -42,7 +40,7 @@ fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: vec![insert(
                     key.as_bytes(),
-                    encode_or_panic(&initial_provisional_whitelist),
+                    initial_provisional_whitelist.encode_to_vec(),
                 )],
                 preconditions: vec![],
             }])

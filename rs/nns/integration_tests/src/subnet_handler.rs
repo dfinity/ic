@@ -4,10 +4,7 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nns_common::{
-    registry::encode_or_panic,
-    types::{NeuronId, ProposalId},
-};
+use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance::{
     init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote},
@@ -23,6 +20,7 @@ use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::ReplicaVersion;
+use prost::Message;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use std::str::FromStr;
 
@@ -68,7 +66,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         key.as_bytes(),
-                        encode_or_panic(&initial_subnet_record),
+                        initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 }])

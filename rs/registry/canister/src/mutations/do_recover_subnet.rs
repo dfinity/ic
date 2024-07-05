@@ -8,7 +8,7 @@
 use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
-    mutations::{common::encode_or_panic, do_create_subnet::EcdsaInitialConfig},
+    mutations::do_create_subnet::EcdsaInitialConfig,
     registry::{Registry, Version},
 };
 use candid::{CandidType, Deserialize, Encode};
@@ -30,6 +30,7 @@ use ic_registry_transport::{
     upsert,
 };
 use on_wire::bytes;
+use prost::Message;
 use serde::Serialize;
 use std::convert::TryFrom;
 
@@ -155,7 +156,7 @@ impl Registry {
             // Push all of our subnet_record mutations
             mutations.push(upsert(
                 make_subnet_record_key(subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             ));
 
             let post_call_registry_version = self.latest_version();
@@ -199,7 +200,7 @@ impl Registry {
             let new_subnet_threshold_signing_pubkey_mutation = RegistryMutation {
                 mutation_type: registry_mutation::Type::Update as i32,
                 key: make_crypto_threshold_signing_pubkey_key(subnet_id).into_bytes(),
-                value: encode_or_panic(&dkg_response.subnet_threshold_public_key),
+                value: dkg_response.subnet_threshold_public_key.encode_to_vec(),
             };
 
             mutations.push(new_subnet_threshold_signing_pubkey_mutation);
@@ -223,7 +224,7 @@ impl Registry {
         mutations.push(RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: make_catch_up_package_contents_key(subnet_id).into_bytes(),
-            value: encode_or_panic(&cup_contents),
+            value: cup_contents.encode_to_vec(),
         });
 
         // Check invariants before applying mutations
