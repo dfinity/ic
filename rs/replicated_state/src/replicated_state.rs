@@ -699,28 +699,11 @@ impl ReplicatedState {
     }
 
     /// Returns all signature request contexts.
-    pub fn signature_request_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        // TODO(EXC-1645): currently ECDSA context can be stored either in `sign_with_ecdsa_contexts` or
-        // in `sign_with_threshold_contexts`. Therefore, we need to merge them.
-        // Update this code after full migration to `sign_with_threshold_contexts`.
-        self.sign_with_ecdsa_contexts()
-            .into_iter()
-            .chain(self.sign_with_schnorr_contexts())
-            .collect()
-    }
-
-    /// Returns all `sign_with_ecdsa` contexts.
-    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        self.metadata
+    pub fn signature_request_contexts(&self) -> &BTreeMap<CallbackId, SignWithThresholdContext> {
+        &self
+            .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts()
-    }
-
-    /// Returns all `sign_with_schnorr` contexts.
-    pub fn sign_with_schnorr_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        self.metadata
-            .subnet_call_context_manager
-            .sign_with_schnorr_contexts()
+            .sign_with_threshold_contexts
     }
 
     /// Returns all IDKG dealings contexts.

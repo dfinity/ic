@@ -1,11 +1,11 @@
 #[rustfmt::skip]
 
 use anyhow::Result;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::cross_chain::ic_xc_ledger_suite_orchestrator_test::{
     ic_xc_ledger_suite_orchestrator_test, setup_with_system_and_application_subnets,
 };
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

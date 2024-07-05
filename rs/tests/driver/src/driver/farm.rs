@@ -192,17 +192,13 @@ impl Farm {
         group_name: &str,
         vm_name: &str,
         template_name: &str,
-        image_ids: Vec<FileId>,
+        image_specs: Vec<AttachImageSpec>,
     ) -> FarmResult<()> {
         let path = format!(
             "group/{}/vm/{}/drive-templates/{}",
             group_name, vm_name, template_name
         );
         let req = self.put(&path);
-        let image_specs = image_ids
-            .iter()
-            .map(|image_id| AttachImageSpec::new(image_id.clone()))
-            .collect();
         let attach_drives_req = AttachDrivesRequest {
             drives: image_specs,
         };
@@ -704,16 +700,29 @@ struct AttachDrivesRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct AttachImageSpec {
+pub struct AttachImageSpec {
     pub _tag: String,
-    pub id: FileId,
+    pub id: Option<FileId>,
+    pub url: Option<Url>,
+    pub sha256: Option<String>,
 }
 
 impl AttachImageSpec {
     pub fn new(id: FileId) -> Self {
         Self {
             _tag: "imageViaId".to_string(),
-            id,
+            id: Some(id),
+            sha256: None,
+            url: None,
+        }
+    }
+
+    pub fn via_url(url: Url, sha256: String) -> Self {
+        Self {
+            _tag: "icOsImageViaUrl".to_string(),
+            id: None,
+            url: Some(url),
+            sha256: Some(sha256),
         }
     }
 }

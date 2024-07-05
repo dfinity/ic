@@ -63,8 +63,11 @@ struct Args {
     #[clap(long, short, default_value_t = 0)]
     port: u16,
     /// The file to which the PocketIC server port should be written
-    #[clap(long)]
+    #[clap(long, conflicts_with = "pid")]
     port_file: Option<PathBuf>,
+    /// The file which is created by the PocketIC server once it is ready to accept HTTP connections
+    #[clap(long, conflicts_with = "pid")]
+    ready_file: Option<PathBuf>,
     /// The time-to-live of the PocketIC server in seconds
     #[clap(long, default_value_t = TTL_SEC)]
     ttl: u64,
@@ -113,7 +116,7 @@ async fn start(runtime: Arc<Runtime>) {
     let use_port_file = args.pid.is_some() || args.port_file.is_some();
     let mut port_file_path = None;
     let mut port_file = None;
-    let use_ready_file = args.pid.is_some();
+    let use_ready_file = args.pid.is_some() || args.ready_file.is_some();
     let mut ready_file_path = None;
     if use_port_file {
         if let Some(ref port_file) = args.port_file {
@@ -134,8 +137,15 @@ async fn start(runtime: Arc<Runtime>) {
         };
     }
     if use_ready_file {
-        ready_file_path =
-            Some(std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid.unwrap())));
+        if let Some(ref ready_file) = args.ready_file {
+            // Clean up ready file.
+            let _ = std::fs::remove_file(ready_file);
+        }
+        ready_file_path = if args.ready_file.is_some() {
+            args.ready_file
+        } else {
+            Some(std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid.unwrap())))
+        };
     }
 
     let addr = format!("127.0.0.1:{}", args.port);
@@ -219,7 +229,7 @@ async fn start(runtime: Arc<Runtime>) {
         // Signal that the port file can safely be read by other clients.
         let ready_file = create_file_atomically(ready_file_path.clone().unwrap());
         if ready_file.is_err() {
-            error!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
+            error!("The .ready file already exists; please do not pass the same ready file path to multiple PocketIC server invocations!");
         }
     }
 
@@ -238,13 +248,13 @@ async fn start(runtime: Arc<Runtime>) {
 
         debug!("The PocketIC server will terminate");
 
-        if use_port_file {
-            // Clean up port file.
-            let _ = std::fs::remove_file(port_file_path.unwrap());
-        }
         if use_ready_file {
             // Clean up ready file.
             let _ = std::fs::remove_file(ready_file_path.unwrap());
+        }
+        if use_port_file {
+            // Clean up port file.
+            let _ = std::fs::remove_file(port_file_path.unwrap());
         }
     };
     axum::serve(listener, router)

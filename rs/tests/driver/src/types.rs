@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 #[allow(dead_code)] // Not all reject codes are used yet.
 #[derive(Clone, Copy)]
-pub(crate) enum RejectCode {
+pub enum RejectCode {
     SysFatal = 1,
     SysTransient = 2,
     DestinationInvalid = 3,
@@ -15,17 +15,17 @@ pub(crate) enum RejectCode {
 }
 
 #[derive(CandidType, Deserialize)]
-pub(crate) struct CreateCanisterResult {
+pub struct CreateCanisterResult {
     pub canister_id: Principal,
 }
 
 #[derive(candid::CandidType)]
-pub(crate) struct CanisterIdRecord {
+pub struct CanisterIdRecord {
     pub canister_id: Principal,
 }
 
 #[derive(CandidType, Deserialize, Debug)]
-pub(crate) struct CanisterStatusResult {
+pub struct CanisterStatusResult {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
     pub controller: candid::Principal,

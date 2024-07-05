@@ -1,5 +1,4 @@
 use super::governance_client::GovernanceClient;
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::convert::neuron_account_from_public_key;
 use crate::rosetta_tests::lib::convert::neuron_subaccount_bytes_from_public_key;
@@ -38,6 +37,7 @@ use ic_rosetta_api::request_types::{
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, DEFAULT_TOKEN_SYMBOL};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_types::{time, PrincipalId};
 use icp_ledger::{AccountIdentifier, Operation};
 use rand::rngs::StdRng;

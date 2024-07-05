@@ -6,9 +6,10 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, ExecuteIngressMessage, GetCyclesBalance,
-    GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query, QueryRequest,
-    ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, DashboardRequest, ExecuteIngressMessage,
+    GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query,
+    QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    Tick,
 };
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
@@ -157,6 +158,9 @@ where
         //
         // All the api v2 endpoints
         .nest("/:id/api/v2", instance_api_v2_routes())
+        //
+        // The instance dashboard
+        .api_route("/:id/_/dashboard", get(handler_dashboard))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
@@ -428,7 +432,7 @@ impl TryFrom<OpOut> for RawSubmitIngressResult {
 impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
     fn from(value: OpOut) -> Self {
         match value {
-            OpOut::ApiV2Response((status, headers, bytes)) => (
+            OpOut::RawResponse((status, headers, bytes)) => (
                 StatusCode::from_u16(status).unwrap(),
                 ApiResponse::Success((headers, bytes)),
             ),
@@ -575,6 +579,16 @@ pub async fn handler_pub_key(
     (code, Json(res))
 }
 
+pub async fn handler_dashboard(
+    State(AppState {
+        api_state, runtime, ..
+    }): State<AppState>,
+    NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = DashboardRequest { runtime };
+    handle_raw(api_state, instance_id, op).await
+}
+
 pub async fn handler_status(
     State(AppState {
         api_state, runtime, ..
@@ -583,7 +597,7 @@ pub async fn handler_status(
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = StatusRequest { bytes, runtime };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_call(
@@ -598,7 +612,7 @@ pub async fn handler_call(
         bytes,
         runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_query(
@@ -613,7 +627,7 @@ pub async fn handler_query(
         bytes,
         runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_read_state(
@@ -628,10 +642,10 @@ pub async fn handler_read_state(
         bytes,
         runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
-async fn handler_api_v2<T: Operation + Send + Sync + 'static>(
+async fn handle_raw<T: Operation + Send + Sync + 'static>(
     api_state: Arc<ApiState>,
     instance_id: InstanceId,
     op: T,
@@ -731,7 +745,7 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             }),
         )
             .into_response(),
-        OpOut::ApiV2Response((status, headers, bytes)) => {
+        OpOut::RawResponse((status, headers, bytes)) => {
             let code = StatusCode::from_u16(status).unwrap();
             let mut resp = Response::builder().status(code);
             for (name, value) in headers {

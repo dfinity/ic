@@ -21,7 +21,7 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        retry, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot,
+        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},

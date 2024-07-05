@@ -1,4 +1,4 @@
-use crate::crypto::request_signature_test::{expiry_time, sign_query, sign_update};
+use crate::util::{expiry_time, sign_query, sign_update};
 
 use candid::{CandidType, Deserialize, Principal};
 use canister_test::PrincipalId;

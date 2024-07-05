@@ -8,7 +8,7 @@ use crate::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
-        idkg::{EcdsaMessage, EcdsaMessageAttribute},
+        idkg::{IDkgMessage, IDkgMessageAttribute},
         ConsensusMessage,
     },
     messages::SignedIngress,
@@ -125,29 +125,29 @@ impl ArtifactKind for DkgArtifact {
     }
 }
 
-/// The `ArtifactKind` of ECDSA messages.
+/// The `ArtifactKind` of IDKG messages.
 #[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
-pub struct EcdsaArtifact;
+pub struct IDkgArtifact;
 
-/// `EcdsaArtifact` implements the `ArtifactKind` trait.
-impl ArtifactKind for EcdsaArtifact {
-    const TAG: ArtifactTag = ArtifactTag::EcdsaArtifact;
-    type PbId = ic_protobuf::types::v1::EcdsaArtifactId;
+/// `IDkgArtifact` implements the `ArtifactKind` trait.
+impl ArtifactKind for IDkgArtifact {
+    const TAG: ArtifactTag = ArtifactTag::IDkgArtifact;
+    type PbId = ic_protobuf::types::v1::IDkgArtifactId;
     type PbIdError = ProxyDecodeError;
-    type Id = EcdsaMessageId;
-    type PbMessage = ic_protobuf::types::v1::EcdsaMessage;
+    type Id = IDkgMessageId;
+    type PbMessage = ic_protobuf::types::v1::IDkgMessage;
     type PbMessageError = ProxyDecodeError;
-    type Message = EcdsaMessage;
-    type PbAttribute = ic_protobuf::types::v1::EcdsaMessageAttribute;
+    type Message = IDkgMessage;
+    type PbAttribute = ic_protobuf::types::v1::IDkgMessageAttribute;
     type PbAttributeError = ProxyDecodeError;
-    type Attribute = EcdsaMessageAttribute;
+    type Attribute = IDkgMessageAttribute;
 
-    /// The function converts a `EcdsaMessage` into an advert for a
-    /// `EcdsaArtifact`.
-    fn message_to_advert(msg: &EcdsaMessage) -> Advert<EcdsaArtifact> {
+    /// The function converts a `IDkgMessage` into an advert for a
+    /// `IDkgArtifact`.
+    fn message_to_advert(msg: &IDkgMessage) -> Advert<IDkgArtifact> {
         Advert {
-            id: EcdsaMessageId::from(msg),
-            attribute: EcdsaMessageAttribute::from(msg),
+            id: IDkgMessageId::from(msg),
+            attribute: IDkgMessageAttribute::from(msg),
         }
     }
 }

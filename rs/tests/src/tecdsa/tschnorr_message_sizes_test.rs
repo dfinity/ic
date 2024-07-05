@@ -18,20 +18,20 @@ Success::
 end::catalog[] */
 
 use super::DKG_INTERVAL;
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
-};
 use crate::tecdsa::{
     get_public_key_with_logger, get_signature_with_logger, make_bip340_key_id, make_eddsa_key_id,
     verify_signature, NUMBER_OF_NODES,
 };
-use crate::util::*;
 use ic_config::subnet_config::SCHNORR_SIGNATURE_FEE;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
+};
+use ic_system_test_driver::util::*;
 use ic_types::Height;
 use slog::{info, Logger};
 
@@ -53,7 +53,7 @@ fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
 
 /// Creates one system subnet and two application subnets, the first one with schnorr keys enabled.
 pub fn config(env: TestEnv) {
-    use crate::driver::test_env_api::*;
+    use ic_system_test_driver::driver::test_env_api::*;
     let size_limit: u64 = (2 * LOCAL_LIMIT).try_into().unwrap();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))

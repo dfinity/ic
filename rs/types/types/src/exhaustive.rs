@@ -4,9 +4,9 @@ use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
-    EcdsaUIDGenerator, HasMasterPublicKeyId, IDkgReshareRequest, KeyTranscriptCreation,
-    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
+    CompletedReshareRequest, CompletedSignature, EcdsaPayload, EcdsaUIDGenerator,
+    HasMasterPublicKeyId, IDkgReshareRequest, KeyTranscriptCreation, MaskedTranscript,
+    MasterKeyTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
@@ -758,7 +758,7 @@ pub struct DerivedEcdsaPayload {
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
-    pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
+    pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
 }
 
 impl ExhaustiveSet for EcdsaPayload {
@@ -781,17 +781,17 @@ impl ExhaustiveSet for EcdsaPayload {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedEcdsaKeyTranscript {
+pub struct DerivedMasterKeyTranscript {
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     pub next_in_creation: KeyTranscriptCreation,
     pub master_key_id: MasterPublicKeyId,
 }
 
-impl ExhaustiveSet for EcdsaKeyTranscript {
+impl ExhaustiveSet for MasterKeyTranscript {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedEcdsaKeyTranscript::exhaustive_set(rng)
+        DerivedMasterKeyTranscript::exhaustive_set(rng)
             .into_iter()
-            .map(|r| EcdsaKeyTranscript {
+            .map(|r| MasterKeyTranscript {
                 deprecated_key_id: None,
                 master_key_id: r.master_key_id,
                 current: r.current,
@@ -882,7 +882,7 @@ impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
 
-impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
+impl HasId<MasterPublicKeyId> for MasterKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
         Some(self.key_id())
     }

@@ -11,3 +11,8 @@ WantedBy=multi-user.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/guestos_tool generate-network-config
+
+# All services that networking depends on log their outputs to the console 
+# and are piped to the host terminal if the verbose flag is enabled.
+StandardOutput=journal+console
+StandardError=journal+console

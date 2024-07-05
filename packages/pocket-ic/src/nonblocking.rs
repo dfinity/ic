@@ -1,7 +1,7 @@
 use crate::common::rest::{
     ApiResponse, BlobCompression, BlobId, CreateHttpGatewayResponse, CreateInstanceResponse,
-    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, InstanceId,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
+    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, HttpsConfig,
+    InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
     RawEffectivePrincipal, RawMessageId, RawSetStableMemory, RawStableMemory,
     RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
     Topology,
@@ -302,10 +302,36 @@ impl PocketIc {
         // Execute a tick to make sure all subnets have a certified state.
         self.tick().await;
         self.auto_progress().await;
-        self.start_http_gateway(listen_at).await
+        self.start_http_gateway(listen_at, None, None).await
     }
 
-    async fn start_http_gateway(&mut self, listen_at: Option<u16>) -> Url {
+    /// Creates an HTTPS gateway for this IC instance
+    /// listening on an optionally specified domain and port
+    /// and configures the IC instance to make progress
+    /// automatically, i.e., periodically update the time
+    /// of the IC to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub async fn make_live_https(
+        &mut self,
+        listen_at: Option<u16>,
+        domain: String,
+        https_config: HttpsConfig,
+    ) -> Url {
+        // Execute a tick to make sure all subnets have a certified state.
+        self.tick().await;
+        self.auto_progress().await;
+        self.start_http_gateway(listen_at, Some(domain), Some(https_config))
+            .await
+    }
+
+    async fn start_http_gateway(
+        &mut self,
+        listen_at: Option<u16>,
+        domain: Option<String>,
+        https_config: Option<HttpsConfig>,
+    ) -> Url {
         if let Some(url) = self.url() {
             return url;
         }
@@ -313,7 +339,8 @@ impl PocketIc {
         let http_gateway_config = HttpGatewayConfig {
             listen_at,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
-            domain: None,
+            domain: domain.clone(),
+            https_config: https_config.clone(),
         };
         let res = self
             .reqwest_client
@@ -329,7 +356,18 @@ impl PocketIc {
             CreateHttpGatewayResponse::Created(info) => {
                 let port = info.port;
                 self.http_gateway = Some(info);
-                Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap()
+                let proto = if https_config.is_some() {
+                    "https"
+                } else {
+                    "http"
+                };
+                Url::parse(&format!(
+                    "{}://{}:{}/",
+                    proto,
+                    domain.unwrap_or(LOCALHOST.to_string()),
+                    port
+                ))
+                .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
                 panic!("Failed to crate http gateway: {}", message)

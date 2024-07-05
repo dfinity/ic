@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/config",
     "//rs/constants",
-    "//rs/nns/common",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/test_utils/ni-dkg",

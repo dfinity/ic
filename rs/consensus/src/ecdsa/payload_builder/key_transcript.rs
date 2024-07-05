@@ -5,7 +5,7 @@ use ic_logger::{info, ReplicaLogger};
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
-        self, EcdsaBlockReader, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes,
+        self, EcdsaBlockReader, EcdsaUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     Height, NodeId, RegistryVersion,
@@ -14,7 +14,7 @@ use ic_types::{
 use super::EcdsaPayloadError;
 
 pub(super) fn get_created_key_transcript(
-    key_transcript: &idkg::EcdsaKeyTranscript,
+    key_transcript: &idkg::MasterKeyTranscript,
     block_reader: &dyn EcdsaBlockReader,
 ) -> Result<Option<idkg::UnmaskedTranscriptWithAttributes>, EcdsaPayloadError> {
     if let idkg::KeyTranscriptCreation::Created(unmasked) = &key_transcript.next_in_creation {
@@ -61,7 +61,7 @@ pub(super) fn update_next_key_transcripts(
 }
 
 pub(super) fn update_next_key_transcript(
-    key_transcript: &mut EcdsaKeyTranscript,
+    key_transcript: &mut MasterKeyTranscript,
     uid_generator: &mut EcdsaUIDGenerator,
     receivers: &[NodeId],
     registry_version: RegistryVersion,
@@ -248,7 +248,7 @@ mod tests {
             idkg::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let current_key_transcript = idkg::EcdsaKeyTranscript {
+        let current_key_transcript = idkg::MasterKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
             deprecated_key_id: None,
@@ -272,7 +272,7 @@ mod tests {
     fn get_created_key_transcript_returns_none_test() {
         let block_reader = TestEcdsaBlockReader::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let key_transcript = idkg::EcdsaKeyTranscript {
+        let key_transcript = idkg::MasterKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Begin,
             deprecated_key_id: None,

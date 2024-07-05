@@ -23,6 +23,7 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/tests",
+        "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",

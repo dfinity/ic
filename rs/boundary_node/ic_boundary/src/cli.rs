@@ -291,6 +291,10 @@ pub struct RetryConfig {
     /// Whether to retry update calls
     #[clap(long, default_value = "false")]
     pub retry_update_call: bool,
+
+    /// Whether to use latency-based routing for /call
+    #[clap(long, default_value = "false")]
+    pub disable_latency_routing: bool,
 }
 
 #[derive(Args)]

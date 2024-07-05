@@ -21,24 +21,24 @@ Success::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry, HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot,
-    IcNodeContainer, SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-};
 use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
 use crate::orchestrator::utils::subnet_recovery::{
     get_master_public_key, run_chain_key_signature_test,
 };
-use crate::tecdsa::{create_new_subnet_with_keys, make_key};
-use crate::{retry_with_msg, tecdsa::KEY_ID1, util::*};
+use crate::tecdsa::{create_new_subnet_with_keys, make_key, KEY_ID1};
 use anyhow::bail;
 use canister_test::Canister;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
+    SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
+use ic_system_test_driver::util::*;
 use ic_types::{Height, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};
@@ -122,7 +122,7 @@ fn wait_until_subnet_mr_version(
         subnet.subnet_id,
     );
     let metrics = MetricsFetcher::new(subnet.nodes().take(1), vec![MR_REGISTRY_VERSION.into()]);
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!(
             "check if message routing registry version {} on subnet {}",
             target_registry_version, subnet.subnet_id,

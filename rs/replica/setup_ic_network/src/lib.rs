@@ -10,7 +10,7 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::ConsensusPoolImpl,
     dkg_pool::DkgPoolImpl,
-    ecdsa_pool::EcdsaPoolImpl,
+    idkg_pool::IDkgPoolImpl,
     ingress_pool::{IngressPoolImpl, IngressPrioritizer},
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
@@ -74,7 +74,7 @@ struct ArtifactPools {
     ingress_pool: Arc<RwLock<IngressPoolImpl>>,
     certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
-    ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+    idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
@@ -322,7 +322,7 @@ fn start_consensus(
             canister_http_payload_builder,
             Arc::from(query_stats_payload_builder),
             Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
-            Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
+            Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
             Arc::clone(&dkg_key_manager) as Arc<_>,
             message_router,
             Arc::clone(&state_manager) as Arc<_>,
@@ -458,13 +458,13 @@ fn start_consensus(
                 malicious_flags,
             ),
             Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&artifact_pools.ecdsa_pool),
+            Arc::clone(&artifact_pools.idkg_pool),
             metrics_registry.clone(),
         );
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(ecdsa_rx, artifact_pools.ecdsa_pool, ecdsa_gossip, client);
+        new_p2p_consensus.add_client(ecdsa_rx, artifact_pools.idkg_pool, ecdsa_gossip, client);
     };
 
     {
@@ -523,14 +523,14 @@ fn init_artifact_pools(
         log.clone(),
     )));
 
-    let mut ecdsa_pool = EcdsaPoolImpl::new(
+    let mut idkg_pool = IDkgPoolImpl::new(
         config.clone(),
         log.clone(),
         metrics_registry.clone(),
-        Box::new(ecdsa::EcdsaStatsImpl::new(metrics_registry.clone())),
+        Box::new(ecdsa::IDkgStatsImpl::new(metrics_registry.clone())),
     );
-    ecdsa_pool.add_initial_dealings(&catch_up_package, time_source);
-    let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
+    idkg_pool.add_initial_dealings(&catch_up_package, time_source);
+    let idkg_pool = Arc::new(RwLock::new(idkg_pool));
 
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
         node_id,
@@ -550,7 +550,7 @@ fn init_artifact_pools(
         ingress_pool,
         certification_pool,
         dkg_pool,
-        ecdsa_pool,
+        idkg_pool,
         canister_http_pool,
     }
 }

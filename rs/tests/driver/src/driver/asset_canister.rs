@@ -1,7 +1,6 @@
 use crate::{
     driver::test_env_api::{
-        retry_async, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTestEnv, READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
+        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTestEnv, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
     },
     retry_with_msg_async,
     util::agent_observes_canister_module,

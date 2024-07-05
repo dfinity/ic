@@ -33,22 +33,21 @@ const CATCH_UP_PACKAGE_MIN_HEIGHT: &str = "artifact_pool_consensus_height_stat{p
 const FINALIZATION_MIN_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"min\",type=\"finalization\"}";
 const FINALIZATION_MAX_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"max\",type=\"finalization\"}";
 
-use crate::{
+use anyhow::{anyhow, bail};
+use futures::join;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
             READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    retry_with_msg,
     util::{block_on, MetricsFetcher},
 };
-use anyhow::{anyhow, bail};
-use futures::join;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use slog::{info, Logger};
 use std::time::Duration;
@@ -167,7 +166,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
     // Wait until the node is available again
     // If the node is not able to catch up, we can't wait until the endpoint
     // reports healthy, therefore we simply await until we can reach the endpoint.
-    let _ = retry_with_msg!(
+    let _ = ic_system_test_driver::retry_with_msg!(
         format!(
             "check if malicious node {} is available",
             malicious_node.node_id
@@ -292,7 +291,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
 }
 
 pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!(
             "check if node {} is at height {}",
             node.node_id, target_height
@@ -317,7 +316,7 @@ pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height,
 }
 
 pub fn get_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!("get certified height of node {}", node.node_id),
         log,
         READY_WAIT_TIMEOUT,

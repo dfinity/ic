@@ -1,14 +1,13 @@
 name: Release Testing
 
 on:
-  push:
-    workflow_run:
-      workflows: ["CI Main"]
-      types:
-        - completed
-      branches:
-        - 'hotfix-*-rc--*'
-        - 'rc--*'
+  workflow_run:
+    workflows: ["CI Main"]
+    types:
+      - completed
+    branches:
+      - 'hotfix-*-rc--*'
+      - 'rc--*'
   workflow_dispatch:
 
 env:
@@ -50,11 +49,13 @@ anchors:
 
 jobs:
   ci-main-failure:
+    name: Check CI Main Failure
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
       - run: |
           echo 'CI Main workflow failed'
+          echo "CI Main URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
           exit 1
 
   bazel-system-test-nightly:

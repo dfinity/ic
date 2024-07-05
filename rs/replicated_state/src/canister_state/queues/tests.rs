@@ -18,7 +18,9 @@ use message_pool::REQUEST_LIFETIME;
 use proptest::prelude::*;
 use queue::{InputQueue, OutputQueue};
 use std::cell::RefCell;
-use std::{collections::BTreeSet, convert::TryInto, time::Duration};
+use std::collections::BTreeSet;
+use std::convert::TryInto;
+use std::time::Duration;
 
 /// Wrapper for `CanisterQueues` for tests using only one pair of
 /// `(InputQueue, OutputQueue)` and arbitrary requests/responses.
@@ -152,7 +154,7 @@ fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response 
         .build()
 }
 
-fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
+fn coarse_time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
@@ -852,7 +854,7 @@ fn test_peek_input_with_stale_references() {
         .map(|(i, sender)| {
             RequestBuilder::default()
                 .sender(*sender)
-                .deadline(time(1000 + i as u32))
+                .deadline(coarse_time(1000 + i as u32))
                 .build()
         })
         .collect::<Vec<_>>();
@@ -862,7 +864,7 @@ fn test_peek_input_with_stale_references() {
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
     // Time out the first two requests, including the only request from canister 2.
-    queues.time_out_messages(time(1002).into(), &own_canister_id, &local_canisters);
+    queues.time_out_messages(coarse_time(1002).into(), &own_canister_id, &local_canisters);
 
     assert!(queues.has_input());
 
@@ -1098,32 +1100,6 @@ fn encode_empty() {
     assert_eq!(expected, serialized.as_slice());
 }
 
-/// Tests that serializing a `CanisterQueues` with an empty but non-default pool
-/// preserves the non-default pool.
-#[test]
-fn encode_non_default_pool() {
-    let mut queues = CanisterQueues::default();
-
-    let this = canister_test_id(13);
-    queues
-        .push_input(
-            RequestBuilder::default().sender(this).build().into(),
-            RemoteSubnet,
-        )
-        .unwrap();
-    queues.pop_canister_input(RemoteSubnet).unwrap();
-    // Sanity check that the pool is empty but not equal to the default.
-    assert_eq!(0, queues.pool.len());
-    assert_ne!(MessagePool::default(), queues.pool);
-
-    // And a roundtrip encode preserves the `CanisterQueues` unaltered.
-    let encoded: pb_queues::CanisterQueues = (&queues).into();
-    let decoded = (encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)
-        .try_into()
-        .unwrap();
-    assert_eq!(queues, decoded);
-}
-
 /// Tests decoding a `CanisterQueues` with an invalid input schedule.
 #[test]
 fn decode_invalid_input_schedule() {
@@ -1171,6 +1147,32 @@ fn decode_invalid_input_schedule() {
     decoded
         .remote_subnet_input_schedule
         .clone_from(&queues.remote_subnet_input_schedule);
+    assert_eq!(queues, decoded);
+}
+
+/// Tests that serializing a `CanisterQueues` with an empty but non-default pool
+/// preserves the non-default pool.
+#[test]
+fn encode_non_default_pool() {
+    let mut queues = CanisterQueues::default();
+
+    let this = canister_test_id(13);
+    queues
+        .push_input(
+            RequestBuilder::default().sender(this).build().into(),
+            RemoteSubnet,
+        )
+        .unwrap();
+    queues.pop_canister_input(RemoteSubnet).unwrap();
+    // Sanity check that the pool is empty but not equal to the default.
+    assert_eq!(0, queues.pool.len());
+    assert_ne!(MessagePool::default(), queues.pool);
+
+    // And a roundtrip encode preserves the `CanisterQueues` unaltered.
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let decoded = (encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)
+        .try_into()
+        .unwrap();
     assert_eq!(queues, decoded);
 }
 
@@ -1321,9 +1323,9 @@ fn test_stats_best_effort() {
 
     // Enqueue one guaranteed response request and one guaranteed response each into
     // an input and an output queue.
-    let request = request(time(10));
+    let request = request(coarse_time(10));
     let request_size_bytes = request.count_bytes();
-    let response = response_with_payload(1000, time(20));
+    let response = response_with_payload(1000, coarse_time(20));
     let response_size_bytes = response.count_bytes();
 
     // Make reservatuibs for the responses.
@@ -1405,7 +1407,7 @@ fn test_stats_best_effort() {
     // request), shed the incoming response and pop the generated reject response.
     assert_eq!(
         1,
-        queues.time_out_messages(time(20).into(), &request.sender, &BTreeMap::new())
+        queues.time_out_messages(coarse_time(20).into(), &request.sender, &BTreeMap::new())
     );
     assert!(queues.shed_largest_message(&request.sender, &BTreeMap::new()));
     assert!(queues.pop_input().is_some());
@@ -1522,7 +1524,11 @@ fn test_stats_guaranteed_response() {
     // request), pop the incoming response and the generated reject response.
     assert_eq!(
         1,
-        queues.time_out_messages(time(u32::MAX).into(), &request.sender, &BTreeMap::new())
+        queues.time_out_messages(
+            coarse_time(u32::MAX).into(),
+            &request.sender,
+            &BTreeMap::new()
+        )
     );
     assert_eq!(
         queues.pop_input(),
@@ -1560,7 +1566,7 @@ fn test_stats_oversized_requests() {
     // input and an output queue.
     let best_effort = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
-        time(10),
+        coarse_time(10),
     );
     let best_effort_size_bytes = best_effort.count_bytes();
     let guaranteed = request_with_payload(
@@ -1644,7 +1650,11 @@ fn test_stats_oversized_requests() {
     assert!(queues.shed_largest_message(&best_effort.sender, &BTreeMap::new()));
     assert_eq!(
         1,
-        queues.time_out_messages(time(u32::MAX).into(), &best_effort.sender, &BTreeMap::new())
+        queues.time_out_messages(
+            coarse_time(u32::MAX).into(),
+            &best_effort.sender,
+            &BTreeMap::new()
+        )
     );
 
     // Input queue slots and the input queue memory reservation were consumed.
@@ -1897,7 +1907,7 @@ fn test_peek_output_with_stale_references() {
         .map(|(i, receiver)| {
             RequestBuilder::default()
                 .receiver(*receiver)
-                .deadline(time(1000 + i as u32))
+                .deadline(coarse_time(1000 + i as u32))
                 .build()
         })
         .collect::<Vec<_>>();
@@ -1911,7 +1921,7 @@ fn test_peek_output_with_stale_references() {
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
     // Time out the first two requests, including the only request to canister 2.
-    queues.time_out_messages(time(1002).into(), &own_canister_id, &local_canisters);
+    queues.time_out_messages(coarse_time(1002).into(), &own_canister_id, &local_canisters);
 
     assert!(queues.has_output());
 
@@ -2148,7 +2158,7 @@ proptest! {
         let own_canister_id = canister_test_id(13);
         let local_canisters = BTreeMap::new();
         // Time out some messages.
-        canister_queues.time_out_messages(time(deadline).into(), &own_canister_id, &local_canisters);
+        canister_queues.time_out_messages(coarse_time(deadline).into(), &own_canister_id, &local_canisters);
         // And shed one more.
         canister_queues.shed_largest_message(&own_canister_id, &local_canisters);
 

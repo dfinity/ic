@@ -77,7 +77,13 @@ pub struct CanisterQueues {
     /// Per remote canister input and output queues.
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
+    /// Pool holding all messages in `canister_queues`, with support for time-based
+    /// expiration and load shedding.
     pool: MessagePool,
+
+    /// Slot and memory reservation stats. Message count and size stats are
+    /// maintained separately in the `MessagePool`.
+    queue_stats: QueueStats,
 
     /// FIFO queue of local subnet sender canister IDs ensuring round-robin
     /// consumption of input messages. Only senders with non-empty queues
@@ -99,11 +105,7 @@ pub struct CanisterQueues {
     /// senders is best effort.
     remote_subnet_input_schedule: VecDeque<CanisterId>,
 
-    /// Slot and memory reservation stats. Message count and size stats are
-    /// maintained separately in the `MessagePool`.
-    queue_stats: QueueStats,
-
-    /// Round-robin across ingress and cross-net input queues for pop_input().
+    /// Round-robin across ingress and cross-net input queues for `pop_input()`.
     next_input_queue: NextInputQueue,
 }
 
@@ -1394,8 +1396,9 @@ struct QueueStats {
     /// Transient: size in bytes of responses routed from `output_queues` into
     /// streams and not yet garbage collected.
     ///
-    /// This is populated by `ReplicatedState::put_streams()`, called by MR
-    /// after every streams mutation (induction, routing, GC).
+    /// This is updated by `ReplicatedState::put_streams()`, called by MR after
+    /// every streams mutation (induction, routing, GC). And is (re)populated during
+    /// checkpoint loading by `ReplicatedState::new_from_checkpoint()`.
     transient_stream_responses_size_bytes: usize,
 }
 

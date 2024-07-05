@@ -3,11 +3,15 @@ use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::OpId;
 use crate::Operation;
 use crate::{copy_dir, BlobStore};
-use axum::{extract::State, response::IntoResponse};
+use askama::Template;
+use axum::{
+    extract::State,
+    response::{Html, IntoResponse},
+};
 use candid::Decode;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
-use hyper::Method;
+use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey};
 use ic_config::execution_environment;
 use ic_config::flag_status::FlagStatus;
@@ -17,6 +21,7 @@ use ic_http_endpoints_public::{
     CallServiceV2, CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
 };
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
+use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, Method as Ic00Method,
     ProvisionalCreateCanisterWithCyclesArgs,
@@ -39,7 +44,7 @@ use ic_types::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
         QueryResponseHash, ReplicaHealthStatus,
     },
-    CanisterId, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
@@ -66,6 +71,9 @@ use tower::{
     service_fn,
     util::{BoxCloneService, ServiceExt},
 };
+
+// See build.rs
+include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
@@ -863,6 +871,74 @@ impl Operation for Query {
     }
 }
 
+pub struct DashboardRequest {
+    pub runtime: Arc<Runtime>,
+}
+
+impl Operation for DashboardRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnets = pic.subnets.read().unwrap();
+
+        // All PocketIC subnets have the same height and thus we fetch the height from an arbitrary subnet.
+        let arbitrary_subnet = subnets.values().next().unwrap();
+        let height = arbitrary_subnet.state_manager.latest_state_height();
+
+        let states: Vec<_> = subnets
+            .values()
+            .map(|subnet| {
+                (
+                    subnet.state_manager.get_latest_state(),
+                    subnet.get_subnet_id(),
+                )
+            })
+            .collect();
+        let canisters = states
+            .iter()
+            .map(|(state, subnet_id)| {
+                state
+                    .get_ref()
+                    .canisters_iter()
+                    .map(|c| (c, *subnet_id))
+                    .collect::<Vec<_>>()
+            })
+            .concat();
+
+        let dashboard = Dashboard {
+            height,
+            canisters: &canisters,
+        };
+
+        let resp = match dashboard.render() {
+            Ok(content) => Html(content).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal error: {}", e),
+            )
+                .into_response(),
+        };
+
+        OpOut::RawResponse((
+            resp.status().into(),
+            resp.headers()
+                .iter()
+                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                .collect(),
+            self.runtime
+                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
+                .unwrap()
+                .to_vec(),
+        ))
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        OpId("dashboard".to_string())
+    }
+}
+
 pub struct StatusRequest {
     pub bytes: Bytes,
     pub runtime: Arc<Runtime>,
@@ -941,7 +1017,7 @@ impl Operation for StatusRequest {
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
 
-        OpOut::ApiV2Response((
+        OpOut::RawResponse((
             resp.status().into(),
             resp.headers()
                 .iter()
@@ -1044,7 +1120,7 @@ impl Operation for CallRequest {
                     subnet.push_signed_ingress(msg);
                 }
 
-                OpOut::ApiV2Response((
+                OpOut::RawResponse((
                     resp.status().into(),
                     resp.headers()
                         .iter()
@@ -1137,7 +1213,7 @@ impl Operation for QueryRequest {
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::ApiV2Response((
+                OpOut::RawResponse((
                     resp.status().into(),
                     resp.headers()
                         .iter()
@@ -1201,7 +1277,7 @@ impl Operation for ReadStateRequest {
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::ApiV2Response((
+                OpOut::RawResponse((
                     resp.status().into(),
                     resp.headers()
                         .iter()

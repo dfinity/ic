@@ -2,15 +2,17 @@ use canister_test::Canister;
 use canister_test::Runtime;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::ic::{InternetComputer, Subnet};
-use ic_tests::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr};
-use ic_tests::driver::test_setup::InfraProvider;
-use ic_tests::driver::universal_vm::*;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env_api::{
+    HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
+};
+use ic_system_test_driver::driver::test_setup::InfraProvider;
+use ic_system_test_driver::driver::universal_vm::*;
+use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::*,
 };
-use ic_tests::util::{self, create_and_install};
+use ic_system_test_driver::util::{self, create_and_install};
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
 use std::net::{Ipv4Addr, Ipv6Addr};

@@ -5402,7 +5402,11 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let contexts = test.state().sign_with_ecdsa_contexts();
+        let contexts = test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts();
         let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
         // Check that quadruple and nonce are none
@@ -5427,7 +5431,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let contexts = test.state().sign_with_ecdsa_contexts();
+    let contexts = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     let expected_height = Height::from(test.last_round().get());
@@ -5441,7 +5449,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let contexts = test.state().sign_with_ecdsa_contexts();
+    let contexts = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that quadruple is still matched
@@ -5454,7 +5466,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert!(nonce.is_some());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let contexts = test.state().sign_with_ecdsa_contexts();
+    let contexts = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that nonce wasn't changed
@@ -5500,7 +5516,11 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
 
-    let sign_with_ecdsa_contexts = &test.state().sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
 
     // First context (requesting key 3) should be unmatched
     let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();

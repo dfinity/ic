@@ -172,7 +172,7 @@ pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
 #[cfg(test)]
 mod tests {
     use ic_types::artifact_kind::{
-        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
+        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, IDkgArtifact,
         IngressArtifact,
     };
 
@@ -190,7 +190,7 @@ mod tests {
         assert!(uri_prefix::<IngressArtifact>()
             .chars()
             .all(char::is_alphabetic));
-        assert!(uri_prefix::<EcdsaArtifact>()
+        assert!(uri_prefix::<IDkgArtifact>()
             .chars()
             .all(char::is_alphabetic));
         assert!(uri_prefix::<CanisterHttpArtifact>()

@@ -222,7 +222,7 @@ mod tests {
         ic_types::batch::ConsensusResponse::new(
             callback_id,
             ic_types::messages::Payload::Data(
-                ic_management_canister_types::ComputeInitialEcdsaDealingsResponse {
+                ic_management_canister_types::ComputeInitialIDkgDealingsResponse {
                     initial_dkg_dealings: initial_dealings.into(),
                 }
                 .encode(),

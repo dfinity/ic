@@ -15,12 +15,6 @@ Runbook::
 
 
 end::catalog[] */
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, NnsCanisterEnvVars,
-};
-use crate::util::{block_on, runtime_from_url};
 use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response,
@@ -37,6 +31,12 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, NnsCanisterEnvVars,
+};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::RegistryVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use slog::info;

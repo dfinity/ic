@@ -193,7 +193,7 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS,
     deps = [
-        "//rs/tests",
+        "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/ic_mainnet_nns_recovery",
         "@crate_index//:anyhow",
     ],

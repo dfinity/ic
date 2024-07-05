@@ -1,14 +1,14 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::sns_client::SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
+use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_deployment::{
     generate_ticket_participants_workload, initiate_token_swap_with_oc_parameters,
     sns_setup_with_many_icp_users,
 };
-use ic_tests::sns_client::SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
-use ic_tests::systest;
 
 fn workload_rps70_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(

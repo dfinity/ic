@@ -398,3 +398,34 @@ impl SearchTransactionsRequest {
         }
     }
 }
+
+/// CallRequest is the input to the `/call`
+/// endpoint. It contains the method name the user wants to call and some parameters specific for the method call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct CallRequest {
+    #[serde(rename = "network_identifier")]
+    pub network_identifier: NetworkIdentifier,
+
+    /// Method is some network-specific procedure call. This method could map to a network-specific RPC endpoint, a method in an SDK generated from a smart contract, or some hybrid of the two. The implementation must define all available methods in the Allow object. However, it is up to the caller to determine which parameters to provide when invoking /call.
+    #[serde(rename = "method_name")]
+    pub method_name: String,
+
+    /// Parameters is some network-specific argument for a method. It is up to the caller to determine which parameters to provide when invoking /call.
+    #[serde(rename = "parameters")]
+    pub parameters: ObjectMap,
+}
+
+impl CallRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        method_name: String,
+        parameters: ObjectMap,
+    ) -> CallRequest {
+        CallRequest {
+            network_identifier,
+            method_name,
+            parameters,
+        }
+    }
+}

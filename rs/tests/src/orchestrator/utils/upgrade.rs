@@ -1,12 +1,3 @@
-use crate::{
-    driver::test_env_api::*,
-    nns::{
-        get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
-        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
-    },
-    retry_with_msg, retry_with_msg_async,
-    util::runtime_from_url,
-};
 use anyhow::{bail, Result};
 use ic_canister_client::Sender;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -16,6 +7,14 @@ use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_system_test_driver::{
+    driver::test_env_api::*,
+    nns::{
+        get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
+        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
+    },
+    util::runtime_from_url,
+};
 use ic_types::{messages::ReplicaHealthStatus, ReplicaVersion, SubnetId};
 use prost::Message;
 use slog::{info, Logger};
@@ -58,7 +57,7 @@ pub(crate) async fn fetch_update_file_sha256_with_retry(
     version_str: &str,
     is_test_img: bool,
 ) -> String {
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!("fetch update file sha256 of version {}", version_str),
         log,
         READY_WAIT_TIMEOUT,
@@ -151,7 +150,7 @@ pub fn assert_assigned_replica_version(
         Finished,
     }
     let mut state = State::Uninitialized;
-    let result = retry_with_msg!(
+    let result = ic_system_test_driver::retry_with_msg!(
         format!(
             "Check if node {} is healthy and running replica version {}",
             node.get_ip_addr(),
