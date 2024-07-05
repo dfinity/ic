@@ -415,7 +415,7 @@ impl CyclesAccountManager {
             reserved_balance,
         );
         let available_for_withdrawal = *cycles_balance - threshold;
-        let withdrawn_cycles = Cycles::min(available_for_withdrawal, cycles);
+        let withdrawn_cycles = available_for_withdrawal.min(cycles);
         *cycles_balance -= withdrawn_cycles;
         withdrawn_cycles
     }
