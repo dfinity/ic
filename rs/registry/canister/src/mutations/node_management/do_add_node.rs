@@ -297,8 +297,7 @@ mod tests {
     use std::str::FromStr;
 
     use crate::{
-        common::test_helpers::invariant_compliant_registry,
-        mutations::common::{encode_or_panic, test::TEST_NODE_ID},
+        common::test_helpers::invariant_compliant_registry, mutations::common::test::TEST_NODE_ID,
     };
 
     use super::*;
@@ -308,6 +307,7 @@ mod tests {
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::insert;
     use lazy_static::lazy_static;
+    use prost::Message;
 
     /// Prepares the payload to add a new node, for tests.
     pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePublicKeys) {
@@ -316,13 +316,15 @@ mod tests {
         let node_public_keys =
             generate_node_keys_once(&config, None).expect("error generating node public keys");
         // Create payload message
-        let node_signing_pk = encode_or_panic(node_public_keys.node_signing_key());
-        let committee_signing_pk = encode_or_panic(node_public_keys.committee_signing_key());
-        let ni_dkg_dealing_encryption_pk =
-            encode_or_panic(node_public_keys.dkg_dealing_encryption_key());
-        let transport_tls_cert = encode_or_panic(node_public_keys.tls_certificate());
-        let idkg_dealing_encryption_pk =
-            encode_or_panic(node_public_keys.idkg_dealing_encryption_key());
+        let node_signing_pk = node_public_keys.node_signing_key().encode_to_vec();
+        let committee_signing_pk = node_public_keys.committee_signing_key().encode_to_vec();
+        let ni_dkg_dealing_encryption_pk = node_public_keys
+            .dkg_dealing_encryption_key()
+            .encode_to_vec();
+        let transport_tls_cert = node_public_keys.tls_certificate().encode_to_vec();
+        let idkg_dealing_encryption_pk = node_public_keys
+            .idkg_dealing_encryption_key()
+            .encode_to_vec();
         // Create the payload
         let payload = AddNodePayload {
             node_signing_pk,
@@ -388,7 +390,7 @@ mod tests {
     #[test]
     fn empty_committee_signing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
     }
@@ -396,8 +398,8 @@ mod tests {
     #[test]
     fn empty_dkg_dealing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
-        let committee_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.committee_signing_key());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
+        let committee_signing_pubkey = TEST_DATA.node_pks.committee_signing_key().encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
@@ -406,10 +408,12 @@ mod tests {
     #[test]
     fn empty_tls_cert_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
-        let committee_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.committee_signing_key());
-        let ni_dkg_dealing_encryption_pubkey =
-            encode_or_panic(TEST_DATA.node_pks.dkg_dealing_encryption_key());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
+        let committee_signing_pubkey = TEST_DATA.node_pks.committee_signing_key().encode_to_vec();
+        let ni_dkg_dealing_encryption_pubkey = TEST_DATA
+            .node_pks
+            .dkg_dealing_encryption_key()
+            .encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
@@ -419,11 +423,13 @@ mod tests {
     #[test]
     fn empty_idkg_key_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
-        let committee_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.committee_signing_key());
-        let ni_dkg_dealing_encryption_pubkey =
-            encode_or_panic(TEST_DATA.node_pks.dkg_dealing_encryption_key());
-        let tls_certificate = encode_or_panic(TEST_DATA.node_pks.tls_certificate());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
+        let committee_signing_pubkey = TEST_DATA.node_pks.committee_signing_key().encode_to_vec();
+        let ni_dkg_dealing_encryption_pubkey = TEST_DATA
+            .node_pks
+            .dkg_dealing_encryption_key()
+            .encode_to_vec();
+        let tls_certificate = TEST_DATA.node_pks.tls_certificate().encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
@@ -532,7 +538,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (mut payload, _) = prepare_add_node_payload(1);
         // Set an invalid domain name
@@ -558,7 +564,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (payload, _) = prepare_add_node_payload(1);
         // Act
@@ -597,7 +603,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (payload, _) = prepare_add_node_payload(1);
         // Act
@@ -632,7 +638,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (payload_1, _) = prepare_add_node_payload(1);
         // Set a different IP for the second node
@@ -683,7 +689,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         // Use payloads with the same IPs
         let (payload_1, _) = prepare_add_node_payload(1);
@@ -742,7 +748,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
 
         // create an IPv4 config

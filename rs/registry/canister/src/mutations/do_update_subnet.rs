@@ -1,8 +1,4 @@
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{encode_or_panic, has_duplicates},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
@@ -17,6 +13,7 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+use prost::Message;
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -38,7 +35,7 @@ impl Registry {
 
         let subnet_record_mutation = upsert(
             make_subnet_record_key(subnet_id).into_bytes(),
-            encode_or_panic(&new_subnet_record),
+            new_subnet_record.encode_to_vec(),
         );
 
         let mut mutations = vec![subnet_record_mutation];
@@ -303,7 +300,7 @@ impl Registry {
 
             mutations.push(upsert(
                 make_chain_key_signing_subnet_list_key(master_public_key_id).into_bytes(),
-                encode_or_panic(&chain_key_signing_list_for_key),
+                chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }
         mutations
