@@ -21,7 +21,7 @@ mod tests;
 ///
 /// May be a weak reference into the message pool; or identify a reject response to
 /// a specific callback.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum CanisterQueueItem {
     /// Weak reference to a `Request` or `Response` held in the message pool.
     ///

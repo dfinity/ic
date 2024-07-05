@@ -164,7 +164,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
                 // Stale reference, pop it and try again.
                 // FIXME: Add a test that covers skipping over stale references.
-                queue.pop();
+                assert_eq!(Some(*item), queue.pop());
                 self.size -= 1;
             }
 
@@ -292,9 +292,7 @@ impl CanisterQueues {
 
                     // Expired / dropped message. Pop it and advance.
                     None => {
-                        queue
-                            .pop()
-                            .expect("peek() returned an item, pop() should not fail");
+                        assert_eq!(Some(*item), queue.pop());
                         continue;
                     }
                 };
@@ -308,9 +306,7 @@ impl CanisterQueues {
                         self.pool
                             .take(id)
                             .expect("peek() returned a message, take() should not fail");
-                        queue
-                            .pop()
-                            .expect("peek() returned a message, pop() should not fail");
+                        assert_eq!(Some(*item), queue.pop());
                     }
                 }
             }
@@ -353,8 +349,8 @@ impl CanisterQueues {
     ///  * `QueueFull` if pushing a `Request` and the corresponding input or
     ///    output queues are full.
     ///
-    ///  * `NonMatchingResponse` if pushing a `Response` and the receiving canister
-    ///    is not expecting one.
+    ///  * `NonMatchingResponse` if pushing a `Response` and the corresponding input
+    ///    queue does not have a reserved slot.
     pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -472,7 +468,7 @@ impl CanisterQueues {
                 }
 
                 // Stale reference, pop it and try again.
-                input_queue.pop();
+                assert_eq!(Some(*item), input_queue.pop());
             }
 
             // Queue only contained stale references and was exhausted.
@@ -742,7 +738,7 @@ impl CanisterQueues {
                 return msg;
             }
             // Stale reference, pop it and try again.
-            output_queue.pop();
+            assert_eq!(Some(*item), output_queue.pop());
         }
 
         None
@@ -957,91 +953,6 @@ impl CanisterQueues {
         true
     }
 
-    /// Helper function to concisely validate `CanisterQueues`' input schedules
-    /// during deserialization; or in debug builds, by writing
-    /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)`.
-    ///
-    /// Checks that all canister IDs of input queues that contain at least one message
-    /// are found exactly once in either the input schedule for the local subnet or the
-    /// input schedule for remote subnets.
-    ///
-    /// Time complexity: `O(n * log(n))`.
-    fn schedules_ok(
-        &self,
-        own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> Result<(), String> {
-        let mut local_schedule: HashSet<_> = self.local_subnet_input_schedule.iter().collect();
-        let mut remote_schedule: HashSet<_> = self.remote_subnet_input_schedule.iter().collect();
-
-        if local_schedule.len() != self.local_subnet_input_schedule.len()
-            || remote_schedule.len() != self.remote_subnet_input_schedule.len()
-            || local_schedule.intersection(&remote_schedule).count() != 0
-        {
-            return Err(format!(
-                "Duplicate entries in local and/or remote input schedules:\n  `local_subnet_input_schedule`: {:?}\n  `remote_subnet_input_schedule`: {:?}",
-                self.local_subnet_input_schedule, self.remote_subnet_input_schedule,
-            ));
-        }
-
-        for (canister_id, (input_queue, _)) in self.canister_queues.iter() {
-            if input_queue.len() == 0 {
-                continue;
-            }
-
-            if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
-                // Definitely a local canister.
-                if !local_schedule.remove(canister_id) {
-                    return Err(format!(
-                        "Local canister with non-empty input queue ({:?}) absent from `local_subnet_input_schedule`",
-                        canister_id
-                    ));
-                }
-            } else {
-                // Remote canister or deleted local canister. Check in both schedules.
-                if !remote_schedule.remove(canister_id) && !local_schedule.remove(canister_id) {
-                    return Err(format!(
-                        "Canister with non-empty input queue ({:?}) absent from input schedules",
-                        canister_id
-                    ));
-                }
-            }
-        }
-
-        if !local_schedule.is_empty() || !remote_schedule.is_empty() {
-            return Err(format!(
-                "Canister(s) with no inputs enqueued in input schedule:\n  local: {:?}\n  remote: {:?}",
-                local_schedule, remote_schedule,
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Computes stats for the given canister queues. Used when deserializing and in
-    /// `debug_assert!()` checks. Takes the number of memory reservations from the
-    /// caller, as the queues have no need to track memory reservations, so it
-    /// cannot be computed.
-    ///
-    /// Time complexity: `O(canister_queues.len())`.
-    fn calculate_queue_stats(
-        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
-        guaranteed_response_memory_reservations: usize,
-    ) -> QueueStats {
-        let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
-            .values()
-            .map(|(iq, oq)| (iq.reserved_slots(), oq.reserved_slots()))
-            .fold((0, 0), |(acc0, acc1), (item0, item1)| {
-                (acc0 + item0, acc1 + item1)
-            });
-        QueueStats {
-            guaranteed_response_memory_reservations,
-            input_queues_reserved_slots,
-            output_queues_reserved_slots,
-            transient_stream_responses_size_bytes: 0,
-        }
-    }
-
     /// Queries whether the deadline of any message in the pool has expired.
     ///
     /// Time complexity: `O(1)`.
@@ -1168,6 +1079,91 @@ impl CanisterQueues {
         }
 
         debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
+    }
+
+    /// Helper function to concisely validate `CanisterQueues`' input schedules
+    /// during deserialization; or in debug builds, by writing
+    /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)`.
+    ///
+    /// Checks that all canister IDs of input queues that contain at least one message
+    /// are found exactly once in either the input schedule for the local subnet or the
+    /// input schedule for remote subnets.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    fn schedules_ok(
+        &self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> Result<(), String> {
+        let mut local_schedule: HashSet<_> = self.local_subnet_input_schedule.iter().collect();
+        let mut remote_schedule: HashSet<_> = self.remote_subnet_input_schedule.iter().collect();
+
+        if local_schedule.len() != self.local_subnet_input_schedule.len()
+            || remote_schedule.len() != self.remote_subnet_input_schedule.len()
+            || local_schedule.intersection(&remote_schedule).count() != 0
+        {
+            return Err(format!(
+                "Duplicate entries in local and/or remote input schedules:\n  `local_subnet_input_schedule`: {:?}\n  `remote_subnet_input_schedule`: {:?}",
+                self.local_subnet_input_schedule, self.remote_subnet_input_schedule,
+            ));
+        }
+
+        for (canister_id, (input_queue, _)) in self.canister_queues.iter() {
+            if input_queue.len() == 0 {
+                continue;
+            }
+
+            if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
+                // Definitely a local canister.
+                if !local_schedule.remove(canister_id) {
+                    return Err(format!(
+                        "Local canister with non-empty input queue ({:?}) absent from `local_subnet_input_schedule`",
+                        canister_id
+                    ));
+                }
+            } else {
+                // Remote canister or deleted local canister. Check in both schedules.
+                if !remote_schedule.remove(canister_id) && !local_schedule.remove(canister_id) {
+                    return Err(format!(
+                        "Canister with non-empty input queue ({:?}) absent from input schedules",
+                        canister_id
+                    ));
+                }
+            }
+        }
+
+        if !local_schedule.is_empty() || !remote_schedule.is_empty() {
+            return Err(format!(
+                "Canister(s) with no inputs enqueued in input schedule:\n  local: {:?}\n  remote: {:?}",
+                local_schedule, remote_schedule,
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Computes stats for the given canister queues. Used when deserializing and in
+    /// `debug_assert!()` checks. Takes the number of memory reservations from the
+    /// caller, as the queues have no need to track memory reservations, so it
+    /// cannot be computed.
+    ///
+    /// Time complexity: `O(canister_queues.len())`.
+    fn calculate_queue_stats(
+        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+        guaranteed_response_memory_reservations: usize,
+    ) -> QueueStats {
+        let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
+            .values()
+            .map(|(iq, oq)| (iq.reserved_slots(), oq.reserved_slots()))
+            .fold((0, 0), |(acc0, acc1), (item0, item1)| {
+                (acc0 + item0, acc1 + item1)
+            });
+        QueueStats {
+            guaranteed_response_memory_reservations,
+            input_queues_reserved_slots,
+            output_queues_reserved_slots,
+            transient_stream_responses_size_bytes: 0,
+        }
     }
 }
 
