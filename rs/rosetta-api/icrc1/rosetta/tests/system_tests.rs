@@ -23,6 +23,7 @@ use ic_icrc_rosetta::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, icrc1_rosetta_block_to_rosetta_core_block,
 };
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
+use ic_icrc_rosetta::data_api::types::{QueryBlockRangeRequest, QueryBlockRangeResponse};
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::RosettaClientArgsBuilder;
 use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
@@ -1641,4 +1642,73 @@ fn test_cli_construction() {
             },
         )
         .unwrap();
+}
+
+#[test]
+fn test_query_blocks_range() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let setup = Setup::builder().build();
+
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironmentBuilder::new(&setup)
+                        .with_args_with_caller(args_with_caller.clone())
+                        .build()
+                        .await;
+                    wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0)
+                        .await;
+
+                    if !args_with_caller.is_empty() {
+                        let rosetta_blocks = get_rosetta_blocks_from_icrc1_ledger(
+                            env.icrc1_agent,
+                            0,
+                            *MAX_BLOCKS_PER_REQUEST,
+                        )
+                        .await;
+
+                        let highest_block_index = rosetta_blocks.last().unwrap().index;
+                        let num_blocks = rosetta_blocks.len();
+                        let query_blocks_request = QueryBlockRangeRequest {
+                            highest_block_index,
+                            number_of_blocks: num_blocks as u64,
+                        };
+                        let query_block_range_response: QueryBlockRangeResponse = env
+                            .rosetta_client
+                            .call(
+                                env.network_identifier.clone(),
+                                "query_block_range".to_owned(),
+                                query_blocks_request.try_into().unwrap(),
+                            )
+                            .await
+                            .unwrap()
+                            .result
+                            .try_into()
+                            .unwrap();
+                        assert!(query_block_range_response.blocks.len() == num_blocks);
+                        assert!(query_block_range_response
+                            .blocks
+                            .iter()
+                            .all(|block| block.block_identifier.index <= highest_block_index));
+                    }
+                });
+
+                Ok(())
+            },
+        )
+        .unwrap()
 }
