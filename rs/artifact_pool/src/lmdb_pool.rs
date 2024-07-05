@@ -22,8 +22,8 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         idkg::{
-            EcdsaComplaint, EcdsaOpening, EcdsaSigShare, IDkgArtifactId, IDkgMessage,
-            IDkgMessageType, IDkgPrefix, IDkgPrefixOf, SchnorrSigShare,
+            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
+            SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
@@ -161,13 +161,13 @@ pub(crate) enum TypeKey {
     // Certification messages
     Certification,
     CertificationShare,
-    // Ecdsa messages
-    EcdsaDealing,
-    EcdsaDealingSupport,
+    // IDkg messages
+    IDkgDealing,
+    IDkgDealingSupport,
     EcdsaSigShare,
     SchnorrSigShare,
-    EcdsaComplaint,
-    EcdsaOpening,
+    IDkgComplaint,
+    IDkgOpening,
 }
 
 impl TypeKey {
@@ -1886,12 +1886,12 @@ impl PersistentIDkgPoolSection {
 
     fn get_type_key(message_type: IDkgMessageType) -> TypeKey {
         match message_type {
-            IDkgMessageType::Dealing => TypeKey::EcdsaDealing,
-            IDkgMessageType::DealingSupport => TypeKey::EcdsaDealingSupport,
+            IDkgMessageType::Dealing => TypeKey::IDkgDealing,
+            IDkgMessageType::DealingSupport => TypeKey::IDkgDealingSupport,
             IDkgMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
             IDkgMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
-            IDkgMessageType::Complaint => TypeKey::EcdsaComplaint,
-            IDkgMessageType::Opening => TypeKey::EcdsaOpening,
+            IDkgMessageType::Complaint => TypeKey::IDkgComplaint,
+            IDkgMessageType::Opening => TypeKey::IDkgOpening,
         }
     }
 }
@@ -1981,28 +1981,28 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         )
     }
 
-    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
         message_db.iter(None)
     }
 
     fn complaints_by_prefix(
         &self,
-        prefix: IDkgPrefixOf<EcdsaComplaint>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+        prefix: IDkgPrefixOf<SignedIDkgComplaint>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
         message_db.iter(Some(prefix))
     }
 
-    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
         message_db.iter(None)
     }
 
     fn openings_by_prefix(
         &self,
-        prefix: IDkgPrefixOf<EcdsaOpening>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+        prefix: IDkgPrefixOf<SignedIDkgOpening>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
         message_db.iter(Some(prefix))
     }

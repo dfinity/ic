@@ -1,5 +1,5 @@
 use crate::ecdsa::complaints::{
-    EcdsaComplaintHandlerImpl, EcdsaTranscriptLoader, TranscriptLoadStatus,
+    EcdsaTranscriptLoader, IDkgComplaintHandlerImpl, TranscriptLoadStatus,
 };
 use crate::ecdsa::pre_signer::{EcdsaPreSignerImpl, EcdsaTranscriptBuilder};
 use crate::ecdsa::signer::{EcdsaSignatureBuilder, EcdsaSignerImpl};
@@ -37,11 +37,11 @@ use ic_types::consensus::idkg::{
     common::{CombinedSignature, PreSignatureRef, ThresholdSigInputsRef},
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
-    EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript, EcdsaOpening,
-    EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare, IDkgArtifactId, IDkgMessage,
-    IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
-    IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId,
-    ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
+    EcdsaBlockReader, EcdsaPayload, EcdsaSigShare, IDkgArtifactId, IDkgComplaintContent,
+    IDkgMessage, IDkgOpeningContent, IDkgReshareRequest, IDkgTranscriptAttributes,
+    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
+    MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams, SignedIDkgComplaint,
+    SignedIDkgOpening, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
     UnmaskedTranscript,
 };
 use ic_types::consensus::idkg::{HasMasterPublicKeyId, SchnorrSigShare};
@@ -530,7 +530,7 @@ pub(crate) enum TestTranscriptLoadStatus {
 
 pub(crate) struct TestEcdsaTranscriptLoader {
     load_transcript_result: TestTranscriptLoadStatus,
-    returned_complaints: Mutex<Vec<EcdsaComplaint>>,
+    returned_complaints: Mutex<Vec<SignedIDkgComplaint>>,
 }
 
 impl TestEcdsaTranscriptLoader {
@@ -541,7 +541,7 @@ impl TestEcdsaTranscriptLoader {
         }
     }
 
-    pub(crate) fn returned_complaints(&self) -> Vec<EcdsaComplaint> {
+    pub(crate) fn returned_complaints(&self) -> Vec<SignedIDkgComplaint> {
         let complaints = self.returned_complaints.lock().unwrap();
         let mut ret = Vec::new();
         for complaint in complaints.iter() {
@@ -815,11 +815,11 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
     node_id: NodeId,
-) -> (IDkgPoolImpl, EcdsaComplaintHandlerImpl) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
-    let complaint_handler = EcdsaComplaintHandlerImpl::new(
+    let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
@@ -835,11 +835,11 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
 pub(crate) fn create_complaint_dependencies_and_pool(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (IDkgPoolImpl, EcdsaComplaintHandlerImpl, TestConsensusPool) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
-    let complaint_handler = EcdsaComplaintHandlerImpl::new(
+    let complaint_handler = IDkgComplaintHandlerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         crypto,
@@ -854,7 +854,7 @@ pub(crate) fn create_complaint_dependencies_and_pool(
 pub(crate) fn create_complaint_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (IDkgPoolImpl, EcdsaComplaintHandlerImpl) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     create_complaint_dependencies_with_crypto(pool_config, logger, None)
 }
 
@@ -862,7 +862,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     crypto: Option<Arc<dyn ConsensusCrypto>>,
-) -> (IDkgPoolImpl, EcdsaComplaintHandlerImpl) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     create_complaint_dependencies_with_crypto_and_node_id(pool_config, logger, crypto, NODE_1)
 }
 
@@ -1376,15 +1376,15 @@ pub(crate) fn create_complaint_with_nonce(
     dealer_id: NodeId,
     complainer_id: NodeId,
     nonce: u8,
-) -> EcdsaComplaint {
-    let content = EcdsaComplaintContent {
+) -> SignedIDkgComplaint {
+    let content = IDkgComplaintContent {
         idkg_complaint: IDkgComplaint {
             transcript_id,
             dealer_id,
             internal_complaint_raw: vec![nonce],
         },
     };
-    EcdsaComplaint {
+    SignedIDkgComplaint {
         content,
         signature: BasicSignature::fake(complainer_id),
     }
@@ -1395,7 +1395,7 @@ pub(crate) fn create_complaint(
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     complainer_id: NodeId,
-) -> EcdsaComplaint {
+) -> SignedIDkgComplaint {
     create_complaint_with_nonce(transcript_id, dealer_id, complainer_id, 0)
 }
 
@@ -1406,15 +1406,15 @@ pub(crate) fn create_opening_with_nonce(
     _complainer_id: NodeId,
     opener_id: NodeId,
     nonce: u8,
-) -> EcdsaOpening {
-    let content = EcdsaOpeningContent {
+) -> SignedIDkgOpening {
+    let content = IDkgOpeningContent {
         idkg_opening: IDkgOpening {
             transcript_id,
             dealer_id,
             internal_opening_raw: vec![nonce],
         },
     };
-    EcdsaOpening {
+    SignedIDkgOpening {
         content,
         signature: BasicSignature::fake(opener_id),
     }
@@ -1426,7 +1426,7 @@ pub(crate) fn create_opening(
     dealer_id: NodeId,
     complainer_id: NodeId,
     opener_id: NodeId,
-) -> EcdsaOpening {
+) -> SignedIDkgOpening {
     create_opening_with_nonce(transcript_id, dealer_id, complainer_id, opener_id, 0)
 }
 // Checks that the dealing with the given id is being added to the validated
@@ -1436,9 +1436,7 @@ pub(crate) fn is_dealing_added_to_validated(
     transcript_id: &IDkgTranscriptId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(signed_dealing)) =
-            action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(signed_dealing)) = action {
             let dealing = signed_dealing.idkg_dealing();
             if dealing.transcript_id == *transcript_id && signed_dealing.dealer_id() == NODE_1 {
                 return true;
@@ -1456,8 +1454,7 @@ pub(crate) fn is_dealing_support_added_to_validated(
     dealer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaDealingSupport(support)) = action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action {
             if support.transcript_id == *transcript_id
                 && support.dealer_id == *dealer_id
                 && support.sig_share.signer == NODE_1
@@ -1477,9 +1474,7 @@ pub(crate) fn is_complaint_added_to_validated(
     complainer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(signed_complaint)) =
-            action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(signed_complaint)) = action {
             let complaint = signed_complaint.get();
             if complaint.idkg_complaint.transcript_id == *transcript_id
                 && complaint.idkg_complaint.dealer_id == *dealer_id
@@ -1500,8 +1495,7 @@ pub(crate) fn is_opening_added_to_validated(
     opener_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(signed_opening)) = action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::Opening(signed_opening)) = action {
             let opening = signed_opening.get();
             if opening.idkg_opening.transcript_id == *transcript_id
                 && opening.idkg_opening.dealer_id == *dealer_id
@@ -1612,7 +1606,7 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
         subnet_id,
         key_ids
             .into_iter()
-            .map(|key_id| EcdsaKeyTranscript {
+            .map(|key_id| MasterKeyTranscript {
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
@@ -1829,12 +1823,12 @@ pub(crate) trait EcdsaPayloadTestHelper {
     /// Retrieves the only key transcript in the ecdsa payload.
     ///
     /// Panics if there are multiple or no keys.
-    fn single_key_transcript(&self) -> &EcdsaKeyTranscript;
+    fn single_key_transcript(&self) -> &MasterKeyTranscript;
 
     /// Retrieves the only key transcript in the ecdsa payload.
     ///
     /// Panics if there are multiple or no keys.
-    fn single_key_transcript_mut(&mut self) -> &mut EcdsaKeyTranscript;
+    fn single_key_transcript_mut(&mut self) -> &mut MasterKeyTranscript;
 }
 
 impl EcdsaPayloadTestHelper for EcdsaPayload {
@@ -1846,7 +1840,7 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         self.uid_generator.clone().next_pre_signature_id()
     }
 
-    fn single_key_transcript(&self) -> &EcdsaKeyTranscript {
+    fn single_key_transcript(&self) -> &MasterKeyTranscript {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values().next().unwrap(),
@@ -1854,7 +1848,7 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         }
     }
 
-    fn single_key_transcript_mut(&mut self) -> &mut EcdsaKeyTranscript {
+    fn single_key_transcript_mut(&mut self) -> &mut MasterKeyTranscript {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values_mut().next().unwrap(),

@@ -169,7 +169,7 @@
 //!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
 //!   signatures with the signing request and the 4-tuple.
 
-use crate::ecdsa::complaints::{EcdsaComplaintHandler, EcdsaComplaintHandlerImpl};
+use crate::ecdsa::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::ecdsa::metrics::{
     timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
     CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
@@ -240,7 +240,7 @@ pub struct EcdsaImpl {
     /// The Pre-Signer subcomponent
     pub pre_signer: Box<EcdsaPreSignerImpl>,
     signer: Box<dyn EcdsaSigner>,
-    complaint_handler: Box<dyn EcdsaComplaintHandler>,
+    complaint_handler: Box<dyn IDkgComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
@@ -277,7 +277,7 @@ impl EcdsaImpl {
             metrics_registry.clone(),
             logger.clone(),
         ));
-        let complaint_handler = Box::new(EcdsaComplaintHandlerImpl::new(
+        let complaint_handler = Box::new(IDkgComplaintHandlerImpl::new(
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
@@ -523,8 +523,8 @@ fn compute_priority(
     metrics: &EcdsaGossipMetrics,
 ) -> Priority {
     match attr {
-        IDkgMessageAttribute::EcdsaSignedDealing(transcript_id)
-        | IDkgMessageAttribute::EcdsaDealingSupport(transcript_id) => {
+        IDkgMessageAttribute::Dealing(transcript_id)
+        | IDkgMessageAttribute::DealingSupport(transcript_id) => {
             // For xnet dealings(target side), always fetch the artifacts,
             // as the source_height from different subnet cannot be compared
             // anyways.
@@ -567,8 +567,8 @@ fn compute_priority(
                 Priority::Stash
             }
         }
-        IDkgMessageAttribute::EcdsaComplaint(transcript_id)
-        | IDkgMessageAttribute::EcdsaOpening(transcript_id) => {
+        IDkgMessageAttribute::Complaint(transcript_id)
+        | IDkgMessageAttribute::Opening(transcript_id) => {
             let height = transcript_id.source_height();
             if height <= args.finalized_height {
                 if args.active_transcripts.contains(transcript_id)
@@ -675,44 +675,44 @@ mod tests {
         let tests = vec![
             // Signed dealings
             (
-                IDkgMessageAttribute::EcdsaSignedDealing(xnet_transcript_id),
+                IDkgMessageAttribute::Dealing(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_1),
+                IDkgMessageAttribute::Dealing(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaSignedDealing(transcript_id_drop),
+                IDkgMessageAttribute::Dealing(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                IDkgMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_2),
+                IDkgMessageAttribute::Dealing(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaSignedDealing(transcript_id_stash),
+                IDkgMessageAttribute::Dealing(transcript_id_stash),
                 Priority::Stash,
             ),
             // Dealing support
             (
-                IDkgMessageAttribute::EcdsaDealingSupport(xnet_transcript_id),
+                IDkgMessageAttribute::DealingSupport(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_1),
+                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaDealingSupport(transcript_id_drop),
+                IDkgMessageAttribute::DealingSupport(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                IDkgMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_2),
+                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaDealingSupport(transcript_id_stash),
+                IDkgMessageAttribute::DealingSupport(transcript_id_stash),
                 Priority::Stash,
             ),
         ];
@@ -835,44 +835,44 @@ mod tests {
         let tests = vec![
             // Complaints
             (
-                IDkgMessageAttribute::EcdsaComplaint(transcript_id_fetch_1),
+                IDkgMessageAttribute::Complaint(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaComplaint(transcript_id_drop),
+                IDkgMessageAttribute::Complaint(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                IDkgMessageAttribute::EcdsaComplaint(transcript_id_fetch_2),
+                IDkgMessageAttribute::Complaint(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaComplaint(transcript_id_stash),
+                IDkgMessageAttribute::Complaint(transcript_id_stash),
                 Priority::Stash,
             ),
             (
-                IDkgMessageAttribute::EcdsaComplaint(transcript_id_fetch_3),
+                IDkgMessageAttribute::Complaint(transcript_id_fetch_3),
                 Priority::FetchNow,
             ),
             // Openings
             (
-                IDkgMessageAttribute::EcdsaOpening(transcript_id_fetch_1),
+                IDkgMessageAttribute::Opening(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaOpening(transcript_id_drop),
+                IDkgMessageAttribute::Opening(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                IDkgMessageAttribute::EcdsaOpening(transcript_id_fetch_2),
+                IDkgMessageAttribute::Opening(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::EcdsaOpening(transcript_id_stash),
+                IDkgMessageAttribute::Opening(transcript_id_stash),
                 Priority::Stash,
             ),
             (
-                IDkgMessageAttribute::EcdsaOpening(transcript_id_fetch_3),
+                IDkgMessageAttribute::Opening(transcript_id_fetch_3),
                 Priority::FetchNow,
             ),
         ];

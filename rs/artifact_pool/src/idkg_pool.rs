@@ -27,8 +27,8 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact_kind::IDkgArtifact;
 use ic_types::consensus::{
     idkg::{
-        EcdsaComplaint, EcdsaOpening, EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType,
-        IDkgPrefixOf, IDkgStats, SchnorrSigShare,
+        EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
+        SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
     },
     CatchUpPackage,
 };
@@ -265,28 +265,28 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         )
     }
 
-    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Complaint);
         object_pool.iter()
     }
 
     fn complaints_by_prefix(
         &self,
-        prefix: IDkgPrefixOf<EcdsaComplaint>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+        prefix: IDkgPrefixOf<SignedIDkgComplaint>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Complaint);
         object_pool.iter_by_prefix(prefix)
     }
 
-    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Opening);
         object_pool.iter()
     }
 
     fn openings_by_prefix(
         &self,
-        prefix: IDkgPrefixOf<EcdsaOpening>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+        prefix: IDkgPrefixOf<SignedIDkgOpening>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Opening);
         object_pool.iter_by_prefix(prefix)
     }
@@ -392,7 +392,7 @@ impl IDkgPoolImpl {
             );
 
             self.insert(UnvalidatedArtifact {
-                message: IDkgMessage::EcdsaSignedDealing(signed_dealing.clone()),
+                message: IDkgMessage::Dealing(signed_dealing.clone()),
                 peer_id: signed_dealing.dealer_id(),
                 timestamp: time_source.get_relative_time(),
             })
@@ -446,10 +446,10 @@ impl MutablePool<IDkgArtifact> for IDkgPoolImpl {
                 }
                 IDkgChangeAction::MoveToValidated(message) => {
                     match &message {
-                        IDkgMessage::EcdsaDealingSupport(_)
+                        IDkgMessage::DealingSupport(_)
                         | IDkgMessage::EcdsaSigShare(_)
                         | IDkgMessage::SchnorrSigShare(_)
-                        | IDkgMessage::EcdsaSignedDealing(_) => (),
+                        | IDkgMessage::Dealing(_) => (),
                         _ => artifacts_with_opt.push(ArtifactWithOpt {
                             artifact: message.clone(),
                             // relayed
@@ -642,13 +642,13 @@ mod tests {
             };
             if test_unvalidated {
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support),
+                    message: IDkgMessage::DealingSupport(support),
                     peer_id: NODE_1,
                     timestamp: UNIX_EPOCH,
                 });
             } else {
                 let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaDealingSupport(support.clone()),
+                    IDkgMessage::DealingSupport(support.clone()),
                 )];
                 let result = idkg_pool.apply_changes(change_set);
                 assert!(result.purged.is_empty());
@@ -758,7 +758,7 @@ mod tests {
         let mut object_pool = IDkgObjectPool::new(IDkgMessageType::Dealing, metrics);
 
         let key_1 = {
-            let ecdsa_dealing = IDkgMessage::EcdsaSignedDealing(create_ecdsa_dealing(
+            let ecdsa_dealing = IDkgMessage::Dealing(create_ecdsa_dealing(
                 dummy_idkg_transcript_id_for_tests(100),
             ));
             let key = IDkgArtifactId::from(&ecdsa_dealing);
@@ -767,7 +767,7 @@ mod tests {
             key
         };
         let key_2 = {
-            let ecdsa_dealing = IDkgMessage::EcdsaSignedDealing(create_ecdsa_dealing(
+            let ecdsa_dealing = IDkgMessage::Dealing(create_ecdsa_dealing(
                 dummy_idkg_transcript_id_for_tests(200),
             ));
             let key = IDkgArtifactId::from(&ecdsa_dealing);
@@ -816,7 +816,7 @@ mod tests {
         let metrics = IDkgPoolMetrics::new(metrics_registry, POOL_IDKG, POOL_TYPE_VALIDATED);
         let mut object_pool = IDkgObjectPool::new(IDkgMessageType::DealingSupport, metrics);
 
-        let ecdsa_dealing = IDkgMessage::EcdsaSignedDealing(create_ecdsa_dealing(
+        let ecdsa_dealing = IDkgMessage::Dealing(create_ecdsa_dealing(
             dummy_idkg_transcript_id_for_tests(100),
         ));
         object_pool.insert_object(ecdsa_dealing);
@@ -833,7 +833,7 @@ mod tests {
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
                     idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
@@ -844,7 +844,7 @@ mod tests {
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
                     idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
@@ -869,9 +869,9 @@ mod tests {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
                     idkg_pool.apply_changes(change_set);
                     msg_id
                 };
@@ -880,7 +880,7 @@ mod tests {
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
                     idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
@@ -902,9 +902,9 @@ mod tests {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
                     idkg_pool.apply_changes(change_set);
                     msg_id
                 };
@@ -912,7 +912,7 @@ mod tests {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    let msg = IDkgMessage::EcdsaSignedDealing(ecdsa_dealing);
+                    let msg = IDkgMessage::Dealing(ecdsa_dealing);
                     idkg_pool.insert(UnvalidatedArtifact {
                         message: msg.clone(),
                         peer_id: NODE_1,
@@ -927,7 +927,7 @@ mod tests {
                         dealing_hash: CryptoHashOf::new(CryptoHash(vec![1])),
                         sig_share: BasicSignature::fake(NODE_2),
                     };
-                    let msg = IDkgMessage::EcdsaDealingSupport(support);
+                    let msg = IDkgMessage::DealingSupport(support);
                     idkg_pool.insert(UnvalidatedArtifact {
                         message: msg.clone(),
                         peer_id: NODE_1,
@@ -959,9 +959,9 @@ mod tests {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
                     idkg_pool.apply_changes(change_set);
                     msg_id
                 };
@@ -969,9 +969,9 @@ mod tests {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
                     idkg_pool.apply_changes(change_set);
                     msg_id
                 };
@@ -980,7 +980,7 @@ mod tests {
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(300));
                     let msg_id = ecdsa_dealing.message_id();
                     idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
@@ -1022,7 +1022,7 @@ mod tests {
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
                     idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
@@ -1050,7 +1050,7 @@ mod tests {
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
                     idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
@@ -1077,9 +1077,9 @@ mod tests {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
                     idkg_pool.apply_changes(change_set);
                     msg_id
                 };

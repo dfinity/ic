@@ -2,8 +2,8 @@
 
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    EcdsaComplaint, EcdsaOpening, EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats,
-    SchnorrSigShare, SigShare,
+    EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare, SigShare,
+    SignedIDkgComplaint, SignedIDkgOpening,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
@@ -104,24 +104,24 @@ pub trait IDkgPoolSection: Send + Sync {
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_>;
 
     /// Iterator for complaint objects.
-    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_>;
+    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_>;
 
     /// Iterator for complaint objects matching the prefix.
     fn complaints_by_prefix(
         &self,
-        _prefix: IDkgPrefixOf<EcdsaComplaint>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+        _prefix: IDkgPrefixOf<SignedIDkgComplaint>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         unimplemented!()
     }
 
     /// Iterator for opening objects.
-    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_>;
+    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_>;
 
     /// Iterator for opening objects matching the prefix.
     fn openings_by_prefix(
         &self,
-        _prefix: IDkgPrefixOf<EcdsaOpening>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+        _prefix: IDkgPrefixOf<SignedIDkgOpening>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         unimplemented!()
     }
 }

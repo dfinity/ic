@@ -397,7 +397,7 @@ pub struct EcdsaPayload {
     #[prost(uint64, tag = "10")]
     pub next_unused_pre_signature_id: u64,
     #[prost(message, repeated, tag = "13")]
-    pub key_transcripts: ::prost::alloc::vec::Vec<EcdsaKeyTranscript>,
+    pub key_transcripts: ::prost::alloc::vec::Vec<MasterKeyTranscript>,
     #[prost(message, repeated, tag = "14")]
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
@@ -427,7 +427,7 @@ pub mod consensus_response {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaKeyTranscript {
+pub struct MasterKeyTranscript {
     #[prost(message, optional, tag = "1")]
     pub deprecated_key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "2")]
@@ -726,9 +726,9 @@ pub mod i_dkg_message {
         #[prost(message, tag = "3")]
         EcdsaSigShare(super::EcdsaSigShare),
         #[prost(message, tag = "4")]
-        Complaint(super::EcdsaComplaint),
+        Complaint(super::SignedIDkgComplaint),
         #[prost(message, tag = "5")]
-        Opening(super::EcdsaOpening),
+        Opening(super::SignedIDkgOpening),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
     }
@@ -755,29 +755,29 @@ pub struct SchnorrSigShare {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaComplaint {
+pub struct SignedIDkgComplaint {
     #[prost(message, optional, tag = "1")]
-    pub content: ::core::option::Option<EcdsaComplaintContent>,
+    pub content: ::core::option::Option<IDkgComplaintContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaComplaintContent {
+pub struct IDkgComplaintContent {
     #[prost(message, optional, tag = "1")]
     pub idkg_complaint: ::core::option::Option<super::super::registry::subnet::v1::IDkgComplaint>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaOpening {
+pub struct SignedIDkgOpening {
     #[prost(message, optional, tag = "1")]
-    pub content: ::core::option::Option<EcdsaOpeningContent>,
+    pub content: ::core::option::Option<IDkgOpeningContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaOpeningContent {
+pub struct IDkgOpeningContent {
     #[prost(message, optional, tag = "1")]
     pub idkg_opening: ::core::option::Option<super::super::registry::subnet::v1::IDkgOpening>,
 }

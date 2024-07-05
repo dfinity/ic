@@ -605,9 +605,9 @@ impl EcdsaPreSignerImpl {
             Ok(idkg_dealing) => {
                 self.metrics.pre_sign_metrics_inc("dealing_created");
                 self.metrics.pre_sign_metrics_inc("dealing_sent");
-                vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(idkg_dealing),
-                )]
+                vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    idkg_dealing,
+                ))]
             }
             Err(IDkgCreateDealingError::SignatureError { internal_error }) => {
                 warn!(
@@ -667,9 +667,9 @@ impl EcdsaPreSignerImpl {
             }
             Ok(()) => {
                 self.metrics.pre_sign_metrics_inc("dealing_received");
-                Some(IDkgChangeAction::MoveToValidated(
-                    IDkgMessage::EcdsaSignedDealing(signed_dealing),
-                ))
+                Some(IDkgChangeAction::MoveToValidated(IDkgMessage::Dealing(
+                    signed_dealing,
+                )))
             }
         }
     }
@@ -741,7 +741,7 @@ impl EcdsaPreSignerImpl {
                     };
                     self.metrics.pre_sign_metrics_inc("dealing_support_sent");
                     vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaDealingSupport(dealing_support),
+                        IDkgMessage::DealingSupport(dealing_support),
                     )]
                 },
             )
@@ -780,7 +780,7 @@ impl EcdsaPreSignerImpl {
                 self.metrics
                     .pre_sign_metrics_inc("dealing_support_received");
                 Some(IDkgChangeAction::MoveToValidated(
-                    IDkgMessage::EcdsaDealingSupport(support),
+                    IDkgMessage::DealingSupport(support),
                 ))
             }
         }
@@ -1452,9 +1452,9 @@ mod tests {
                 let dealing_2 = create_dealing(id_2, NODE_2);
                 let dealing_3 = create_dealing(id_3, NODE_3);
                 let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing_1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing_2)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing_3)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_1)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_2)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
                 ];
                 idkg_pool.apply_changes(change_set);
 
@@ -1495,8 +1495,8 @@ mod tests {
                 let dealing2 = create_dealing(id_2, NODE_2);
                 let msg_id2 = dealing2.message_id();
                 let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing2)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing1)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing2)),
                 ];
                 idkg_pool.apply_changes(change_set);
 
@@ -1695,7 +1695,7 @@ mod tests {
                 let dealing = create_dealing(id, NODE_2);
                 let msg_id = dealing.message_id();
                 artifacts.push(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing),
+                    message: IDkgMessage::Dealing(dealing),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1852,16 +1852,16 @@ mod tests {
                 // Set up the ECDSA pool
                 // Validated pool has: {transcript 2, dealer = NODE_2}
                 let dealing = create_dealing(id_2, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
                 let dealing = create_dealing(id_2, NODE_2);
                 let msg_id_2 = dealing.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing),
+                    message: IDkgMessage::Dealing(dealing),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1900,7 +1900,7 @@ mod tests {
                 dealing.content.internal_dealing_raw = vec![1];
                 let msg_id_2_a = dealing.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing),
+                    message: IDkgMessage::Dealing(dealing),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1910,7 +1910,7 @@ mod tests {
                 dealing.content.internal_dealing_raw = vec![2];
                 let msg_id_2_b = dealing.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing),
+                    message: IDkgMessage::Dealing(dealing),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1920,7 +1920,7 @@ mod tests {
                 dealing.content.internal_dealing_raw = vec![3];
                 let msg_id_3 = dealing.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing),
+                    message: IDkgMessage::Dealing(dealing),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1965,7 +1965,7 @@ mod tests {
                 let dealing = create_dealing(id_2, NODE_2);
                 let msg_id_2 = dealing.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing),
+                    message: IDkgMessage::Dealing(dealing),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2000,9 +2000,9 @@ mod tests {
 
                 // We haven't sent support yet, and we are in the receiver list
                 let dealing = create_dealing(id, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
@@ -2047,9 +2047,9 @@ mod tests {
 
                 // We haven't sent support yet, and we are in the receiver list
                 let dealing = create_dealing_with_payload(&key_id, id, NODE_2, &mut rng);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
                 // create a transcript with unknown future registry version
                 let rv = RegistryVersion::from(1);
@@ -2095,9 +2095,9 @@ mod tests {
 
                 // We haven't sent support yet, and we are in the receiver list
                 let dealing = create_dealing_with_payload(&key_id, id, NODE_2, &mut rng);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing.clone()),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing.clone(),
+                ))];
                 idkg_pool.apply_changes(change_set);
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
@@ -2132,9 +2132,9 @@ mod tests {
 
                 // We are not in the receiver list for the transcript
                 let dealing = create_dealing(id, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
 
@@ -2156,9 +2156,9 @@ mod tests {
                 let id = create_transcript_id(1);
 
                 let dealing = create_dealing(id, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 let block_reader =
@@ -2239,14 +2239,14 @@ mod tests {
         let (dealing, mut support) = create_support(id_2, NODE_2, NODE_3);
         let msg_id_2 = support.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaDealingSupport(support.clone()),
+            message: IDkgMessage::DealingSupport(support.clone()),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
         support.sig_share.signature = BasicSigOf::new(BasicSig(vec![1]));
         let msg_id_2_dupl = support.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaDealingSupport(support),
+            message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
@@ -2256,7 +2256,7 @@ mod tests {
         let (_, support) = create_support(id_3, NODE_2, NODE_3);
         let msg_id_3 = support.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaDealingSupport(support),
+            message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
@@ -2266,7 +2266,7 @@ mod tests {
         let (_, support) = create_support(id_4, NODE_2, NODE_3);
         let msg_id_4 = support.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaDealingSupport(support),
+            message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
@@ -2275,7 +2275,7 @@ mod tests {
         // (share deferred)
         let (_, support) = create_support(id_5, NODE_2, NODE_3);
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaDealingSupport(support),
+            message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
@@ -2287,9 +2287,9 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
 
                 // Set up the ECDSA pool
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing.clone()),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing.clone(),
+                ))];
                 idkg_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
@@ -2315,9 +2315,9 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
 
                 // Set up the ECDSA pool
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing.clone()),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing.clone(),
+                ))];
                 idkg_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
@@ -2338,9 +2338,9 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
 
                 // Set up the ECDSA pool
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing.clone()),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing.clone(),
+                ))];
                 idkg_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
@@ -2371,20 +2371,20 @@ mod tests {
                 // Set up the ECDSA pool
                 // Validated pool has: support {transcript 2, dealer = NODE_2, signer = NODE_3}
                 let (dealing, support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaDealingSupport(support.clone()),
+                    IDkgMessage::DealingSupport(support.clone()),
                 )];
                 idkg_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: duplicate of the same support share
                 let msg_id = support.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support),
+                    message: IDkgMessage::DealingSupport(support),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2416,7 +2416,7 @@ mod tests {
                 let (_, support) = create_support(id, NODE_2, NODE_3);
                 let msg_id = support.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support),
+                    message: IDkgMessage::DealingSupport(support),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2446,15 +2446,15 @@ mod tests {
                 // A dealing for a transcript that is requested by finalized block,
                 // and we already have the dealing(share accepted)
                 let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 support.dealer_id = NODE_3;
                 let msg_id = support.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support),
+                    message: IDkgMessage::DealingSupport(support),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2485,15 +2485,15 @@ mod tests {
                 // A dealing for a transcript that is requested by finalized block,
                 // and we already have the dealing(share accepted)
                 let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 let msg_id = support.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support),
+                    message: IDkgMessage::DealingSupport(support),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2524,16 +2524,16 @@ mod tests {
                 // A dealing for a transcript that is requested by finalized block,
                 // and we already have the dealing(share accepted)
                 let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaSignedDealing(dealing),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 support.dealer_id = NODE_4;
                 let msg_id = support.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support),
+                    message: IDkgMessage::DealingSupport(support),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2567,7 +2567,7 @@ mod tests {
                 // Dealing 1: height <= current_height, in_progress (not purged)
                 let dealing_1 = create_dealing(id_1, NODE_2);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing_1),
+                    message: IDkgMessage::Dealing(dealing_1),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2576,7 +2576,7 @@ mod tests {
                 let dealing_2 = create_dealing(id_2, NODE_2);
                 let msg_id_2 = dealing_2.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing_2),
+                    message: IDkgMessage::Dealing(dealing_2),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2584,7 +2584,7 @@ mod tests {
                 // Dealing 3: height > current_height (not purged)
                 let dealing_3 = create_dealing(id_3, NODE_2);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaSignedDealing(dealing_3),
+                    message: IDkgMessage::Dealing(dealing_3),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2628,10 +2628,10 @@ mod tests {
                 let dealing_4 = create_dealing(id_4, NODE_2);
 
                 let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing_1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing_2)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing_3)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(dealing_4)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_1)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_2)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_4)),
                 ];
                 idkg_pool.apply_changes(change_set);
 
@@ -2664,7 +2664,7 @@ mod tests {
                 // Support 1: height <= current_height, in_progress (not purged)
                 let (_, support_1) = create_support(id_1, NODE_2, NODE_3);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support_1),
+                    message: IDkgMessage::DealingSupport(support_1),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2673,7 +2673,7 @@ mod tests {
                 let (_, support_2) = create_support(id_2, NODE_2, NODE_3);
                 let msg_id_2 = support_2.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support_2),
+                    message: IDkgMessage::DealingSupport(support_2),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2681,7 +2681,7 @@ mod tests {
                 // Dealing 3: height > current_height (not purged)
                 let (_, support_3) = create_support(id_3, NODE_2, NODE_3);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaDealingSupport(support_3),
+                    message: IDkgMessage::DealingSupport(support_3),
                     peer_id: NODE_2,
                     timestamp: UNIX_EPOCH,
                 });
@@ -2721,9 +2721,9 @@ mod tests {
                 let (_, support_3) = create_support(id_3, NODE_2, NODE_3);
 
                 let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaDealingSupport(support_1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaDealingSupport(support_2)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaDealingSupport(support_3)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_1)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_2)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_3)),
                 ];
                 idkg_pool.apply_changes(change_set);
 
@@ -2790,9 +2790,7 @@ mod tests {
                 // add dealings
                 let change_set = dealings
                     .values()
-                    .map(|d| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(d.clone()))
-                    })
+                    .map(|d| IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(d.clone())))
                     .collect();
                 idkg_pool.apply_changes(change_set);
 
@@ -2818,9 +2816,7 @@ mod tests {
                 let change_set = supports
                     .iter()
                     .map(|s| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaDealingSupport(
-                            s.clone(),
-                        ))
+                        IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(s.clone()))
                     })
                     .collect();
                 idkg_pool.apply_changes(change_set);

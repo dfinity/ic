@@ -1,6 +1,6 @@
 //! The complaint handling
 
-use crate::ecdsa::metrics::{timed_call, EcdsaComplaintMetrics};
+use crate::ecdsa::metrics::{timed_call, IDkgComplaintMetrics};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -12,8 +12,8 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    complaint_prefix, opening_prefix, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
-    EcdsaOpening, EcdsaOpeningContent, IDkgMessage, TranscriptRef,
+    complaint_prefix, opening_prefix, EcdsaBlockReader, IDkgComplaintContent, IDkgMessage,
+    IDkgOpeningContent, SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef,
 };
 use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use super::utils::update_purge_height;
 
-pub(crate) trait EcdsaComplaintHandler: Send {
+pub(crate) trait IDkgComplaintHandler: Send {
     /// The on_state_change() called from the main ECDSA path.
     fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet;
 
@@ -41,8 +41,8 @@ struct ComplaintKey {
     complainer_id: NodeId,
 }
 
-impl From<&EcdsaComplaint> for ComplaintKey {
-    fn from(ecdsa_complaint: &EcdsaComplaint) -> Self {
+impl From<&SignedIDkgComplaint> for ComplaintKey {
+    fn from(ecdsa_complaint: &SignedIDkgComplaint) -> Self {
         Self {
             transcript_id: ecdsa_complaint.content.idkg_complaint.transcript_id,
             dealer_id: ecdsa_complaint.content.idkg_complaint.dealer_id,
@@ -58,8 +58,8 @@ struct OpeningKey {
     opener_id: NodeId,
 }
 
-impl From<&EcdsaOpening> for OpeningKey {
-    fn from(ecdsa_opening: &EcdsaOpening) -> Self {
+impl From<&SignedIDkgOpening> for OpeningKey {
+    fn from(ecdsa_opening: &SignedIDkgOpening) -> Self {
         Self {
             transcript_id: ecdsa_opening.content.idkg_opening.transcript_id,
             dealer_id: ecdsa_opening.content.idkg_opening.dealer_id,
@@ -68,17 +68,17 @@ impl From<&EcdsaOpening> for OpeningKey {
     }
 }
 
-pub(crate) struct EcdsaComplaintHandlerImpl {
+pub(crate) struct IDkgComplaintHandlerImpl {
     node_id: NodeId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
-    metrics: EcdsaComplaintMetrics,
+    metrics: IDkgComplaintMetrics,
     log: ReplicaLogger,
     prev_finalized_height: RefCell<Height>,
 }
 
-impl EcdsaComplaintHandlerImpl {
+impl IDkgComplaintHandlerImpl {
     pub(crate) fn new(
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -91,7 +91,7 @@ impl EcdsaComplaintHandlerImpl {
             consensus_block_cache,
             crypto,
             schedule: RoundRobin::default(),
-            metrics: EcdsaComplaintMetrics::new(metrics_registry),
+            metrics: IDkgComplaintMetrics::new(metrics_registry),
             log,
             prev_finalized_height: RefCell::new(Height::from(0)),
         }
@@ -399,11 +399,11 @@ impl EcdsaComplaintHandlerImpl {
         &self,
         idkg_complaint: IDkgComplaint,
         registry_version: RegistryVersion,
-    ) -> Option<EcdsaComplaint> {
-        let content = EcdsaComplaintContent { idkg_complaint };
+    ) -> Option<SignedIDkgComplaint> {
+        let content = IDkgComplaintContent { idkg_complaint };
         match self.crypto.sign(&content, self.node_id, registry_version) {
             Ok(signature) => {
-                let signed_complaint = EcdsaComplaint { content, signature };
+                let signed_complaint = SignedIDkgComplaint { content, signature };
                 self.metrics.complaint_metrics_inc("complaints_sent");
                 Some(signed_complaint)
             }
@@ -426,7 +426,7 @@ impl EcdsaComplaintHandlerImpl {
         &self,
         id: IDkgMessageId,
         transcript: &IDkgTranscript,
-        signed_complaint: EcdsaComplaint,
+        signed_complaint: SignedIDkgComplaint,
     ) -> Option<IDkgChangeAction> {
         let complaint = signed_complaint.get();
 
@@ -488,9 +488,9 @@ impl EcdsaComplaintHandlerImpl {
             }
             Ok(()) => {
                 self.metrics.complaint_metrics_inc("complaint_received");
-                Some(IDkgChangeAction::MoveToValidated(
-                    IDkgMessage::EcdsaComplaint(signed_complaint),
-                ))
+                Some(IDkgChangeAction::MoveToValidated(IDkgMessage::Complaint(
+                    signed_complaint,
+                )))
             }
         }
     }
@@ -498,7 +498,7 @@ impl EcdsaComplaintHandlerImpl {
     /// Helper to create a signed opening
     fn crypto_create_opening(
         &self,
-        signed_complaint: &EcdsaComplaint,
+        signed_complaint: &SignedIDkgComplaint,
         transcript: &IDkgTranscript,
     ) -> IDkgChangeSet {
         let complaint = signed_complaint.get();
@@ -523,15 +523,15 @@ impl EcdsaComplaintHandlerImpl {
         };
 
         // Sign the opening
-        let content = EcdsaOpeningContent { idkg_opening };
+        let content = IDkgOpeningContent { idkg_opening };
         match self
             .crypto
             .sign(&content, self.node_id, transcript.registry_version)
         {
             Ok(signature) => {
-                let ecdsa_opening = EcdsaOpening { content, signature };
+                let ecdsa_opening = SignedIDkgOpening { content, signature };
                 self.metrics.complaint_metrics_inc("openings_sent");
-                vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     ecdsa_opening,
                 ))]
             }
@@ -551,8 +551,8 @@ impl EcdsaComplaintHandlerImpl {
         &self,
         id: IDkgMessageId,
         transcript: &IDkgTranscript,
-        signed_opening: EcdsaOpening,
-        signed_complaint: &EcdsaComplaint,
+        signed_opening: SignedIDkgOpening,
+        signed_complaint: &SignedIDkgComplaint,
     ) -> Option<IDkgChangeAction> {
         let opening = signed_opening.get();
         let complaint = signed_complaint.get();
@@ -614,9 +614,9 @@ impl EcdsaComplaintHandlerImpl {
             }
             Ok(()) => {
                 self.metrics.complaint_metrics_inc("opening_received");
-                Some(IDkgChangeAction::MoveToValidated(
-                    IDkgMessage::EcdsaOpening(signed_opening),
-                ))
+                Some(IDkgChangeAction::MoveToValidated(IDkgMessage::Opening(
+                    signed_opening,
+                )))
             }
         }
     }
@@ -649,8 +649,8 @@ impl EcdsaComplaintHandlerImpl {
     fn get_complaint_for_opening(
         &self,
         idkg_pool: &dyn IDkgPool,
-        signed_opening: &EcdsaOpening,
-    ) -> Option<EcdsaComplaint> {
+        signed_opening: &SignedIDkgOpening,
+    ) -> Option<SignedIDkgComplaint> {
         let opening = signed_opening.get();
         idkg_pool
             .validated()
@@ -774,7 +774,7 @@ impl EcdsaComplaintHandlerImpl {
     }
 }
 
-impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
+impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
     fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
@@ -842,10 +842,10 @@ pub(crate) enum TranscriptLoadStatus {
     Failure,
 
     /// Resulted in new complaints
-    Complaints(Vec<EcdsaComplaint>),
+    Complaints(Vec<SignedIDkgComplaint>),
 }
 
-impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
+impl EcdsaTranscriptLoader for IDkgComplaintHandlerImpl {
     fn load_transcript(
         &self,
         idkg_pool: &dyn IDkgPool,
@@ -1091,7 +1091,7 @@ mod tests {
         // Complaint from a node ahead of us (deferred)
         let complaint = create_complaint(id_1, NODE_2, NODE_3);
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaComplaint(complaint),
+            message: IDkgMessage::Complaint(complaint),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
@@ -1100,7 +1100,7 @@ mod tests {
         let complaint = create_complaint(id_2, NODE_2, NODE_3);
         let msg_id_2 = complaint.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaComplaint(complaint),
+            message: IDkgMessage::Complaint(complaint),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
@@ -1109,7 +1109,7 @@ mod tests {
         let complaint = create_complaint(id_3, NODE_2, NODE_3);
         let msg_id_3 = complaint.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaComplaint(complaint),
+            message: IDkgMessage::Complaint(complaint),
             peer_id: NODE_3,
             timestamp: UNIX_EPOCH,
         });
@@ -1187,16 +1187,16 @@ mod tests {
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 let msg_id = complaint.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaComplaint(complaint.clone()),
+                    message: IDkgMessage::Complaint(complaint.clone()),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
 
                 // Validated pool already has complaint from NODE_3 for
                 // transcript id_1, dealer NODE_2
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaComplaint(complaint),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1227,8 +1227,8 @@ mod tests {
                 let complaint2 = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id2 = complaint2.message_id();
                 let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(complaint1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(complaint2)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint1)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint2)),
                 ];
                 idkg_pool.apply_changes(change_set);
 
@@ -1282,7 +1282,7 @@ mod tests {
                 let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 0);
                 let msg_id_1 = complaint.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaComplaint(complaint),
+                    message: IDkgMessage::Complaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1291,7 +1291,7 @@ mod tests {
                 let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 1);
                 let msg_id_2 = complaint.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaComplaint(complaint),
+                    message: IDkgMessage::Complaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1331,18 +1331,18 @@ mod tests {
         // Complaint for which we haven't issued an opening. This should
         // result in opening sent out.
         let complaint = create_complaint(id_1, NODE_2, NODE_3);
-        artifacts.push(IDkgMessage::EcdsaComplaint(complaint));
+        artifacts.push(IDkgMessage::Complaint(complaint));
 
         // Complaint for which we already issued an opening. This should
         // not result in an opening.
         let complaint = create_complaint(id_2, NODE_2, NODE_3);
         let opening = create_opening(id_2, NODE_2, NODE_3, NODE_1);
-        artifacts.push(IDkgMessage::EcdsaComplaint(complaint));
-        artifacts.push(IDkgMessage::EcdsaOpening(opening));
+        artifacts.push(IDkgMessage::Complaint(complaint));
+        artifacts.push(IDkgMessage::Opening(opening));
 
         // Complaint for transcript not in the active list
         let complaint = create_complaint(id_3, NODE_2, NODE_3);
-        artifacts.push(IDkgMessage::EcdsaComplaint(complaint));
+        artifacts.push(IDkgMessage::Complaint(complaint));
 
         let block_reader = TestEcdsaBlockReader::for_complainer_test(
             &key_id,
@@ -1449,7 +1449,7 @@ mod tests {
         // Opening from a node ahead of us (deferred)
         let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaOpening(opening),
+            message: IDkgMessage::Opening(opening),
             peer_id: NODE_4,
             timestamp: UNIX_EPOCH,
         });
@@ -1458,7 +1458,7 @@ mod tests {
         let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
         let msg_id_1 = opening.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaOpening(opening),
+            message: IDkgMessage::Opening(opening),
             peer_id: NODE_4,
             timestamp: UNIX_EPOCH,
         });
@@ -1468,17 +1468,17 @@ mod tests {
         let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
         let msg_id_2 = opening.message_id();
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaOpening(opening),
+            message: IDkgMessage::Opening(opening),
             peer_id: NODE_4,
             timestamp: UNIX_EPOCH,
         });
-        let complaint = IDkgMessage::EcdsaComplaint(create_complaint(id_3, NODE_2, NODE_3));
+        let complaint = IDkgMessage::Complaint(create_complaint(id_3, NODE_2, NODE_3));
 
         // Opening for a transcript currently active,
         // without a matching complaint (deferred)
         let opening = create_opening(id_4, NODE_2, NODE_3, NODE_4);
         artifacts.push(UnvalidatedArtifact {
-            message: IDkgMessage::EcdsaOpening(opening),
+            message: IDkgMessage::Opening(opening),
             peer_id: NODE_4,
             timestamp: UNIX_EPOCH,
         });
@@ -1560,13 +1560,13 @@ mod tests {
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaOpening(opening.clone()),
+                    message: IDkgMessage::Opening(opening.clone()),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
                 });
 
                 // Validated pool already has it
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
                 idkg_pool.apply_changes(change_set);
@@ -1599,7 +1599,7 @@ mod tests {
                 let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 1);
                 let msg_id_1 = opening.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaOpening(opening),
+                    message: IDkgMessage::Opening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1608,14 +1608,14 @@ mod tests {
                 let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 2);
                 let msg_id_2 = opening.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaOpening(opening),
+                    message: IDkgMessage::Opening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
                 });
 
                 // Make sure we also have matching complaints
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                let message = IDkgMessage::EcdsaComplaint(complaint);
+                let message = IDkgMessage::Complaint(complaint);
                 idkg_pool.insert(UnvalidatedArtifact {
                     message: message.clone(),
                     peer_id: NODE_3,
@@ -1656,7 +1656,7 @@ mod tests {
                 // Complaint 1: height <= current_height, active transcripts (not purged)
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaComplaint(complaint),
+                    message: IDkgMessage::Complaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1665,7 +1665,7 @@ mod tests {
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id = complaint.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaComplaint(complaint),
+                    message: IDkgMessage::Complaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1673,7 +1673,7 @@ mod tests {
                 // Complaint 3: height > current_height (not purged)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaComplaint(complaint),
+                    message: IDkgMessage::Complaint(complaint),
                     peer_id: NODE_3,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1707,24 +1707,24 @@ mod tests {
 
                 // Complaint 1: height <= current_height, active transcripts (not purged)
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaComplaint(complaint),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id = complaint.message_id();
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaComplaint(complaint),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::EcdsaComplaint(complaint),
-                )];
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
                 idkg_pool.apply_changes(change_set);
 
                 // Only id_1 is active
@@ -1757,7 +1757,7 @@ mod tests {
                 // Opening 1: height <= current_height, active transcripts (not purged)
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaOpening(opening),
+                    message: IDkgMessage::Opening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1766,7 +1766,7 @@ mod tests {
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaOpening(opening),
+                    message: IDkgMessage::Opening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1774,7 +1774,7 @@ mod tests {
                 // Complaint 3: height > current_height (not purged)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::EcdsaOpening(opening),
+                    message: IDkgMessage::Opening(opening),
                     peer_id: NODE_4,
                     timestamp: UNIX_EPOCH,
                 });
@@ -1808,7 +1808,7 @@ mod tests {
 
                 // Opening 1: height <= current_height, active transcripts (not purged)
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
                 idkg_pool.apply_changes(change_set);
@@ -1816,14 +1816,14 @@ mod tests {
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_id();
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
                 idkg_pool.apply_changes(change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
                 idkg_pool.apply_changes(change_set);
@@ -1973,7 +1973,7 @@ mod tests {
                     TranscriptLoadStatus::Complaints(mut complaints) if complaints.len() == 1 => {
                         let complaint = complaints.remove(0);
                         idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
-                            IDkgMessage::EcdsaComplaint(complaint.clone()),
+                            IDkgMessage::Complaint(complaint.clone()),
                         )]);
                         complaint
                     }
@@ -1989,14 +1989,14 @@ mod tests {
                         .crypto()
                         .open_transcript(&t, complainer, &complaint.content.idkg_complaint)
                         .expect("Failed to open transcript with complaint");
-                    let content = EcdsaOpeningContent { idkg_opening };
+                    let content = IDkgOpeningContent { idkg_opening };
                     let signature = node
                         .crypto()
                         .sign(&content, node.id(), t.registry_version)
                         .expect("Failed to sign opening content");
-                    let opening = EcdsaOpening { content, signature };
+                    let opening = SignedIDkgOpening { content, signature };
                     idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::EcdsaOpening(opening),
+                        IDkgMessage::Opening(opening),
                     )]);
                 }
 
