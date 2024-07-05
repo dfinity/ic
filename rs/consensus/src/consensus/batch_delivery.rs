@@ -445,7 +445,7 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
     consensus_responses
 }
 
-/// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
+/// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
     ecdsa_payload: &idkg::EcdsaPayload,

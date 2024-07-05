@@ -10,7 +10,7 @@ documentation.workspace = true
 
 [dependencies]
 lazy_static = { workspace = true }
-num-bigint = "0.4"
+num-bigint = { workspace = true }
 p256 = { workspace = true }
 pem = "1.1.0"
 rand = { workspace = true }
