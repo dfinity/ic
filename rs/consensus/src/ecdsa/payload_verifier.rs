@@ -506,9 +506,9 @@ fn validate_reshare_dealings(
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if !curr_payload.ongoing_xnet_reshares.contains_key(request) {
             if let Some(response) = new_reshare_agreement.get(request) {
-                use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
+                use ic_management_canister_types::ComputeInitialIDkgDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
-                    let dealings_response = ComputeInitialEcdsaDealingsResponse::decode(data)
+                    let dealings_response = ComputeInitialIDkgDealingsResponse::decode(data)
                         .map_err(|err| {
                             InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
