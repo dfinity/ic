@@ -553,7 +553,7 @@ pub(crate) fn create_data_payload_helper(
         next_interval_registry_version,
         certified_height,
         &receivers,
-        &all_signing_requests,
+        all_signing_requests,
         &idkg_dealings_contexts,
         block_reader,
         transcript_builder,
