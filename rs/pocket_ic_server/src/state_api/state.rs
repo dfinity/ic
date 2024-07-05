@@ -163,7 +163,7 @@ pub enum OpOut {
     StableMemBytes(Vec<u8>),
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
-    ApiV2Response((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
+    RawResponse((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
@@ -237,7 +237,7 @@ impl std::fmt::Debug for OpOut {
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
-            OpOut::ApiV2Response((status, headers, bytes)) => {
+            OpOut::RawResponse((status, headers, bytes)) => {
                 write!(
                     f,
                     "ApiV2Resp({}:{:?}:{})",
