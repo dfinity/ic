@@ -665,10 +665,9 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     assert_eq!(block1.parent_block_identifier, block0.block_identifier);
     assert_eq!(block1.timestamp, rosetta_block1_expected_time_millis);
     assert_eq!(block1.metadata, None);
-    assert_eq!(block1.transactions.len(), 1);
     assert_eq!(
-        block1.transactions.first().unwrap(),
-        &convert::to_rosetta_core_transaction(
+        block1.transactions,
+        vec![convert::to_rosetta_core_transaction(
             /* block_index: */ 1,
             Transaction {
                 operation: Operation::Mint {
@@ -682,7 +681,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
             rosetta_block1_expected_time_ts,
             "ICP"
         )
-        .unwrap(),
+        .unwrap()]
     );
 
     // let block2 = env
