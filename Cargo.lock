@@ -15596,6 +15596,7 @@ name = "pocket-ic-server"
 version = "4.0.0"
 dependencies = [
  "aide",
+ "askama",
  "axum 0.7.5",
  "axum-extra",
  "axum-server 0.6.0",
@@ -15619,12 +15620,14 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-http-endpoints-public",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-management-canister-types",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
+ "ic-replicated-state",
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-test-utilities-registry",

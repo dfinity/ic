@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The argument of the endpoint `/http_gateway` takes an additional optional field `https_config` specifying the TLS certificate and key. If provided, then an HTTPS gateway is started using that TLS certificate.
 - A new endpoint `/instances/<instance_id>/read/topology` to retrieve the topology of the PocketIC instance.
 - New CLI option `--ready-file` to specify a file which is created by the PocketIC server once it is ready to accept HTTP connections.
+- A new endpoint `/instances/<instance_id>/_/dashboard` serving a PocketIC dashboard.
 
 ## 4.0.0 - 2024-04-30
 
