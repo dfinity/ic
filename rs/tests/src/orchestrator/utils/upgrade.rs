@@ -1,9 +1,8 @@
 use anyhow::{bail, Result};
 use ic_canister_client::Sender;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -18,9 +17,7 @@ use ic_system_test_driver::{
 use ic_types::{messages::ReplicaHealthStatus, ReplicaVersion, SubnetId};
 use prost::Message;
 use slog::{info, Logger};
-use std::fs;
-use std::path::Path;
-use std::{convert::TryFrom, io::Read};
+use std::{convert::TryFrom, fs, io::Read, path::Path};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum UpdateImageType {

@@ -21,23 +21,21 @@ Success::
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
-use crate::orchestrator::utils::ssh_access::update_ssh_keys_for_all_unassigned_nodes;
-use crate::{
-    orchestrator::utils::ssh_access::{
+use crate::orchestrator::utils::{
+    ssh_access::{
         generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
-        wait_until_authentication_is_granted, AuthMean,
+        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted, AuthMean,
     },
-    orchestrator::utils::upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
+    upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
 };
 use anyhow::bail;
 use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::{
+    driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
     nns::{
         self, submit_update_elected_replica_versions_proposal,
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
