@@ -19,13 +19,6 @@ use ic_nns_common::types::NeuronId;
 
 // To update or add more, add print statements to `with_test_neurons` to print
 // the generated neuron IDs and copy the printed IDs here.
-pub const TEST_NEURON_1_ID: u64 = 449479075714955186;
-pub const TEST_NEURON_2_ID: u64 = 4368585614685248742;
-pub const TEST_NEURON_3_ID: u64 = 4884056990215423907;
-
-/// The sum of the total ICP staked in test neurons.
-pub const TEST_NEURON_TOTAL_STAKE_DOMS: u64 = 1_110_000_000;
-
 #[allow(dead_code)]
 pub struct GovernanceCanisterInitPayloadBuilder {
     pub proto: Governance,
@@ -101,8 +94,8 @@ impl GovernanceCanisterInitPayloadBuilder {
 
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
         use ic_nervous_system_common_test_keys::{
-            TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
-            TEST_NEURON_3_OWNER_PRINCIPAL,
+            TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+            TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
         };
 
         let mut neuron1 = {
