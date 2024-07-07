@@ -1321,6 +1321,7 @@ impl Governance {
             auto_stake_maturity: parent_neuron.auto_stake_maturity,
             vesting_period_seconds: None,
             disburse_maturity_in_progress: vec![],
+            reward_events_to_neuron_reward_e8s: BTreeMap::new(),
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
@@ -3769,6 +3770,7 @@ impl Governance {
             auto_stake_maturity: None,
             vesting_period_seconds: None,
             disburse_maturity_in_progress: vec![],
+            reward_events_to_neuron_reward_e8s: BTreeMap::new(),
         };
 
         // This also verifies that there are not too many neurons already.
@@ -3921,6 +3923,7 @@ impl Governance {
                 auto_stake_maturity: neuron_parameter.construct_auto_staking_maturity(),
                 vesting_period_seconds: None,
                 disburse_maturity_in_progress: vec![],
+                reward_events_to_neuron_reward_e8s: BTreeMap::new(),
             };
 
             // Add the neuron to the various data structures and indexes to support neurons. This
@@ -4935,16 +4938,16 @@ impl Governance {
                 } else {
                     neuron.maturity_e8s_equivalent += neuron_reward_e8s;
                 }
-                // Add the neuron_reward_e8s to the reward_events_to_neuron_reward_e8s map on the neuron. 
+                // Insert the neuron_reward_e8s into the reward_events_to_neuron_reward_e8s map on the neuron. 
                 neuron.reward_events_to_neuron_reward_e8s.insert( 
                     reward_event_end_timestamp_seconds, 
                     neuron_reward_e8s
                 );
                 // prune
-                while neuron.reward_events_to_neuron_reward_e8s.len() > MAX_KEEP_REWARD_EVENTS_TO_NEURON_REWARD_E8S_PER_NEURON {
-                    // prune earliest. 
+                while neuron.reward_events_to_neuron_reward_e8s.len() > MAX_KEEP_REWARD_EVENTS_TO_NEURON_REWARD_E8S_PER_NEURON as usize {
+                    // prune earliest.
                     neuron.reward_events_to_neuron_reward_e8s.remove(
-                        neuron.reward_events_to_neuron_reward_e8s.keys().min().clone()
+                        &neuron.reward_events_to_neuron_reward_e8s.keys().min().unwrap().clone()
                     );
                 }
                 distributed_e8s_equivalent += neuron_reward_e8s;

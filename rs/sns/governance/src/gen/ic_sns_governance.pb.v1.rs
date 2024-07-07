@@ -138,6 +138,10 @@ pub struct Neuron {
     /// entry\[i\].timestamp_of_disbursement_seconds <= entry\[i+1\].timestamp_of_disbursement_seconds
     #[prost(message, repeated, tag = "18")]
     pub disburse_maturity_in_progress: ::prost::alloc::vec::Vec<DisburseMaturityInProgress>,
+    /// The keys are the reward-event-timestamps (end_timestamp_seconds) and the values are the neuron_reward_e8s for this reward-event.
+    /// Stores minimum 5 latest reward events.
+    #[prost(btree_map = "uint64, uint64", tag = "19")]
+    pub reward_events_to_neuron_reward_e8s: ::prost::alloc::collections::BTreeMap<u64, u64>,
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///
