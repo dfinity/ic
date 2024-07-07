@@ -30,7 +30,7 @@ pub struct HttpsConfig {
 pub struct HttpGatewayConfig {
     pub listen_at: Option<u16>,
     pub forward_to: HttpGatewayBackend,
-    pub domain: Option<String>,
+    pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,
 }
 

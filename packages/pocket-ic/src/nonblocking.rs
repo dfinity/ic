@@ -305,31 +305,32 @@ impl PocketIc {
         self.start_http_gateway(listen_at, None, None).await
     }
 
-    /// Creates an HTTPS gateway for this IC instance
-    /// listening on an optionally specified domain and port
-    /// and configures the IC instance to make progress
-    /// automatically, i.e., periodically update the time
-    /// of the IC to the real time and execute rounds on the subnets.
+    /// Creates an HTTP gateway for this PocketIC instance listening
+    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// and optionally specified domains (default to `localhost`)
+    /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
     /// Returns the URL at which `/api/v2` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
-    pub async fn make_live_https(
+    pub async fn make_live_with_params(
         &mut self,
         listen_at: Option<u16>,
-        domain: String,
-        https_config: HttpsConfig,
+        domains: Option<Vec<String>>,
+        https_config: Option<HttpsConfig>,
     ) -> Url {
         // Execute a tick to make sure all subnets have a certified state.
         self.tick().await;
         self.auto_progress().await;
-        self.start_http_gateway(listen_at, Some(domain), Some(https_config))
+        self.start_http_gateway(listen_at, domains, https_config)
             .await
     }
 
     async fn start_http_gateway(
         &mut self,
         listen_at: Option<u16>,
-        domain: Option<String>,
+        domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
         if let Some(url) = self.url() {
@@ -339,7 +340,7 @@ impl PocketIc {
         let http_gateway_config = HttpGatewayConfig {
             listen_at,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
-            domain: domain.clone(),
+            domains: domains.clone(),
             https_config: https_config.clone(),
         };
         let res = self
@@ -364,7 +365,11 @@ impl PocketIc {
                 Url::parse(&format!(
                     "{}://{}:{}/",
                     proto,
-                    domain.unwrap_or(LOCALHOST.to_string()),
+                    domains
+                        .unwrap_or_default()
+                        .into_iter()
+                        .next()
+                        .unwrap_or(LOCALHOST.to_string()),
                     port
                 ))
                 .unwrap()
