@@ -42,6 +42,8 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+    with:
+      ref: ${{ github.event.workflow_run.head_sha }}
   before-script: &before-script
     name: Before script
     id: before-script
