@@ -299,8 +299,6 @@ impl PocketIc {
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
-        // Execute a tick to make sure all subnets have a certified state.
-        self.tick().await;
         self.auto_progress().await;
         self.start_http_gateway(listen_at, None, None).await
     }
@@ -320,8 +318,6 @@ impl PocketIc {
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
-        // Execute a tick to make sure all subnets have a certified state.
-        self.tick().await;
         self.auto_progress().await;
         self.start_http_gateway(listen_at, domains, https_config)
             .await

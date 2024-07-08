@@ -285,6 +285,11 @@ impl PocketIc {
             subnet.reload_registry();
         }
 
+        // We execute a round on every subnet to make sure it has a state to certify.
+        for subnet in subnets.read().unwrap().values() {
+            subnet.execute_round();
+        }
+
         Self {
             subnets,
             routing_table,
