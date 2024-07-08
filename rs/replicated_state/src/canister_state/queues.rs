@@ -371,9 +371,12 @@ impl CanisterQueues {
                 // Make the borrow checker happy.
                 &mut self.canister_queues.get_mut(&sender).unwrap().0
             }
-            RequestOrResponse::Response(response) => match self.canister_queues.get_mut(&sender) {
-                Some((queue, _)) => {
-                    if queue.check_has_reserved_response_slot().is_err() {
+            RequestOrResponse::Response(response) => {
+                match self.canister_queues.get_mut(&sender) {
+                    Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => queue,
+
+                    // Queue does not exist or has no reserved slot for this response.
+                    _ => {
                         return Err((
                             StateError::NonMatchingResponse {
                                 err_str: "No reserved response slot".to_string(),
@@ -385,10 +388,8 @@ impl CanisterQueues {
                             msg,
                         ));
                     }
-                    queue
                 }
-                None => return Err((StateError::QueueFull { capacity: 0 }, msg)),
-            },
+            }
         };
 
         self.queue_stats.on_push(&msg, Context::Inbound);
