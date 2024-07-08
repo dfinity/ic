@@ -589,6 +589,7 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
 
 fn new_state_machine() -> StateMachine {
     StateMachineBuilder::new()
+        .with_master_ecdsa_public_key()
         .with_default_canister_range()
         .build()
 }
