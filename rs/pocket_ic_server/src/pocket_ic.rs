@@ -23,8 +23,8 @@ use ic_http_endpoints_public::{
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs,
+    CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
+    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
@@ -140,7 +140,6 @@ impl PocketIc {
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
             .with_registry_data_provider(registry_data_provider.clone())
-            .with_multisubnet_ecdsa_key()
             .with_use_cost_scaling_flag(true)
     }
 
@@ -237,6 +236,21 @@ impl PocketIc {
                 if let Some(nns_subnet_id) = nns_subnet_id {
                     builder = builder.with_subnet_id(nns_subnet_id);
                 }
+            }
+
+            if subnet_kind == SubnetKind::II {
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "dfx_test_key1".to_string(),
+                }));
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "test_key_1".to_string(),
+                }));
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "key_1".to_string(),
+                }));
             }
 
             if let Some(state_dir) = state_dir {

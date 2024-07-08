@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,7 +27,10 @@ TEST_DEPENDENCIES = [
     "//rs/test_utilities/load_wasm",
     "//rs/rosetta-api/icp_ledger",
     "//rs/types/base_types",
+    "@crate_index//:candid_parser",
     "@crate_index//:flate2",
+    "@crate_index//:k256",
+    "@crate_index//:lazy_static",
     "@crate_index//:wat",
 ]
 
@@ -38,6 +42,24 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_canister(
+    name = "test_canister",
+    srcs = ["tests/test_canister.rs"],
+    service_file = ":tests/test_canister.did",
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_test(
+    name = "test_canister_unit_test",
+    crate = ":_wasm_test_canister",
+    data = ["tests/test_canister.did"],
+    env = {"CARGO_MANIFEST_DIR": "packages/pocket-ic"},
+    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)
+
 rust_test_suite(
     name = "test",
     size = "small",
@@ -45,12 +67,14 @@ rust_test_suite(
     data = [
         "tests/counter.wasm",
         "tests/icp_ledger.wasm",
+        ":test_canister.wasm",
         "//rs/pocket_ic_server:pocket-ic-server",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
         "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
+        "TEST_WASM": "$(rootpath :test_canister.wasm)",
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,

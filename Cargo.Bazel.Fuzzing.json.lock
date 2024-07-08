@@ -1,5 +1,5 @@
 {
-  "checksum": "2e083bd135a4bfc5851f6264f738e1e767105ba7e539352bbb259a62602b3d9a",
+  "checksum": "46bd87c4266c01206f85e2379537ddf31606c5ecdac6ec4cee9c29c53a017b2b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -49359,6 +49359,10 @@
               "target": "serde_cbor"
             },
             {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
               "id": "slog 2.7.0",
               "target": "slog"
             },
@@ -59915,38 +59919,30 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
@@ -59959,14 +59955,10 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ]

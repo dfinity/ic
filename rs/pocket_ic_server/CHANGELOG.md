@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A new endpoint `/instances/<instance_id>/read/topology` to retrieve the topology of the PocketIC instance.
 - New CLI option `--ready-file` to specify a file which is created by the PocketIC server once it is ready to accept HTTP connections.
 - A new endpoint `/instances/<instance_id>/_/dashboard` serving a PocketIC dashboard.
+- ECDSA support (IC mainnet-like): there are three ECDSA keys with names `dfx_test_key1`, `test_key_1`, and `key_1` on the II subnet.
 
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.
