@@ -118,10 +118,6 @@ rules_proto_dependencies()
 
 rules_proto_toolchains()
 
-load("//bazel/manifests:defs.bzl", "manifests_repository")
-
-manifests_repository(name = "manifests")
-
 load("//bazel:external_crates.bzl", "external_crates_repository")
 load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
 
