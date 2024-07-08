@@ -274,10 +274,6 @@ struct CliArgs {
                 ignore_case = true)]
     log_level: Option<String>,
 
-    /// Debug overrides to show debug logs for certain components.
-    #[clap(long = "debug-overrides", multiple_values(true))]
-    debug_overrides: Vec<String>,
-
     /// Metrics port. Default is None, i.e. periodically dump metrics on stdout.
     #[clap(long = "metrics-port")]
     metrics_port: Option<u16>,
@@ -548,7 +544,6 @@ impl CliArgs {
             replica_path,
             replica_version,
             log_level,
-            debug_overrides: self.debug_overrides.clone(),
             cargo_bin,
             cargo_opts,
             state_dir,
@@ -590,7 +585,6 @@ struct ValidatedConfig {
     replica_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
     log_level: slog::Level,
-    debug_overrides: Vec<String>,
     cargo_bin: String,
     cargo_opts: String,
     state_dir: PathBuf,
@@ -644,7 +638,6 @@ impl ValidatedConfig {
         });
         let logger_config = LoggerConfig {
             level: self.log_level,
-            debug_overrides: self.debug_overrides.clone(),
             ..LoggerConfig::default()
         };
         let logger = Some(logger_config);

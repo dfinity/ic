@@ -256,8 +256,7 @@ pub mod test {
             "http_request_timeout_secs": 20,
             "incoming_source": "Systemd",
             "logger": {
-                "format": "text_full",
-                "debug_overrides": []
+                "format": "text_full"
             }        
         }       
         "#;
@@ -277,7 +276,6 @@ pub mod test {
             incoming_source: IncomingSource::Systemd,
             logger: ic_config::logger::Config {
                 format: ic_config::logger::LogFormat::TextFull,
-                debug_overrides: Vec::new(),
                 ..Default::default()
             },
             ..Default::default()
@@ -298,13 +296,11 @@ pub mod test {
             },
             "logger": {
                 "level": "info",
-                "format": "json",
-                "debug_overrides": []
+                "format": "json"
             },
-            "socks_proxy": "socks5://notaproxy.com:1080"        
+            "socks_proxy": "socks5://notaproxy.com:1080" 
         }       
         "#;
-
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
         writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
 
@@ -322,7 +318,6 @@ pub mod test {
             logger: ic_config::logger::Config {
                 level: slog::Level::Info,
                 format: ic_config::logger::LogFormat::Json,
-                debug_overrides: Vec::new(),
                 ..Default::default()
             },
             socks_proxy: "socks5://notaproxy.com:1080".to_string(),

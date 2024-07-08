@@ -548,9 +548,13 @@ pub fn setup_router(
         })));
 
     let call_route = {
-        let mut route = Router::new().route(routes::PATH_CALL, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        });
+        let mut route = Router::new()
+            .route(routes::PATH_CALL, {
+                post(routes::handle_canister).with_state(proxy.clone())
+            })
+            .route(routes::PATH_CALL_V3, {
+                post(routes::handle_canister).with_state(proxy.clone())
+            });
 
         // will panic if ip_rate_limit is Some(0)
         if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
@@ -605,6 +609,7 @@ pub fn setup_router(
         RetryParams {
             retry_count: cli.retry.retry_count as usize,
             retry_update_call: cli.retry.retry_update_call,
+            disable_latency_routing: cli.retry.disable_latency_routing,
         },
         retry_request,
     );

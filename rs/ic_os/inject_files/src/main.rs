@@ -22,7 +22,7 @@ struct Cli {
     file_contexts: Option<PathBuf>,
     #[arg(long)]
     prefix: Option<PathBuf>,
-    #[arg(short)]
+    #[arg(long)]
     dflate: PathBuf,
     extra_files: Vec<String>,
 }
@@ -89,6 +89,7 @@ async fn main() -> Result<()> {
     target.close().await?;
 
     // TODO: Quick hack to unpack and repack file
+    // We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     // If dflate is ever misbehaving, it can be replaced with:
     // tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
     let temp_tar = temp_dir.path().join("partition.tar");

@@ -6,14 +6,13 @@
 function usage() {
     cat <<EOF
 Usage:
-  generate-replica-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-l log.conf] [-m malicious_behavior.conf] [-q query_stats.conf] -i ic.json5.template -o ic.json5
+  generate-replica-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-m malicious_behavior.conf] [-q query_stats.conf] -i ic.json5.template -o ic.json5
 
   Generate replica config from template file.
 
   -n network.conf: Optional, network configuration description file
   -c nns.conf: Optional, address of nns to contact
   -b backup.conf: Optional, parameters of the artifact backup
-  -l log.conf: Optional, logging parameters of the node software
   -m malicious_behavior.conf: Optional, malicious behavior parameters
   -q query_stats.conf: Optional, query statistics epoch length configuration
   -t jaeger_addr.conf: Optional, Jaeger address
@@ -113,22 +112,6 @@ function read_backup_variables() {
     done <"$1"
 }
 
-# Read log config variables from file. The file must be of the form
-# "key=value" for each line with a specific set of keys permissible (see
-# code below).
-#
-# Arguments:
-# - $1: Name of the file to be read.
-function read_log_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "replica_log_debug_overrides") replica_log_debug_overrides="${value}" ;;
-        esac
-    done <"$1"
-}
-
 # Read malicious behavior config variables from file. The file must be of the
 # form "key=value" for each line with a specific set of keys permissible (see
 # code below).
@@ -177,9 +160,6 @@ while getopts "l:m:q:n:c:t:i:o:b:" OPT; do
         b)
             BACKUP_CONFIG_FILE="${OPTARG}"
             ;;
-        l)
-            LOG_CONFIG_FILE="${OPTARG}"
-            ;;
         m)
             MALICIOUS_BEHAVIOR_CONFIG_FILE="${OPTARG}"
             ;;
@@ -219,10 +199,6 @@ if [ "${NNS_CONFIG_FILE}" != "" -a -e "${NNS_CONFIG_FILE}" ]; then
     read_nns_variables "${NNS_CONFIG_FILE}"
 fi
 
-if [ "${LOG_CONFIG_FILE}" != "" -a -e "${LOG_CONFIG_FILE}" ]; then
-    read_log_variables "${LOG_CONFIG_FILE}"
-fi
-
 if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" ]; then
     read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
 fi
@@ -247,8 +223,6 @@ NODE_INDEX="${node_index:-0}"
 BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
 # Default value is 1h
 BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
-# Default is an empty list
-REPLICA_LOG_DEBUG_OVERRIDES="${replica_log_debug_overrides:-[]}"
 # Default is null (None)
 MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
 # Defaults to enabled
@@ -287,7 +261,6 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
-    -e "s@{{ replica_log_debug_overrides }}@${REPLICA_LOG_DEBUG_OVERRIDES}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
     -e "s@{{ query_stats_aggregation }}@${QUERY_STATS_AGGREGATION}@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \

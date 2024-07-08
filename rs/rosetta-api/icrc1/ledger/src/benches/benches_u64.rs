@@ -1,8 +1,8 @@
 use crate::benches::{
-    assert_has_num_balances, icrc1_transfer, max_length_principal, mint_tokens, upgrade,
-    NUM_TRANSFERS,
+    assert_has_num_balances, emulate_archive_blocks, icrc1_transfer, max_length_principal,
+    mint_tokens, upgrade, NUM_TRANSFERS,
 };
-use crate::init_state;
+use crate::{init_state, Access, LOG};
 use assert_matches::assert_matches;
 use canbench_rs::{bench, BenchResult};
 use candid::Principal;
@@ -43,6 +43,7 @@ fn bench_icrc1_transfers() -> BenchResult {
                 };
                 let result = icrc1_transfer(account_with_tokens.owner, transfer.clone());
                 assert_matches!(result, Ok(_));
+                emulate_archive_blocks::<Access>(&LOG);
             }
             assert_has_num_balances(NUM_TRANSFERS + 2);
         }

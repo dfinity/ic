@@ -7,9 +7,9 @@
 //   2023-06-01 16:46:15.994 INFO[setup:rs/tests/src/driver/prometheus_vm.rs:169:0]
 //     IC Progress Clock at http://grafana.throughput_with_large_messages_colocate--1685637895775.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::consensus::consensus_performance_test::{setup, test_large_messages};
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 
 use anyhow::Result;
 use std::time::Duration;

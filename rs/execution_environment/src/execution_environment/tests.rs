@@ -2314,34 +2314,23 @@ fn test_sign_with_threshold_key_fee_charged() {
             }
         );
 
-        match method {
-            Method::SignWithECDSA => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment.get(), payment - fee);
-
-                assert_eq!(
-                    test.state()
-                        .metadata
-                        .subnet_metrics
-                        .consumed_cycles_ecdsa_outcalls,
-                    NominalCycles::from(fee)
-                );
-            }
-            Method::SignWithSchnorr => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_schnorr_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment.get(), payment - fee);
-            }
+        let subnet_call_context_manager = &test.state().metadata.subnet_call_context_manager;
+        let contexts = match method {
+            Method::SignWithECDSA => subnet_call_context_manager.sign_with_ecdsa_contexts(),
+            Method::SignWithSchnorr => subnet_call_context_manager.sign_with_schnorr_contexts(),
             _ => panic!("Unexpected method"),
+        };
+        let (_, context) = contexts.iter().next().unwrap();
+        assert_eq!(context.request.payment.get(), payment - fee);
+
+        if let Method::SignWithECDSA = method {
+            assert_eq!(
+                test.state()
+                    .metadata
+                    .subnet_metrics
+                    .consumed_cycles_ecdsa_outcalls,
+                NominalCycles::from(fee)
+            );
         }
 
         assert_eq!(
@@ -2615,36 +2604,25 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
                 state: IngressState::Processing,
             }
         );
-        match method {
-            Method::SignWithECDSA => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment, Cycles::zero());
 
-                assert_eq!(
-                    test.state()
-                        .metadata
-                        .subnet_metrics
-                        .consumed_cycles_ecdsa_outcalls,
-                    NominalCycles::from(0)
-                );
-            }
-            Method::SignWithSchnorr => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_schnorr_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment, Cycles::zero());
-            }
+        let subnet_call_context_manager = &test.state().metadata.subnet_call_context_manager;
+        let contexts = match method {
+            Method::SignWithECDSA => subnet_call_context_manager.sign_with_ecdsa_contexts(),
+            Method::SignWithSchnorr => subnet_call_context_manager.sign_with_schnorr_contexts(),
             _ => panic!("Unexpected method"),
-        }
+        };
+        let (_, context) = contexts.iter().next().unwrap();
+        assert_eq!(context.request.payment, Cycles::zero());
 
+        if let Method::SignWithECDSA = method {
+            assert_eq!(
+                test.state()
+                    .metadata
+                    .subnet_metrics
+                    .consumed_cycles_ecdsa_outcalls,
+                NominalCycles::from(0)
+            );
+        }
         assert_eq!(
             test.state()
                 .metadata

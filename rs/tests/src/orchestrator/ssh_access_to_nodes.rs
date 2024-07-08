@@ -11,7 +11,14 @@ Coverage::
 
 end::catalog[] */
 
-use crate::{
+use crate::orchestrator::utils::ssh_access::{
+    assert_authentication_fails, assert_authentication_works, fail_to_update_subnet_record,
+    fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
+    get_updatesshreadonlyaccesskeyspayload, get_updatesubnetpayload_with_keys,
+    update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
+    wait_until_authentication_fails, wait_until_authentication_is_granted, AuthMean,
+};
+use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
         test_env::TestEnv,
@@ -19,13 +26,6 @@ use crate::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, NnsInstallationBuilder,
             SubnetSnapshot, TopologySnapshot,
         },
-    },
-    orchestrator::utils::ssh_access::{
-        assert_authentication_fails, assert_authentication_works, fail_to_update_subnet_record,
-        fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
-        get_updatesshreadonlyaccesskeyspayload, get_updatesubnetpayload_with_keys,
-        update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
-        wait_until_authentication_fails, wait_until_authentication_is_granted, AuthMean,
     },
     util::{block_on, get_app_subnet_and_node, get_nns_node},
 };

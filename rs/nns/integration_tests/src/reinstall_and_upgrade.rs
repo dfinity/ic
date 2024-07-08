@@ -4,14 +4,11 @@ use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance::{
-    init::TEST_NEURON_2_ID,
-    pb::v1::{Governance as GovernanceProto, NnsFunction},
-};
+use ic_nns_governance::pb::v1::{Governance as GovernanceProto, NnsFunction};
 use ic_nns_gtc::{
     der_encode,
     pb::v1::{AccountState, Gtc as GtcProto},

@@ -1,10 +1,10 @@
 use crate::registry::Registry;
-use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_keys::NODE_OPERATOR_RECORD_KEY_PREFIX;
 use ic_types::PrincipalId;
+use prost::Message;
 use std::convert::TryFrom;
 use std::str::from_utf8;
 
@@ -24,7 +24,7 @@ impl Registry {
                 if value.deletion_marker {
                     continue;
                 }
-                let node_operator = decode_or_panic::<NodeOperatorRecord>(value.value.clone());
+                let node_operator = NodeOperatorRecord::decode(value.value.as_slice()).unwrap();
                 let node_provider_id = PrincipalId::try_from(
                     &node_operator.node_provider_principal_id,
                 )
@@ -41,7 +41,7 @@ impl Registry {
                 }
                 let dc_id = node_operator.dc_id.clone();
                 let dc_key = make_data_center_record_key(&dc_id);
-                let dc_record_bytes = self
+                let dc_record_bytes = &self
                     .get(dc_key.as_bytes(), self.latest_version())
                     .ok_or_else(|| {
                         format!(
@@ -51,9 +51,8 @@ impl Registry {
                             dc_id
                         )
                     })?
-                    .value
-                    .clone();
-                let data_center = decode_or_panic::<DataCenterRecord>(dc_record_bytes);
+                    .value;
+                let data_center = DataCenterRecord::decode(dc_record_bytes.as_slice()).unwrap();
                 node_operators_and_dcs_of_node_provider
                     .push((data_center.clone(), node_operator.clone()));
             }

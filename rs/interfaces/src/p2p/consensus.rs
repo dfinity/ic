@@ -1,7 +1,7 @@
 //! The artifact pool public interface that defines the Consensus-P2P API.
 //! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
 use ic_types::{
-    artifact::{Advert, ArtifactKind, PriorityFn},
+    artifact::{ArtifactKind, PriorityFn},
     NodeId, Time,
 };
 
@@ -42,7 +42,7 @@ pub struct ChangeResult<Artifact: ArtifactKind> {
 }
 
 pub struct ArtifactWithOpt<Artifact: ArtifactKind> {
-    pub advert: Advert<Artifact>,
+    pub artifact: Artifact::Message,
     pub is_latency_sensitive: bool,
 }
 

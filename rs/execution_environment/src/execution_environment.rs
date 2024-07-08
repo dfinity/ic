@@ -1738,7 +1738,7 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a canister task of a given canister.
-    pub fn execute_canister_task(
+    fn execute_canister_task(
         &self,
         canister: CanisterState,
         task: CanisterTask,
@@ -3102,7 +3102,7 @@ impl ExecutionEnvironment {
                             execution_duration,
                             result.old_wasm_hash,
                             result.new_wasm_hash,
-                            instructions_used);
+                            instructions_used.display());
 
                         Ok(EmptyBlob.encode())
                     }
@@ -3113,7 +3113,7 @@ impl ExecutionEnvironment {
                             canister_id,
                             execution_duration,
                             err,
-                            instructions_used);
+                            instructions_used.display());
                         Err(err.into())
                     }
                 };

@@ -15,7 +15,7 @@ use crate::{
     canister_http::CanisterHttpResponseShare,
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
-        idkg::EcdsaArtifactId,
+        idkg::IDkgArtifactId,
         ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
     },
     crypto::{crypto_hash, CryptoHash},
@@ -47,8 +47,8 @@ pub enum ArtifactTag {
     ConsensusArtifact,
     #[strum(serialize = "dkg")]
     DkgArtifact,
-    #[strum(serialize = "ecdsa")]
-    EcdsaArtifact,
+    #[strum(serialize = "idkg")]
+    IDkgArtifact,
     #[strum(serialize = "file_tree_sync")]
     FileTreeSyncArtifact,
     #[strum(serialize = "ingress")]
@@ -65,7 +65,7 @@ impl std::fmt::Display for ArtifactTag {
                 ArtifactTag::CertificationArtifact => "Certification",
                 ArtifactTag::ConsensusArtifact => "Consensus",
                 ArtifactTag::DkgArtifact => "DKG",
-                ArtifactTag::EcdsaArtifact => "ECDSA",
+                ArtifactTag::IDkgArtifact => "IDKG",
                 ArtifactTag::FileTreeSyncArtifact => "FileTreeSync",
                 ArtifactTag::IngressArtifact => "Ingress",
             }
@@ -145,7 +145,6 @@ pub struct Advert<Artifact: ArtifactKind> {
     /// The id _must_ contain the integrity hash of the message.
     pub id: Artifact::Id,
     pub attribute: Artifact::Attribute,
-    pub size: usize,
 }
 
 // -----------------------------------------------------------------------------
@@ -338,9 +337,9 @@ impl From<&CertificationMessage> for CertificationMessageHash {
 }
 
 // -----------------------------------------------------------------------------
-// ECDSA artifacts
+// IDKG artifacts
 
-pub type EcdsaMessageId = EcdsaArtifactId;
+pub type IDkgMessageId = IDkgArtifactId;
 
 // -----------------------------------------------------------------------------
 // CanisterHttp artifacts

@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:backoff",
     "@crate_index//:bytes",
     "@crate_index//:prometheus",
+    "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:slog",
     "@crate_index//:tokio",

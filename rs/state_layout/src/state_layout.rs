@@ -56,6 +56,7 @@ pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
+pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -697,6 +698,19 @@ impl StateLayout {
             }
         }
         CheckpointLayout::new(path, height, self.clone())
+    }
+
+    /// Returns the untracked `CheckpointLayout` for the given height (if there is one).
+    pub fn checkpoint_untracked(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let cp_name = Self::checkpoint_name(height);
+        let path = self.checkpoints().join(cp_name);
+        if !path.exists() {
+            return Err(LayoutError::NotFound(height));
+        }
+        CheckpointLayout::new_untracked(path, height)
     }
 
     fn increment_checkpoint_ref_counter(&self, height: Height) {
@@ -1370,6 +1384,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {
         self.root.join(STATS_FILE).into()
+    }
+
+    pub fn unverified_checkpoint_marker(&self) -> PathBuf {
+        self.root.join(UNVERIFIED_CHECKPOINT_MARKER)
     }
 
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {

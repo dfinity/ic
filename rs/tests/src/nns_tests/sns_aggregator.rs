@@ -6,33 +6,24 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    canister_agent::CanisterAgent,
-    canister_api::{CallMode, SnsRequestProvider},
-    canister_requests,
-    driver::test_env_api::{retry_async, NnsCanisterWasmStrategy},
-    generic_workload_engine::{
-        engine::Engine,
-        metrics::{LoadTestMetrics, RequestOutcome},
-    },
-    retry_with_msg_async,
-    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
-};
 use anyhow::{bail, Context};
 use candid::{Decode, Principal};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_swap::pb::v1::{GetStateResponse, Params};
-use ic_utils::{
-    call::SyncCall,
-    interfaces::{http_request::HttpResponse, HttpRequestCanister, ManagementCanister},
+use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::{
+    canister_agent::CanisterAgent,
+    canister_api::{CallMode, SnsRequestProvider},
+    canister_requests,
+    driver::test_env_api::NnsCanisterWasmStrategy,
+    generic_workload_engine::{
+        engine::Engine,
+        metrics::{LoadTestMetrics, RequestOutcome},
+    },
+    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use slog::{info, Logger};
-
-use crate::canister_agent::HasCanisterAgentCapability;
-use crate::{
+use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
         test_env::{TestEnv, TestEnvAttribute},
@@ -43,8 +34,15 @@ use crate::{
     },
     util::block_on,
 };
+use ic_utils::{
+    call::SyncCall,
+    interfaces::{http_request::HttpResponse, HttpRequestCanister, ManagementCanister},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use slog::{info, Logger};
 
-use super::sns_deployment::{self, install_nns, install_sns, SaleParticipant};
+use super::sns_deployment::{self, install_nns, install_sns, SnsSaleParticipants};
 
 use ic_base_types::PrincipalId;
 
@@ -234,8 +232,12 @@ impl AggregatorClient {
     {
         let start_time = Instant::now();
         let attempts = Arc::new(AtomicUsize::new(0));
-        let result =
-            retry_with_msg_async!("http_get_asset", log, timeout, Duration::from_secs(5), {
+        let result = ic_system_test_driver::retry_with_msg_async!(
+            "http_get_asset",
+            log,
+            timeout,
+            Duration::from_secs(5),
+            {
                 let log = log.clone();
                 let attempts = attempts.clone();
                 let canister = canister.clone();
@@ -251,9 +253,10 @@ impl AggregatorClient {
                         extract_sub_asset(asset)
                     }
                 }
-            })
-            .await
-            .map_err(|e| format!("{e:?}"));
+            }
+        )
+        .await
+        .map_err(|e| format!("{e:?}"));
         RequestOutcome::new(
             result,
             "aggregator_sub_asset".to_string(),
@@ -539,7 +542,8 @@ pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
         let participants: Vec<(CanisterAgent, CanisterAgent)> = {
             let nns_node = env.get_first_healthy_nns_node_snapshot();
             let app_node = env.get_first_healthy_application_node_snapshot();
-            Vec::<SaleParticipant>::read_attribute(&env)
+            SnsSaleParticipants::read_attribute(&env)
+                .participants
                 .into_iter()
                 .map(|p| {
                     block_on(async {

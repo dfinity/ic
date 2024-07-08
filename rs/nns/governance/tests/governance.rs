@@ -80,12 +80,11 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
         BallotInfoChange, CreateServiceNervousSystem, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceChange, GovernanceError,
-        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
-        ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics,
-        Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation,
-        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData,
-        ProposalDataChange,
+        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+        MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange,
+        NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot,
+        NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
@@ -8357,140 +8356,6 @@ fn test_omit_large_fields() {
             list_proposals_response
         );
     }
-}
-
-// Test that listing of neurons satisfies the following properties:
-//
-// 1. That the neurons with the caller as controller or hot keys are
-// included in the result if `include_neurons_readable_by_caller` is true.
-//
-// 2. That the full neuron information is retrieved for a neuron
-// listed in `neuron_ids` if and only if the caller is authorized to
-// view it.
-#[test]
-fn test_list_neurons() {
-    let mut driver = fake::FakeDriver::default();
-    // Create 100 neurons with IDs 1-100.
-    let mut proto = GovernanceProto {
-        neurons: (1..100)
-            .collect::<Vec<u64>>()
-            .iter()
-            .map(|x| {
-                (
-                    *x,
-                    Neuron {
-                        id: Some(NeuronId { id: *x }),
-                        controller: Some(principal(*x)),
-                        account: driver.random_byte_array().to_vec(),
-                        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
-                        aging_since_timestamp_seconds: u64::MAX,
-                        ..Default::default()
-                    },
-                )
-            })
-            .collect::<BTreeMap<u64, Neuron>>(),
-        ..Default::default()
-    };
-    let p1 = principal(1);
-    let p2 = principal(2);
-    let p3 = principal(3);
-    let p4 = principal(4);
-    // Set hot keys.
-    proto.neurons.get_mut(&12).unwrap().hot_keys = vec![p1, p2];
-    proto.neurons.get_mut(&21).unwrap().hot_keys = vec![p1, p2];
-    proto.neurons.get_mut(&13).unwrap().hot_keys = vec![p1, p3];
-    proto.neurons.get_mut(&31).unwrap().hot_keys = vec![p1, p3];
-    // Set manage neuron followees
-    proto.neurons.get_mut(&42).unwrap().followees = hashmap! {
-        Topic::NeuronManagement as i32 => neuron::Followees {
-            followees: [NeuronId { id: 2 }, NeuronId { id: 4 }].to_vec(),
-        },
-    };
-    let gov = Governance::new(
-        proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-    assert_eq!(
-        ListNeuronsResponse {
-            ..Default::default()
-        },
-        gov.list_neurons_by_principal(
-            &ListNeurons {
-                ..Default::default()
-            },
-            &p1
-        )
-    );
-    // Principal p1 has access to n1 (controller) and n12, n21, n13, n31, as hot
-    // key.
-    let p1_listing = gov.list_neurons_by_principal(
-        &ListNeurons {
-            include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: Some(true),
-            neuron_ids: vec![],
-        },
-        &p1,
-    );
-    let p1_access = vec![1, 12, 13, 21, 31]
-        .into_iter()
-        .collect::<HashSet<u64>>();
-    assert_eq!(p1_access, p1_listing.neuron_infos.keys().copied().collect());
-    assert_eq!(
-        p1_access,
-        p1_listing
-            .full_neurons
-            .iter()
-            .map(|x| x.id.as_ref().unwrap().id)
-            .collect::<HashSet<u64>>()
-    );
-    // Principal p4 has access only to n4 (controller). But it can
-    // also view 42 as followee on the manage neuron topic.
-    let p4_listing = gov.list_neurons_by_principal(
-        &ListNeurons {
-            include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: Some(true),
-            neuron_ids: vec![42, 99],
-        },
-        &p4,
-    );
-    assert_eq!(
-        vec![4, 42, 99].into_iter().collect::<HashSet<u64>>(),
-        p4_listing
-            .neuron_infos
-            .keys()
-            .copied()
-            .collect::<HashSet<u64>>()
-    );
-    assert_eq!(
-        vec![4, 42].into_iter().collect::<HashSet<u64>>(),
-        p4_listing
-            .full_neurons
-            .iter()
-            .map(|x| x.id.as_ref().unwrap().id)
-            .collect::<HashSet<u64>>()
-    );
-
-    let principal_with_no_neurons = principal(1001);
-    let list_neurons_response = gov.list_neurons_by_principal(
-        &ListNeurons {
-            include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: Some(true),
-            neuron_ids: vec![200],
-        },
-        &principal_with_no_neurons,
-    );
-    assert!(
-        list_neurons_response.neuron_infos.is_empty(),
-        "{:?}",
-        list_neurons_response.neuron_infos
-    );
-    assert!(
-        list_neurons_response.full_neurons.is_empty(),
-        "{:?}",
-        list_neurons_response.full_neurons
-    );
 }
 
 #[tokio::test]

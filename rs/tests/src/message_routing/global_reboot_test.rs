@@ -27,19 +27,19 @@ end::catalog[] */
 
 use std::time::Duration;
 
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasDependencies, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
 };
-use crate::util::{
+use ic_system_test_driver::util::{
     assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
     EndpointsStatus,
 };
 
-use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
 use slog::{info, Logger};
 use tokio::time::sleep;
 use xnet_test::{CanisterId, Metrics};

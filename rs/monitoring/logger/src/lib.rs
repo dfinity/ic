@@ -12,7 +12,7 @@ pub use crate::replica_logger::{no_op_logger, ReplicaLogger};
 
 pub fn new_replica_logger(log: slog::Logger, config: &LoggerConfig) -> ReplicaLogger {
     use crate::replica_logger::LogEntryLogger;
-    let log_entry_logger = LogEntryLogger::new(log, config.level, config.debug_overrides.clone());
+    let log_entry_logger = LogEntryLogger::new(log, config.level);
     ReplicaLogger::new(log_entry_logger)
 }
 

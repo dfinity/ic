@@ -13,10 +13,6 @@ use ic_interfaces::p2p::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::{
-    p2p::v1 as pb,
-    proxy::{try_from_option_field, ProtoProxy, ProxyDecodeError},
-};
 use ic_quic_transport::{ConnId, SubnetTopology, Transport};
 use ic_types::artifact::{ArtifactKind, UnvalidatedArtifactMutation};
 use phantom_newtype::AmountOf;
@@ -134,7 +130,6 @@ fn start_consensus_manager<Artifact, Pool>(
         log.clone(),
         metrics.clone(),
         rt_handle.clone(),
-        raw_pool.clone(),
         transport.clone(),
         adverts_to_send,
         cancellation_token,
@@ -164,49 +159,6 @@ pub(crate) enum Update<Artifact: ArtifactKind> {
     Advert((Artifact::Id, Artifact::Attribute)),
 }
 
-impl<Artifact: ArtifactKind> From<SlotUpdate<Artifact>> for pb::SlotUpdate {
-    fn from(
-        SlotUpdate {
-            slot_number,
-            commit_id,
-            update,
-        }: SlotUpdate<Artifact>,
-    ) -> Self {
-        Self {
-            commit_id: commit_id.get(),
-            slot_id: slot_number.get(),
-            update: Some(match update {
-                Update::Artifact(artifact) => {
-                    pb::slot_update::Update::Artifact(Artifact::PbMessage::proxy_encode(artifact))
-                }
-                Update::Advert((id, attribute)) => pb::slot_update::Update::Advert(pb::Advert {
-                    id: Artifact::PbId::proxy_encode(id),
-                    attribute: Artifact::PbAttribute::proxy_encode(attribute),
-                }),
-            }),
-        }
-    }
-}
-
-impl<Artifact: ArtifactKind> TryFrom<pb::SlotUpdate> for SlotUpdate<Artifact> {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::SlotUpdate) -> Result<Self, Self::Error> {
-        Ok(Self {
-            slot_number: SlotNumber::from(value.slot_id),
-            commit_id: CommitId::from(value.commit_id),
-            update: match try_from_option_field(value.update, "update")? {
-                pb::slot_update::Update::Artifact(artifact) => {
-                    Update::Artifact(Artifact::PbMessage::proxy_decode(&artifact)?)
-                }
-                pb::slot_update::Update::Advert(pb::Advert { id, attribute }) => Update::Advert((
-                    Artifact::PbId::proxy_decode(&id)?,
-                    Artifact::PbAttribute::proxy_decode(&attribute)?,
-                )),
-            },
-        })
-    }
-}
-
 pub(crate) fn uri_prefix<Artifact: ArtifactKind>() -> String {
     Artifact::TAG.to_string().to_lowercase()
 }
@@ -220,7 +172,7 @@ pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
 #[cfg(test)]
 mod tests {
     use ic_types::artifact_kind::{
-        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
+        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, IDkgArtifact,
         IngressArtifact,
     };
 
@@ -238,7 +190,7 @@ mod tests {
         assert!(uri_prefix::<IngressArtifact>()
             .chars()
             .all(char::is_alphabetic));
-        assert!(uri_prefix::<EcdsaArtifact>()
+        assert!(uri_prefix::<IDkgArtifact>()
             .chars()
             .all(char::is_alphabetic));
         assert!(uri_prefix::<CanisterHttpArtifact>()

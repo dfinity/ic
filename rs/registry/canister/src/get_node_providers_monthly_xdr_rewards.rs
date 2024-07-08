@@ -1,17 +1,17 @@
 use crate::{pb::v1::NodeProvidersMonthlyXdrRewards, registry::Registry};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nns_common::registry::decode_or_panic;
-use ic_protobuf::registry::dc::v1::DataCenterRecord;
-use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardsTable};
+use ic_protobuf::registry::{
+    dc::v1::DataCenterRecord,
+    node_operator::v1::NodeOperatorRecord,
+    node_rewards::v2::{NodeRewardRate, NodeRewardsTable},
+};
 use ic_registry_keys::{
     make_data_center_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_types::PrincipalId;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::str::from_utf8;
+use prost::Message;
+use std::{collections::HashMap, convert::TryFrom, str::from_utf8};
 
 impl Registry {
     /// Return a map from Node Provider IDs to the amount (in 10,000ths of an
@@ -28,8 +28,7 @@ impl Registry {
             .value
             .clone();
 
-        let rewards_table: NodeRewardsTable =
-            decode_or_panic::<NodeRewardsTable>(rewards_table_bytes);
+        let rewards_table = NodeRewardsTable::decode(rewards_table_bytes.as_slice()).unwrap();
 
         // The reward coefficients for the NP, at the moment used only for type3 nodes, as a measure for stimulating decentralization.
         // It is kept outside of the reward calculation loop in order to reduce node rewards for NPs with multiple DCs.
@@ -42,7 +41,7 @@ impl Registry {
                 if value.deletion_marker {
                     continue;
                 }
-                let node_operator = decode_or_panic::<NodeOperatorRecord>(value.value.clone());
+                let node_operator = NodeOperatorRecord::decode(value.value.as_slice()).unwrap();
                 let node_operator_id = PrincipalId::try_from(
                     &node_operator.node_operator_principal_id,
                 )
@@ -78,7 +77,7 @@ impl Registry {
                     })?
                     .value
                     .clone();
-                let dc = decode_or_panic::<DataCenterRecord>(dc_record_bytes);
+                let dc = DataCenterRecord::decode(dc_record_bytes.as_slice()).unwrap();
                 let region = &dc.region;
 
                 let np_rewards = rewards
@@ -186,6 +185,8 @@ impl Registry {
             }
         }
 
+        rewards.registry_version = Some(self.latest_version());
+
         Ok(rewards)
     }
 }
@@ -198,9 +199,11 @@ mod tests {
         TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     };
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
-    use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
-    use ic_protobuf::registry::node_rewards::v2::{
-        NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload,
+    use ic_protobuf::registry::{
+        dc::v1::AddOrRemoveDataCentersProposalPayload,
+        node_rewards::v2::{
+            NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload,
+        },
     };
     use ic_registry_keys::make_node_operator_record_key;
     use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
@@ -394,6 +397,10 @@ mod tests {
         let np1 = TEST_USER1_PRINCIPAL.to_string();
         let np1_rewards = monthly_rewards.rewards.get(&np1).unwrap();
         assert_eq!(*np1_rewards, 5); // 5 nodes at 1 XDR/month/node
+        assert_eq!(
+            monthly_rewards.registry_version,
+            Some(registry.latest_version())
+        );
 
         ///////////////////////////////
         // Now add the reward table for type0 and type2 nodes and check that the values are properly used
@@ -502,6 +509,11 @@ mod tests {
         registry.do_update_node_rewards_table(node_rewards_payload);
 
         let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+
+        assert_eq!(
+            monthly_rewards.registry_version,
+            Some(registry.latest_version())
+        );
 
         // NP1: the existence of type3 nodes should not impact the type0/type2 rewards
         assert_eq!(

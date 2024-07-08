@@ -205,10 +205,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
-        debug_overrides: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
@@ -235,10 +231,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
-        debug_overrides: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
@@ -264,10 +256,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "text_full",
         // EXAMPLE: format: "json",
         format: "text_full",
-
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_crypto_internal_csp::vault"],
-        debug_overrides: [],
 
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a

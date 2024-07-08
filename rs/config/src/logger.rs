@@ -41,15 +41,10 @@ pub enum LogDestination {
 pub struct Config {
     #[serde(with = "LevelDef")]
     pub level: Level,
-
-    pub debug_overrides: Vec<String>,
-
-    /// The format of emitted log lines
+    /// The format of emitted log lines.
     pub format: LogFormat,
-
     /// The destination where logs should be written.
     pub log_destination: LogDestination,
-
     /// If set to `false`, the logging thread will _not_ block even if the queue/buffer full.
     ///
     /// Messages are logged asynchronously.
@@ -67,7 +62,6 @@ impl Default for Config {
         Self {
             level: Level::Debug,
             format: LogFormat::TextFull,
-            debug_overrides: vec![],
             log_destination: LogDestination::default(),
             block_on_overflow: true,
         }
