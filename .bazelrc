@@ -19,6 +19,9 @@ build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17
 
+# We don't use bzlmod yet
+common --enable_bzlmod=False
+
 common --experimental_allow_tags_propagation
 build --nosandbox_default_allow_network
 build --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
@@ -55,7 +58,7 @@ build --bes_timeout=60s # Default is no timeout.
 build --bes_upload_mode=wait_for_upload_complete
 build:ci --bes_timeout=180s # Default is no timeout.
 build:ci --bes_upload_mode=fully_async
-build --experimental_remote_build_event_upload=minimal
+build --remote_build_event_upload=minimal
 
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh

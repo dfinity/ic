@@ -53,7 +53,6 @@ wasm_rust_binary_rule = rule(
     implementation = _wasm_binary_impl,
     attrs = {
         "binary": attr.label(mandatory = True, cfg = wasm_rust_transition),
-        "_whitelist_function_transition": attr.label(default = "@bazel_tools//tools/whitelists/function_transition_whitelist"),
         "opt": attr.string(mandatory = True),
     },
 )
