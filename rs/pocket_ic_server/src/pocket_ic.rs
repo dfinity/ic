@@ -33,11 +33,10 @@ use ic_state_machine_tests::{
 use ic_test_utilities_registry::add_subnet_list_record;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
-        QueryResponseHash, ReplicaHealthStatus,
+        QueryResponseHash, ReplicaHealthStatus, SignedIngress,
     },
     CanisterId, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
@@ -1004,7 +1003,7 @@ impl Operation for CallRequest {
                 let node = &subnet.nodes[0];
                 #[allow(clippy::disallowed_methods)]
                 let (s, mut r) =
-                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<IngressArtifact>>();
+                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<SignedIngress>>();
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(

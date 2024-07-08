@@ -11,7 +11,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{CanisterHttpResponseId, Priority, PriorityFn},
-    artifact_kind::CanisterHttpArtifact,
+    canister_http::CanisterHttpResponseShare,
 };
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -37,7 +37,7 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, Pool>
+impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpResponseShare, Pool>
     for CanisterHttpGossipImpl
 {
     fn get_priority_function(

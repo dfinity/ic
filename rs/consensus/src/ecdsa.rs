@@ -190,10 +190,10 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_types::consensus::idkg::IDkgMessage;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::{IDkgMessageId, Priority, PriorityFn},
-    artifact_kind::IDkgArtifact,
     consensus::idkg::{EcdsaBlockReader, IDkgMessageAttribute, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
@@ -501,7 +501,7 @@ impl EcdsaPriorityFnArgs {
     }
 }
 
-impl<Pool: IDkgPool> PriorityFnAndFilterProducer<IDkgArtifact, Pool> for EcdsaGossipImpl {
+impl<Pool: IDkgPool> PriorityFnAndFilterProducer<IDkgMessage, Pool> for EcdsaGossipImpl {
     fn get_priority_function(
         &self,
         _idkg_pool: &Pool,

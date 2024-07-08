@@ -24,7 +24,6 @@ use ic_interfaces::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact_kind::IDkgArtifact;
 use ic_types::consensus::{
     idkg::{
         EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
@@ -414,7 +413,7 @@ impl IDkgPool for IDkgPoolImpl {
     }
 }
 
-impl MutablePool<IDkgArtifact> for IDkgPoolImpl {
+impl MutablePool<IDkgMessage> for IDkgPoolImpl {
     type ChangeSet = IDkgChangeSet;
 
     fn insert(&mut self, artifact: UnvalidatedArtifact<IDkgMessage>) {
@@ -429,7 +428,7 @@ impl MutablePool<IDkgArtifact> for IDkgPoolImpl {
         self.unvalidated.mutate(ops);
     }
 
-    fn apply_changes(&mut self, change_set: IDkgChangeSet) -> ChangeResult<IDkgArtifact> {
+    fn apply_changes(&mut self, change_set: IDkgChangeSet) -> ChangeResult<IDkgMessage> {
         let mut unvalidated_ops = IDkgPoolSectionOps::new();
         let mut validated_ops = IDkgPoolSectionOps::new();
         let changed = !change_set.is_empty();
@@ -494,7 +493,7 @@ impl MutablePool<IDkgArtifact> for IDkgPoolImpl {
     }
 }
 
-impl ValidatedPoolReader<IDkgArtifact> for IDkgPoolImpl {
+impl ValidatedPoolReader<IDkgMessage> for IDkgPoolImpl {
     fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
@@ -515,7 +514,7 @@ mod tests {
     use ic_test_utilities_types::ids::{
         subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6,
     };
-    use ic_types::artifact::ArtifactKind;
+    use ic_types::artifact::IdentifiableArtifact;
     use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
@@ -653,7 +652,7 @@ mod tests {
                 let result = idkg_pool.apply_changes(change_set);
                 assert!(result.purged.is_empty());
                 assert_eq!(
-                    IDkgArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                    result.artifacts_with_opt[0].artifact.id(),
                     support.message_id()
                 );
                 assert!(result.poll_immediately);

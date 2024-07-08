@@ -34,8 +34,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
 use ic_types::{
-    artifact::{ArtifactKind, Priority, PriorityFn},
-    artifact_kind::ConsensusArtifact,
+    artifact::{IdentifiableArtifact, Priority, PriorityFn},
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
         CatchUpPackage, ConsensusMessage,
@@ -266,12 +265,12 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// instances at every time step.
 pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
 
-pub(crate) struct PriorityFnState<Artifact: ArtifactKind> {
+pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
     priority_fn: PriorityFn<Artifact::Id, Artifact::Attribute>,
     pub last_updated: Time,
 }
 
-impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
+impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
     pub fn new<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
         producer: &Producer,
         pool: &Pool,
@@ -282,9 +281,8 @@ impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
         })
     }
     /// Return the priority of the given message
-    pub fn get_priority(&self, msg: &Artifact::Message) -> Priority {
-        let advert = Artifact::message_to_advert(msg);
-        (self.priority_fn)(&advert.id, &advert.attribute)
+    pub fn get_priority(&self, msg: &Artifact) -> Priority {
+        (self.priority_fn)(&msg.id(), &msg.attribute())
     }
 
     /// Compute a new priority function
@@ -361,7 +359,7 @@ pub struct ConsensusDriver<'a> {
     pub ingress_pool: RefCell<TestIngressPool>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
-    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusArtifact>>,
+    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusMessage>>,
 }
 
 /// An execution strategy picks the next instance to execute, and execute a
