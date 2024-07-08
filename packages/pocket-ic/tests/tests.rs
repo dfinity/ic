@@ -1027,3 +1027,19 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
         }
     }
 }
+
+#[test]
+fn test_query_call_on_new_pocket_ic() {
+    let pic = PocketIc::new();
+
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+    let canister_id = Principal::from_slice(
+        &topology.0.get(&app_subnet).unwrap().canister_ranges[0]
+            .start
+            .canister_id,
+    );
+
+    pic.query_call(canister_id, Principal::anonymous(), "foo", vec![])
+        .unwrap_err();
+}

@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New CLI option `--ready-file` to specify a file which is created by the PocketIC server once it is ready to accept HTTP connections.
 - A new endpoint `/instances/<instance_id>/_/dashboard` serving a PocketIC dashboard.
 
+### Fixed
+- Executing a query call on a new PocketIC instance crashed the PocketIC server.
+
 ## 4.0.0 - 2024-04-30
 
 ### Added
