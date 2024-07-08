@@ -251,7 +251,6 @@ mod tests {
         let current_key_transcript = idkg::MasterKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
-            deprecated_key_id: None,
             master_key_id: MasterPublicKeyId::Ecdsa(key_id),
         };
 
@@ -275,7 +274,6 @@ mod tests {
         let key_transcript = idkg::MasterKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            deprecated_key_id: None,
             master_key_id: MasterPublicKeyId::Ecdsa(key_id),
         };
 
