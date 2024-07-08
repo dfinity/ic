@@ -320,7 +320,7 @@ async fn transform_adapter_response(
     }
 }
 
-fn grpc_status_code_to_reject(code: Code) -> RejectCode {
+pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
     match code {
         // TODO: Is unavailable really transient
         Code::Unavailable => RejectCode::SysTransient,
