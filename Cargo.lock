@@ -18846,7 +18846,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "testing-verifcation-tests"
+name = "testing-verification-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
