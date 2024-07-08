@@ -3586,4 +3586,38 @@ pub mod test {
             );
         });
     }
+
+    #[test]
+    fn test_ignore_blockmakers_if_we_have_equivocations() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                membership,
+                state_manager,
+                registry_client,
+                mut pool,
+                time_source,
+                replica_config,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(Height::from(0));
+            pool.advance_round_normal_operation_n(3);
+
+            let block = pool.make_next_block();
+            pool.insert_unvalidated(block);
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            eprintln!("{:?}", changeset);
+
+        })
+    }
 }
