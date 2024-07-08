@@ -39,7 +39,7 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:11476c9e0ec4c79cdaf36efd81dffaa54cb72918060ee8be5a44b8f9125642f1
     timeout-minutes: 90
     runs-on:
       group: zh1
@@ -87,7 +87,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:11476c9e0ec4c79cdaf36efd81dffaa54cb72918060ee8be5a44b8f9125642f1
     timeout-minutes: 90
     name: Bazel Build All Config Check
     steps:
@@ -170,7 +170,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:11476c9e0ec4c79cdaf36efd81dffaa54cb72918060ee8be5a44b8f9125642f1
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -193,7 +193,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:11476c9e0ec4c79cdaf36efd81dffaa54cb72918060ee8be5a44b8f9125642f1
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -240,7 +240,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:11476c9e0ec4c79cdaf36efd81dffaa54cb72918060ee8be5a44b8f9125642f1
     timeout-minutes: 90
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -332,7 +332,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:11476c9e0ec4c79cdaf36efd81dffaa54cb72918060ee8be5a44b8f9125642f1
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -367,7 +367,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:11476c9e0ec4c79cdaf36efd81dffaa54cb72918060ee8be5a44b8f9125642f1
     timeout-minutes: 90
     steps:
       - name: Checkout
