@@ -15,7 +15,6 @@ use ic_types::crypto::crypto_hash;
 use ic_types::NodeId;
 use ic_types::{
     artifact::CertificationMessageId,
-    artifact_kind::CertificationArtifact,
     consensus::certification::{
         Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
     },
@@ -164,7 +163,7 @@ impl CertificationPoolImpl {
     }
 }
 
-impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
+impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     type ChangeSet = ChangeSet;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
@@ -201,7 +200,7 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
         }
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<CertificationArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<CertificationMessage> {
         let changed = !change_set.is_empty();
         let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
@@ -370,7 +369,7 @@ impl CertificationPool for CertificationPoolImpl {
     }
 }
 
-impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
+impl ValidatedPoolReader<CertificationMessage> for CertificationPoolImpl {
     fn get(&self, id: &CertificationMessageId) -> Option<CertificationMessage> {
         match &id.hash {
             CertificationMessageHash::CertificationShare(hash) => self
@@ -437,7 +436,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::artifact::ArtifactKind;
+    use ic_types::artifact::IdentifiableArtifact;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         consensus::certification::{
@@ -604,11 +603,8 @@ mod tests {
                 ChangeAction::MoveToValidated(share_msg.clone()),
                 ChangeAction::MoveToValidated(cert_msg.clone()),
             ]);
-            let expected = CertificationArtifact::message_to_advert(&cert_msg).id;
-            assert_eq!(
-                CertificationArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
-                expected
-            );
+            let expected = cert_msg.id();
+            assert_eq!(result.artifacts_with_opt[0].artifact.id(), expected);
             assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);

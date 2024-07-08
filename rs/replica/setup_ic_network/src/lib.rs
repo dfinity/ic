@@ -51,11 +51,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
-    consensus::CatchUpPackage,
-    consensus::HasHeight,
+    consensus::{CatchUpPackage, HasHeight},
     malicious_flags::MaliciousFlags,
+    messages::SignedIngress,
     replica_config::ReplicaConfig,
     Height, NodeId, SubnetId,
 };
@@ -119,7 +118,7 @@ pub fn setup_consensus_and_p2p(
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let time_source = Arc::new(SysTimeSource::new());
@@ -237,7 +236,7 @@ fn start_consensus(
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
     ConsensusManagerBuilder,
 ) {

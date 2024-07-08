@@ -1,5 +1,6 @@
 //! Defines types used for threshold ECDSA key generation.
 
+use crate::artifact::{IdentifiableArtifact, PbArtifact};
 pub use crate::consensus::idkg::common::{
     unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptAttributes,
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript, PreSigId,
@@ -808,6 +809,27 @@ pub enum IDkgMessage {
     SchnorrSigShare(SchnorrSigShare),
     Complaint(SignedIDkgComplaint),
     Opening(SignedIDkgOpening),
+}
+
+impl IdentifiableArtifact for IDkgMessage {
+    const NAME: &'static str = "idkg";
+    type Id = IDkgArtifactId;
+    type Attribute = IDkgMessageAttribute;
+    fn id(&self) -> Self::Id {
+        self.message_id()
+    }
+    fn attribute(&self) -> Self::Attribute {
+        self.into()
+    }
+}
+
+impl PbArtifact for IDkgMessage {
+    type PbId = ic_protobuf::types::v1::IDkgArtifactId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::IDkgMessage;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ic_protobuf::types::v1::IDkgMessageAttribute;
+    type PbAttributeError = ProxyDecodeError;
 }
 
 impl IDkgMessage {

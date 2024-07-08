@@ -2,6 +2,7 @@
 
 use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
 use crate::{
+    artifact::{IdentifiableArtifact, IngressMessageId, PbArtifact},
     messages::{
         http::{representation_independent_hash_call_or_query, CallOrQuery},
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
@@ -23,7 +24,7 @@ use ic_protobuf::{
 };
 use prost::bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{convert::Infallible, str::FromStr};
 use std::{
     convert::{From, TryFrom, TryInto},
     mem::size_of,
@@ -157,6 +158,25 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
 pub struct SignedIngress {
     signed: HttpRequest<SignedIngressContent>,
     binary: SignedRequestBytes,
+}
+
+impl IdentifiableArtifact for SignedIngress {
+    const NAME: &'static str = "ingress";
+    type Id = IngressMessageId;
+    type Attribute = ();
+    fn id(&self) -> Self::Id {
+        self.into()
+    }
+    fn attribute(&self) -> Self::Attribute {}
+}
+
+impl PbArtifact for SignedIngress {
+    type PbId = ic_protobuf::types::v1::IngressMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = Bytes;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
 }
 
 impl PartialEq for SignedIngress {

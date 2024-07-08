@@ -18,7 +18,6 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{CertificationMessageId, Priority, PriorityFn},
-    artifact_kind::CertificationArtifact,
     consensus::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
@@ -61,7 +60,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact, Pool>
+impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationMessage, Pool>
     for CertifierGossipImpl
 {
     // The priority function requires just the height of the artifact to decide if

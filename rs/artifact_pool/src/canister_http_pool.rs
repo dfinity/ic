@@ -14,7 +14,6 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::CanisterHttpResponseId,
-    artifact_kind::CanisterHttpArtifact,
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
 };
@@ -99,7 +98,7 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     }
 }
 
-impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
+impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
     type ChangeSet = CanisterHttpChangeSet;
 
     fn insert(&mut self, artifact: UnvalidatedArtifact<CanisterHttpResponseShare>) {
@@ -113,7 +112,7 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
     fn apply_changes(
         &mut self,
         change_set: CanisterHttpChangeSet,
-    ) -> ChangeResult<CanisterHttpArtifact> {
+    ) -> ChangeResult<CanisterHttpResponseShare> {
         let changed = !change_set.is_empty();
         let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
@@ -162,7 +161,7 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
     }
 }
 
-impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
+impl ValidatedPoolReader<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
     fn get(&self, id: &CanisterHttpResponseId) -> Option<CanisterHttpResponseShare> {
         self.validated.get(id).map(|()| id.clone())
     }
@@ -184,7 +183,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        artifact::ArtifactKind,
+        artifact::IdentifiableArtifact,
         canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
         crypto::{CryptoHash, Signed},
         messages::CallbackId,
@@ -254,10 +253,7 @@ mod tests {
             CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
         ]);
 
-        assert_eq!(
-            CanisterHttpArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
-            id
-        );
+        assert_eq!(result.artifacts_with_opt[0].artifact.id(), id);
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
