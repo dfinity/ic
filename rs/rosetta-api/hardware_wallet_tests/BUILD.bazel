@@ -4,13 +4,13 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/canister_client/sender",
+    "//rs/crypto/ed25519",
     "//rs/nns/constants",
     "//rs/rosetta-api",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/test_utils",
     "//rs/types/types",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
     "@crate_index//:nix",
     "@crate_index//:rand",

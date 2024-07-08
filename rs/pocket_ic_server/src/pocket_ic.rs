@@ -1172,7 +1172,7 @@ pub struct QueryRequest {
 }
 
 #[derive(Clone)]
-struct PocketNodeSigner(pub ed25519_consensus::SigningKey);
+struct PocketNodeSigner(pub ic_crypto_ed25519::PrivateKey);
 
 impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(
@@ -1182,7 +1182,7 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
         _registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<QueryResponseHash>> {
         Ok(BasicSigOf::new(BasicSig(
-            self.0.sign(&message.as_signed_bytes()).to_bytes().to_vec(),
+            self.0.sign_message(&message.as_signed_bytes()).to_vec(),
         )))
     }
 }
