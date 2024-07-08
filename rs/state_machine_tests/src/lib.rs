@@ -150,6 +150,7 @@ pub use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 pub use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -595,7 +596,6 @@ pub struct StateMachine {
     public_key: ThresholdSigPublicKey,
     public_key_der: Vec<u8>,
     secret_key: SecretKeyBytes,
-    ecdsa_secret_key: PrivateKey,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
@@ -616,6 +616,7 @@ pub struct StateMachine {
     nonce: AtomicU64,
     time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, PrivateKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
@@ -682,10 +683,7 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            idkg_keys: vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "master_ecdsa_public_key".to_string(),
-            })],
+            idkg_keys: vec![],
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -803,12 +801,11 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_multisubnet_ecdsa_key(self) -> Self {
-        let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+    pub fn with_master_ecdsa_public_key(self) -> Self {
+        self.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
-            name: format!("master_ecdsa_public_key_{}", hex::encode(self.seed)),
-        });
-        self.with_idkg_key(key_id)
+            name: "master_ecdsa_public_key".to_string(),
+        }))
     }
 
     pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
@@ -1080,8 +1077,12 @@ impl StateMachine {
                     .map(DerivationIndex)
                     .collect::<Vec<_>>(),
             );
+            let ecdsa_secret_key = self
+                .idkg_subnet_secret_keys
+                .get(&ecdsa_context.key_id())
+                .unwrap();
             let signature = sign_prehashed_message_with_derived_key(
-                &self.ecdsa_secret_key,
+                ecdsa_secret_key,
                 &ecdsa_context.ecdsa_args().message_hash,
                 derivation_path,
             );
@@ -1278,28 +1279,33 @@ impl StateMachine {
         let ecdsa_secret_key: PrivateKey =
             PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
+        let master_ecdsa_public_key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "master_ecdsa_public_key".to_string(),
+        });
+
         let mut idkg_subnet_public_keys = BTreeMap::new();
+        let mut idkg_subnet_secret_keys = BTreeMap::new();
 
         for key_id in idkg_keys {
+            let private_key: PrivateKey = if key_id == master_ecdsa_public_key {
+                // ckETH tests rely on using the hard-coded ecdsa_secret_key
+                ecdsa_secret_key.clone()
+            } else {
+                let mut hasher = Sha256::new();
+                hasher.update(seed);
+                hasher.update(format!("{:?}", key_id).as_bytes());
+                PrivateKey::generate_using_rng(&mut StdRng::from_seed(hasher.finalize().into()))
+            };
+            idkg_subnet_secret_keys.insert(key_id.clone(), private_key.clone());
             idkg_subnet_public_keys.insert(
                 key_id.clone(),
                 MasterPublicKey {
                     algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                    public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
+                    public_key: private_key.public_key().serialize_sec1(true),
                 },
             );
         }
-
-        idkg_subnet_public_keys.insert(
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "master_ecdsa_public_key".to_string(),
-            }),
-            MasterPublicKey {
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
-            },
-        );
 
         let time_source = FastForwardTimeSource::new();
         time_source.set_time(time).unwrap();
@@ -1329,7 +1335,6 @@ impl StateMachine {
             secret_key,
             public_key,
             public_key_der,
-            ecdsa_secret_key,
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
@@ -1353,6 +1358,7 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             idkg_subnet_public_keys,
+            idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
             nodes,
             batch_summary: None,
@@ -1672,8 +1678,12 @@ impl StateMachine {
                     .map(DerivationIndex)
                     .collect::<Vec<_>>(),
             );
+            let ecdsa_secret_key = self
+                .idkg_subnet_secret_keys
+                .get(&ecdsa_context.key_id())
+                .unwrap();
             let signature = sign_prehashed_message_with_derived_key(
-                &self.ecdsa_secret_key,
+                ecdsa_secret_key,
                 &ecdsa_context.ecdsa_args().message_hash,
                 derivation_path,
             );

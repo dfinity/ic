@@ -5,10 +5,9 @@ use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, EcdsaPayload, EcdsaUIDGenerator,
-    HasMasterPublicKeyId, IDkgReshareRequest, KeyTranscriptCreation, MaskedTranscript,
-    MasterKeyTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
-    RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
-    UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
+    HasMasterPublicKeyId, IDkgReshareRequest, MaskedTranscript, MasterKeyTranscript, PreSigId,
+    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{BlockPayload, ConsensusMessageHashable};
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
@@ -728,28 +727,6 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedIDkgReshareRequest {
-    pub key_id: MasterPublicKeyId,
-    pub receiving_node_ids: Vec<NodeId>,
-    pub registry_version: RegistryVersion,
-}
-
-impl ExhaustiveSet for IDkgReshareRequest {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedIDkgReshareRequest::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| IDkgReshareRequest {
-                key_id: None,
-                master_key_id: r.key_id,
-                receiving_node_ids: r.receiving_node_ids,
-                registry_version: r.registry_version,
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedEcdsaPayload {
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
@@ -774,28 +751,6 @@ impl ExhaustiveSet for EcdsaPayload {
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedMasterKeyTranscript {
-    pub current: Option<UnmaskedTranscriptWithAttributes>,
-    pub next_in_creation: KeyTranscriptCreation,
-    pub master_key_id: MasterPublicKeyId,
-}
-
-impl ExhaustiveSet for MasterKeyTranscript {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedMasterKeyTranscript::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| MasterKeyTranscript {
-                deprecated_key_id: None,
-                master_key_id: r.master_key_id,
-                current: r.current,
-                next_in_creation: r.next_in_creation,
             })
             .collect()
     }

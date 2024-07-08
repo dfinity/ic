@@ -502,11 +502,11 @@ impl ApiState {
             agent.fetch_root_key().await.unwrap();
             let replica_uri = Uri::from_str(&replica_url).unwrap();
             let replicas = vec![(agent, replica_uri)];
-            let gateway_domain = http_gateway_config
-                .domain
-                .unwrap_or("localhost".to_string());
+            let gateway_domains = http_gateway_config
+                .domains
+                .unwrap_or(vec!["localhost".to_string()]);
             let aliases: Vec<String> = vec![];
-            let suffixes: Vec<String> = vec![gateway_domain];
+            let suffixes: Vec<String> = gateway_domains;
             let resolver = ResolverState {
                 dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
             };

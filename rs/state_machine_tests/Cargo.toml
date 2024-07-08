@@ -64,6 +64,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
+sha2 = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
 tempfile = { workspace = true }

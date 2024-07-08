@@ -23,8 +23,8 @@ use ic_http_endpoints_public::{
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs,
+    CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
+    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
@@ -38,11 +38,10 @@ use ic_state_machine_tests::{
 use ic_test_utilities_registry::add_subnet_list_record;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
-        QueryResponseHash, ReplicaHealthStatus,
+        QueryResponseHash, ReplicaHealthStatus, SignedIngress,
     },
     CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
@@ -141,7 +140,6 @@ impl PocketIc {
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
             .with_registry_data_provider(registry_data_provider.clone())
-            .with_multisubnet_ecdsa_key()
             .with_use_cost_scaling_flag(true)
     }
 
@@ -240,6 +238,21 @@ impl PocketIc {
                 }
             }
 
+            if subnet_kind == SubnetKind::II {
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "dfx_test_key1".to_string(),
+                }));
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "test_key_1".to_string(),
+                }));
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "key_1".to_string(),
+                }));
+            }
+
             if let Some(state_dir) = state_dir {
                 builder = builder.with_state_dir(state_dir);
             }
@@ -284,6 +297,11 @@ impl PocketIc {
             // Reload registry on the state machines to make sure
             // all the state machines have a consistent view of the registry.
             subnet.reload_registry();
+        }
+
+        // We execute a round on every subnet to make sure it has a state to certify.
+        for subnet in subnets.read().unwrap().values() {
+            subnet.execute_round();
         }
 
         Self {
@@ -1080,7 +1098,7 @@ impl Operation for CallRequest {
                 let node = &subnet.nodes[0];
                 #[allow(clippy::disallowed_methods)]
                 let (s, mut r) =
-                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<IngressArtifact>>();
+                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<SignedIngress>>();
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(

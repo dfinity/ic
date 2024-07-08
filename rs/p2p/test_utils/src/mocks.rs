@@ -6,7 +6,7 @@ use ic_interfaces::p2p::{
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{ArtifactKind, PriorityFn};
+use ic_types::artifact::{IdentifiableArtifact, PriorityFn};
 use ic_types::NodeId;
 use mockall::mock;
 
@@ -60,20 +60,20 @@ mock! {
 }
 
 mock! {
-    pub ValidatedPoolReader<A: ArtifactKind> {}
+    pub ValidatedPoolReader<A: IdentifiableArtifact> {}
 
-    impl<A: ArtifactKind> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
-        fn get(&self, id: &A::Id) -> Option<A::Message>;
+    impl<A: IdentifiableArtifact> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
+        fn get(&self, id: &A::Id) -> Option<A>;
         fn get_all_validated(
             &self,
-        ) -> Box<dyn Iterator<Item = A::Message>>;
+        ) -> Box<dyn Iterator<Item = A>>;
     }
 }
 
 mock! {
-    pub PriorityFnAndFilterProducer<A: ArtifactKind> {}
+    pub PriorityFnAndFilterProducer<A: IdentifiableArtifact> {}
 
-    impl<A: ArtifactKind + Sync> PriorityFnAndFilterProducer<A, MockValidatedPoolReader<A>> for PriorityFnAndFilterProducer<A> {
+    impl<A: IdentifiableArtifact + Sync> PriorityFnAndFilterProducer<A, MockValidatedPoolReader<A>> for PriorityFnAndFilterProducer<A> {
         fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
     }
 }

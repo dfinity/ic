@@ -15,7 +15,7 @@ use ic_interfaces::p2p::{artifact_manager::ArtifactProcessorEvent, consensus::Ar
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{Advert, ArtifactKind};
+use ic_types::artifact::PbArtifact;
 use prost::Message;
 use tokio::{
     runtime::Handle,
@@ -56,7 +56,7 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
     }
 }
 
-pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
+pub(crate) struct ConsensusManagerSender<Artifact: PbArtifact> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
@@ -69,7 +69,7 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     cancellation_token: CancellationToken,
 }
 
-impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
+impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
     pub(crate) fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
@@ -78,8 +78,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
         cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
-        let slot_manager =
-            AvailableSlotSet::new(log.clone(), metrics.clone(), Artifact::TAG.into());
+        let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), Artifact::NAME);
 
         let manager = Self {
             log,
@@ -162,7 +161,8 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
     #[instrument(skip_all)]
     fn handle_send_advert(&mut self, new_artifact: ArtifactWithOpt<Artifact>) {
-        let Advert { id, attribute } = Artifact::message_to_advert(&new_artifact.artifact);
+        let id = new_artifact.artifact.id();
+        let attribute = new_artifact.artifact.attribute();
         let entry = self.active_adverts.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {

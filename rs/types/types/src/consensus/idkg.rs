@@ -1,5 +1,6 @@
 //! Defines types used for threshold ECDSA key generation.
 
+use crate::artifact::{IdentifiableArtifact, PbArtifact};
 pub use crate::consensus::idkg::common::{
     unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptAttributes,
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript, PreSigId,
@@ -29,7 +30,7 @@ use common::SignatureScheme;
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
@@ -41,7 +42,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     fmt::{self, Display, Formatter},
-    hash::{Hash, Hasher},
+    hash::Hash,
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -357,33 +358,15 @@ impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MasterKeyTranscript {
     /// The ECDSA key transcript used for the current interval.
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     /// Progress of creating the next ECDSA key transcript.
     pub next_in_creation: KeyTranscriptCreation,
-    /// DEPRECATED: ECDSA Key id.
-    pub deprecated_key_id: Option<EcdsaKeyId>,
     /// Master key Id allowing different signature schemes.
     pub master_key_id: MasterPublicKeyId,
-}
-
-impl Hash for MasterKeyTranscript {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let MasterKeyTranscript {
-            current,
-            next_in_creation,
-            deprecated_key_id,
-            master_key_id,
-        } = self;
-        current.hash(state);
-        next_in_creation.hash(state);
-        if let Some(key_id) = deprecated_key_id {
-            key_id.hash(state);
-        }
-        master_key_id.hash(state);
-    }
 }
 
 impl MasterKeyTranscript {
@@ -391,7 +374,6 @@ impl MasterKeyTranscript {
         Self {
             current: None,
             next_in_creation,
-            deprecated_key_id: None,
             master_key_id: key_id,
         }
     }
@@ -404,7 +386,6 @@ impl MasterKeyTranscript {
         Self {
             current: current.or_else(|| self.current.clone()),
             next_in_creation,
-            deprecated_key_id: None,
             master_key_id: self.master_key_id.clone(),
         }
     }
@@ -504,10 +485,6 @@ impl From<MasterKeyTranscript> for pb::MasterKeyTranscript {
             next_in_creation: Some(pb::KeyTranscriptCreation::from(
                 &transcript.next_in_creation,
             )),
-            deprecated_key_id: transcript
-                .deprecated_key_id
-                .as_ref()
-                .map(|key_id| key_id.into()),
             master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
                 &transcript.master_key_id,
             )),
@@ -525,12 +502,6 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
     type Error = ProxyDecodeError;
 
     fn try_from(proto: pb::MasterKeyTranscript) -> Result<Self, Self::Error> {
-        let deprecated_key_id = proto
-            .deprecated_key_id
-            .clone()
-            .map(|key_id| key_id.try_into())
-            .transpose()?;
-
         let current = proto
             .current
             .as_ref()
@@ -546,7 +517,6 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
 
         Ok(Self {
-            deprecated_key_id,
             current,
             next_in_creation,
             master_key_id,
@@ -687,29 +657,12 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 }
 
 /// Internal format of the resharing request from execution.
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgReshareRequest {
-    pub key_id: Option<EcdsaKeyId>,
     pub master_key_id: MasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
-}
-
-impl Hash for IDkgReshareRequest {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let IDkgReshareRequest {
-            key_id,
-            master_key_id,
-            receiving_node_ids,
-            registry_version,
-        } = self;
-        if let Some(key_id) = key_id {
-            key_id.hash(state);
-        }
-        master_key_id.hash(state);
-        receiving_node_ids.hash(state);
-        registry_version.hash(state);
-    }
 }
 
 impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
@@ -719,7 +672,6 @@ impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
             receiving_node_ids.push(node_id_into_protobuf(*node));
         }
         Self {
-            key_id: request.key_id.as_ref().map(|key_id| key_id.into()),
             master_key_id: Some((&request.master_key_id).into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
@@ -736,19 +688,12 @@ impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
             .map(|node| node_id_try_from_option(Some(node.clone())))
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
-        let key_id = request
-            .key_id
-            .clone()
-            .map(|key_id| key_id.try_into())
-            .transpose()?;
-
         let master_key_id = try_from_option_field(
             request.master_key_id.clone(),
             "IDkgReshareRequest::master_key_id",
         )?;
 
         Ok(Self {
-            key_id,
             master_key_id,
             receiving_node_ids,
             registry_version: RegistryVersion::new(request.registry_version),
@@ -808,6 +753,27 @@ pub enum IDkgMessage {
     SchnorrSigShare(SchnorrSigShare),
     Complaint(SignedIDkgComplaint),
     Opening(SignedIDkgOpening),
+}
+
+impl IdentifiableArtifact for IDkgMessage {
+    const NAME: &'static str = "idkg";
+    type Id = IDkgArtifactId;
+    type Attribute = IDkgMessageAttribute;
+    fn id(&self) -> Self::Id {
+        self.message_id()
+    }
+    fn attribute(&self) -> Self::Attribute {
+        self.into()
+    }
+}
+
+impl PbArtifact for IDkgMessage {
+    type PbId = ic_protobuf::types::v1::IDkgArtifactId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::IDkgMessage;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ic_protobuf::types::v1::IDkgMessageAttribute;
+    type PbAttributeError = ProxyDecodeError;
 }
 
 impl IDkgMessage {

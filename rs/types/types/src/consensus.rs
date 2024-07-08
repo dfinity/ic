@@ -19,9 +19,9 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
 };
 use serde::{Deserialize, Serialize};
-use std::cmp::PartialOrd;
 use std::convert::TryInto;
 use std::hash::Hash;
+use std::{cmp::PartialOrd, convert::Infallible};
 
 pub mod block_maker;
 pub mod catchup;
@@ -35,6 +35,8 @@ pub mod thunk;
 pub use catchup::*;
 use hashed::Hashed;
 pub use payload::{BlockPayload, DataPayload, Payload, PayloadType, SummaryPayload};
+
+use self::artifact::{IdentifiableArtifact, PbArtifact};
 
 /// Abstract messages with height attribute
 pub trait HasHeight {
@@ -895,6 +897,25 @@ pub enum ConsensusMessage {
     CatchUpPackage(CatchUpPackage),
     CatchUpPackageShare(CatchUpPackageShare),
     EquivocationProof(EquivocationProof),
+}
+
+impl IdentifiableArtifact for ConsensusMessage {
+    const NAME: &'static str = "consensus";
+    type Id = ConsensusMessageId;
+    type Attribute = ();
+    fn id(&self) -> Self::Id {
+        self.get_id()
+    }
+    fn attribute(&self) -> Self::Attribute {}
+}
+
+impl PbArtifact for ConsensusMessage {
+    type PbId = ic_protobuf::types::v1::ConsensusMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {
