@@ -1610,7 +1610,6 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                deprecated_key_id: None,
             })
             .collect(),
     )
@@ -1673,7 +1672,6 @@ pub(crate) fn create_reshare_request(
     registry_version: u64,
 ) -> IDkgReshareRequest {
     IDkgReshareRequest {
-        key_id: None,
         master_key_id: key_id,
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
