@@ -9,29 +9,26 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::Sender;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{
-        create_service_nervous_system::{
-            governance_parameters::VotingRewardParameters,
-            initial_token_distribution::{
-                developer_distribution::NeuronDistribution, DeveloperDistribution,
-                SwapDistribution, TreasuryDistribution,
-            },
-            swap_parameters::NeuronBasketConstructionParameters,
-            GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
+use ic_nns_governance::pb::v1::{
+    create_service_nervous_system::{
+        governance_parameters::VotingRewardParameters,
+        initial_token_distribution::{
+            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            TreasuryDistribution,
         },
-        manage_neuron::Command,
-        manage_neuron_response::Command as CommandResp,
-        proposal::Action,
-        CreateServiceNervousSystem, ManageNeuron, ManageNeuronResponse, NnsFunction,
-        OpenSnsTokenSwap, Proposal,
+        swap_parameters::NeuronBasketConstructionParameters,
+        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     },
+    manage_neuron::Command,
+    manage_neuron_response::Command as CommandResp,
+    proposal::Action,
+    CreateServiceNervousSystem, ManageNeuron, ManageNeuronResponse, NnsFunction, OpenSnsTokenSwap,
+    Proposal,
 };
 use ic_nns_test_utils::sns_wasm::ensure_sns_wasm_gzipped;
 use ic_sns_governance::pb::v1::governance::Mode;

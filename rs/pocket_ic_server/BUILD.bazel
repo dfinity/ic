@@ -1,14 +1,19 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
+BUILD_DEPENDENCIES = []
+
 LIB_DEPENDENCIES = [
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
+    "//rs/crypto/ed25519",
     "//rs/boundary_node/ic_boundary",
     "//rs/boundary_node/icx_proxy:icx_proxy_dev",
     "//rs/interfaces",
+    "//rs/interfaces/state_manager",
     "//rs/http_endpoints/public",
     "//rs/validator/ingress_message",
     "//rs/crypto/iccsa",
@@ -17,6 +22,7 @@ LIB_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/subnet_type",
     "//rs/registry/proto_data_provider",
+    "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//packages/pocket-ic:pocket-ic",
     "//rs/types/types",
@@ -26,6 +32,7 @@ LIB_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "@crate_index//:askama",
     "@crate_index//:aide",
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
@@ -40,12 +47,12 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:candid",
     "@crate_index//:hyper",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:serde",
     "@crate_index//:hex",
     "@crate_index//:rand",
     "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
     "@crate_index//:time",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
@@ -62,6 +69,7 @@ TEST_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
     "//rs/types/types",
     "//rs/registry/routing_table",
+    "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
     "@crate_index//:reqwest",
@@ -78,6 +86,16 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    aliases = ALIASES,
+    data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
+    deps = BUILD_DEPENDENCIES,
+)
 
 rust_binary(
     name = "pocket-ic-server",
@@ -99,14 +117,14 @@ rust_library(
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "4.0.0",
-    deps = LIB_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
 rust_ic_test(
     name = "pic_test",
     srcs = glob(["src/**"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = LIB_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
 rust_test(

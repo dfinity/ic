@@ -101,8 +101,6 @@ RUN systemctl disable \
     apt-daily.timer \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
-    logrotate.service \
-    logrotate.timer \
     motd-news.service \
     motd-news.timer
 

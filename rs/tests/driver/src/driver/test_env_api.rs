@@ -2006,6 +2006,11 @@ impl SshSession for IcNodeSnapshot {
 }
 
 /* ### Auxiliary functions & helpers ### */
+
+/// Try executing the given closure of type `FnMut() -> Result<R>` but retry in case it returns an `Err`.
+/// Don't use `panic!` in your closure if you need it to be retried. Return an `Err` instead.
+/// The macro will also log the given message before attempting to execute the closure, every time it's being retried and when it succceeds.
+/// The log messages will include the source file path and code location of the macro call site.
 #[macro_export]
 macro_rules! retry_with_msg {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
@@ -2072,6 +2077,10 @@ fn trunc_error(err_str: String) -> String {
     short_e
 }
 
+/// Try executing the given closure of type `Fn() -> Fut` where `Fut: Future<Output = Result<R>>` but retry in case the future returns an `Err`.
+/// Don't use `panic!` in your closure if you need it to be retried. Return an `Err` instead.
+/// The macro will also log the given message before attempting to execute the closure, every time it's being retried and when it succceeds.
+/// The log messages will include the source file path and code location of the macro call site.
 #[macro_export]
 macro_rules! retry_with_msg_async {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {

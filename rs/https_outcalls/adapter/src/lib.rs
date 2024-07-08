@@ -75,16 +75,18 @@ impl AdapterServer {
             }
         };
 
-        let https_client = Client::builder()
+        let builder = Client::builder()
             .use_rustls_tls()
-            .https_only(true)
             .http1_only()
             .redirect(Policy::none())
             .referer(false)
             .default_headers(HeaderMap::new())
-            .connect_timeout(timeout)
-            .build()
-            .expect("Failed to create HTTPS client");
+            .connect_timeout(timeout);
+
+        #[cfg(not(feature = "http"))]
+        let builder = builder.https_only(true);
+
+        let https_client = builder.build().expect("Failed to create HTTPS client");
 
         let canister_http = CanisterHttp::new(https_client, socks_client, logger, metrics);
 

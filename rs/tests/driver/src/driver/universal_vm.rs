@@ -1,5 +1,6 @@
 use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use crate::driver::farm::id_of_file;
+use crate::driver::farm::AttachImageSpec;
 use crate::driver::farm::ClaimResult;
 use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
@@ -128,7 +129,7 @@ impl UniversalVm {
         env.write_json_object(univm_path.join("vm.json"), vm)?;
         let universal_vm_dir = env.get_path(univm_path);
 
-        let mut image_ids = vec![];
+        let mut image_specs = vec![];
         if InfraProvider::read_attribute(env) == InfraProvider::Farm {
             // Setup SSH image
             let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
@@ -136,12 +137,12 @@ impl UniversalVm {
             let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
             create_universal_vm_config_image(env, &config_ssh_dir, &config_ssh_img, "SSH")?;
 
-            let ssh_config_img_file_id = farm.upload_file(
+            let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
                 &pot_setup.infra_group_name,
                 config_ssh_img,
                 CONF_SSH_IMG_FNAME,
-            )?;
-            image_ids.push(ssh_config_img_file_id);
+            )?);
+            image_specs.push(ssh_config_img_file_spec);
         }
 
         // Setup config image
@@ -157,7 +158,8 @@ impl UniversalVm {
             };
 
             if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-                let mut file_id = id_of_file(config_img.clone())?;
+                let file_id = id_of_file(config_img.clone())?;
+                let mut file_spec = AttachImageSpec::new(file_id.clone());
 
                 let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
                     ClaimResult::FileClaimed(file_expiration) => {
@@ -177,8 +179,11 @@ impl UniversalVm {
                 };
 
                 if upload {
-                    file_id =
-                        farm.upload_file(&pot_setup.infra_group_name, config_img, CONF_IMG_FNAME)?;
+                    file_spec = AttachImageSpec::new(farm.upload_file(
+                        &pot_setup.infra_group_name,
+                        config_img,
+                        CONF_IMG_FNAME,
+                    )?);
                     info!(env.logger(), "Uploaded image: {}", file_id);
                 } else {
                     info!(
@@ -186,7 +191,7 @@ impl UniversalVm {
                         "Image: {} was already uploaded, no need to upload it again", file_id,
                     );
                 }
-                image_ids.push(file_id);
+                image_specs.push(file_spec);
             } else {
                 let tnet = TNet::read_attribute(env);
                 let tnet_node = tnet.nodes.last().expect("no nodes");
@@ -219,7 +224,7 @@ impl UniversalVm {
                 &pot_setup.infra_group_name,
                 &self.name,
                 "usb-storage",
-                image_ids,
+                image_specs,
             )?;
             farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
         } else if InfraProvider::read_attribute(env) == InfraProvider::K8s {

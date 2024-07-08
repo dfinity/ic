@@ -24,7 +24,6 @@ use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{messages::Blob, time, PrincipalId};
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
-use log::debug;
 use rand::{seq::SliceRandom, thread_rng};
 use rosetta_api_serv::RosettaApiHandle;
 use rosetta_core::convert::principal_id_from_public_key;
@@ -50,7 +49,6 @@ pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey,
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
-    debug!("[test] created user {}", aid);
     (aid, kp, pb, pid)
 }
 
@@ -61,7 +59,6 @@ pub fn make_user_ecdsa_secp256k1(
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
-    debug!("[test] created user {}", aid);
     (aid, kp, pb, pid)
 }
 

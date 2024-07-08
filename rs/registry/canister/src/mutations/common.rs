@@ -13,17 +13,6 @@ use std::{
     cmp::Eq, collections::HashSet, convert::TryFrom, fmt, hash::Hash, net::Ipv4Addr, str::FromStr,
 };
 
-/// Wraps around Message::encode and panics on error.
-pub(crate) fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
-    let mut buf = Vec::<u8>::new();
-    msg.encode(&mut buf).unwrap();
-    buf
-}
-
-pub fn decode_registry_value<T: Message + Default>(registry_value: Vec<u8>) -> T {
-    T::decode(registry_value.as_slice()).unwrap()
-}
-
 pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<SubnetId> {
     subnet_list
         .subnets
@@ -58,8 +47,7 @@ pub(crate) fn get_blessed_replica_versions(
         .map_or(
             Err("Failed to retrieve the blessed replica versions.".to_string()),
             |result| {
-                let decoded =
-                    decode_registry_value::<BlessedReplicaVersions>(result.value.to_vec());
+                let decoded = BlessedReplicaVersions::decode(result.value.as_slice()).unwrap();
                 Ok(decoded)
             },
         )
@@ -121,8 +109,7 @@ pub fn get_unassigned_nodes_record(
         .map_or(
             Err("No unassigned nodes record found in the registry.".to_string()),
             |result| {
-                let decoded =
-                    decode_registry_value::<UnassignedNodesConfigRecord>(result.value.to_vec());
+                let decoded = UnassignedNodesConfigRecord::decode(result.value.as_slice()).unwrap();
                 Ok(decoded)
             },
         )

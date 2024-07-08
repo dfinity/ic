@@ -150,13 +150,14 @@ pub use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 pub use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     fmt,
     io::{self, stderr},
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
     sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
@@ -234,7 +235,7 @@ pub fn finalize_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    ecdsa_keys: &[EcdsaKeyId],
+    idkg_keys: &[MasterPublicKeyId],
     features: SubnetFeatures,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
@@ -255,10 +256,10 @@ fn make_nodes_registry(
             raw: subnet_id.get_ref().to_vec(),
         }),
     };
-    for key_id in ecdsa_keys {
+    for key_id in idkg_keys {
         registry_data_provider
             .add(
-                &make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(key_id.clone())),
+                &make_chain_key_signing_subnet_list_key(key_id),
                 registry_version,
                 Some(ChainKeySigningSubnetList {
                     subnets: vec![subnet_id_proto.clone()],
@@ -318,10 +319,10 @@ fn make_nodes_registry(
         .with_max_block_payload_size(max_block_payload_size)
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: ecdsa_keys
+            key_configs: idkg_keys
                 .iter()
-                .map(|ecdsa_key| KeyConfig {
-                    key_id: MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                .map(|key_id| KeyConfig {
+                    key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
@@ -562,24 +563,24 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
 pub struct StateMachineNode {
     pub node_id: NodeId,
     pub node_pk_proto: PublicKeyProto,
-    pub signing_key: ed25519_consensus::SigningKey,
+    pub signing_key: ic_crypto_ed25519::PrivateKey,
 }
 
 impl From<u64> for StateMachineNode {
     fn from(i: u64) -> Self {
         let mut bytes = [0; 32];
         bytes[..8].copy_from_slice(&i.to_le_bytes());
-        let signing_key: ed25519_consensus::SigningKey = bytes.into();
+        let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
         let node_pk_proto = PublicKeyProto {
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: signing_key.verification_key().to_bytes().to_vec(),
+            key_value: signing_key.public_key().serialize_raw().to_vec(),
             version: 0,
             proof_data: None,
             timestamp: None,
         };
         Self {
             node_id: PrincipalId::new_self_authenticating(
-                &signing_key.verification_key().to_bytes(),
+                &signing_key.public_key().serialize_raw(),
             )
             .into(),
             node_pk_proto,
@@ -595,7 +596,6 @@ pub struct StateMachine {
     public_key: ThresholdSigPublicKey,
     public_key_der: Vec<u8>,
     secret_key: SecretKeyBytes,
-    ecdsa_secret_key: PrivateKey,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
@@ -616,6 +616,7 @@ pub struct StateMachine {
     nonce: AtomicU64,
     time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, PrivateKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
@@ -623,7 +624,7 @@ pub struct StateMachine {
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
-    pub state_dir: TempDir,
+    state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
 }
 
@@ -642,8 +643,34 @@ impl fmt::Debug for StateMachine {
     }
 }
 
+/// A state directory for a `StateMachine` in which
+/// the `StateMachine` maintains its state.
+pub trait StateMachineStateDir: Send + Sync {
+    fn path(&self) -> PathBuf;
+}
+
+/// A state directory based on a `TempDir` which
+/// gets deleted once the `StateMachine` is dropped.
+impl StateMachineStateDir for TempDir {
+    fn path(&self) -> PathBuf {
+        self.path().to_path_buf()
+    }
+}
+
+/// A state directory based on a `PathBuf` which
+/// is persisted once the `StateMachine` is dropped.
+/// To reuse the state in another `StateMachine`,
+/// you need to run `state_machine.checkpointed_tick()`
+/// followed by `state_machine.await_state_hash()`
+/// before dropping the `StateMachine`.
+impl StateMachineStateDir for PathBuf {
+    fn path(&self) -> PathBuf {
+        self.clone()
+    }
+}
+
 pub struct StateMachineBuilder {
-    state_dir: TempDir,
+    state_dir: Box<dyn StateMachineStateDir>,
     nonce: u64,
     time: Time,
     config: Option<StateMachineConfig>,
@@ -656,7 +683,7 @@ pub struct StateMachineBuilder {
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
     enable_canister_snapshots: bool,
-    ecdsa_keys: Vec<EcdsaKeyId>,
+    idkg_keys: Vec<MasterPublicKeyId>,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -670,7 +697,7 @@ pub struct StateMachineBuilder {
 impl StateMachineBuilder {
     pub fn new() -> Self {
         Self {
-            state_dir: TempDir::new().expect("failed to create a temporary directory"),
+            state_dir: Box::new(TempDir::new().expect("failed to create a temporary directory")),
             nonce: 0,
             time: GENESIS,
             config: None,
@@ -682,10 +709,7 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            ecdsa_keys: vec![EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "master_ecdsa_public_key".to_string(),
-            }],
+            idkg_keys: vec![],
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -707,7 +731,7 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_state_dir(self, state_dir: TempDir) -> Self {
+    pub fn with_state_machine_state_dir(self, state_dir: Box<dyn StateMachineStateDir>) -> Self {
         Self { state_dir, ..self }
     }
 
@@ -803,20 +827,16 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
-        let mut ecdsa_keys = self.ecdsa_keys;
-        ecdsa_keys.push(key);
-        Self { ecdsa_keys, ..self }
+    pub fn with_master_ecdsa_public_key(self) -> Self {
+        self.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "master_ecdsa_public_key".to_string(),
+        }))
     }
 
-    pub fn with_multisubnet_ecdsa_key(self) -> Self {
-        Self {
-            ecdsa_keys: vec![EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: format!("master_ecdsa_public_key_{}", hex::encode(self.seed)),
-            }],
-            ..self
-        }
+    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys.push(key_id);
+        self
     }
 
     pub fn with_features(self, features: SubnetFeatures) -> Self {
@@ -868,7 +888,7 @@ impl StateMachineBuilder {
             self.subnet_id,
             self.use_cost_scaling_flag,
             self.enable_canister_snapshots,
-            self.ecdsa_keys,
+            self.idkg_keys,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1083,8 +1103,12 @@ impl StateMachine {
                     .map(DerivationIndex)
                     .collect::<Vec<_>>(),
             );
+            let ecdsa_secret_key = self
+                .idkg_subnet_secret_keys
+                .get(&ecdsa_context.key_id())
+                .unwrap();
             let signature = sign_prehashed_message_with_derived_key(
-                &self.ecdsa_secret_key,
+                ecdsa_secret_key,
                 &ecdsa_context.ecdsa_args().message_hash,
                 derivation_path,
             );
@@ -1112,7 +1136,7 @@ impl StateMachine {
     /// directory for storing states.
     #[allow(clippy::too_many_arguments)]
     fn setup_from_dir(
-        state_dir: TempDir,
+        state_dir: Box<dyn StateMachineStateDir>,
         nonce: u64,
         time: Time,
         config: Option<StateMachineConfig>,
@@ -1122,7 +1146,7 @@ impl StateMachine {
         subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
         enable_canister_snapshots: bool,
-        ecdsa_keys: Vec<EcdsaKeyId>,
+        idkg_keys: Vec<MasterPublicKeyId>,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1157,7 +1181,7 @@ impl StateMachine {
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            &ecdsa_keys,
+            &idkg_keys,
             features,
             registry_data_provider.clone(),
             &nodes,
@@ -1281,29 +1305,33 @@ impl StateMachine {
         let ecdsa_secret_key: PrivateKey =
             PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
-        let mut idkg_subnet_public_keys = BTreeMap::new();
+        let master_ecdsa_public_key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "master_ecdsa_public_key".to_string(),
+        });
 
-        //TODO: support schnorr keys
-        for ecdsa_key in ecdsa_keys {
+        let mut idkg_subnet_public_keys = BTreeMap::new();
+        let mut idkg_subnet_secret_keys = BTreeMap::new();
+
+        for key_id in idkg_keys {
+            let private_key: PrivateKey = if key_id == master_ecdsa_public_key {
+                // ckETH tests rely on using the hard-coded ecdsa_secret_key
+                ecdsa_secret_key.clone()
+            } else {
+                let mut hasher = Sha256::new();
+                hasher.update(seed);
+                hasher.update(format!("{:?}", key_id).as_bytes());
+                PrivateKey::generate_using_rng(&mut StdRng::from_seed(hasher.finalize().into()))
+            };
+            idkg_subnet_secret_keys.insert(key_id.clone(), private_key.clone());
             idkg_subnet_public_keys.insert(
-                MasterPublicKeyId::Ecdsa(ecdsa_key),
+                key_id.clone(),
                 MasterPublicKey {
                     algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                    public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
+                    public_key: private_key.public_key().serialize_sec1(true),
                 },
             );
         }
-
-        idkg_subnet_public_keys.insert(
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "master_ecdsa_public_key".to_string(),
-            }),
-            MasterPublicKey {
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
-            },
-        );
 
         let time_source = FastForwardTimeSource::new();
         time_source.set_time(time).unwrap();
@@ -1333,7 +1361,6 @@ impl StateMachine {
             secret_key,
             public_key,
             public_key_der,
-            ecdsa_secret_key,
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
@@ -1357,6 +1384,7 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             idkg_subnet_public_keys,
+            idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
             nodes,
             batch_summary: None,
@@ -1366,18 +1394,13 @@ impl StateMachine {
         }
     }
 
-    fn into_components(self) -> (TempDir, u64, Time, u64) {
+    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         (
             self.state_dir,
             self.nonce.into_inner(),
             Time::from_nanos_since_unix_epoch(self.time.into_inner()),
             self.checkpoint_interval_length.load(Ordering::Relaxed),
         )
-    }
-
-    pub fn into_state_dir(self) -> TempDir {
-        let (path, _, _, _) = self.into_components();
-        path
     }
 
     /// Emulates a node restart, including checkpoint recovery.
@@ -1387,7 +1410,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
@@ -1401,7 +1424,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
@@ -1417,7 +1440,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_config(Some(config))
@@ -1676,8 +1699,12 @@ impl StateMachine {
                     .map(DerivationIndex)
                     .collect::<Vec<_>>(),
             );
+            let ecdsa_secret_key = self
+                .idkg_subnet_secret_keys
+                .get(&ecdsa_context.key_id())
+                .unwrap();
             let signature = sign_prehashed_message_with_derived_key(
-                &self.ecdsa_secret_key,
+                ecdsa_secret_key,
                 &ecdsa_context.ecdsa_args().message_hash,
                 derivation_path,
             );
@@ -1849,6 +1876,16 @@ impl StateMachine {
     /// Total memory footprint of all canisters on this subnet.
     pub fn canister_memory_usage_bytes(&self) -> u64 {
         fetch_int_gauge(&self.metrics_registry, "canister_memory_usage_bytes").unwrap_or(0)
+    }
+
+    /// Get the time stored in the latest state. This is useful when starting
+    /// the `StateMachine` on an already existing state since time
+    /// must be monotone and thus the time of the `StateMachine`
+    /// which is used when executing rounds must be set to be
+    /// no smaller than the time stored in the latest state.
+    pub fn get_state_time(&self) -> Time {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        replicated_state.metadata.batch_time
     }
 
     /// Sets the time that the state machine will use for executing next
@@ -2068,7 +2105,7 @@ impl StateMachine {
     }
 
     // Enable checkpoints and make a tick to write a checkpoint.
-    fn checkpointed_tick(&self) {
+    pub fn checkpointed_tick(&self) {
         let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);
         self.tick();

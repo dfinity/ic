@@ -2005,8 +2005,8 @@ impl FromStr for EcdsaCurve {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Secp256k1" => Ok(Self::Secp256k1),
+        match s.to_lowercase().as_str() {
+            "secp256k1" => Ok(Self::Secp256k1),
             _ => Err(format!("{} is not a recognized ECDSA curve", s)),
         }
     }
@@ -2136,9 +2136,9 @@ impl FromStr for SchnorrAlgorithm {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Bip340Secp256k1" => Ok(Self::Bip340Secp256k1),
-            "Ed25519" => Ok(Self::Ed25519),
+        match s.to_lowercase().as_str() {
+            "bip340secp256k1" => Ok(Self::Bip340Secp256k1),
+            "ed25519" => Ok(Self::Ed25519),
             _ => Err(format!("{} is not a recognized Schnorr algorithm", s)),
         }
     }
@@ -2266,12 +2266,12 @@ impl FromStr for MasterPublicKeyId {
         let (scheme, key_id) = s
             .split_once(':')
             .ok_or_else(|| format!("Master public key id {} does not contain a ':'", s))?;
-        match scheme {
+        match scheme.to_lowercase().as_str() {
             "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
             "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
-            other => Err(format!(
+            _ => Err(format!(
                 "Scheme {} in master public key id {} is not supported.",
-                other, s
+                scheme, s
             )),
         }
     }

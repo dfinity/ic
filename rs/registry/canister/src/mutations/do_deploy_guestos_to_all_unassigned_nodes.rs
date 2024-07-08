@@ -44,10 +44,11 @@ mod tests {
     };
     use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
     use ic_registry_transport::{insert, upsert};
+    use prost::Message;
 
     use crate::{
         common::test_helpers::invariant_compliant_registry,
-        mutations::common::{decode_registry_value, encode_or_panic, get_unassigned_nodes_record},
+        mutations::common::get_unassigned_nodes_record,
     };
 
     use super::DeployGuestosToAllUnassignedNodesPayload;
@@ -75,7 +76,7 @@ mod tests {
                 make_blessed_replica_versions_key().as_bytes(), // key
                 registry.latest_version(),                      // version
             )
-            .map(|v| decode_registry_value(v.value.clone()))
+            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
             .expect("failed to decode blessed versions");
         let blessed_versions = blessed_versions.blessed_version_ids;
 
@@ -83,18 +84,20 @@ mod tests {
             // Mutation to insert new replica version
             insert(
                 make_replica_version_key("version"), // key
-                encode_or_panic(&ReplicaVersionRecord {
+                ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurement_sha256_hex: None,
-                }),
+                }
+                .encode_to_vec(),
             ),
             // Mutation to insert BlessedReplicaVersions
             upsert(
                 make_blessed_replica_versions_key(), // key
-                encode_or_panic(&BlessedReplicaVersions {
+                BlessedReplicaVersions {
                     blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 

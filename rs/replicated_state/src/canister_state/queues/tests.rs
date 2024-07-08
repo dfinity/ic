@@ -8,11 +8,13 @@ use ic_test_utilities_state::arb_num_receivers;
 use ic_test_utilities_types::arbitrary;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
-use ic_types::messages::{CallbackId, CanisterMessage, NO_DEADLINE};
-use ic_types::time::{expiry_time_from_now, UNIX_EPOCH};
+use ic_types::messages::{CallbackId, CanisterMessage};
+use ic_types::time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH};
 use maplit::btreemap;
 use proptest::prelude::*;
+use std::cell::RefCell;
 use std::convert::TryInto;
+use std::time::Duration;
 
 /// Wrapper for `CanisterQueues` for tests using only one pair of
 /// `(InputQueue, OutputQueue)` and arbitrary requests/responses.
@@ -38,7 +40,7 @@ impl CanisterQueuesFixture {
                 .receiver(self.this)
                 .build()
                 .into(),
-            InputQueueType::LocalSubnet,
+            LocalSubnet,
         )
     }
 
@@ -49,7 +51,7 @@ impl CanisterQueuesFixture {
                 .respondent(self.other)
                 .build()
                 .into(),
-            InputQueueType::LocalSubnet,
+            LocalSubnet,
         )
     }
 
@@ -113,6 +115,16 @@ impl CanisterQueuesFixture {
     }
 }
 
+fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
+    for req in requests {
+        queues.push_input(req.clone().into(), input_type).unwrap()
+    }
+}
+
+fn coarse_time(seconds_since_unix_epoch: u32) -> CoarseTime {
+    CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
+}
+
 /// Can push one request to the output queues.
 #[test]
 fn can_push_output_request() {
@@ -173,7 +185,7 @@ fn can_push_input_response_after_output_request() {
     queues.push_input_response().unwrap();
 }
 
-/// Check that `available_output_request_slots` doesn't count input requests and
+/// Checks that `available_output_request_slots` doesn't count input requests and
 /// output reserved slots and responses.
 #[test]
 fn test_available_output_request_slots_dont_counts() {
@@ -192,7 +204,7 @@ fn test_available_output_request_slots_dont_counts() {
     );
 }
 
-/// Check that `available_output_request_slots` counts output requests and input
+/// Checks that `available_output_request_slots` counts output requests and input
 /// reserved slots and responses.
 #[test]
 fn test_available_output_request_slots_counts() {
@@ -220,7 +232,8 @@ fn test_available_output_request_slots_counts() {
     );
 }
 
-/// Check `available_output_request_slots` counts timed out output requests.
+/// Checks that `available_output_request_slots` counts timed out output
+/// requests.
 #[test]
 fn test_available_output_request_slots_counts_timed_out_output_requests() {
     let mut queues = CanisterQueuesFixture::new();
@@ -251,21 +264,21 @@ fn test_available_output_request_slots_counts_timed_out_output_requests() {
 }
 
 #[test]
-fn test_back_pressure_with_timed_out_requests() {
+fn test_backpressure_with_timed_out_requests() {
     let mut queues = CanisterQueuesFixture::new();
 
-    // Need output response to pin timed out request behind.
+    // Need output response to pin timed out requests behind.
     queues.push_input_request().unwrap();
     queues.pop_input();
     queues.push_output_response();
 
-    // Push `DEFAULT_QUEUE_CAPACITY` output requests.
+    // Push `DEFAULT_QUEUE_CAPACITY` output requests and time them all out.
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
         queues.push_output_request().unwrap();
     }
-
-    // Time out all requests, then check no new request can be pushed.
     queues.time_out_all_output_requests();
+
+    // Check that no new request can be pushed.
     assert!(queues.push_output_request().is_err());
 }
 
@@ -589,7 +602,7 @@ fn test_split_input_schedules() {
 }
 
 #[test]
-fn test_peek_round_robin() {
+fn test_peek_input_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
@@ -613,8 +626,8 @@ fn test_peek_round_robin() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
+    push_requests(&mut queues, RemoteSubnet, &remote_requests);
 
     let ingress = Ingress {
         source: user_test_id(77),
@@ -667,11 +680,12 @@ fn test_peek_round_robin() {
     let peeked_input = CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
     assert!(!queues.has_input());
 }
 
 #[test]
-fn test_skip_round_robin() {
+fn test_skip_input_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
@@ -685,7 +699,7 @@ fn test_skip_round_robin() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
     let ingress = Ingress {
         source: user_test_id(77),
         receiver: canister_test_id(13),
@@ -806,23 +820,19 @@ fn test_peek_canister_input_does_not_affect_schedule() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
+    push_requests(&mut queues, RemoteSubnet, &remote_requests);
 
     // Schedules before peek.
     let before_local_schedule = queues.local_subnet_input_schedule.clone();
     let before_remote_schedule = queues.remote_subnet_input_schedule.clone();
 
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
+        queues.peek_canister_input(RemoteSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
     );
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
+        queues.peek_canister_input(LocalSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
     );
 
@@ -859,38 +869,30 @@ fn test_skip_canister_input() {
         .map(|sender| RequestBuilder::default().sender(*sender).build())
         .collect::<Vec<_>>();
 
-    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
-    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+    push_requests(&mut queues, LocalSubnet, &local_requests);
+    push_requests(&mut queues, RemoteSubnet, &remote_requests);
 
     // Peek before skip.
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
+        queues.peek_canister_input(RemoteSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
     );
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
+        queues.peek_canister_input(LocalSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
     );
 
-    queues.skip_canister_input(InputQueueType::RemoteSubnet);
-    queues.skip_canister_input(InputQueueType::LocalSubnet);
+    queues.skip_canister_input(RemoteSubnet);
+    queues.skip_canister_input(LocalSubnet);
 
     // Peek will return a different result.
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::RemoteSubnet)
-            .unwrap(),
+        queues.peek_canister_input(RemoteSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()))
     );
     assert_eq!(queues.remote_subnet_input_schedule.len(), 2);
     assert_eq!(
-        queues
-            .peek_canister_input(InputQueueType::LocalSubnet)
-            .unwrap(),
+        queues.peek_canister_input(LocalSubnet).unwrap(),
         CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()))
     );
     assert_eq!(queues.local_subnet_input_schedule.len(), 2);
@@ -905,12 +907,6 @@ fn test_skip_canister_input() {
     );
 }
 
-fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
-    for req in requests {
-        queues.push_input(req.clone().into(), input_type).unwrap()
-    }
-}
-
 struct StrictMetrics;
 impl CheckpointLoadingMetrics for StrictMetrics {
     fn observe_broken_soft_invariant(&self, msg: String) {
@@ -918,14 +914,16 @@ impl CheckpointLoadingMetrics for StrictMetrics {
     }
 }
 
-struct NoOpMetrics;
-impl CheckpointLoadingMetrics for NoOpMetrics {
-    fn observe_broken_soft_invariant(&self, _: String) {}
+struct CountingMetrics(RefCell<usize>);
+impl CheckpointLoadingMetrics for CountingMetrics {
+    fn observe_broken_soft_invariant(&self, _: String) {
+        *self.0.borrow_mut() += 1;
+    }
 }
 
-/// Tests that an encode-decode roundtrip yields a result equal to the
-/// original (and the queue size metrics of an organically constructed
-/// `CanisterQueues` match those of a deserialized one).
+/// Tests that an encode-decode roundtrip yields a result equal to the original
+/// (and that the stats of an organically constructed `CanisterQueues` match
+/// those of a deserialized one).
 #[test]
 fn encode_roundtrip() {
     let mut queues = CanisterQueues::default();
@@ -935,18 +933,16 @@ fn encode_roundtrip() {
     queues
         .push_input(
             RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::LocalSubnet,
+            LocalSubnet,
         )
         .unwrap();
     queues
         .push_input(
             RequestBuilder::default().sender(other).build().into(),
-            InputQueueType::RemoteSubnet,
+            RemoteSubnet,
         )
         .unwrap();
-    queues
-        .pop_canister_input(InputQueueType::RemoteSubnet)
-        .unwrap();
+    queues.pop_canister_input(RemoteSubnet).unwrap();
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
     let encoded: pb_queues::CanisterQueues = (&queues).into();
@@ -954,54 +950,6 @@ fn encode_roundtrip() {
         .try_into()
         .unwrap();
 
-    assert_eq!(queues, decoded);
-}
-
-/// Tests decoding a `CanisterQueues` with an invalid input schedule.
-#[test]
-fn decode_invalid_input_schedule() {
-    let mut queues = CanisterQueues::default();
-
-    let this = canister_test_id(13);
-    let other = canister_test_id(14);
-    queues
-        .push_input(
-            RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::LocalSubnet,
-        )
-        .unwrap();
-    queues
-        .push_input(
-            RequestBuilder::default().sender(other).build().into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
-    queues.push_ingress(IngressBuilder::default().receiver(this).build());
-
-    let mut encoded: pb_queues::CanisterQueues = (&queues).into();
-    // Wipe the input schedule.
-    encoded.local_subnet_input_schedule.clear();
-
-    // Decoding should succeed.
-    let mut decoded =
-        CanisterQueues::try_from((encoded, &NoOpMetrics as &dyn CheckpointLoadingMetrics)).unwrap();
-    // Even though the input schedules are not valid.
-    assert_matches!(
-        decoded.schedules_ok(
-            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
-            &BTreeMap::new(),
-        ),
-        Err(_)
-    );
-
-    // If we replace the input schedules with the original ones, the rest should be
-    // equal.
-    decoded
-        .local_subnet_input_schedule
-        .clone_from(&queues.local_subnet_input_schedule);
-    decoded
-        .remote_subnet_input_schedule
-        .clone_from(&queues.remote_subnet_input_schedule);
     assert_eq!(queues, decoded);
 }
 
@@ -1018,6 +966,56 @@ fn encode_empty() {
 
     let expected: &[u8] = &[];
     assert_eq!(expected, serialized.as_slice());
+}
+
+/// Tests decoding a `CanisterQueues` with an invalid input schedule.
+#[test]
+fn decode_invalid_input_schedule() {
+    let mut queues = CanisterQueues::default();
+
+    let this = canister_test_id(13);
+    let other = canister_test_id(14);
+    queues
+        .push_input(
+            RequestBuilder::default().sender(this).build().into(),
+            LocalSubnet,
+        )
+        .unwrap();
+    queues
+        .push_input(
+            RequestBuilder::default().sender(other).build().into(),
+            RemoteSubnet,
+        )
+        .unwrap();
+    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+
+    let mut encoded: pb_queues::CanisterQueues = (&queues).into();
+    // Wipe the input schedule.
+    encoded.local_subnet_input_schedule.clear();
+
+    // Decoding should succeed.
+    let metrics = CountingMetrics(RefCell::new(0));
+    let mut decoded =
+        CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)).unwrap();
+    // Even though the input schedules are not valid.
+    assert_matches!(
+        decoded.schedules_ok(
+            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
+            &BTreeMap::new(),
+        ),
+        Err(_)
+    );
+    assert_eq!(1, *metrics.0.borrow());
+
+    // If we replace the input schedules with the original ones, the rest should be
+    // equal.
+    decoded
+        .local_subnet_input_schedule
+        .clone_from(&queues.local_subnet_input_schedule);
+    decoded
+        .remote_subnet_input_schedule
+        .clone_from(&queues.remote_subnet_input_schedule);
+    assert_eq!(queues, decoded);
 }
 
 /// Tests decoding `CanisterQueues`from `canister_queues` + `pool` (instead of
@@ -1051,7 +1049,7 @@ fn decode_forward_compatibility() {
     //
 
     // A `CanisterQueue` with a request, a response and a reserved slot.
-    let mut iq1 = CanisterQueue::new(10);
+    let mut iq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     // Enqueue a request and a response.
     iq1.push_request(pool.insert_inbound(req.clone().into()));
     iq1.try_reserve_response_slot().unwrap();
@@ -1060,19 +1058,19 @@ fn decode_forward_compatibility() {
     iq1.try_reserve_response_slot().unwrap();
 
     // Expected `InputQueue`.
-    let mut expected_iq1 = InputQueue::new(10);
+    let mut expected_iq1 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
     expected_iq1.push(req.clone().into()).unwrap();
     expected_iq1.reserve_slot().unwrap();
     expected_iq1.push(rep.clone().into()).unwrap();
     expected_iq1.reserve_slot().unwrap();
 
     // An output queue with a stale request and a reserved slot.
-    let mut oq1 = CanisterQueue::new(10);
+    let mut oq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     oq1.push_request(stale_request_id);
     oq1.try_reserve_response_slot().unwrap();
 
     // Expected `OutputQueue`.
-    let mut expected_oq1 = OutputQueue::new(10);
+    let mut expected_oq1 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
     expected_oq1.reserve_slot().unwrap();
 
     queues_proto
@@ -1098,15 +1096,15 @@ fn decode_forward_compatibility() {
     //
 
     // Input queue with a reserved slot.
-    let mut iq2 = CanisterQueue::new(10);
+    let mut iq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     iq2.try_reserve_response_slot().unwrap();
 
     // Expected `InputQueue`.
-    let mut expected_iq2 = InputQueue::new(10);
+    let mut expected_iq2 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
     expected_iq2.reserve_slot().unwrap();
 
     // Empty output queue.
-    let oq2 = CanisterQueue::new(10);
+    let oq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
 
     queues_proto
         .canister_queues
@@ -1116,9 +1114,10 @@ fn decode_forward_compatibility() {
             output_queue: Some((&oq2).into()),
         });
     queues_proto.guaranteed_response_memory_reservations += 1;
-    expected_queues
-        .canister_queues
-        .insert(remote_canister, (expected_iq2, OutputQueue::new(10)));
+    expected_queues.canister_queues.insert(
+        remote_canister,
+        (expected_iq2, OutputQueue::new(DEFAULT_QUEUE_CAPACITY)),
+    );
 
     //
     // Persist pool, adjust stats.
@@ -1132,6 +1131,140 @@ fn decode_forward_compatibility() {
         CanisterQueues::calculate_output_queues_stats(&expected_queues.canister_queues);
     expected_queues.memory_usage_stats =
         CanisterQueues::calculate_memory_usage_stats(&expected_queues.canister_queues);
+
+    let queues = (
+        queues_proto,
+        &StrictMetrics as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap();
+    assert_eq!(expected_queues, queues);
+}
+
+/// Tests decoding `NewCanisterQueues` from `input_queues` + `output_queues`
+/// (instead of `canister_queues` + `pool`).
+#[test]
+fn decode_backward_compatibility() {
+    let local_canister = canister_test_id(13);
+    let remote_canister = canister_test_id(14);
+
+    let mut queues_proto = pb_queues::CanisterQueues::default();
+    let mut expected_queues = NewCanisterQueues::default();
+
+    let req = RequestBuilder::default()
+        .sender(local_canister)
+        .receiver(local_canister)
+        .build();
+    let rep = ResponseBuilder::default()
+        .originator(local_canister)
+        .respondent(local_canister)
+        .build();
+    let t1 = Time::from_secs_since_unix_epoch(12345).unwrap();
+    let t2 = t1 + Duration::from_secs(1);
+    let d1 = t1 + REQUEST_LIFETIME;
+    let d2 = t2 + REQUEST_LIFETIME;
+
+    //
+    // `local_canister`'s queues.
+    //
+
+    // An `InputQueue` with a request, a response and a reserved slot.
+    let mut iq1 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    iq1.push(req.clone().into()).unwrap();
+    iq1.reserve_slot().unwrap();
+    iq1.push(rep.clone().into()).unwrap();
+    iq1.reserve_slot().unwrap();
+
+    // Expected input queue.
+    let mut expected_iq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+    // Enqueue a request and a response.
+    expected_iq1.push_request(expected_queues.pool.insert_inbound(req.clone().into()));
+    expected_iq1.try_reserve_response_slot().unwrap();
+    expected_iq1.push_response(expected_queues.pool.insert_inbound(rep.clone().into()));
+    // Make an extra response reservation.
+    expected_iq1.try_reserve_response_slot().unwrap();
+
+    // An output queue with a response, a timed out request, a non-timed out request
+    // and a reserved slot.
+    let mut oq1 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    oq1.reserve_slot().unwrap();
+    oq1.push_response(rep.clone().into());
+    oq1.push_request(req.clone().into(), d1).unwrap();
+    oq1.time_out_requests(d2).count();
+    oq1.push_request(req.clone().into(), d2).unwrap();
+    oq1.reserve_slot().unwrap();
+
+    // Expected output queue. The timed out request is gone.
+    let mut expected_oq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+    expected_oq1.try_reserve_response_slot().unwrap();
+    expected_oq1.push_response(
+        expected_queues
+            .pool
+            .insert_outbound_response(rep.clone().into()),
+    );
+    expected_oq1.push_request(
+        expected_queues
+            .pool
+            .insert_outbound_request(req.clone().into(), t2),
+    );
+    expected_oq1.try_reserve_response_slot().unwrap();
+
+    queues_proto.input_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(local_canister.into()),
+        queue: Some((&iq1).into()),
+    });
+    queues_proto.output_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(local_canister.into()),
+        queue: Some((&oq1).into()),
+    });
+    queues_proto
+        .local_subnet_input_schedule
+        .push(local_canister.into());
+    queues_proto.guaranteed_response_memory_reservations += 2;
+    expected_queues
+        .canister_queues
+        .insert(local_canister, (expected_iq1, expected_oq1));
+    expected_queues
+        .local_subnet_input_schedule
+        .push_back(local_canister);
+
+    //
+    // `remote_canister`'s queues.
+    //
+
+    // Input queue with a reserved slot.
+    let mut iq2 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    iq2.reserve_slot().unwrap();
+
+    // Expected input queue.
+    let mut expected_iq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+    expected_iq2.try_reserve_response_slot().unwrap();
+
+    // Empty output queue.
+    let oq2 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
+
+    queues_proto.input_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(remote_canister.into()),
+        queue: Some((&iq2).into()),
+    });
+    queues_proto.output_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(remote_canister.into()),
+        queue: Some((&oq2).into()),
+    });
+    queues_proto.guaranteed_response_memory_reservations += 1;
+    expected_queues.canister_queues.insert(
+        remote_canister,
+        (expected_iq2, CanisterQueue::new(DEFAULT_QUEUE_CAPACITY)),
+    );
+
+    //
+    // Adjust stats.
+    //
+
+    expected_queues.queue_stats = NewCanisterQueues::calculate_queue_stats(
+        &expected_queues.canister_queues,
+        queues_proto.guaranteed_response_memory_reservations as usize,
+    );
 
     let queues = (
         queues_proto,
@@ -1173,7 +1306,7 @@ fn test_stats() {
             .into();
         msg_size[i] = msg.count_bytes();
         queues
-            .push_input(msg, InputQueueType::RemoteSubnet)
+            .push_input(msg, RemoteSubnet)
             .expect("could not push");
 
         // Added a new input queue and `msg`.
@@ -1323,7 +1456,7 @@ fn test_stats() {
         .into();
     msg_size[5] = msg.count_bytes();
     queues
-        .push_input(msg, InputQueueType::RemoteSubnet)
+        .push_input(msg, RemoteSubnet)
         .expect("could not push");
     // Added a new input message.
     expected_iq_stats += InputQueuesStats {
@@ -1563,9 +1696,7 @@ fn test_garbage_collect() {
     assert_eq!(1, queues.canister_queues.len());
 
     // Push input response.
-    queues
-        .push_input(response.into(), InputQueueType::LocalSubnet)
-        .unwrap();
+    queues.push_input(response.into(), LocalSubnet).unwrap();
     // Before popping any input, `queue.next_input_queue` has default value.
     assert_eq!(NextInputQueue::default(), queues.next_input_queue);
     // No-op.
@@ -1732,8 +1863,56 @@ fn test_output_queues_for_each() {
     assert!(!queues.has_output());
 }
 
+#[test]
+fn test_peek_output_with_stale_references() {
+    let mut queues = CanisterQueues::default();
+    let canister1 = canister_test_id(1);
+    let canister2 = canister_test_id(2);
+    let canister3 = canister_test_id(3);
+
+    let receivers = [canister1, canister2, canister1, canister3];
+    let requests = receivers
+        .iter()
+        .map(|receiver| RequestBuilder::default().receiver(*receiver).build())
+        .collect::<Vec<_>>();
+
+    for (i, request) in requests.iter().enumerate() {
+        queues
+            .push_output_request(request.clone().into(), coarse_time(1000 + i as u32).into())
+            .unwrap();
+    }
+
+    let own_canister_id = canister_test_id(13);
+    let local_canisters = BTreeMap::new();
+    // Time out the first two requests, including the only request to canister 2.
+    queues.time_out_requests(
+        Time::from_secs_since_unix_epoch(1001).unwrap() + REQUEST_LIFETIME,
+        &own_canister_id,
+        &local_canisters,
+    );
+
+    assert!(queues.has_output());
+
+    // One message to canister 1.
+    let peeked = requests.get(2).unwrap().clone().into();
+    assert_eq!(Some(&peeked), queues.peek_output(&canister1));
+    assert_eq!(Some(peeked), queues.pop_canister_output(&canister1));
+    assert_eq!(None, queues.peek_output(&canister1));
+
+    // No message to canister 2.
+    assert_eq!(None, queues.peek_output(&canister2));
+
+    // One message to canister 3.
+    let peeked = requests.get(3).unwrap().clone().into();
+    assert_eq!(Some(&peeked), queues.peek_output(&canister3));
+    assert_eq!(Some(peeked), queues.pop_canister_output(&canister3));
+    assert_eq!(None, queues.peek_output(&canister3));
+
+    assert!(!queues.has_output());
+}
+
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
-// `CanisterQueues` defined by a its `ic_replicated_state`, not the ones from
+// `CanisterQueues` defined by its `ic_replicated_state`, not the ones from
 // `crate` and we wouldn't have access to its non-public methods.
 prop_compose! {
     /// Strategy that generates an arbitrary `CanisterQueues` (and a matching
@@ -1752,7 +1931,7 @@ prop_compose! {
 
 proptest! {
     #[test]
-    fn peek_and_next_consistent(
+    fn output_into_iter_peek_and_next_consistent(
         (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
     ) {
         let mut output_iter = canister_queues.output_into_iter();
@@ -1768,7 +1947,7 @@ proptest! {
     }
 
     #[test]
-    fn peek_and_next_consistent_with_excludes(
+    fn output_into_iter_peek_and_next_consistent_with_excludes(
         (mut canister_queues, raw_requests) in arb_canister_queues(100, None),
         start in 0..=1,
         exclude_step in 2..=5,
@@ -1793,7 +1972,7 @@ proptest! {
     }
 
     #[test]
-    fn iter_leaves_non_consumed_messages_untouched(
+    fn output_into_iter_leaves_non_consumed_messages_untouched(
         (mut canister_queues, mut raw_requests) in arb_canister_queues(100, Some(10)),
     ) {
         let num_requests = raw_requests.len();
@@ -1827,7 +2006,7 @@ proptest! {
     }
 
     #[test]
-    fn iter_with_exclude_leaves_excluded_queues_untouched(
+    fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
         (mut canister_queues, mut raw_requests) in arb_canister_queues(100, None),
         start in 0..=1,
         exclude_step in 2..=5,
@@ -1840,7 +2019,7 @@ proptest! {
 
             let mut i = start;
             let mut excluded = 0;
-            while output_iter.peek().is_some() {
+            while let Some(peeked_message) = output_iter.peek() {
                 i += 1;
                 if i % exclude_step == 0 {
                     output_iter.exclude_queue();
@@ -1851,7 +2030,9 @@ proptest! {
                     continue;
                 }
 
+                let peeked_message = peeked_message.clone();
                 let popped_message = output_iter.pop().unwrap();
+                assert_eq!(popped_message, peeked_message);
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -1874,7 +2055,7 @@ proptest! {
     }
 
     #[test]
-    fn iter_yields_correct_elements(
+    fn output_into_iter_yields_correct_elements(
         (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
     ) {
         let recovered: VecDeque<_> = canister_queues
@@ -1885,7 +2066,7 @@ proptest! {
     }
 
     #[test]
-    fn exclude_leaves_state_untouched(
+    fn output_into_iter_exclude_leaves_state_untouched(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
     ) {
         let expected_canister_queues = canister_queues.clone();
@@ -1901,18 +2082,19 @@ proptest! {
     }
 
     #[test]
-    fn peek_pop_loop_terminates(
+    fn output_into_iter_peek_pop_loop_terminates(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
     ) {
         let mut output_iter = canister_queues.output_into_iter();
 
-        while output_iter.peek().is_some() {
-            output_iter.next();
+        while let Some(msg) = output_iter.peek() {
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
+        assert_eq!(None, output_iter.next());
     }
 
     #[test]
-    fn peek_pop_loop_with_excludes_terminates(
+    fn output_into_iter_peek_pop_loop_with_excludes_terminates(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
         start in 0..=1,
         exclude_step in 2..=5,
@@ -1920,18 +2102,36 @@ proptest! {
         let mut output_iter = canister_queues.output_into_iter();
 
         let mut i = start;
-        while output_iter.peek().is_some() {
+        while let Some(msg) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
                 continue;
             }
-            output_iter.next();
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
+    }
+
+    #[test]
+    fn output_into_iter_peek_with_stale_references(
+        (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
+        deadline in any::<u32>(),
+    ) {
+        let own_canister_id = canister_test_id(13);
+        let local_canisters = BTreeMap::new();
+        // Time out some messages.
+        canister_queues.time_out_requests(coarse_time(deadline).into(), &own_canister_id, &local_canisters);
+
+        // Peek and pop until the output queues are empty.
+        let mut output_iter = canister_queues.output_into_iter();
+        while let Some(msg) = output_iter.peek() {
+            assert_eq!(Some(msg.clone()), output_iter.next());
+        }
+        assert_eq!(None, output_iter.next());
     }
 }
 
-/// Tests 'has_expired_deadlines` reports
+/// Tests that 'has_expired_deadlines` reports:
 /// - false for an empty `CanisterQueues`.
 /// - false for a non-empty `CanisterQueues` using a current time < all deadlines.
 /// - true for a non-empty `CanisterQueues` using a current time >= at least one deadline.
@@ -1939,10 +2139,10 @@ proptest! {
 fn has_expired_deadlines_reports_correctly() {
     let mut canister_queues = CanisterQueues::default();
 
-    let time0 = Time::from_nanos_since_unix_epoch(0);
+    let time0 = Time::from_secs_since_unix_epoch(0).unwrap();
     assert!(!canister_queues.has_expired_deadlines(time0 + REQUEST_LIFETIME));
 
-    let time1 = Time::from_nanos_since_unix_epoch(1);
+    let time1 = Time::from_secs_since_unix_epoch(1).unwrap();
     canister_queues
         .push_output_request(Arc::new(RequestBuilder::default().build()), time1)
         .unwrap();

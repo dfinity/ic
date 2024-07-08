@@ -169,7 +169,6 @@ fn reshare_request_from_dealings_context(
     context: &IDkgDealingsContext,
 ) -> idkg::IDkgReshareRequest {
     idkg::IDkgReshareRequest {
-        key_id: None,
         master_key_id: context.key_id.clone(),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
@@ -222,7 +221,7 @@ mod tests {
         ic_types::batch::ConsensusResponse::new(
             callback_id,
             ic_types::messages::Payload::Data(
-                ic_management_canister_types::ComputeInitialEcdsaDealingsResponse {
+                ic_management_canister_types::ComputeInitialIDkgDealingsResponse {
                     initial_dkg_dealings: initial_dealings.into(),
                 }
                 .encode(),

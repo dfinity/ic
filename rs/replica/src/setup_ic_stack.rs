@@ -29,8 +29,8 @@ use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
 use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     consensus::{CatchUpPackage, HasHeight},
+    messages::SignedIngress,
     Height, NodeId, SubnetId,
 };
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
@@ -75,7 +75,7 @@ pub fn construct_ic_stack(
     // TODO: remove next three return values since they are used only in tests
     Arc<dyn StateReader<State = ReplicatedState>>,
     QueryExecutionService,
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
     XNetEndpoint,
 )> {

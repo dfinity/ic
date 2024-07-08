@@ -27,7 +27,7 @@ fn reject_response(
 }
 
 /// Update signature agreements in the data payload by:
-/// - dropping agreements that don't have a [SignWithEcdsaContext] anymore (because
+/// - dropping agreements that don't have a [SignWithThresholdContext] anymore (because
 ///   the response has been delivered)
 /// - setting remaining agreements to "Reported" (the signing response was delivered
 ///   in the previous round, the context will be removed when the previous block is

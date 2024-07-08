@@ -7,7 +7,7 @@ use ic_config::{
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
     CanisterInstallMode, CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId,
-    HttpMethod, TransformContext, TransformFunc,
+    HttpMethod, MasterPublicKeyId, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -415,7 +415,7 @@ fn simulate_sign_with_ecdsa_cost(
     nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
 ) -> Cycles {
-    let ecdsa_key = EcdsaKeyId {
+    let key_id = EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: "key_id_secp256k1".to_string(),
     };
@@ -425,7 +425,7 @@ fn simulate_sign_with_ecdsa_cost(
         .with_subnet_size(subnet_size)
         .with_nns_subnet_id(nns_subnet_id)
         .with_subnet_id(subnet_id)
-        .with_ecdsa_key(ecdsa_key.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
     let canister_id =
@@ -441,7 +441,7 @@ fn simulate_sign_with_ecdsa_cost(
                 Encode!(&ic00::SignWithECDSAArgs {
                     message_hash: [0; 32],
                     derivation_path: DerivationPath::new(Vec::new()),
-                    key_id: ecdsa_key
+                    key_id,
                 })
                 .unwrap(),
             ),

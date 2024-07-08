@@ -1245,6 +1245,8 @@ pub mod governance_error {
         AlreadyJoinedCommunityFund = 17,
         /// The neuron attempted to leave the community fund but is not a member.
         NotInTheCommunityFund = 18,
+        /// The neuron attempted to vote on a proposal that it has already voted on before.
+        NeuronAlreadyVoted = 19,
     }
     impl ErrorType {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -1272,6 +1274,7 @@ pub mod governance_error {
                 ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
                 ErrorType::AlreadyJoinedCommunityFund => "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND",
                 ErrorType::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
+                ErrorType::NeuronAlreadyVoted => "ERROR_TYPE_NEURON_ALREADY_VOTED",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1298,6 +1301,7 @@ pub mod governance_error {
                     Some(Self::AlreadyJoinedCommunityFund)
                 }
                 "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND" => Some(Self::NotInTheCommunityFund),
+                "ERROR_TYPE_NEURON_ALREADY_VOTED" => Some(Self::NeuronAlreadyVoted),
                 _ => None,
             }
         }
