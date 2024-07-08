@@ -5,7 +5,6 @@ use candid::{Encode, Principal};
 use ic_agent::agent::http_transport::ReqwestTransport;
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::common::rest::{HttpsConfig, SubnetConfigSet};
-use pocket_ic::nonblocking::PocketIc as NonblockingPocketIc;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
@@ -219,16 +218,97 @@ fn test_port_file() {
     }
 }
 
-async fn test_gateway(
-    mut pic: NonblockingPocketIc,
-    client: NonblockingClient,
-    proto: &str,
-    port: u16,
-    expected_canister_id: Principal,
-) {
+async fn test_gateway(https: bool) {
+    // create PocketIC instance
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+
+    // retrieve the first canister ID on the application subnet
+    // which will be the effective and expected canister ID for canister creation
+    let topology = pic.topology().await;
+    let app_subnet = topology.get_app_subnets()[0];
+    let effective_canister_id =
+        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
+
+    // define HTTP protocol for this test
+    let proto = if https { "https" } else { "http" };
+
+    // define two domains for canister ID resolution
+    let localhost = "localhost";
+    let sub_localhost = &format!("{}.{}", effective_canister_id, localhost);
+    let alt_domain = "example.com";
+    let sub_alt_domain = &format!("{}.{}", effective_canister_id, alt_domain);
+
+    // generate root TLS certificate (only used if `https` is set to `true`,
+    // but defining it here unconditionally simplifies the test)
+    let root_key_pair = KeyPair::generate().unwrap();
+    let root_cert = CertificateParams::new(vec![
+        localhost.to_string(),
+        sub_localhost.to_string(),
+        alt_domain.to_string(),
+        sub_alt_domain.to_string(),
+    ])
+    .unwrap()
+    .self_signed(&root_key_pair)
+    .unwrap();
+    let (mut cert_file, cert_path) = NamedTempFile::new().unwrap().keep().unwrap();
+    cert_file.write_all(root_cert.pem().as_bytes()).unwrap();
+    let (mut key_file, key_path) = NamedTempFile::new().unwrap().keep().unwrap();
+    key_file
+        .write_all(root_key_pair.serialize_pem().as_bytes())
+        .unwrap();
+
+    // make PocketIc instance live with an HTTP gateway
+    let https_config = if https {
+        Some(HttpsConfig {
+            cert_path: cert_path.into_os_string().into_string().unwrap(),
+            key_path: key_path.into_os_string().into_string().unwrap(),
+        })
+    } else {
+        None
+    };
+    let port = pic
+        .make_live_with_params(
+            None,
+            Some(vec![localhost.to_string(), alt_domain.to_string()]),
+            https_config,
+        )
+        .await
+        .port_or_known_default()
+        .unwrap();
+
+    // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.localhost/example.com to [::1]
+    let mut builder = NonblockingClient::builder()
+        .resolve(
+            localhost,
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+        )
+        .resolve(
+            sub_localhost,
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+        )
+        .resolve(
+            alt_domain,
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+        )
+        .resolve(
+            sub_alt_domain,
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+        );
+    // add a custom root certificate
+    if https {
+        builder = builder.add_root_certificate(
+            reqwest::Certificate::from_pem(root_cert.pem().as_bytes()).unwrap(),
+        );
+    }
+    let client = builder.build().unwrap();
+
     // create agent with custom transport
     let transport = ReqwestTransport::create_with_client(
-        format!("{}://localhost:{}", proto, port),
+        format!("{}://{}:{}", proto, localhost, port),
         client.clone(),
     )
     .unwrap();
@@ -243,11 +323,11 @@ async fn test_gateway(
     let (canister_id,) = ic00
         .create_canister()
         .as_provisional_create_with_amount(None)
-        .with_effective_canister_id(expected_canister_id)
+        .with_effective_canister_id(effective_canister_id)
         .call_and_wait()
         .await
         .unwrap();
-    assert_eq!(canister_id, expected_canister_id);
+    assert_eq!(canister_id, effective_canister_id.into());
 
     // install II canister WASM
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
@@ -258,14 +338,17 @@ async fn test_gateway(
         .await
         .unwrap();
 
-    // perform frontend asset request for the title page at http://localhost:<port>/?canisterId=<canister-id>
-    let canister_url = format!("{}://localhost:{}/?canisterId={}", proto, port, canister_id);
+    // perform frontend asset request for the title page at http(s)://localhost:<port>/?canisterId=<canister-id>
+    let canister_url = format!(
+        "{}://{}:{}/?canisterId={}",
+        proto, localhost, port, canister_id
+    );
     let res = client.get(canister_url).send().await.unwrap();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
 
-    // perform frontend asset request for the title page at http://<canister-id>.localhost:<port>
-    let canister_url = format!("{}://{}.localhost:{}", proto, canister_id, port);
+    // perform frontend asset request for the title page at http(s)://<canister-id>.example.com:<port>
+    let canister_url = format!("{}://{}.{}:{}", proto, canister_id, alt_domain, port);
     let res = client.get(canister_url.clone()).send().await.unwrap();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
@@ -273,7 +356,7 @@ async fn test_gateway(
     // stop HTTP gateway and disable auto progress
     pic.stop_live().await;
 
-    // HTTP gateway requests should eventually stop and requests to it fail
+    // HTTP gateway should eventually stop and requests to it fail
     loop {
         if client.get(canister_url.clone()).send().await.is_err() {
             break;
@@ -284,98 +367,12 @@ async fn test_gateway(
 
 #[tokio::test]
 async fn test_http_gateway() {
-    // create PocketIc instance
-    let mut pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_application_subnet()
-        .build_async()
-        .await;
-
-    // retrieve the first canister ID on the application subnet
-    // which will be the effective and expected canister ID for canister creation
-    let topology = pic.topology().await;
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id =
-        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
-
-    // make PocketIc instance live with an HTTP gateway
-    let port = pic.make_live(None).await.port_or_known_default().unwrap();
-
-    // create a non-blocking reqwest client with resolving localhost and <canister-id>.localhost to [::1]
-    let client = NonblockingClient::builder()
-        .resolve(
-            "localhost",
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
-        )
-        .resolve(
-            &format!("{}.localhost", effective_canister_id),
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
-        )
-        .build()
-        .unwrap();
-
-    test_gateway(pic, client, "http", port, effective_canister_id.into()).await;
+    test_gateway(false).await;
 }
 
 #[tokio::test]
 async fn test_https_gateway() {
-    // create PocketIc instance
-    let mut pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_application_subnet()
-        .build_async()
-        .await;
-
-    // retrieve the first canister ID on the application subnet
-    // which will be the effective and expected canister ID for canister creation
-    let topology = pic.topology().await;
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id =
-        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
-
-    // generate root TLS certificate
-    let root_key_pair = KeyPair::generate().unwrap();
-    let localhost = "localhost";
-    let canister_localhost = &format!("{}.localhost", effective_canister_id);
-    let root_cert =
-        CertificateParams::new(vec![localhost.to_string(), canister_localhost.to_string()])
-            .unwrap()
-            .self_signed(&root_key_pair)
-            .unwrap();
-    let (mut cert_file, cert_path) = NamedTempFile::new().unwrap().keep().unwrap();
-    cert_file.write_all(root_cert.pem().as_bytes()).unwrap();
-    let (mut key_file, key_path) = NamedTempFile::new().unwrap().keep().unwrap();
-    key_file
-        .write_all(root_key_pair.serialize_pem().as_bytes())
-        .unwrap();
-
-    // make PocketIc instance live with an HTTPS gateway
-    let https_config = HttpsConfig {
-        cert_path: cert_path.into_os_string().into_string().unwrap(),
-        key_path: key_path.into_os_string().into_string().unwrap(),
-    };
-    let port = pic
-        .make_live_https(None, localhost.to_string(), https_config)
-        .await
-        .port_or_known_default()
-        .unwrap();
-
-    // create a non-blocking reqwest client with a custom root certificate
-    // and resolving localhost and <canister-id>.localhost to [::1]
-    let client = NonblockingClient::builder()
-        .add_root_certificate(reqwest::Certificate::from_pem(root_cert.pem().as_bytes()).unwrap())
-        .resolve(
-            localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
-        )
-        .resolve(
-            canister_localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
-        )
-        .build()
-        .unwrap();
-
-    test_gateway(pic, client, "https", port, effective_canister_id.into()).await;
+    test_gateway(true).await;
 }
 
 #[test]

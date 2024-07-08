@@ -412,24 +412,25 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
     }
 
-    /// Creates an HTTPS gateway for this IC instance
-    /// listening on an optionally specified domain and port
-    /// and configures the IC instance to make progress
-    /// automatically, i.e., periodically update the time
-    /// of the IC to the real time and execute rounds on the subnets.
+    /// Creates an HTTP gateway for this PocketIC instance listening
+    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// and optionally specified domains (default to `localhost`)
+    /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
     /// Returns the URL at which `/api/v2` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub async fn make_live_https(
+    pub async fn make_live_with_params(
         &mut self,
         listen_at: Option<u16>,
-        domain: String,
-        https_config: HttpsConfig,
+        domains: Option<Vec<String>>,
+        https_config: Option<HttpsConfig>,
     ) -> Url {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
-                .make_live_https(listen_at, domain, https_config)
+                .make_live_with_params(listen_at, domains, https_config)
                 .await
         })
     }

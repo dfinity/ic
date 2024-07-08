@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - A new subnet is created on an existing PocketIC instance if a new canister is created with a specified mainnet canister ID that does not belong to any existing subnet's canister range.
-- The argument of the endpoint `/http_gateway` takes an additional optional field `domain` specifying the domain at which the PocketIC server (and thus HTTP gateway) is listening.
+- The argument of the endpoint `/http_gateway` takes an additional optional field `domains` specifying the domains at which the HTTP gateway is listening (default to `localhost`).
 - The argument of the endpoint `/http_gateway` takes an additional optional field `https_config` specifying the TLS certificate and key. If provided, then an HTTPS gateway is started using that TLS certificate.
 - A new endpoint `/instances/<instance_id>/read/topology` to retrieve the topology of the PocketIC instance.
 - New CLI option `--ready-file` to specify a file which is created by the PocketIC server once it is ready to accept HTTP connections.
