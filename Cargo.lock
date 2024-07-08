@@ -15647,6 +15647,7 @@ dependencies = [
  "reqwest 0.12.4",
  "serde",
  "serde_cbor",
+ "serde_json",
  "spec-compliance",
  "tempfile",
  "time",

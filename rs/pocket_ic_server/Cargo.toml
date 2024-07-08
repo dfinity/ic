@@ -59,6 +59,7 @@ wat = "1.0.52"
 flate2 = { workspace = true }
 aide = { version = "^0.13.0", features = ["axum"] }
 serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 reqwest = { workspace = true }
