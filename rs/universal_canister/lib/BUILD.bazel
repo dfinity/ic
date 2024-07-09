@@ -31,6 +31,7 @@ rust_doc_test(
     name = "lib_doc_test",
     crate = ":lib",
     deps = [
+        # Keep sorted.
         "//rs/crypto/sha2",
         "//rs/types/types",
     ],

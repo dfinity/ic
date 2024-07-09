@@ -4,10 +4,12 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 PROXY_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/rust_canisters/proxy_canister:proxy_canister",
 ]
 
 CANISTER_HTTP_BASE_DEPS = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/proxy_canister:lib",
     "//rs/tests",

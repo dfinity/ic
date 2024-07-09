@@ -10,12 +10,14 @@ rust_library(
     ),
     crate_name = "orchestrator",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:async-trait",
         "@crate_index//:indoc",
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/async_utils",
         "//rs/canister_client",
         "//rs/canister_client/sender",
@@ -66,6 +68,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     crate_name = "ic_state_tool",
     deps = [
+        # Keep sorted.
         ":lib",
         "//rs/async_utils",
         "@crate_index//:clap_3_2_25",
@@ -82,6 +85,7 @@ rust_test(
         "//ic-os/components:ic/ic.json5.template",
     ],
     deps = [
+        # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/reproducible_rng",

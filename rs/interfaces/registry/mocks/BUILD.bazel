@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_interfaces_registry_mocks",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/interfaces/registry",
         "//rs/types/base_types",
         "//rs/types/types",

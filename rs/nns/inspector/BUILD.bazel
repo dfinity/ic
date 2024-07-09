@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/constants",
     "//rs/nns/governance",
     "//rs/nns/gtc",
