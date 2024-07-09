@@ -6,6 +6,7 @@ rust_library(
     name = "dfn_protobuf",
     srcs = glob(["src/**"]),
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/on_wire",
         "@crate_index//:prost",
     ],

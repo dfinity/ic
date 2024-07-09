@@ -516,7 +516,7 @@ fn output_queue_try_from_canister_queue() {
 fn input_queue_constructor_test() {
     let capacity: usize = 14;
     let mut queue = InputQueue::new(capacity);
-    assert_eq!(queue.num_messages(), 0);
+    assert_eq!(queue.len(), 0);
     assert!(!queue.has_used_slots());
     assert_eq!(queue.pop(), None);
 }
@@ -528,7 +528,7 @@ fn input_queue_with_message_is_not_empty() {
     input_queue
         .push(RequestBuilder::default().build().into())
         .expect("could push");
-    assert_ne!(input_queue.num_messages(), 0);
+    assert_ne!(input_queue.len(), 0);
     assert!(input_queue.has_used_slots());
 }
 
@@ -537,7 +537,7 @@ fn input_queue_with_reservation_is_not_empty() {
     let mut input_queue = InputQueue::new(1);
     input_queue.reserve_slot().unwrap();
 
-    assert_eq!(input_queue.num_messages(), 0);
+    assert_eq!(input_queue.len(), 0);
     assert!(input_queue.has_used_slots());
 }
 
@@ -583,7 +583,7 @@ fn input_queue_push_succeeds() {
         .unwrap();
     assert_eq!(input_queue.queue.available_response_slots(), 0);
 
-    assert_eq!(2, input_queue.num_messages());
+    assert_eq!(2, input_queue.len());
 }
 
 /// Test that overfilling an input queue with messages and reservations
@@ -602,7 +602,7 @@ fn input_queue_push_to_full_queue_fails() {
     for _index in 0..capacity {
         input_queue.reserve_slot().unwrap();
     }
-    assert_eq!(input_queue.num_messages(), capacity);
+    assert_eq!(input_queue.len(), capacity);
 
     // Now push an extraneous message in.
     assert_eq!(

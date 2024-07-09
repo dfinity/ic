@@ -12,13 +12,14 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
-    "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/lock",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
@@ -34,8 +35,8 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/sns/governance/proposal_criticality",
-    "//rs/sns/governance/token_valuation",
     "//rs/sns/governance/proposals_amount_total_limit",
+    "//rs/sns/governance/token_valuation",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/utils",
@@ -59,6 +60,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",
@@ -66,12 +68,14 @@ MACRO_DEPENDENCIES = [
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
     "@crate_index//:build-info-build",
     "@crate_index//:prost-build",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/common/test_utils",
@@ -240,6 +244,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/sns/governance",
     deps = [
+        # Keep sorted.
         "//rs/sns/governance/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

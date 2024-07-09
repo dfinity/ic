@@ -11,24 +11,22 @@ use ic_canister_client::Sender;
 use ic_ckbtc_kyt::{
     InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
 };
-use ic_ckbtc_minter::lifecycle::init::MinterArg;
-use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
-use ic_ckbtc_minter::CKBTC_LEDGER_MEMO_SIZE;
+use ic_ckbtc_minter::{
+    lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
+    CKBTC_LEDGER_MEMO_SIZE,
+};
 use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
-use ic_management_canister_types::{CanisterIdRecord, MasterPublicKeyId};
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{NnsFunction, ProposalStatus},
+use ic_management_canister_types::{
+    CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
 };
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
@@ -49,8 +47,7 @@ use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 

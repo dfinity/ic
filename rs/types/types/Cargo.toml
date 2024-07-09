@@ -12,7 +12,7 @@ bincode = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../base_types" }
-ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
 ic-constants = { path = "../../constants" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }

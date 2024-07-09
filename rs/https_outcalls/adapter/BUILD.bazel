@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
@@ -12,8 +13,8 @@ DEPENDENCIES = [
     "@crate_index//:byte-unit",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
-    "@crate_index//:reqwest",
     "@crate_index//:prometheus",
+    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
@@ -26,6 +27,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-stream",
     "@crate_index//:once_cell",
     "@crate_index//:rand",
@@ -58,6 +60,7 @@ rust_library(
     crate_name = "ic_https_outcalls_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 

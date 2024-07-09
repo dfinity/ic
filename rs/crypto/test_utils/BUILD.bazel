@@ -14,6 +14,7 @@ rust_library(
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [
+        # Keep sorted.
         "//rs/crypto/ed25519",
         "//rs/crypto/internal/csp_test_utils",
         "//rs/interfaces/registry",

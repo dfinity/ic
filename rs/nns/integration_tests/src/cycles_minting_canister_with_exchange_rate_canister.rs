@@ -1,15 +1,14 @@
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{
     pb::v1::NeuronId,
     types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
 };
 use ic_nns_constants::{EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX};
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal},
+use ic_nns_governance::pb::v1::{
+    manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

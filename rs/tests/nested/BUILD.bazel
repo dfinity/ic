@@ -5,6 +5,7 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/common",
@@ -20,6 +21,7 @@ DEPENDENCIES = [
 ]
 
 RUNNER_DEPENDENCIES = [
+    # Keep sorted.
     "nested",
     "//rs/tests/driver:ic-system-test-driver",
     "@crate_index//:anyhow",

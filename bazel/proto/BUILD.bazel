@@ -7,6 +7,7 @@ proto_library(
     name = "build_event_stream_proto",
     srcs = ["build_event_stream.proto"],
     deps = [
+        # Keep sorted.
         ":command_line_proto",
         ":failure_details_proto",
         ":invocation_policy_proto",
@@ -19,6 +20,7 @@ proto_library(
     name = "command_line_proto",
     srcs = ["command_line.proto"],
     deps = [
+        # Keep sorted.
         ":option_filters_proto",
     ],
 )
@@ -29,6 +31,7 @@ proto_library(
         "failure_details.proto",
     ],
     deps = [
+        # Keep sorted.
         "@com_google_protobuf//:descriptor_proto",
     ],
 )
@@ -48,6 +51,7 @@ go_proto_library(
     importpath = "github.com/dfinity/ic/proto/command_line",
     proto = ":command_line_proto",
     deps = [
+        # Keep sorted.
         ":option_filters_go_proto",
     ],
 )
@@ -75,6 +79,7 @@ go_proto_library(
     importpath = "github.com/dfinity/ic/proto/build_event_stream",
     proto = ":build_event_stream_proto",
     deps = [
+        # Keep sorted.
         ":command_line_go_proto",
         ":failure_details_go_proto",
         ":invocation_policy_go_proto",

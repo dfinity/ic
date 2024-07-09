@@ -15,10 +15,12 @@ package(default_visibility = ["//visibility:public"])
             "//rs/rosetta-api/icrc1/ledger:block.cddl",
         ],
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:async-trait",
         ],
         version = "0.9.0",
         deps = [
+            # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",

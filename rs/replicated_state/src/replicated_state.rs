@@ -15,7 +15,7 @@ use crate::{
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_management_canister_types::MasterPublicKeyId;

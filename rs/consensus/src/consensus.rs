@@ -53,8 +53,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageId, PriorityFn},
-    artifact_kind::ConsensusArtifact,
-    consensus::ConsensusMessageHashable,
+    consensus::{ConsensusMessage, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
@@ -589,7 +588,7 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
+impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusMessage, Pool>
     for ConsensusGossipImpl
 {
     /// Return a priority function that matches the given consensus pool.

@@ -24,7 +24,6 @@ use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact::{Priority, PriorityFn},
-    artifact_kind::DkgArtifact,
     batch::ValidationContext,
     consensus::{
         dkg::{DealingContent, DkgMessageId, Message},
@@ -388,7 +387,7 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossipImpl {
+impl<Pool: DkgPool> PriorityFnAndFilterProducer<Message, Pool> for DkgGossipImpl {
     fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId, ()> {
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id, _| {

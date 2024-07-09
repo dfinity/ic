@@ -428,8 +428,6 @@ pub mod consensus_response {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MasterKeyTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub deprecated_key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "3")]
@@ -683,8 +681,6 @@ pub struct IDkgReshareRequest {
     pub receiving_node_ids: ::prost::alloc::vec::Vec<NodeId>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
-    #[prost(message, optional, tag = "4")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "5")]
     pub master_key_id:
         ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
