@@ -38,12 +38,12 @@ env:
 jobs:
   bazel-test-all:
     name: Bazel Test All
+    runs-on:
+      group: ch1
+      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
-    runs-on:
-      group: zh1
-      labels: dind-large
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,6 +85,7 @@ jobs:
             bazel-targets
   bazel-build-all-config-check:
     runs-on:
+      group: ch1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
@@ -168,6 +169,7 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
+      group: ch1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
@@ -191,6 +193,7 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
+      group: ch1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
@@ -238,6 +241,7 @@ jobs:
   build-ic:
     name: Build IC
     runs-on:
+      group: ch1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
@@ -330,6 +334,7 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
+      group: ch1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
@@ -365,6 +370,7 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:
+      group: ch1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
