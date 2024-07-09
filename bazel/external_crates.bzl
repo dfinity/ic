@@ -700,9 +700,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.7",
                 default_features = False,
             ),
-            "libsecp256k1": crate.spec(
-                version = "^0.7.0",
-            ),
             "libnss": crate.spec(
                 version = "^0.5.0",
             ),

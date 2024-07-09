@@ -1,5 +1,5 @@
 {
-  "checksum": "c57dbb652cd0fa371551796537ce2acd10b5d8b40c36fae684dbc0a401611679",
+  "checksum": "1ae72c441c8510e799c8584315ce7fbec182050461a9cee96cb6d46ec18241f2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2429,44 +2429,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "arrayref 0.3.7": {
-      "name": "arrayref",
-      "version": "0.3.7",
-      "package_url": "https://github.com/droundy/arrayref",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/arrayref/0.3.7/download",
-          "sha256": "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "arrayref",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "arrayref",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.3.7"
-      },
-      "license": "BSD-2-Clause",
-      "license_ids": [
-        "BSD-2-Clause"
-      ],
-      "license_file": "LICENSE"
     },
     "arrayvec 0.5.2": {
       "name": "arrayvec",
@@ -14795,58 +14757,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "crypto-mac 0.8.0": {
-      "name": "crypto-mac",
-      "version": "0.8.0",
-      "package_url": "https://github.com/RustCrypto/traits",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/crypto-mac/0.8.0/download",
-          "sha256": "b584a330336237c1eecd3e94266efb216c56ed91225d634cb2991c5f3fd1aeab"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "crypto_mac",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "crypto_mac",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "generic-array 0.14.7",
-              "target": "generic_array"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "cssparser 0.31.2": {
       "name": "cssparser",
       "version": "0.31.2",
@@ -17555,10 +17465,6 @@
             {
               "id": "libnss 0.5.0",
               "target": "libnss"
-            },
-            {
-              "id": "libsecp256k1 0.7.1",
-              "target": "libsecp256k1"
             },
             {
               "id": "little-loadshedder 0.1.0",
@@ -25333,58 +25239,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hmac 0.8.1": {
-      "name": "hmac",
-      "version": "0.8.1",
-      "package_url": "https://github.com/RustCrypto/MACs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hmac/0.8.1/download",
-          "sha256": "126888268dcc288495a26bf004b38c5fdbb31682f992c84ceb046a1f0fe38840"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hmac",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hmac",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "crypto-mac 0.8.0",
-              "target": "crypto_mac"
-            },
-            {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "hmac 0.12.1": {
       "name": "hmac",
       "version": "0.12.1",
@@ -25438,61 +25292,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "hmac-drbg 0.3.0": {
-      "name": "hmac-drbg",
-      "version": "0.3.0",
-      "package_url": null,
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hmac-drbg/0.3.0/download",
-          "sha256": "17ea0a1394df5b6574da6e0c1ade9e78868c9fb0a4e5ef4428e32da4676b85b1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hmac_drbg",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hmac_drbg",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            },
-            {
-              "id": "generic-array 0.14.7",
-              "target": "generic_array"
-            },
-            {
-              "id": "hmac 0.8.1",
-              "target": "hmac"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
     },
     "home 0.5.5": {
       "name": "home",
@@ -34201,287 +34000,6 @@
         "Apache-2.0",
         "BSD-3-Clause",
         "MIT"
-      ],
-      "license_file": null
-    },
-    "libsecp256k1 0.7.1": {
-      "name": "libsecp256k1",
-      "version": "0.7.1",
-      "package_url": "https://github.com/paritytech/libsecp256k1",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/libsecp256k1/0.7.1/download",
-          "sha256": "95b09eff1b35ed3b33b877ced3a691fc7a481919c7e29c53c906226fcf55e2a1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "libsecp256k1",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "libsecp256k1",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "hmac",
-            "hmac-drbg",
-            "sha2",
-            "static-context",
-            "std",
-            "typenum"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "arrayref 0.3.7",
-              "target": "arrayref"
-            },
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            },
-            {
-              "id": "hmac-drbg 0.3.0",
-              "target": "hmac_drbg"
-            },
-            {
-              "id": "libsecp256k1 0.7.1",
-              "target": "build_script_build"
-            },
-            {
-              "id": "libsecp256k1-core 0.3.0",
-              "target": "libsecp256k1_core"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "sha2 0.9.9",
-              "target": "sha2"
-            },
-            {
-              "id": "typenum 1.17.0",
-              "target": "typenum"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.7.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libsecp256k1-gen-ecmult 0.3.0",
-              "target": "libsecp256k1_gen_ecmult"
-            },
-            {
-              "id": "libsecp256k1-gen-genmult 0.3.0",
-              "target": "libsecp256k1_gen_genmult"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "libsecp256k1-core 0.3.0": {
-      "name": "libsecp256k1-core",
-      "version": "0.3.0",
-      "package_url": "https://github.com/paritytech/libsecp256k1",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/libsecp256k1-core/0.3.0/download",
-          "sha256": "5be9b9bb642d8522a44d533eab56c16c738301965504753b03ad1de3425d5451"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "libsecp256k1_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "libsecp256k1_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "crunchy 0.2.2",
-              "target": "crunchy"
-            },
-            {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "libsecp256k1-gen-ecmult 0.3.0": {
-      "name": "libsecp256k1-gen-ecmult",
-      "version": "0.3.0",
-      "package_url": "https://github.com/paritytech/libsecp256k1",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/libsecp256k1-gen-ecmult/0.3.0/download",
-          "sha256": "3038c808c55c87e8a172643a7d87187fc6c4174468159cb3090659d55bcb4809"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "libsecp256k1_gen_ecmult",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "libsecp256k1_gen_ecmult",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libsecp256k1-core 0.3.0",
-              "target": "libsecp256k1_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "libsecp256k1-gen-genmult 0.3.0": {
-      "name": "libsecp256k1-gen-genmult",
-      "version": "0.3.0",
-      "package_url": "https://github.com/paritytech/libsecp256k1",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/libsecp256k1-gen-genmult/0.3.0/download",
-          "sha256": "3db8d6ba2cec9eacc40e6e8ccc98931840301f1006e95647ceb2dd5c3aa06f7c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "libsecp256k1_gen_genmult",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "libsecp256k1_gen_genmult",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libsecp256k1-core 0.3.0",
-              "target": "libsecp256k1_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
       ],
       "license_file": null
     },
@@ -77234,7 +76752,6 @@
     "libflate 1.4.0",
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
-    "libsecp256k1 0.7.1",
     "little-loadshedder 0.1.0",
     "local-ip-address 0.5.6",
     "lru 0.7.8",
