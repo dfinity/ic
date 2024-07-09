@@ -1,10 +1,10 @@
-use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
-use ic_wasm_types::CanisterModule;
 use crate::{
     canister_state::execution_state::Memory,
     canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
     PageMap,
 };
+use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_wasm_types::CanisterModule;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -215,16 +215,16 @@ impl CanisterSnapshot {
         }
     }
 
-    pub fn new_from(canister: &CanisterState, taken_at_timestamp: Time) -> Result<Self, CanisterSnapshotError> {
+    pub fn new_from(
+        canister: &CanisterState,
+        taken_at_timestamp: Time,
+    ) -> Result<Self, CanisterSnapshotError> {
         let canister_id = canister.canister_id();
 
-        let execution_state =
-        canister
+        let execution_state = canister
             .execution_state
             .as_ref()
-            .ok_or(
-                CanisterSnapshotError::EmptyExecutionState(canister_id)
-            )?;
+            .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
             stable_memory: PageMemory::from(&execution_state.stable_memory),
@@ -282,7 +282,6 @@ impl CanisterSnapshot {
         &self.certified_data
     }
 }
-
 
 // impl TryFrom<(&CanisterState, Time)> for CanisterSnapshot {
 //     type Error = CanisterSnapshotError;
@@ -357,7 +356,7 @@ mod tests {
             0,
             vec![],
             WasmChunkStore::new_for_testing(),
-            Some(execution_snapshot),
+            execution_snapshot,
             NumBytes::from(0),
         );
         let mut snapshot_manager = CanisterSnapshots::default();

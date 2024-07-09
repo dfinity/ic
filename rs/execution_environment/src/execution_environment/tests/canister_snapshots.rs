@@ -918,7 +918,10 @@ fn list_canister_snapshot_succeeds() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.
@@ -1251,7 +1254,10 @@ fn snapshot_is_deleted_with_canister_delete() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.
