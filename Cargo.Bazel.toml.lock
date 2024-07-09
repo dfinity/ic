@@ -3079,7 +3079,6 @@ dependencies = [
  "proptest-derive",
  "prost",
  "prost-build",
- "prost-derive",
  "protobuf",
  "publicsuffix",
  "quickcheck",

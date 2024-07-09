@@ -1,5 +1,5 @@
 {
-  "checksum": "5cc796f07f37111bfb92f2542644845fd37a8893cff00af3a4f3253d565e2c80",
+  "checksum": "c57dbb652cd0fa371551796537ce2acd10b5d8b40c36fae684dbc0a401611679",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18331,10 +18331,6 @@
             {
               "id": "proptest-derive 0.3.0",
               "target": "proptest_derive"
-            },
-            {
-              "id": "prost-derive 0.12.2",
-              "target": "prost_derive"
             },
             {
               "id": "rust_decimal_macros 1.32.0",
@@ -77292,7 +77288,6 @@
     "proptest-derive 0.3.0",
     "prost 0.12.2",
     "prost-build 0.12.2",
-    "prost-derive 0.12.2",
     "protobuf 2.28.0",
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
