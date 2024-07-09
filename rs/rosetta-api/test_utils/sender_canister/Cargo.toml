@@ -1,0 +1,16 @@
+[package]
+name = "ic-sender-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
