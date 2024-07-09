@@ -1,40 +1,43 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::canister_agent::{CanisterAgent, HasCanisterAgentCapability};
-use crate::canister_api::{
-    CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
-    NnsDappRequestProvider, Request, Response, SnsRequestProvider,
-};
-use crate::canister_requests;
-use crate::driver::farm::HostFeature;
-use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::IcNodeSnapshot;
-use crate::driver::test_env_api::NnsCanisterWasmStrategy;
-use crate::driver::test_env_api::TEST_USER1_STARTING_TOKENS;
-use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, NnsCustomizations,
-};
-use crate::generic_workload_engine::engine::Engine;
-use crate::generic_workload_engine::metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome};
-use crate::sns_client::openchat_create_service_nervous_system_proposal;
-use crate::types::CanisterStatusResult;
-use crate::types::CreateCanisterResult;
-use crate::util::UniversalCanister;
 use candid::Decode;
 use candid::{Nat, Principal};
 use ic_agent::Agent;
 use ic_agent::{agent::EnvelopeContent, Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
+use ic_system_test_driver::canister_agent::{CanisterAgent, HasCanisterAgentCapability};
+use ic_system_test_driver::canister_api::{
+    CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
+    NnsDappRequestProvider, Request, Response, SnsRequestProvider,
+};
+use ic_system_test_driver::canister_requests;
+use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
+use ic_system_test_driver::driver::test_env_api::NnsCanisterWasmStrategy;
+use ic_system_test_driver::driver::test_env_api::TEST_USER1_STARTING_TOKENS;
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, NnsCustomizations,
+};
+use ic_system_test_driver::generic_workload_engine::engine::Engine;
+use ic_system_test_driver::generic_workload_engine::metrics::{
+    LoadTestMetrics, LoadTestOutcome, RequestOutcome,
+};
+use ic_system_test_driver::sns_client::openchat_create_service_nervous_system_proposal;
+use ic_system_test_driver::types::CanisterStatusResult;
+use ic_system_test_driver::types::CreateCanisterResult;
+use ic_system_test_driver::util::UniversalCanister;
 use rosetta_core::models::RosettaSupportedKeyPair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
@@ -53,13 +56,13 @@ use slog::info;
 use tokio::runtime::Builder;
 
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
-use crate::util::{assert_create_agent_with_identity, block_on};
+use ic_system_test_driver::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
+use ic_system_test_driver::util::{assert_create_agent_with_identity, block_on};
 
-use crate::driver::ic::{
+use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use crate::driver::test_env::TestEnvAttribute;
+use ic_system_test_driver::driver::test_env::TestEnvAttribute;
 
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
@@ -426,7 +429,10 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
         .collect();
 
     // Make sure these participants are available after the setup
-    participants.write_attribute(&env);
+    SnsSaleParticipants {
+        participants: participants.clone(),
+    }
+    .write_attribute(&env);
 
     // Run the actual setup
     setup_with_oc_parameters(
@@ -459,7 +465,10 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
         .collect();
 
     // Make sure these participants are available after the setup
-    participants.write_attribute(&env);
+    SnsSaleParticipants {
+        participants: participants.clone(),
+    }
+    .write_attribute(&env);
 
     // Run the actual setup
     setup_with_oc_parameters(
@@ -476,7 +485,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
 pub fn init_participants(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
-    let participants = Vec::<SaleParticipant>::read_attribute(&env);
+    let participants = SnsSaleParticipants::read_attribute(&env).participants;
     let participants_str: Vec<String> = participants.iter().map(|p| p.name.clone()).collect();
     let sns_client = SnsClient::read_attribute(&env);
     let app_node = env.get_first_healthy_application_node_snapshot();
@@ -520,7 +529,7 @@ pub fn init_participants(env: TestEnv) {
 pub fn check_all_participants(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
-    let participants = Vec::<SaleParticipant>::read_attribute(&env);
+    let participants = SnsSaleParticipants::read_attribute(&env).participants;
     let participants_str: Vec<String> = participants.iter().map(|p| p.name.clone()).collect();
     let sns_client = SnsClient::read_attribute(&env);
     let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
@@ -700,7 +709,8 @@ pub fn generate_sns_workload_with_many_users<T, R>(
     let future_generator = {
         let app_node = env.get_first_healthy_application_node_snapshot();
         let agents: Vec<(SaleParticipant, CanisterAgent)> =
-            Vec::<SaleParticipant>::read_attribute(&env)
+            SnsSaleParticipants::read_attribute(&env)
+                .participants
                 .into_iter()
                 .map(|p| {
                     let canister_agent =
@@ -754,7 +764,12 @@ pub struct SaleParticipant {
     starting_sns_balance: Tokens,
 }
 
-impl TestEnvAttribute for Vec<SaleParticipant> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnsSaleParticipants {
+    pub participants: Vec<SaleParticipant>,
+}
+
+impl TestEnvAttribute for SnsSaleParticipants {
     fn attribute_name() -> String {
         "sns_sale_participants".to_string()
     }
@@ -767,7 +782,7 @@ impl SaleParticipant {
         starting_sns_balance: Tokens,
         seed: u64,
     ) -> Self {
-        let key_pair = EdKeypair::generate_from_u64(seed);
+        let key_pair = EdKeypair::generate(seed);
         let principal_id = key_pair.generate_principal_id().unwrap();
         let (secret_key, public_key) = key_pair.serialize_raw();
         Self {
@@ -1376,7 +1391,7 @@ impl<'a> DappCanister<'a> {
                 let observed_controllers = canister_status_result.settings.controllers();
                 let expected_controllers = controllers
                     .iter()
-                    .map(crate::util::to_principal_id)
+                    .map(ic_system_test_driver::util::to_principal_id)
                     .collect::<Vec<PrincipalId>>();
                 assert_eq!(
                     observed_controllers, expected_controllers,
@@ -1420,11 +1435,16 @@ impl<'a> DappCanister<'a> {
         assert_eq!(
             dapp_canister_summary
                 .status
-                .as_ref()
+                .clone()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![sns_client.sns_canisters.root.unwrap()]
+                .controllers
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                sns_client.sns_canisters.root.unwrap(),
+                ROOT_CANISTER_ID.get()
+            ])
         );
 
         info!(

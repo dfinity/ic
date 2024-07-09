@@ -5,6 +5,7 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 IC_HS_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/tests:ic-hs",
 ]
 

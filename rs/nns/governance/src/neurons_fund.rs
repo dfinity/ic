@@ -379,18 +379,19 @@ pub enum NeuronsFundNeuronPortionError {
     },
 }
 
-impl ToString for NeuronsFundNeuronPortionError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundNeuronPortionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Invalid NeuronsFundNeuronPortion: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name)
             }
             Self::AmountTooBig {
                 amount_icp_e8s,
                 maturity_equivalent_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}`amount_icp_e8s` ({}) exceeds `maturity_equivalent_icp_e8s` ({})",
                     prefix, amount_icp_e8s, maturity_equivalent_icp_e8s,
                 )
@@ -679,16 +680,15 @@ pub enum NeuronsFundSnapshotValidationError {
     NeuronsFundNeuronPortionError(usize, NeuronsFundNeuronPortionError),
 }
 
-impl ToString for NeuronsFundSnapshotValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundSnapshotValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Cannot validate NeuronsFundSnapshot: ";
         match self {
             Self::NeuronsFundNeuronPortionError(index, error) => {
-                format!(
+                write!(
+                    f,
                     "{}neurons_fund_neuron_portions[{}]: {}",
-                    prefix,
-                    index,
-                    error.to_string()
+                    prefix, index, error
                 )
             }
         }
@@ -750,18 +750,19 @@ pub enum SwapParametersError {
     },
 }
 
-impl ToString for SwapParametersError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SwapParametersError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Cannot extract data from SwapParameters: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name,)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name,)
             }
             Self::MaxIsLessThanOrEqualMinParticipationIcp {
                 min_direct_participation_icp_e8s,
                 max_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: min_direct_participation_icp_e8s ({}) \
                     <= max_direct_participation_icp_e8s ({}).",
                     prefix, min_direct_participation_icp_e8s, max_direct_participation_icp_e8s,
@@ -771,7 +772,8 @@ impl ToString for SwapParametersError {
                 min_participant_icp_e8s,
                 max_participant_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: min_participant_icp_e8s ({}) \
                     <= max_participant_icp_e8s ({}).",
                     prefix, min_participant_icp_e8s, max_participant_icp_e8s,
@@ -1590,30 +1592,32 @@ pub enum NeuronsFundParticipationValidationError {
     },
 }
 
-impl ToString for NeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "NeuronsFundParticipation is invalid: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name)
             }
             Self::NeuronsFundSnapshotValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::MatchFunctionDeserializationFailed(error) => {
-                format!(
+                write!(
+                    f,
                     "{}failed to deserialize an IdealMatchingFunction instance: {}",
                     prefix, error
                 )
             }
             Self::SwapParametersError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::NeuronsFundParticipationGreaterThanDirectParticipation {
                 allocated_neurons_fund_participation_icp_e8s,
                 direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be <= direct_participation_icp_e8s ({}).",
                     prefix,
@@ -1627,7 +1631,8 @@ impl ToString for NeuronsFundParticipationValidationError {
                 max_neurons_fund_swap_participation_icp_e8s,
                 total_maturity_equivalent_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be <= intended_neurons_fund_participation_icp_e8s ({}) \
                     must be <= max_neurons_fund_swap_participation_icp_e8s ({}) \
@@ -1643,7 +1648,8 @@ impl ToString for NeuronsFundParticipationValidationError {
                 allocated_neurons_fund_participation_icp_e8s,
                 neurons_fund_reserves_total_amount_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}inconsistent total allocation data: \
                     allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be == neurons_fund_reserves.total_amount_icp_e8s ({}).",

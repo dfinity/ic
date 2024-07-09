@@ -795,9 +795,13 @@ mod tests {
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
         let mut replica_firewall_config = config.firewall.unwrap();
-        replica_firewall_config.config_file = nftables_config_path.clone();
+        replica_firewall_config
+            .config_file
+            .clone_from(&nftables_config_path);
         let mut boundary_node_firewall_config = config.boundary_node_firewall.unwrap();
-        boundary_node_firewall_config.config_file = nftables_config_path.clone();
+        boundary_node_firewall_config
+            .config_file
+            .clone_from(&nftables_config_path);
         let mut firewall = set_up_firewall_dependencies(
             replica_firewall_config,
             boundary_node_firewall_config,
@@ -832,7 +836,6 @@ mod tests {
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ replica_log_debug_overrides }}", "[]")
             .replace("{{ nns_url }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
             .replace("{{ query_stats_aggregation }}", "\"Enabled\"")

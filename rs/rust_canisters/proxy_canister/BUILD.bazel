@@ -9,6 +9,7 @@ rust_library(
     crate_name = "proxy_canister",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:serde",
@@ -21,6 +22,7 @@ rust_canister(
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":empty.did",
     deps = [
+        # Keep sorted.
         ":lib",
         "//rs/types/management_canister_types",
         "@crate_index//:candid",

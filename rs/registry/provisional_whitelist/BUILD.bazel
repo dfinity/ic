@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_registry_provisional_whitelist",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/types/base_types",
     ],

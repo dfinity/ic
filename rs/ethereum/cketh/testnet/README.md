@@ -76,3 +76,23 @@ dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { m
 ```shell
 dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 2_000_000_000_000 ; cycles_for_archive_creation = 1_000_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
 ```
+
+# ckERC20
+
+## Add ckSepoliaUSDC
+
+```shell
+dfx deploy orchestrator --network ic --argument "(variant { AddErc20Arg = record { contract = record { chain_id = 11155111; address = \"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238\" }; ledger_init_arg = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 6; max_memo_length = opt 80; transfer_fee = 4_000; token_symbol = \"ckSepoliaUSDC\"; token_name = \"Chain key Sepolia USDC\"; token_logo = \"\"; initial_balances = vec {}; }; git_commit_hash = \"3924e543af04d30a0b601d749721af239a10dff6\";  ledger_compressed_wasm_hash = \"57e2a728f9ffcb1a7d9e101dbd1260f8b9f3246bf5aa2ad3e2c750e125446838\"; index_compressed_wasm_hash = \"6fb62c7e9358ca5c937a5d25f55700459ed09a293d0826c09c631b64ba756594\"; }})" --upgrade-unchanged --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
+
+## Add ckSepoliaLINK
+
+```shell
+dfx deploy orchestrator --network ic --argument "(variant { AddErc20Arg = record { contract = record { chain_id = 11155111; address = \"0x779877A7B0D9E8603169DdbD7836e478b4624789\" }; ledger_init_arg = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 18; max_memo_length = opt 80; transfer_fee = 200_000_000_000_000; token_symbol = \"ckSepoliaLINK\"; token_name = \"Chain key Sepolia LINK\"; token_logo = \"\"; initial_balances = vec {}; }; git_commit_hash = \"3924e543af04d30a0b601d749721af239a10dff6\";  ledger_compressed_wasm_hash = \"57e2a728f9ffcb1a7d9e101dbd1260f8b9f3246bf5aa2ad3e2c750e125446838\"; index_compressed_wasm_hash = \"6fb62c7e9358ca5c937a5d25f55700459ed09a293d0826c09c631b64ba756594\"; }})" --upgrade-unchanged --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
+
+## Add ckSepoliaPEPE
+
+```shell
+dfx deploy orchestrator --network ic --argument "(variant { AddErc20Arg = record { contract = record { chain_id = 11155111; address = \"0x560eF9F39E4B08f9693987cad307f6FBfd97B2F6\" }; ledger_init_arg = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 18; max_memo_length = opt 80; transfer_fee = 100_000_000_000_000_000_000; token_symbol = \"ckSepoliaPEPE\"; token_name = \"Chain key Sepolia PEPE\"; token_logo = \"\"; initial_balances = vec {}; }; git_commit_hash = \"3924e543af04d30a0b601d749721af239a10dff6\";  ledger_compressed_wasm_hash = \"57e2a728f9ffcb1a7d9e101dbd1260f8b9f3246bf5aa2ad3e2c750e125446838\"; index_compressed_wasm_hash = \"6fb62c7e9358ca5c937a5d25f55700459ed09a293d0826c09c631b64ba756594\"; }})" --upgrade-unchanged --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```

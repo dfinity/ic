@@ -19,10 +19,10 @@ use ic_sns_swap::{
         error_refund_icp_response,
         set_mode_call_result::SetModeResult,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
-        CanisterCallError, CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest,
-        ErrorRefundIcpResponse, ListDirectParticipantsRequest, Participant,
-        RestoreDappControllersResponse, SetDappControllersCallResult, SetDappControllersResponse,
-        SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
+        CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
+        ListDirectParticipantsRequest, Participant, SetDappControllersCallResult,
+        SetDappControllersResponse, SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult,
+        TransferableAmount,
     },
     swap::{
         principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START,
@@ -131,34 +131,6 @@ pub fn mock_stub(mut expect: Vec<LedgerExpect>) -> MockLedger {
     expect.reverse();
     let e = Arc::new(Mutex::new(expect));
     MockLedger { expect: e }
-}
-
-pub fn extract_canister_call_error(
-    restore_dapp_controller_response: &RestoreDappControllersResponse,
-) -> &CanisterCallError {
-    use ic_sns_swap::pb::v1::restore_dapp_controllers_response::Possibility;
-
-    match restore_dapp_controller_response.possibility.as_ref() {
-        Some(Possibility::Ok(_)) | None => panic!(
-            "Extracting CanisterCallError failed. Possibility was {:?}",
-            restore_dapp_controller_response.possibility,
-        ),
-        Some(Possibility::Err(canister_call_error)) => canister_call_error,
-    }
-}
-
-pub fn extract_set_dapp_controller_response(
-    restore_dapp_controller_response: &RestoreDappControllersResponse,
-) -> &SetDappControllersResponse {
-    use ic_sns_swap::pb::v1::restore_dapp_controllers_response::Possibility;
-
-    match restore_dapp_controller_response.possibility.as_ref() {
-        Some(Possibility::Err(_)) | None => panic!(
-            "Extracting SetDappControllersResponse failed. Possibility was {:?}",
-            restore_dapp_controller_response.possibility,
-        ),
-        Some(Possibility::Ok(response)) => response,
-    }
 }
 
 /// Helper method for constructing a successful response in tests

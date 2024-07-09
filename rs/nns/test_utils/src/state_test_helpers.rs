@@ -43,8 +43,8 @@ use ic_nns_governance::pb::v1::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, JoinCommunityFund,
-        LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
+        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     proposal::{self, Action},
@@ -89,9 +89,14 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
     // TODO, remove when this is the value set in the normal IC build
     // This is to uncover issues in testing that might affect performance in production
     const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
+    const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions =
+        NumInstructions::new(2_000_000_000);
 
     let mut subnet_config = SubnetConfig::new(SubnetType::System);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
+    subnet_config
+        .scheduler_config
+        .max_instructions_per_install_code_slice = MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE;
 
     StateMachineBuilder::new()
         .with_current_time()
@@ -998,6 +1003,24 @@ pub fn nns_claim_or_refresh_neuron(
     *neuron_id
 }
 
+pub fn nns_disburse_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    amount_e8s: u64,
+    to_account: Option<AccountIdentifier>,
+) -> ManageNeuronResponse {
+    manage_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        manage_neuron::Command::Disburse(Disburse {
+            amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
+            to_account: to_account.map(|account| account.into()),
+        }),
+    )
+}
+
 pub fn nns_increase_dissolve_delay(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1028,6 +1051,7 @@ pub fn nns_propose_upgrade_nns_canister(
     proposer_neuron_id: NeuronId,
     target_canister_id: CanisterId,
     wasm_module: Vec<u8>,
+    module_arg: Vec<u8>,
 ) -> ProposalId {
     let action = if target_canister_id != ROOT_CANISTER_ID {
         let payload = ChangeCanisterRequest::new(
@@ -1045,8 +1069,6 @@ pub fn nns_propose_upgrade_nns_canister(
             payload,
         }))
     } else {
-        let module_arg = Encode!(&()).unwrap();
-
         let payload = UpgradeRootProposal {
             wasm_module,
             module_arg,
@@ -1432,17 +1454,17 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
 }
 
-pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNeuronsResponse {
+pub fn list_neurons(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: ListNeurons,
+) -> ListNeuronsResponse {
     let result = state_machine
         .execute_ingress_as(
             sender,
             GOVERNANCE_CANISTER_ID,
             "list_neurons",
-            Encode!(&ListNeurons {
-                neuron_ids: vec![],
-                include_neurons_readable_by_caller: true,
-            })
-            .unwrap(),
+            Encode!(&request).unwrap(),
         )
         .unwrap();
 
@@ -1452,6 +1474,21 @@ pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNe
     };
 
     Decode!(&result, ListNeuronsResponse).unwrap()
+}
+
+pub fn list_neurons_by_principal(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+) -> ListNeuronsResponse {
+    list_neurons(
+        state_machine,
+        sender,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: None,
+        },
+    )
 }
 
 /// Returns when the proposal has been executed. A proposal is considered to be

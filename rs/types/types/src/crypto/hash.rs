@@ -9,11 +9,12 @@ use crate::consensus::{
     },
     dkg as consensus_dkg,
     idkg::{
-        EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
+        EcdsaSigShare, EcdsaTranscript, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent,
+        SchnorrSigShare,
     },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent,
-    RandomBeaconContent, RandomTapeContent,
+    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, SignedIDkgDealing,
@@ -70,7 +71,7 @@ mod private {
 
     impl CryptoHashDomainSeal for Block {}
     impl CryptoHashDomainSeal for Signed<HashedBlock, BasicSignature<BlockMetadata>> {}
-
+    impl CryptoHashDomainSeal for EquivocationProof {}
     impl CryptoHashDomainSeal for BlockPayload {}
 
     impl CryptoHashDomainSeal for RandomBeaconContent {}
@@ -110,7 +111,7 @@ mod private {
     impl CryptoHashDomainSeal for ConsensusMessage {}
     impl CryptoHashDomainSeal for CertificationMessage {}
 
-    impl CryptoHashDomainSeal for EcdsaMessage {}
+    impl CryptoHashDomainSeal for IDkgMessage {}
 
     impl CryptoHashDomainSeal for IDkgDealing {}
 
@@ -119,12 +120,13 @@ mod private {
 
     impl CryptoHashDomainSeal for EcdsaTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
+    impl CryptoHashDomainSeal for SchnorrSigShare {}
 
-    impl CryptoHashDomainSeal for EcdsaComplaintContent {}
-    impl CryptoHashDomainSeal for Signed<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>> {}
+    impl CryptoHashDomainSeal for IDkgComplaintContent {}
+    impl CryptoHashDomainSeal for Signed<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>> {}
 
-    impl CryptoHashDomainSeal for EcdsaOpeningContent {}
-    impl CryptoHashDomainSeal for Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>> {}
+    impl CryptoHashDomainSeal for IDkgOpeningContent {}
+    impl CryptoHashDomainSeal for Signed<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>> {}
 
     impl CryptoHashDomainSeal for CanisterHttpResponse {}
     impl CryptoHashDomainSeal for CanisterHttpResponseMetadata {}
@@ -214,6 +216,12 @@ impl CryptoHashDomain for Block {
 impl CryptoHashDomain for Signed<HashedBlock, BasicSignature<BlockMetadata>> {
     fn domain(&self) -> String {
         DomainSeparator::BlockMetadataProposal.to_string()
+    }
+}
+
+impl CryptoHashDomain for EquivocationProof {
+    fn domain(&self) -> String {
+        DomainSeparator::EquivocationProof.to_string()
     }
 }
 
@@ -333,9 +341,9 @@ impl CryptoHashDomain for CertificationMessage {
     }
 }
 
-impl CryptoHashDomain for EcdsaMessage {
+impl CryptoHashDomain for IDkgMessage {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaMessage.to_string()
+        DomainSeparator::IDkgMessage.to_string()
     }
 }
 
@@ -369,27 +377,33 @@ impl CryptoHashDomain for EcdsaSigShare {
     }
 }
 
-impl CryptoHashDomain for EcdsaComplaintContent {
+impl CryptoHashDomain for SchnorrSigShare {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaComplaintContent.to_string()
+        DomainSeparator::SchnorrSigShare.to_string()
     }
 }
 
-impl CryptoHashDomain for Signed<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>> {
+impl CryptoHashDomain for IDkgComplaintContent {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaComplaint.to_string()
+        DomainSeparator::IDkgComplaintContent.to_string()
     }
 }
 
-impl CryptoHashDomain for EcdsaOpeningContent {
+impl CryptoHashDomain for Signed<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>> {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaOpeningContent.to_string()
+        DomainSeparator::SignedIDkgComplaint.to_string()
     }
 }
 
-impl CryptoHashDomain for Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>> {
+impl CryptoHashDomain for IDkgOpeningContent {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaOpening.to_string()
+        DomainSeparator::IDkgOpeningContent.to_string()
+    }
+}
+
+impl CryptoHashDomain for Signed<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>> {
+    fn domain(&self) -> String {
+        DomainSeparator::SignedIDkgOpening.to_string()
     }
 }
 

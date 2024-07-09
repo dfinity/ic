@@ -19,7 +19,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-libc = "0.2.91"
+libc = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 scoped_threadpool = "0.1.*"

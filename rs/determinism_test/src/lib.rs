@@ -25,7 +25,7 @@ use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, tim
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
-        next_checkpoint_height: None,
+        batch_summary: None,
         requires_full_state_hash: false,
         messages: BatchMessages {
             signed_ingress_msgs: msgs,
@@ -44,7 +44,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
 fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
-        next_checkpoint_height: None,
+        batch_summary: None,
         requires_full_state_hash: true,
         messages: BatchMessages::default(),
         randomness: Randomness::from([0; 32]),

@@ -334,7 +334,7 @@ fn can_validate_duplicate_update_and_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "Duplicate function 'read' exported multiple times \
              with different call types: update, query, or composite_query."
                 .to_string()
@@ -353,7 +353,7 @@ fn can_validate_duplicate_update_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "Duplicate function 'read' exported multiple times \
              with different call types: update, query, or composite_query."
                 .to_string()
@@ -372,7 +372,7 @@ fn can_validate_duplicate_query_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "Duplicate function 'read' exported multiple times \
              with different call types: update, query, or composite_query."
                 .to_string()
@@ -416,7 +416,7 @@ fn can_validate_too_many_exported_functions() {
     let wasm = wat2wasm(&many_exported_functions(1001)).unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 1000.".to_string()
         ))
     );
@@ -462,7 +462,7 @@ fn can_validate_too_large_sum_exported_function_name_lengths() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 20000.".to_string()
         ))
     );

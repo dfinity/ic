@@ -630,7 +630,7 @@ impl LedgerCanisterInitPayloadBuilder {
         }
 
         // Don't allow self-transfers of the minting canister
-        if self.initial_values.get(&minting_account).is_some() {
+        if self.initial_values.contains_key(&minting_account) {
             return Err(
                 "initial_values cannot contain transfers to the minting_account".to_string(),
             );

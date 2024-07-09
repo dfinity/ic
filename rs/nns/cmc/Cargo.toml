@@ -29,7 +29,7 @@ ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 

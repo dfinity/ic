@@ -1,17 +1,17 @@
 //! The malicious pre signature process manager
 
-use crate::consensus::metrics::EcdsaPreSignerMetrics;
+use crate::ecdsa::metrics::EcdsaPreSignerMetrics;
 use crate::ecdsa::{
     pre_signer::EcdsaPreSignerImpl, utils::transcript_op_summary, EcdsaBlockReaderImpl,
 };
 use ic_interfaces::{
     crypto::BasicSigner,
-    ecdsa::{EcdsaChangeAction, EcdsaChangeSet},
+    ecdsa::{IDkgChangeAction, IDkgChangeSet},
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::node::RegistryVersion;
 use ic_types::{
-    consensus::idkg::{EcdsaBlockReader, EcdsaMessage},
+    consensus::idkg::{EcdsaBlockReader, IDkgMessage},
     crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams, SignedIDkgDealing},
     crypto::{BasicSigOf, CryptoResult},
     malicious_flags::MaliciousFlags,
@@ -46,17 +46,17 @@ impl BasicSigner<IDkgDealing> for EcdsaPreSignerImpl {
 
 /// Modify the given changeset with malicious behavior.
 pub fn maliciously_alter_changeset(
-    changeset: EcdsaChangeSet,
+    changeset: IDkgChangeSet,
     pre_signer: &EcdsaPreSignerImpl,
     malicious_flags: &MaliciousFlags,
-) -> EcdsaChangeSet {
+) -> IDkgChangeSet {
     let block_reader =
         EcdsaBlockReaderImpl::new(pre_signer.consensus_block_cache.finalized_chain());
 
     changeset
         .into_iter()
         .flat_map(|action| match action {
-            EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing))
+            IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing))
                 if malicious_flags.maliciously_corrupt_ecdsa_dealings =>
             {
                 let transcript_id = dealing.idkg_dealing().transcript_id;
@@ -75,7 +75,7 @@ pub fn maliciously_alter_changeset(
                             &pre_signer.log,
                             &pre_signer.metrics,
                         );
-                        EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing))
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing))
                     })
             }
             _ => Some(action),

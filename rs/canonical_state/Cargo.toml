@@ -37,7 +37,7 @@ ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 ic-sys = { path = "../sys" }
 hex = { workspace = true }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 proptest = "1.0"
 tempfile = { workspace = true }

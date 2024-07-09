@@ -18,7 +18,7 @@ tree-deserializer = { path = "../tree_deserializer" }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-test-utils = { path = "test-utils" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }

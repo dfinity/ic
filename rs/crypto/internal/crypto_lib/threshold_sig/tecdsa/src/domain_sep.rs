@@ -87,81 +87,47 @@ impl DomainSep {
                 }
             }
             Self::SeedForComplaint(alg, dealer_index) => {
-                if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {
-                    format!("ic-crypto-tecdsa-complaint-against-{}", dealer_index)
-                } else {
-                    format!(
-                        "ic-crypto-idkg-{}-seed-for-complaint-dealer-{}",
-                        alg.tag(),
-                        dealer_index
-                    )
-                }
+                format!(
+                    "ic-crypto-idkg-{}-seed-for-complaint-dealer-{}",
+                    alg.tag(),
+                    dealer_index
+                )
             }
             Self::SeedForDealingMega(alg, recipients, dealer_index) => {
-                if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {
-                    "ic-crypto-tecdsa-create-dealing-mega-encrypt".to_string()
-                } else {
-                    format!(
-                        "ic-crypto-idkg-{}-seed-for-mega-encrypting-from-dealer-{}-to-{}",
-                        alg.tag(),
-                        recipients,
-                        dealer_index
-                    )
-                }
+                format!(
+                    "ic-crypto-idkg-{}-seed-for-mega-encrypting-from-dealer-{}-to-{}",
+                    alg.tag(),
+                    recipients,
+                    dealer_index
+                )
             }
             Self::SeedForDealingPolynomials(alg) => {
-                if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {
-                    "ic-crypto-tecdsa-create-dealing-polynomials".to_string()
-                } else {
-                    format!("ic-crypto-idkg-{}-seed-for-dealing-polynomials", alg.tag())
-                }
+                format!("ic-crypto-idkg-{}-seed-for-dealing-polynomials", alg.tag())
             }
             Self::SeedForMegaEncryption(ctype, alg, key_curve) => {
-                if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {
-                    format!(
-                        "ic-crypto-tecdsa-mega-encryption-{}-ephemeral-key",
-                        ctype.old_tag()
-                    )
-                } else {
-                    format!(
-                        "ic-crypto-idkg-{}-seed-for-mega-{}-encryption-with-{}",
-                        alg.tag(),
-                        ctype.tag(),
-                        key_curve
-                    )
-                }
+                format!(
+                    "ic-crypto-idkg-{}-seed-for-mega-{}-encryption-with-{}",
+                    alg.tag(),
+                    ctype.tag(),
+                    key_curve
+                )
             }
             Self::SeedForMegaPopProof(ctype, alg, key_curve) => {
-                if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {
-                    format!(
-                        "ic-crypto-tecdsa-mega-encryption-{}-pop-proof",
-                        ctype.old_tag()
-                    )
-                } else {
-                    format!(
-                        "ic-crypto-idkg-{}-seed-for-mega-{}-pop-proof-with-{}",
-                        alg.tag(),
-                        ctype.tag(),
-                        key_curve
-                    )
-                }
+                format!(
+                    "ic-crypto-idkg-{}-seed-for-mega-{}-pop-proof-with-{}",
+                    alg.tag(),
+                    ctype.tag(),
+                    key_curve
+                )
             }
             Self::SeedForProofOfEqualOpenings(alg) => {
-                if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {
-                    "ic-crypto-tecdsa-zk-proof-of-equal-openings".to_string()
-                } else {
-                    format!(
-                        "ic-crypto-idkg-{}-seed-for-zk-proof-of-equal-openings",
-                        alg.tag()
-                    )
-                }
+                format!(
+                    "ic-crypto-idkg-{}-seed-for-zk-proof-of-equal-openings",
+                    alg.tag()
+                )
             }
             Self::SeedForProofOfProduct(alg) => {
-                if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {
-                    "ic-crypto-tecdsa-zk-proof-of-product".to_string()
-                } else {
-                    format!("ic-crypto-idkg-{}-seed-for-zk-proof-of-product", alg.tag())
-                }
+                format!("ic-crypto-idkg-{}-seed-for-zk-proof-of-product", alg.tag())
             }
             Self::ZkProofOfDLogEq(alg) => {
                 if alg == IdkgProtocolAlgorithm::EcdsaSecp256k1 {

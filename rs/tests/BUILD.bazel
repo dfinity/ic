@@ -31,10 +31,13 @@ rust_library(
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
         "src/consensus/cow_safety.wasm",
-        "src/message.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

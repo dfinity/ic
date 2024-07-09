@@ -7,7 +7,7 @@ use ic_config::{
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
     CanisterInstallMode, CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId,
-    HttpMethod, TransformContext, TransformFunc,
+    HttpMethod, MasterPublicKeyId, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -30,6 +30,7 @@ const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 const TEST_SUBNET_SIZES: [usize; 3] = [4, 13, 34];
 
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
+pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 
@@ -414,7 +415,7 @@ fn simulate_sign_with_ecdsa_cost(
     nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
 ) -> Cycles {
-    let ecdsa_key = EcdsaKeyId {
+    let key_id = EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: "key_id_secp256k1".to_string(),
     };
@@ -424,7 +425,7 @@ fn simulate_sign_with_ecdsa_cost(
         .with_subnet_size(subnet_size)
         .with_nns_subnet_id(nns_subnet_id)
         .with_subnet_id(subnet_id)
-        .with_ecdsa_key(ecdsa_key.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
     let canister_id =
@@ -440,7 +441,7 @@ fn simulate_sign_with_ecdsa_cost(
                 Encode!(&ic00::SignWithECDSAArgs {
                     message_hash: [0; 32],
                     derivation_path: DerivationPath::new(Vec::new()),
-                    key_id: ecdsa_key
+                    key_id,
                 })
                 .unwrap(),
             ),
@@ -702,12 +703,13 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
-            // The ECDSA signature fee is the fee charged when creating a
+            // ECDSA and Schnorr signature fees are the fees charged when creating a
             // signature on this subnet. The request likely came from a
             // different subnet which is not a system subnet. There is an
             // explicit exception for requests originating from the NNS when the
             // charging occurs.
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
@@ -734,6 +736,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(3_000_000),
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),

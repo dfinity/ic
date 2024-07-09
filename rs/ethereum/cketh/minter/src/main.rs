@@ -11,10 +11,11 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPrice, Erc20Balance, GasFeeEstimate, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
-    WithdrawalSearchParameter,
+    AddCkErc20Token, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
+    GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
+    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
+use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
@@ -145,12 +146,30 @@ async fn smart_contract_address() -> String {
 /// Estimate price of EIP-1559 transaction based on the
 /// `base_fee_per_gas` included in the last finalized block.
 #[query]
-async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
+async fn eip_1559_transaction_price(
+    token: Option<Eip1559TransactionPriceArg>,
+) -> Eip1559TransactionPrice {
+    let gas_limit = match token {
+        None => CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+        Some(Eip1559TransactionPriceArg { ckerc20_ledger_id }) => {
+            match read_state(|s| s.find_ck_erc20_token_by_ledger_id(&ckerc20_ledger_id)) {
+                Some(_) => CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+                None => {
+                    if ckerc20_ledger_id == read_state(|s| s.cketh_ledger_id) {
+                        CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
+                    } else {
+                        ic_cdk::trap(&format!(
+                            "ERROR: Unsupported ckERC20 token ledger {}",
+                            ckerc20_ledger_id
+                        ))
+                    }
+                }
+            }
+        }
+    };
     match read_state(|s| s.last_transaction_price_estimate.clone()) {
         Some((ts, estimate)) => {
-            let mut result = Eip1559TransactionPrice::from(
-                estimate.to_price(CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT),
-            );
+            let mut result = Eip1559TransactionPrice::from(estimate.to_price(gas_limit));
             result.timestamp = Some(ts);
             result
         }
@@ -300,9 +319,10 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 withdrawal_id: *request.cketh_ledger_burn_index().as_ref(),
                 recipient_address: request.payee().to_string(),
                 token_symbol: match request {
-                    CkEth(_) => "ckETH".to_string(),
+                    CkEth(_) => CkTokenSymbol::cketh_symbol_from_state(s).to_string(),
                     CkErc20(r) => s
-                        .ckerc20_token_symbol(&r.erc20_contract_address)
+                        .ckerc20_tokens
+                        .get_alt(&r.erc20_contract_address)
                         .unwrap()
                         .to_string(),
                 },
@@ -718,7 +738,11 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     reimbursed_amount: reimbursed.reimbursed_amount.into(),
                     transaction_hash: reimbursed.transaction_hash.map(|h| h.to_string()),
                 },
-                EventType::SkippedBlock(block_number) => EP::SkippedBlock {
+                EventType::SkippedBlockForContract {
+                    contract_address,
+                    block_number,
+                } => EP::SkippedBlock {
+                    contract_address: Some(contract_address.to_string()),
                     block_number: block_number.into(),
                 },
                 EventType::AddedCkErc20Token(token) => EP::AddedCkErc20Token {
@@ -813,7 +837,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             read_state(|s| {
                 w.encode_gauge(
                     "cketh_minter_stable_memory_bytes",
-                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::api::stable::stable64_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
@@ -845,7 +869,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
                 w.encode_counter(
                     "cketh_minter_skipped_blocks",
-                    s.skipped_blocks.len() as f64,
+                    s.skipped_blocks
+                        .values()
+                        .flat_map(|blocks| blocks.iter())
+                        .count() as f64,
                     "Total count of Ethereum blocks that were skipped for deposits.",
                 )?;
 

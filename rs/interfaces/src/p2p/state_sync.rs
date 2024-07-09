@@ -29,7 +29,24 @@ impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
     }
 }
 
-pub type Chunk = Vec<u8>;
+/// To decrease the risk of leaking chunks we make it hard to clone them.
+pub struct Chunk(Vec<u8>);
+
+impl From<Vec<u8>> for Chunk {
+    fn from(chunk: Vec<u8>) -> Self {
+        Chunk(chunk)
+    }
+}
+
+impl Chunk {
+    pub fn take(self) -> Vec<u8> {
+        self.0
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 /// Error codes returned by the `Chunkable` interface.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]

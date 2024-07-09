@@ -43,6 +43,10 @@ if grep -qE ".*\.hs" <<<"$DIFF_FILES"; then
     files+=(//pre-commit:ormolu-lint)
 fi
 
+if grep -qE ".*\.proto" <<<"$DIFF_FILES"; then
+    files+=(//pre-commit:protobuf-format-check)
+fi
+
 if [ ${#files[@]} -eq 0 ]; then
     echo "Changes not detected in bazel targets. No bazel targets to build or test." >&2
     exit 0
@@ -51,7 +55,7 @@ fi
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(//..., set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_nightly_nns', //...)")
+    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1

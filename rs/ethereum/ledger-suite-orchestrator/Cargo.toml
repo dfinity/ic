@@ -29,6 +29,7 @@ ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-stable-structures = { workspace = true }
 num-traits = { workspace = true }
+scopeguard = "1.1.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }

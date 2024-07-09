@@ -2,11 +2,13 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
-use crate::ecdsa::{
-    make_bootstrap_summary,
-    payload_builder::make_bootstrap_summary_with_initial_dealings,
-    utils::{get_ecdsa_config_if_enabled, inspect_chain_key_initializations},
+use crate::{
+    consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
+    ecdsa::{
+        make_bootstrap_summary,
+        payload_builder::make_bootstrap_summary_with_initial_dealings,
+        utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},
+    },
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
@@ -20,26 +22,22 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::consensus::SummaryPayload;
-use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash};
 use ic_types::{
     artifact::{Priority, PriorityFn},
-    artifact_kind::DkgArtifact,
     batch::ValidationContext,
     consensus::{
         dkg::{DealingContent, DkgMessageId, Message},
         idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank,
+        Payload, RandomBeaconContent, Rank, SummaryPayload,
     },
     crypto::{
         crypto_hash,
         threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     signature::ThresholdSignature,
     Height, NodeId, RegistryVersion, SubnetId, Time,
 };
-pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
 pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use phantom_newtype::Id;
 use prometheus::Histogram;
@@ -54,6 +52,8 @@ pub(crate) mod payload_validator;
 #[cfg(test)]
 mod test_utils;
 mod utils;
+
+pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
@@ -387,7 +387,7 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossipImpl {
+impl<Pool: DkgPool> PriorityFnAndFilterProducer<Message, Pool> for DkgGossipImpl {
     fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId, ()> {
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id, _| {
@@ -567,12 +567,16 @@ fn bootstrap_ecdsa_summary(
         return Ok(Some(summary));
     }
 
-    match get_ecdsa_config_if_enabled(subnet_id, registry_version, registry_client, logger)
-        .map_err(|err| format!("Failed getting the ECDSA config: {:?}", err))?
+    match get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+        .map_err(|err| format!("Failed getting the chain key config: {:?}", err))?
     {
-        Some(ecdsa_config) => Ok(make_bootstrap_summary(
+        Some(chain_key_config) => Ok(make_bootstrap_summary(
             subnet_id,
-            ecdsa_config.key_ids,
+            chain_key_config
+                .key_configs
+                .iter()
+                .map(|key_config| key_config.key_id.clone())
+                .collect(),
             Height::new(cup_contents.height),
         )),
         None => Ok(None),
@@ -581,8 +585,7 @@ fn bootstrap_ecdsa_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::test_utils::complement_state_manager_with_remote_dkg_requests;
-    use super::*;
+    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
         dependencies, dependencies_with_subnet_params,

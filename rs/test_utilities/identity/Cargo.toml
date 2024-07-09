@@ -10,6 +10,6 @@ documentation.workspace = true
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-types = { path = "../../types/types" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

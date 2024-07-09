@@ -83,7 +83,7 @@ else
     PATH1="${PATH1:1}"
 fi
 
-if [[ $PATH0 == *".gz" && $PATH1 == *".gz" ]]; then
+if [[ $PATH0 == *".zst" && $PATH1 == *".zst" ]]; then
     mkdir -p "$(dirname /tmp/$PATH0)"
     mkdir -p "$(dirname /tmp/$PATH1)"
 
@@ -138,13 +138,13 @@ fi
 if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x
     echo_green "Investigate with diffoscope [\xF0\x9F\x99\x8F]:\n"
-    if grep -q "img.tar.gz" $SHA256SUMS0; then
+    if grep -q "img.tar.zst" $SHA256SUMS0; then
         echo_blue "# Download IC-OS image:\n"
 
-        if grep -q "update-img.tar.gz" $SHA256SUMS0; then
-            ARTIFACT="update-img.tar.gz"
+        if grep -q "update-img.tar.zst" $SHA256SUMS0; then
+            ARTIFACT="update-img.tar.zst"
         else
-            ARTIFACT="disk-img.tar.gz"
+            ARTIFACT="disk-img.tar.zst"
         fi
 
         echo "rm -rf /tmp/$PATH0 && mkdir -p /tmp/$PATH0"
@@ -152,7 +152,7 @@ if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
         echo "curl -sfS https://download.dfinity.systems/ic/$PATH0/$ARTIFACT -o /tmp/$PATH0/$ARTIFACT"
         echo "curl -sfS https://download.dfinity.systems/ic/$PATH1/$ARTIFACT -o /tmp/$PATH1/$ARTIFACT"
 
-        if grep -q "update-img.tar.gz" $SHA256SUMS0; then
+        if grep -q "update-img.tar.zst" $SHA256SUMS0; then
             echo_blue "# Mount IC-OS boot & root image as loop devices:\n"
             echo "pushd /tmp/$PATH0"
             echo "tar -xzf $ARTIFACT"

@@ -7,6 +7,7 @@ cc_binary(
         "infogetty-cpp/network_info.cc",
         "infogetty-cpp/network_info.h",
     ],
+    copts = ["-std=c++17"],
     linkopts = [
         "-lsystemd",
     ],
@@ -31,6 +32,7 @@ cc_binary(
     srcs = [
         "prestorecon-cpp/prestorecon.cc",
     ],
+    copts = ["-std=c++17"],
     linkopts = [
         "-lselinux",
         "-pthread",

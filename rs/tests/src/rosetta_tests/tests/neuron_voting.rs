@@ -1,11 +1,9 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::lib::{
     create_governance_client, do_multiple_txn, one_day_from_now_nanos, to_public_key, NeuronDetails,
 };
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::{block_on, get_identity, IDENTITY_PEM};
 use ic_agent::Identity;
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
@@ -17,6 +15,8 @@ use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{RegisterVote, Status};
 use ic_rosetta_test_utils::RequestInfo;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::{block_on, get_identity, IDENTITY_PEM};
 use slog::info;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,11 +28,11 @@ pub fn test(env: TestEnv) {
     let _logger = env.logger();
 
     let mut ledger_balances = HashMap::new();
-    let one_year_from_now = 60 * 60 * 24 * 365
-        + std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let one_year_from_now = 60 * 60 * 24 * 365 + now;
 
     //We need to know the identity of the agent before we create the neurons.
     //The controller of the neuron has to be the agent principal otherwise we cannot make proposals and vote on them.
@@ -44,6 +44,7 @@ pub fn test(env: TestEnv) {
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
     let neuron_setup = |neuron: &mut Neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 420_000_000;
         neuron.controller = Some(agent_principal.into());
         neuron.account =
@@ -56,6 +57,7 @@ pub fn test(env: TestEnv) {
     //Setup for non proposal making entities
     let neuron_setup = |neuron: &mut Neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 420_000_000;
     };
     let neuron2 = neurons.create(neuron_setup);

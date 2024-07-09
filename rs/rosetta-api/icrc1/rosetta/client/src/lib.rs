@@ -12,6 +12,7 @@ use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::models::RosettaSupportedKeyPair;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::objects::Operation;
 use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
@@ -38,7 +39,7 @@ impl RosettaClient {
         Ok(Self::from_url(url))
     }
 
-    fn url(&self, path: &str) -> Url {
+    pub fn url(&self, path: &str) -> Url {
         self.url
             .join(path)
             .unwrap_or_else(|e| panic!("Failed to join {} with path {}: {}", self.url, path, e))
@@ -101,6 +102,15 @@ impl RosettaClient {
             .await?
             .json()
             .await
+    }
+
+    pub async fn ready(&self) -> reqwest::StatusCode {
+        self.http_client
+            .get(self.url("/ready"))
+            .send()
+            .await
+            .unwrap()
+            .status()
     }
 
     pub async fn make_submit_and_wait_for_transaction<T: RosettaSupportedKeyPair>(
@@ -680,6 +690,23 @@ impl RosettaClient {
                 network_identifier,
                 transaction,
                 signed: is_signed,
+            },
+        )
+        .await
+    }
+
+    pub async fn call(
+        &self,
+        network_identifier: NetworkIdentifier,
+        method_name: String,
+        parameters: ObjectMap,
+    ) -> Result<CallResponse, Error> {
+        self.call_endpoint(
+            "/call",
+            &CallRequest {
+                network_identifier,
+                method_name,
+                parameters,
             },
         )
         .await

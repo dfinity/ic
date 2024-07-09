@@ -1,7 +1,7 @@
 //! This module provides two public interfaces, compute_attribute and
 //! get_priority_function.
 
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{pool_reader::PoolReader, ACCEPTABLE_VALIDATION_CUP_GAP};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_types::{
     artifact::{ConsensusMessageId, Priority, Priority::*, PriorityFn},
@@ -15,14 +15,16 @@ pub fn get_priority_function(
     expected_batch_height: Height,
 ) -> PriorityFn<ConsensusMessageId, ()> {
     let pool_reader = PoolReader::new(pool);
-    let catch_up_height = pool_reader.get_catch_up_height();
+    let cup_height = pool_reader.get_catch_up_height();
+    let next_cup_height = pool_reader.get_next_cup_height();
     let finalized_height = pool_reader.get_finalized_height();
     let notarized_height = pool_reader.get_notarized_height();
     let beacon_height = pool_reader.get_random_beacon_height();
 
     Box::new(move |id: &'_ ConsensusMessageId, ()| {
         compute_priority(
-            catch_up_height,
+            cup_height,
+            next_cup_height,
             expected_batch_height,
             finalized_height,
             notarized_height,
@@ -38,7 +40,8 @@ const LOOK_AHEAD: u64 = 10;
 /// The actual priority computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
 fn compute_priority(
-    catch_up_height: Height,
+    cup_height: Height,
+    next_cup_height: Height,
     expected_batch_height: Height,
     finalized_height: Height,
     notarized_height: Height,
@@ -47,8 +50,15 @@ fn compute_priority(
 ) -> Priority {
     let height = id.height;
     // Ignore older than the min of catch-up height and expected_batch_height
-    if height < expected_batch_height.min(catch_up_height) {
+    if height < expected_batch_height.min(cup_height) {
         return Drop;
+    }
+    // Stash non-CUP artifacts, as long as they're too far ahead of the next CUP height.
+    // This prevents nodes that have fallen behind to exceed their validated pool bounds.
+    if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
+        && height > next_cup_height + Height::new(ACCEPTABLE_VALIDATION_CUP_GAP)
+    {
+        return Stash;
     }
     // Other decisions depend on type, default is to FetchNow.
     match id.hash {
@@ -75,7 +85,8 @@ fn compute_priority(
         ConsensusMessageHash::Notarization(_)
         | ConsensusMessageHash::Finalization(_)
         | ConsensusMessageHash::FinalizationShare(_)
-        | ConsensusMessageHash::BlockProposal(_) => {
+        | ConsensusMessageHash::BlockProposal(_)
+        | ConsensusMessageHash::EquivocationProof(_) => {
             // Ignore finalized
             if height <= finalized_height {
                 Drop
@@ -96,7 +107,7 @@ fn compute_priority(
         }
         ConsensusMessageHash::CatchUpPackage(_) => FetchNow,
         ConsensusMessageHash::CatchUpPackageShare(_) => {
-            if height <= catch_up_height {
+            if height <= cup_height {
                 Drop
             } else if height <= finalized_height {
                 FetchNow
@@ -110,13 +121,81 @@ fn compute_priority(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_utils::ACCEPTABLE_VALIDATION_CUP_GAP;
     use ic_test_utilities_consensus::fake::FakeContent;
-    use ic_test_utilities_types::ids::node_test_id;
-    use ic_types::consensus::{
-        ConsensusMessageHashable, Finalization, FinalizationContent, HasHeight, Notarization,
-        NotarizationContent,
+    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::{
+        consensus::{
+            ConsensusMessageHashable, Finalization, FinalizationContent, HasHeight, Notarization,
+            NotarizationContent,
+        },
+        crypto::{CryptoHash, CryptoHashOf},
     };
+
+    #[test]
+    fn test_priority_for_validation_cup_gap() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval = ACCEPTABLE_VALIDATION_CUP_GAP + 29;
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(committee.as_slice())
+                        .with_dkg_interval_length(dkg_interval)
+                        .build(),
+                )],
+            );
+
+            // Advance pool *without* producing CUP to the maximum height beyond
+            // which we don't validate non-CUP artifacts anymore.
+            let max_validation_height = dkg_interval + ACCEPTABLE_VALIDATION_CUP_GAP + 1;
+            pool.advance_round_normal_operation_no_cup_n(max_validation_height);
+
+            let expected_batch_height = Height::from(1);
+            let priority = get_priority_function(&pool, expected_batch_height);
+
+            // Artifacts at the next height are within look-ahead, but exceed
+            // the validator-CUP gap. We should stash them, but not fetch them.
+            let beacon = pool.make_next_beacon();
+            let block = pool.make_next_block();
+            let notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            let equivocation_proof_id = ConsensusMessageId {
+                hash: ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(
+                    vec![],
+                ))),
+                height: block.height(),
+            };
+            assert_eq!(priority(&beacon.get_id(), &()), Stash);
+            assert_eq!(priority(&block.get_id(), &()), Stash);
+            assert_eq!(priority(&notarization.get_id(), &()), Stash);
+            assert_eq!(priority(&equivocation_proof_id, &()), Stash);
+
+            // Regardless of bounds, we should always fetch CUPs.
+            let cup_id = ConsensusMessageId {
+                hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(vec![]))),
+                height: Height::new(100000000),
+            };
+            assert_eq!(priority(&cup_id, &()), FetchNow);
+
+            // Insert CUP for next summary height and recompute priority function.
+            pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
+            let priority = get_priority_function(&pool, expected_batch_height);
+
+            // The artifacts are not outside the validation-CUP gap, and
+            // within look-ahead distance. We should fetch them all.
+            assert_eq!(priority(&beacon.get_id(), &()), FetchNow);
+            assert_eq!(priority(&block.get_id(), &()), FetchNow);
+            assert_eq!(priority(&notarization.get_id(), &()), FetchNow);
+            assert_eq!(priority(&equivocation_proof_id, &()), FetchNow);
+        })
+    }
 
     #[test]
     fn test_priority_function() {

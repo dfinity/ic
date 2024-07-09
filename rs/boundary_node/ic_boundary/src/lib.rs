@@ -8,7 +8,6 @@ mod dns;
 mod firewall;
 mod geoip;
 mod http;
-mod management;
 mod metrics;
 mod persist;
 mod rate_limiting;

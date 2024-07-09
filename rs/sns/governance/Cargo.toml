@@ -61,7 +61,7 @@ ic-sns-governance-proposals-amount-total-limit = { path = "./proposals_amount_to
 ic-sns-governance-token-valuation = { path = "./token_valuation" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
@@ -97,7 +97,7 @@ ic-sns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = "1.0"
 tempfile = { workspace = true }

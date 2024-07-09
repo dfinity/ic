@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-prost = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -269,6 +269,10 @@ pub struct Config {
     pub ic00_compute_initial_i_dkg_dealings: FlagStatus,
 
     // TODO(EXC-1633): remove this flag once the feature is enabled by default.
+    /// Indicates whether `Ic00Method::SchnorrPublicKey` is enabled.
+    pub ic00_schnorr_public_key: FlagStatus,
+
+    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
     /// Indicates whether `Ic00Method::SignWithSchnorr` is enabled.
     pub ic00_sign_with_schnorr: FlagStatus,
 }
@@ -342,8 +346,9 @@ impl Default for Config {
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
             dirty_page_logging: FlagStatus::Disabled,
-            ic00_compute_initial_i_dkg_dealings: FlagStatus::Disabled,
-            ic00_sign_with_schnorr: FlagStatus::Disabled,
+            ic00_compute_initial_i_dkg_dealings: FlagStatus::Enabled,
+            ic00_schnorr_public_key: FlagStatus::Enabled,
+            ic00_sign_with_schnorr: FlagStatus::Enabled,
         }
     }
 }

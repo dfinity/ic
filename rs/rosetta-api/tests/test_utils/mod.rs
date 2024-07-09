@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
@@ -46,7 +47,7 @@ pub struct TestLedger {
 impl TestLedger {
     pub fn new() -> Self {
         Self {
-            blockchain: RwLock::new(Blocks::new_in_memory().unwrap()),
+            blockchain: RwLock::new(Blocks::new_in_memory(false).unwrap()),
             canister_id: CanisterId::unchecked_from_principal(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -239,6 +240,10 @@ impl LedgerAccess for TestLedger {
         Ok(TransferFee {
             transfer_fee: self.transfer_fee,
         })
+    }
+
+    async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode {
+        RosettaBlocksMode::Disabled
     }
 }
 

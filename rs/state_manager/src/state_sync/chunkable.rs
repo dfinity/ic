@@ -1127,8 +1127,6 @@ fn maliciously_alter_chunk_data(
         }
     };
 
-    let payload = chunk.clone();
-
     let ix = chunk_id.get();
     match state_sync_chunk_type(ix) {
         StateSyncChunk::MetaManifestChunk => {
@@ -1136,27 +1134,33 @@ fn maliciously_alter_chunk_data(
                 return chunk;
             }
             allowance.meta_manifest_chunk_error_allowance -= 1;
-            let meta_manifest = match decode_meta_manifest(&payload) {
+            let meta_manifest = match decode_meta_manifest(chunk.as_bytes().to_vec().into()) {
                 Ok(meta_manifest) => meta_manifest,
                 Err(_) => {
                     return chunk;
                 }
             };
-            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest);
+            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest).into();
         }
         StateSyncChunk::ManifestChunk(_) => {
             if allowance.manifest_chunk_error_allowance == 0 {
                 return chunk;
             }
             allowance.manifest_chunk_error_allowance -= 1;
-            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(payload);
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
         }
         _ => {
             if allowance.state_chunk_error_allowance == 0 {
                 return chunk;
             }
             allowance.state_chunk_error_allowance -= 1;
-            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(payload);
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
         }
     }
     // Sleep for 15 seconds to allow the replica connecting to more peers for state sync.
@@ -1201,7 +1205,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
         #[cfg(feature = "malicious_code")]
         let chunk = maliciously_alter_chunk_data(chunk, chunk_id, &mut self.malicious_flags);
         let ix = chunk_id.get();
-        let payload = &chunk;
         match &mut self.state {
             DownloadState::Complete => {
                 debug!(
@@ -1213,7 +1216,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
             }
             DownloadState::Blank => {
                 if chunk_id == META_MANIFEST_CHUNK {
-                    let meta_manifest = decode_meta_manifest(payload).map_err(|err| {
+                    let meta_manifest = decode_meta_manifest(chunk).map_err(|err| {
                         warn!(
                             self.log,
                             "Failed to decode meta-manifest chunk for state {}: {}",
@@ -1291,7 +1294,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                 crate::manifest::validate_sub_manifest(
                     manifest_chunk_index,
-                    &payload[..],
+                    chunk.as_bytes(),
                     meta_manifest,
                 )
                 .map_err(|err| {
@@ -1304,7 +1307,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                     AddChunkError::Invalid
                 })?;
-                manifest_in_construction.insert(ix, payload.clone());
+                manifest_in_construction.insert(ix, chunk.take());
                 manifest_chunks.remove(&ix);
 
                 debug!(
@@ -1446,7 +1449,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 let (chunk_table_indices, payload_pieces) = match state_sync_chunk_type(ix) {
                     StateSyncChunk::FileChunk(index) => {
                         // If it is a normal chunk, there is only one index mapped to the whole payload.
-                        (vec![index], vec![(0, payload.len())])
+                        (vec![index], vec![(0, chunk.as_bytes().len())])
                     }
                     StateSyncChunk::FileGroupChunk(index) => {
                         // If it is a file group chunk, divide it into pieces according to the `FileGroupChunks`.
@@ -1464,7 +1467,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             cur_offset += chunk_size;
                         }
 
-                        if cur_offset != payload.len() {
+                        if cur_offset != chunk.as_bytes().len() {
                             warn!(self.log, "Received invalid file group chunk {}", ix);
                             return Err(AddChunkError::Invalid);
                         }
@@ -1486,7 +1489,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 {
                     crate::manifest::validate_chunk(
                         *chunk_table_index as usize,
-                        &payload[start..end],
+                        &chunk.as_bytes()[start..end],
                         manifest,
                     )
                     .map_err(|err| {
@@ -1508,7 +1511,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         &self.metrics.state_sync_metrics,
                         &self.root,
                         *chunk_table_index as usize,
-                        &payload[start..end],
+                        &chunk.as_bytes()[start..end],
                         manifest,
                     );
                 }

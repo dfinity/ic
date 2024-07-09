@@ -46,6 +46,7 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;
+use std::collections::BTreeSet;
 use std::{collections::HashMap, time::UNIX_EPOCH};
 
 // Valid images to be used in the CreateServiceNervousSystem proposal.
@@ -97,13 +98,13 @@ lazy_static! {
                 }),
             }),
             swap_parameters: Some(SwapParameters {
-                minimum_participants: Some(5),
+                minimum_participants: Some(4),
                 minimum_direct_participation_icp: Some(Tokens::from_tokens(499_900)),
-                maximum_direct_participation_icp: Some(Tokens::from_tokens(749_900)),
-                minimum_participant_icp: Some(Tokens::from_tokens(1)),
+                maximum_direct_participation_icp: Some(Tokens::from_tokens(549_900)),
+                minimum_participant_icp: Some(Tokens::from_tokens(20)),
                 maximum_participant_icp: Some(Tokens::from_tokens(500_000)),
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: Some(5),
+                    count: Some(3),
                     dissolve_delay_interval: Some(Duration::from_secs(7_890_000)), // 3 months
                 }),
                 confirmation_text: None,
@@ -142,9 +143,6 @@ pub struct SnsInitializationFlowTestSetup {
 
     /// The dapp canisters being decentralized with the SNS.
     pub dapp_canisters: Vec<CanisterId>,
-
-    /// The developer principal used to propose and own the dapp being decentralized.
-    pub developer_principal_id: PrincipalId,
 
     /// Principals that have ICP in their main ledger account and can be used in the test, most
     /// likely used to participate in the swap.
@@ -225,7 +223,6 @@ impl SnsInitializationFlowTestSetup {
         Self {
             state_machine,
             dapp_canisters: vec![dapp_canister],
-            developer_principal_id,
             funded_principals,
         }
     }
@@ -393,8 +390,13 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
                 .as_ref()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![test_sns.root_canister_id.unwrap()]
+                .controllers
+                .clone()
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            vec![test_sns.root_canister_id.unwrap(), ROOT_CANISTER_ID.get()]
+                .into_iter()
+                .collect::<BTreeSet<_>>()
         );
     }
 
@@ -699,8 +701,13 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
                 .as_ref()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![test_sns.root_canister_id.unwrap()]
+                .controllers
+                .clone()
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            vec![test_sns.root_canister_id.unwrap(), ROOT_CANISTER_ID.get()]
+                .into_iter()
+                .collect::<BTreeSet<_>>()
         );
     }
 
@@ -1011,8 +1018,13 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
                 .as_ref()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![test_sns.root_canister_id.unwrap()]
+                .controllers
+                .clone()
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            vec![test_sns.root_canister_id.unwrap(), ROOT_CANISTER_ID.get()]
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
         );
     }
 
@@ -1217,10 +1229,10 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
         &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_1.swap_canister_id),
         participant,
-        ExplosiveTokens::from_e8s(E8),
+        ExplosiveTokens::from_e8s(20 * E8),
     );
 
-    assert_eq!(response.icp_accepted_participation_e8s, E8);
+    assert_eq!(response.icp_accepted_participation_e8s, 20 * E8);
 
     // Submit a copy of the same proposal. This should succeed since there is no deduping mechanism
     // for SNS content
@@ -1273,8 +1285,8 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
         &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_2.swap_canister_id),
         participant,
-        ExplosiveTokens::from_e8s(E8),
+        ExplosiveTokens::from_e8s(20 * E8),
     );
 
-    assert_eq!(response.icp_accepted_participation_e8s, E8);
+    assert_eq!(response.icp_accepted_participation_e8s, 20 * E8);
 }

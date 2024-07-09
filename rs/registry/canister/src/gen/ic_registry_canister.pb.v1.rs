@@ -117,6 +117,9 @@ pub struct RegistryCanisterStableStorage {
 pub struct NodeProvidersMonthlyXdrRewards {
     #[prost(map = "string, uint64", tag = "1")]
     pub rewards: ::std::collections::HashMap<::prost::alloc::string::String, u64>,
+    /// Registry version at which rewards were calculated
+    #[prost(uint64, optional, tag = "2")]
+    pub registry_version: ::core::option::Option<u64>,
 }
 /// Maps the supplied PrincipalId (of a canister) to the subnet to which the canister is assigned to.
 /// There is no guarantee that the canister exists, even if a subnet ID is returned.

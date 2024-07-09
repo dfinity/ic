@@ -54,7 +54,7 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 lifeline = { path = "../handlers/lifeline/impl" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }

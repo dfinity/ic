@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use ic_artifact_pool::{
     canister_http_pool, certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl, dkg_pool, ecdsa_pool,
+    consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
@@ -13,7 +13,7 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
-    ecdsa::EcdsaChangeSet,
+    ecdsa::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
@@ -32,12 +32,11 @@ use ic_test_utilities::{
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, EcdsaStatsNoOp};
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
 use ic_types::{
-    artifact::{ArtifactKind, Priority, PriorityFn},
-    artifact_kind::ConsensusArtifact,
+    artifact::{IdentifiableArtifact, Priority, PriorityFn},
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::EcdsaMessage,
+        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
         CatchUpPackage, ConsensusMessage,
     },
     replica_config::ReplicaConfig,
@@ -113,7 +112,7 @@ pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
-    Ecdsa(EcdsaMessage),
+    Ecdsa(IDkgMessage),
 }
 
 /// A Message is a tuple of [`InputMessage`] with a timestamp.
@@ -173,7 +172,7 @@ pub struct ConsensusDependencies {
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
-    pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
+    pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<canister_http_pool::CanisterHttpPoolImpl>>,
     pub message_routing: Arc<FakeMessageRouting>,
     pub state_manager: Arc<FakeStateManager>,
@@ -205,11 +204,11 @@ impl ConsensusDependencies {
             time_source,
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
-        let ecdsa_pool = ecdsa_pool::EcdsaPoolImpl::new(
+        let idkg_pool = idkg_pool::IDkgPoolImpl::new(
             pool_config,
             no_op_logger(),
             metrics_registry.clone(),
-            Box::new(EcdsaStatsNoOp {}),
+            Box::new(IDkgStatsNoOp {}),
         );
         let canister_http_pool =
             canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
@@ -219,7 +218,7 @@ impl ConsensusDependencies {
             registry_client: Arc::clone(&registry_client),
             consensus_pool,
             dkg_pool: Arc::new(RwLock::new(dkg_pool)),
-            ecdsa_pool: Arc::new(RwLock::new(ecdsa_pool)),
+            idkg_pool: Arc::new(RwLock::new(idkg_pool)),
             canister_http_pool: Arc::new(RwLock::new(canister_http_pool)),
             message_routing: Arc::new(FakeMessageRouting::with_state_manager(
                 state_manager.clone(),
@@ -266,12 +265,12 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// instances at every time step.
 pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
 
-pub(crate) struct PriorityFnState<Artifact: ArtifactKind> {
+pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
     priority_fn: PriorityFn<Artifact::Id, Artifact::Attribute>,
     pub last_updated: Time,
 }
 
-impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
+impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
     pub fn new<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
         producer: &Producer,
         pool: &Pool,
@@ -282,9 +281,8 @@ impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
         })
     }
     /// Return the priority of the given message
-    pub fn get_priority(&self, msg: &Artifact::Message) -> Priority {
-        let advert = Artifact::message_to_advert(msg);
-        (self.priority_fn)(&advert.id, &advert.attribute)
+    pub fn get_priority(&self, msg: &Artifact) -> Priority {
+        (self.priority_fn)(&msg.id(), &msg.attribute())
     }
 
     /// Compute a new priority function
@@ -311,7 +309,7 @@ pub struct ComponentModifier {
         dyn Fn(
             ecdsa::EcdsaImpl,
         )
-            -> Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
+            -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     >,
 }
 
@@ -337,7 +335,7 @@ pub fn apply_modifier_consensus(
 pub fn apply_modifier_ecdsa(
     modifier: &Option<ComponentModifier>,
     ecdsa: ecdsa::EcdsaImpl,
-) -> Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>> {
+) -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>> {
     match modifier {
         Some(f) => (f.ecdsa)(ecdsa),
         _ => Box::new(ecdsa),
@@ -352,7 +350,7 @@ pub struct ConsensusDriver<'a> {
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
     pub(crate) ecdsa:
-        Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
+        Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,
@@ -360,8 +358,8 @@ pub struct ConsensusDriver<'a> {
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     pub ingress_pool: RefCell<TestIngressPool>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
-    pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
-    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusArtifact>>,
+    pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
+    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusMessage>>,
 }
 
 /// An execution strategy picks the next instance to execute, and execute a
@@ -399,6 +397,7 @@ pub struct ConsensusRunnerConfig {
     pub num_rounds: u64,
     pub degree: usize,
     pub use_priority_fn: bool,
+    pub stall_clocks: bool,
     pub execution: Box<dyn ExecutionStrategy>,
     pub delivery: Box<dyn DeliveryStrategy>,
 }

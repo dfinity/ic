@@ -52,7 +52,7 @@ async fn mint() {
                 if let Some(result) = read_state(|s| {
                     s.ckerc20_tokens
                         .get_entry_alt(&event.erc20_contract_address)
-                        .map(|(symbol, principal)| (symbol.to_string(), *principal))
+                        .map(|(principal, symbol)| (symbol.to_string(), *principal))
                 }) {
                     result
                 } else {
@@ -186,7 +186,13 @@ where
                         ) {
                             if from == last_block_number {
                                 mutate_state(|s| {
-                                    process_event(s, EventType::SkippedBlock(last_block_number));
+                                    process_event(
+                                        s,
+                                        EventType::SkippedBlockForContract {
+                                            contract_address: helper_contract_address,
+                                            block_number: last_block_number,
+                                        },
+                                    );
                                 });
                                 update_last_scraped_block_number(last_block_number);
                                 return Some(last_block_number);

@@ -10,8 +10,8 @@ documentation.workspace = true
 hex = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 tokio = { workspace = true }
-lazy_static = "1.4.0"
-libc = "0.2.91"
+lazy_static = { workspace = true }
+libc = { workspace = true }
 nix = { workspace = true }
 prost = { workspace = true }
 wsl = "0.1.0"

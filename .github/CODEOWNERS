@@ -5,6 +5,7 @@
 # [Misc]
 /.devcontainer/           @dfinity/idx
 /.github/                 @dfinity/idx
+/.github/CODEOWNERS       @dfinity/ic-owners-owners
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
 /hs/                      @dfinity/utopia
@@ -51,10 +52,12 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-vetkd-utils/            @dfinity/dept-crypto-library
 
 # [IC-OS]
-/ic-os/                                          @dfinity/node
-/ic-os/boundary-guestos/                         @dfinity/boundary-node @dfinity/node
-/ic-os/components/boundary-guestos/              @dfinity/boundary-node @dfinity/node
-/toolchains/                                     @dfinity/node
+/ic-os/                                                                 @dfinity/node
+/ic-os/boundary-guestos/                                                @dfinity/boundary-node @dfinity/node
+/ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
+/ic-os/components/boundary-guestos.bzl                                  @dfinity/boundary-node @dfinity/node
+/ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/boundary-node @dfinity/node
+/toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
@@ -81,22 +84,20 @@ go_deps.bzl               @dfinity/idx
 /testnet/env/                                              @dfinity/platform-operations
 /testnet/release/                                          @dfinity/dre
 /testnet/tools/nns-tools/                                  @dfinity/nns-team
-/testnet/mainnet_revisions.json                            @dfinity/consensus
+/testnet/mainnet_revisions.json                            @dfinity/consensus @dfinity/dre
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
-/rs/artifact_manager/                                   @dfinity/networking
 /rs/artifact_pool/                                      @dfinity/consensus
 /rs/async_utils/                                        @dfinity/networking
 /rs/backup/                                             @dfinity/consensus
-/rs/bazelifier/                                         @dfinity/idx
 /rs/bitcoin/adapter/                                    @dfinity/networking
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
 /rs/bitcoin/mock/                                       @dfinity/finint
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
 /rs/bitcoin/service/                                    @dfinity/networking
-/rs/bitcoin/types/                                      @dfinity/execution
+/rs/bitcoin/replica_types/                              @dfinity/execution
 /rs/boundary_node/                                      @dfinity/boundary-node
 /rs/canister_client/                                    @dfinity/networking
 /rs/canister_sandbox/                                   @dfinity/runtime
@@ -150,10 +151,10 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
 /rs/memory_tracker/                                     @dfinity/runtime
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
-/rs/monitoring/adapter_metrics/                         @dfinity/networking
-/rs/monitoring/adapter_metrics_server/                  @dfinity/networking
-/rs/monitoring/adapter_metrics_service/                 @dfinity/networking
-/rs/monitoring/backtrace/                               @dfinity/ic-message-routing-owners @dfinity/networking
+/rs/monitoring/                                         @dfinity/networking
+/rs/monitoring/backtrace/                               @dfinity/networking @dfinity/ic-message-routing-owners
+/rs/monitoring/metrics                                  @dfinity/networking @dfinity/ic-message-routing-owners
+/rs/monitoring/pprof/                                   @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/nervous_system/                                     @dfinity/nns-team
 /rs/nns/                                                @dfinity/nns-team
 /rs/orchestrator/                                       @dfinity/consensus
@@ -194,6 +195,8 @@ go_deps.bzl               @dfinity/idx
 /rs/replica/                                            @dfinity/networking
 /rs/replica_tests/                                      @dfinity/execution
 /rs/replicated_state/                                   @dfinity/execution @dfinity/ic-message-routing-owners
+/rs/replicated_state/src/canister_state/queues.rs       @dfinity/ic-message-routing-owners
+/rs/replicated_state/src/canister_state/queues          @dfinity/ic-message-routing-owners
 /rs/replicated_state/src/page_map.rs                    @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/rosetta-api/                                        @dfinity/finint
@@ -214,6 +217,7 @@ go_deps.bzl               @dfinity/idx
 /rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/utopia
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
+/rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/system_api/                                         @dfinity/execution
 /rs/test_utilities/artifact_pool/                       @dfinity/consensus
 /rs/test_utilities/consensus/                           @dfinity/consensus
@@ -287,7 +291,7 @@ go_deps.bzl               @dfinity/idx
 
 # [No-Approvals]
 # Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
-*.lock                    @dfinity/core
-Cargo.toml                @dfinity/core
-.gitignore                @dfinity/core
-stackage_snapshot.json    @dfinity/core
+*.lock                    
+Cargo.toml                
+.gitignore                
+stackage_snapshot.json    

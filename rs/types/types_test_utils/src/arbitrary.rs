@@ -205,7 +205,7 @@ prop_compose! {
     ///
     /// This is what should be used for generating arbitrary requests almost everywhere;
     /// the only exception is when specifically testing for a certain certification version,
-    /// in which case `request_with_config()` should be used.
+    /// in which case `response_with_config()` should be used.
     pub fn response()(
         response in response_with_config(true),
     ) -> Response {

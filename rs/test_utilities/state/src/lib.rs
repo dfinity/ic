@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
+use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types::{CanisterStatusType, LogVisibility};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -33,7 +33,9 @@ use ic_types::{
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
     nominal_cycles::NominalCycles,
-    xnet::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue},
+    xnet::{
+        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+    },
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NodeId, NumBytes,
     PrincipalId, SubnetId, Time,
 };
@@ -810,35 +812,51 @@ pub fn insert_dummy_canister(
 
 prop_compose! {
     /// Produces a strategy that generates an arbitrary `signals_end` and between
-    /// `[min_signal_count, max_signal_count]` reject signals .
-    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize)(
-        sig_start in 0..10000u64,
-        sigs in prop::collection::btree_set(arbitrary::stream_index(100 + max_signal_count as u64), min_signal_count..=max_signal_count),
-        sig_end_delta in 0..10u64,
-    ) -> (StreamIndex, VecDeque<StreamIndex>) {
-        let mut reject_signals = VecDeque::with_capacity(sigs.len());
-        let sig_start = sig_start.into();
-        for s in sigs {
-            reject_signals.push_back(s + sig_start);
-        }
-        let sig_end = sig_start + reject_signals.back().unwrap_or(&0.into()).increment() + sig_end_delta.into();
-        (sig_end, reject_signals)
+    /// `[min_signal_count, max_signal_count]` reject signals.
+    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize, reject_reasons: Vec<RejectReason>)(
+        sig_start in 0..10000_u64,
+        reject_signals_map in prop::collection::btree_map(
+            0..(100 + max_signal_count),
+            proptest::sample::select(reject_reasons),
+            min_signal_count..=max_signal_count,
+        ),
+        signals_end_delta in 0..10u64,
+    ) -> (StreamIndex, VecDeque<RejectSignal>) {
+        let reject_signals = reject_signals_map
+            .iter()
+            .map(|(index, reason)| RejectSignal::new(*reason, (*index as u64 + sig_start).into()))
+            .collect::<VecDeque<RejectSignal>>();
+        let signals_end = reject_signals
+            .back()
+            .map(|signal| signal.index)
+            .unwrap_or(0.into())
+            .increment() + signals_end_delta.into();
+        (signals_end, reject_signals)
     }
 }
 
 prop_compose! {
     /// Produces a strategy that generates a stream with between
-    /// `[min_size, max_size]` messages; between `[min_signal_count, max_signal_count]`
-    /// reject signals; and with or without request metadata and/or message deadlines.
-    pub fn arb_stream_with_config(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize, populate_request_metadata: bool, populate_deadline: bool)(
+    /// `[min_size, max_size]` messages; and between
+    /// `[min_signal_count, max_signal_count]` reject signals using `with_reject_reasons` to
+    /// determine the type of reject signal.
+    pub fn arb_stream_with_config(
+        min_size: usize,
+        max_size: usize,
+        min_signal_count:
+        usize, max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
+    )(
         msg_start in 0..10000u64,
         msgs in prop::collection::vec(
-            // TODO(MR-549) Use `request_or_response()` once the canonical state can encode
-            // message deadlines.
-            arbitrary::request_or_response_with_config(populate_request_metadata, populate_deadline),
+            arbitrary::request_or_response_with_config(true, true),
             min_size..=max_size
         ),
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
+        (signals_end, reject_signals) in arb_reject_signals(
+            min_signal_count,
+            max_signal_count,
+            with_reject_reasons,
+        ),
         responses_only_flag in any::<bool>(),
     ) -> Stream {
         let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(msg_start));
@@ -856,10 +874,18 @@ prop_compose! {
 
 prop_compose! {
     /// Produces a strategy that generates a stream with between
-    /// `[min_size, max_size]` messages and between `[min_signal_count, max_signal_count]`
-    /// reject signals.
+    /// `[min_size, max_size]` messages and between
+    /// `[min_signal_count, max_signal_count]` reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count, true, true)
+        stream in arb_stream_with_config(
+            min_size,
+            max_size,
+            min_signal_count,
+            max_signal_count,
+            // TODO: MR-590 Include all `RejectReason` variants once
+            // the canonical representation supports them.
+            vec![RejectReason::CanisterMigrating],
+        )
     ) -> Stream {
         stream
     }
@@ -869,14 +895,12 @@ prop_compose! {
     /// Produces a strategy consisting of an arbitrary stream and valid slice begin and message
     /// count values for extracting a slice from the stream.
     pub fn arb_stream_slice(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        // TODO(MR-549) Use `arb_stream()` once the canonical state can encode
-        // message deadlines.
-        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count, true, false),
+        stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count),
         from_percent in -20..120i64,
         percent_above_min_size in 0..120i64,
     ) ->  (Stream, StreamIndex, usize) {
-        let from_percent = from_percent.max(0).min(100) as usize;
-        let percent_above_min_size = percent_above_min_size.max(0).min(100) as usize;
+        let from_percent = from_percent.clamp(0, 100) as usize;
+        let percent_above_min_size = percent_above_min_size.clamp(0, 100) as usize;
         let msg_count = min_size +
             (stream.messages().len() - min_size) * percent_above_min_size / 100;
         let from = stream.messages_begin() +
@@ -887,10 +911,15 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn arb_stream_header(min_signal_count: usize, max_signal_count: usize, with_responses_only_flag: Vec<bool>)(
+    pub fn arb_stream_header(
+        min_signal_count: usize,
+        max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
+        with_responses_only_flag: Vec<bool>,
+    )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
+        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
         responses_only in proptest::sample::select(with_responses_only_flag),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);

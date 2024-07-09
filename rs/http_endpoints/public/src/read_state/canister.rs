@@ -1,6 +1,6 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor},
+    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
 };
 
@@ -131,7 +131,7 @@ pub(crate) async fn canister_read_state(
         validator,
         registry_client,
     }): State<CanisterReadStateService>,
-    Cbor(request): Cbor<HttpRequestEnvelope<HttpReadStateContent>>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;

@@ -404,7 +404,6 @@ pub struct ThresholdEcdsaSigInputsRef {
     pub hashed_message: [u8; 32],
     pub nonce: Randomness,
     pub presig_quadruple_ref: PreSignatureQuadrupleRef,
-    pub key_transcript_ref: UnmaskedTranscript,
 }
 
 #[derive(Clone, Debug)]
@@ -420,14 +419,12 @@ impl ThresholdEcdsaSigInputsRef {
         hashed_message: [u8; 32],
         nonce: Randomness,
         presig_quadruple_ref: PreSignatureQuadrupleRef,
-        key_transcript_ref: UnmaskedTranscript,
     ) -> Self {
         Self {
             derivation_path,
             hashed_message,
             nonce,
             presig_quadruple_ref,
-            key_transcript_ref,
         }
     }
 
@@ -441,7 +438,7 @@ impl ThresholdEcdsaSigInputsRef {
             .translate(resolver)
             .map_err(ThresholdEcdsaSigInputsError::PreSignatureQuadruple)?;
         let key_transcript = resolver
-            .transcript(self.key_transcript_ref.as_ref())
+            .transcript(self.presig_quadruple_ref.key_unmasked_ref.as_ref())
             .map_err(ThresholdEcdsaSigInputsError::KeyTranscript)?;
         ThresholdEcdsaSigInputs::new(
             &self.derivation_path,
@@ -451,64 +448,5 @@ impl ThresholdEcdsaSigInputsRef {
             key_transcript,
         )
         .map_err(ThresholdEcdsaSigInputsError::Failed)
-    }
-}
-
-impl From<&ThresholdEcdsaSigInputsRef> for pb::ThresholdEcdsaSigInputsRef {
-    fn from(sig_inputs: &ThresholdEcdsaSigInputsRef) -> Self {
-        Self {
-            derivation_path: Some((sig_inputs.derivation_path.clone()).into()),
-            hashed_message: sig_inputs.hashed_message.to_vec(),
-            nonce: sig_inputs.nonce.get().to_vec(),
-            presig_quadruple_ref: Some((&sig_inputs.presig_quadruple_ref).into()),
-            key_transcript_ref: Some((&sig_inputs.key_transcript_ref).into()),
-        }
-    }
-}
-
-impl TryFrom<&pb::ThresholdEcdsaSigInputsRef> for ThresholdEcdsaSigInputsRef {
-    type Error = ProxyDecodeError;
-    fn try_from(sig_inputs: &pb::ThresholdEcdsaSigInputsRef) -> Result<Self, Self::Error> {
-        let derivation_path: ExtendedDerivationPath = try_from_option_field(
-            sig_inputs.derivation_path.clone(),
-            "ThresholdEcdsaSigInputsRef::derivation_path",
-        )?;
-
-        if sig_inputs.hashed_message.len() != 32 {
-            return Err(ProxyDecodeError::Other(format!(
-                "ThresholdEcdsaSigInputsRef:: Invalid hashed_message length: {:?}",
-                sig_inputs.nonce.len()
-            )));
-        }
-        let mut hashed_message = [0; 32];
-        hashed_message.copy_from_slice(&sig_inputs.hashed_message[0..32]);
-
-        if sig_inputs.nonce.len() != 32 {
-            return Err(ProxyDecodeError::Other(format!(
-                "ThresholdEcdsaSigInputsRef:: Invalid nonce length: {:?}",
-                sig_inputs.nonce.len()
-            )));
-        }
-        let mut nonce = [0; 32];
-        nonce.copy_from_slice(&sig_inputs.nonce[0..32]);
-        let nonce = Randomness::from(nonce);
-
-        let presig_quadruple_ref: PreSignatureQuadrupleRef = try_from_option_field(
-            sig_inputs.presig_quadruple_ref.as_ref(),
-            "ThresholdEcdsaSigInputsRef::presig_quadruple_ref",
-        )?;
-
-        let key_transcript_ref: UnmaskedTranscript = try_from_option_field(
-            sig_inputs.key_transcript_ref.as_ref(),
-            "ThresholdEcdsaSigInputsRef::key_transcript_ref",
-        )?;
-
-        Ok(Self::new(
-            derivation_path,
-            hashed_message,
-            nonce,
-            presig_quadruple_ref,
-            key_transcript_ref,
-        ))
     }
 }

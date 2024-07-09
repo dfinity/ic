@@ -445,7 +445,7 @@ fn assert_neurons_can_be_claimed(
     // can get this neuron's info via the `get_neuron_info` Governance method,
     // but `get_full_neuron` returns an error (as `test_identity` does not
     // control the neuron yet)
-    let sample_neuron_id = expected_neuron_ids.first().unwrap().id;
+    let sample_neuron_id = expected_neuron_ids.last().unwrap().id;
     let get_neuron_info_response: Result<NeuronInfo, GovernanceError> =
         nns_governance_get_neuron_info(state_machine, sender.get_principal_id(), sample_neuron_id);
     assert!(get_neuron_info_response.is_ok());

@@ -10,9 +10,9 @@ const SSH_ARGS: &[&str] = &[
     "-o",
     "NumberOfPasswordPrompts=0",
     "-o",
-    "ConnectionAttempts=30",
+    "ConnectionAttempts=4",
     "-o",
-    "ConnectTimeout=60",
+    "ConnectTimeout=15",
     "-A",
 ];
 

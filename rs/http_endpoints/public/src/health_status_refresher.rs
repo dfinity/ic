@@ -106,8 +106,8 @@ where
                     self.metrics
                         .health_status_transitions_total
                         .with_label_values(&[
-                            &old.as_ref(),
-                            &ReplicaHealthStatus::CertifiedStateBehind.as_ref(),
+                            (old.as_ref()),
+                            (ReplicaHealthStatus::CertifiedStateBehind.as_ref()),
                         ])
                         .inc();
                 })
@@ -127,7 +127,10 @@ where
                     );
                     self.metrics
                         .health_status_transitions_total
-                        .with_label_values(&[&old.as_ref(), &ReplicaHealthStatus::Healthy.as_ref()])
+                        .with_label_values(&[
+                            (old.as_ref()),
+                            (ReplicaHealthStatus::Healthy.as_ref()),
+                        ])
                         .inc();
                 })
                 .ok();

@@ -1,4 +1,4 @@
-use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
+use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
 use ic_protobuf::{
@@ -33,7 +33,6 @@ const NONCE_SIZE: usize = 32;
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
-    SignWithEcdsa(SignWithEcdsaContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
     // TODO(EXC-1621): remove after fully migrating to `IDkgDealings`.
     EcdsaDealings(EcdsaDealingsContext),
@@ -47,7 +46,6 @@ impl SubnetCallContext {
     pub fn get_request(&self) -> &Request {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => &context.request,
-            SubnetCallContext::SignWithEcdsa(context) => &context.request,
             SubnetCallContext::CanisterHttpRequest(context) => &context.request,
             SubnetCallContext::EcdsaDealings(context) => &context.request,
             SubnetCallContext::IDkgDealings(context) => &context.request,
@@ -60,7 +58,6 @@ impl SubnetCallContext {
     pub fn get_time(&self) -> Time {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => context.time,
-            SubnetCallContext::SignWithEcdsa(context) => context.batch_time,
             SubnetCallContext::CanisterHttpRequest(context) => context.time,
             SubnetCallContext::EcdsaDealings(context) => context.time,
             SubnetCallContext::IDkgDealings(context) => context.time,
@@ -216,9 +213,7 @@ pub struct SubnetCallContextManager {
     /// corresponds to a future state.
     next_callback_id: u64,
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
-    // TODO(EXC-1621): remove after fully migrating to `sign_with_threshold_contexts`.
-    pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
-    sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
+    pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     // TODO(EXC-1621): remove after fully migrating to `idkg_dealings_contexts`.
     pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,
@@ -242,9 +237,6 @@ impl SubnetCallContextManager {
         match context {
             SubnetCallContext::SetupInitialDKG(context) => {
                 self.setup_initial_dkg_contexts.insert(callback_id, context);
-            }
-            SubnetCallContext::SignWithEcdsa(context) => {
-                self.sign_with_ecdsa_contexts.insert(callback_id, context);
             }
             SubnetCallContext::SignWithThreshold(context) => {
                 self.sign_with_threshold_contexts
@@ -287,19 +279,6 @@ impl SubnetCallContextManager {
                     context.target_id
                 );
                 SubnetCallContext::SetupInitialDKG(context)
-            })
-            .or_else(|| {
-                self.sign_with_ecdsa_contexts
-                    .remove(&callback_id)
-                    .map(|context| {
-                        info!(
-                            logger,
-                            "Received the response for SignWithECDSA request with id {:?} from {:?}",
-                            context.pseudo_random_id,
-                            context.request.sender
-                        );
-                        SubnetCallContext::SignWithEcdsa(context)
-                    })
             })
             .or_else(|| {
                 self.sign_with_threshold_contexts
@@ -465,12 +444,36 @@ impl SubnetCallContextManager {
         removed
     }
 
-    /// Returns the number of `sign_with_schnorr` contexts.
-    pub fn sign_with_schnorr_contexts_count(&self) -> usize {
+    /// Returns the number of `sign_with_threshold_contexts` per key id.
+    pub fn sign_with_threshold_contexts_count(&self, key_id: &MasterPublicKeyId) -> usize {
         self.sign_with_threshold_contexts
             .iter()
-            .filter(|(_, context)| matches!(context.args, ThresholdArguments::Schnorr(_)))
+            .filter(|(_, context)| match (key_id, &context.args) {
+                (MasterPublicKeyId::Ecdsa(ecdsa_key_id), ThresholdArguments::Ecdsa(args)) => {
+                    args.key_id == *ecdsa_key_id
+                }
+                (MasterPublicKeyId::Schnorr(schnorr_key_id), ThresholdArguments::Schnorr(args)) => {
+                    args.key_id == *schnorr_key_id
+                }
+                _ => false,
+            })
             .count()
+    }
+
+    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| context.is_ecdsa())
+            .map(|(cid, context)| (*cid, context.clone()))
+            .collect()
+    }
+
+    pub fn sign_with_schnorr_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| context.is_schnorr())
+            .map(|(cid, context)| (*cid, context.clone()))
+            .collect()
     }
 }
 
@@ -483,16 +486,6 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .iter()
                 .map(
                     |(callback_id, context)| pb_metadata::SetupInitialDkgContextTree {
-                        callback_id: callback_id.get(),
-                        context: Some(context.into()),
-                    },
-                )
-                .collect(),
-            sign_with_ecdsa_contexts: item
-                .sign_with_ecdsa_contexts
-                .iter()
-                .map(
-                    |(callback_id, context)| pb_metadata::SignWithEcdsaContextTree {
                         callback_id: callback_id.get(),
                         context: Some(context.into()),
                     },
@@ -610,13 +603,6 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             setup_initial_dkg_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut sign_with_ecdsa_contexts = BTreeMap::<CallbackId, SignWithEcdsaContext>::new();
-        for entry in item.sign_with_ecdsa_contexts {
-            let context: SignWithEcdsaContext =
-                try_from_option_field(entry.context, "SystemMetadata::SignWithEcdsaContext")?;
-            sign_with_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
-        }
-
         let mut sign_with_threshold_contexts =
             BTreeMap::<CallbackId, SignWithThresholdContext>::new();
         for entry in item.sign_with_threshold_contexts {
@@ -712,7 +698,6 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
         Ok(Self {
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
-            sign_with_ecdsa_contexts,
             sign_with_threshold_contexts,
             canister_http_request_contexts,
             ecdsa_dealings_contexts,
@@ -806,58 +791,6 @@ fn try_into_array_pseudo_random_id(
 
 fn try_into_array_nonce(bytes: Vec<u8>) -> Result<[u8; NONCE_SIZE], ProxyDecodeError> {
     try_into_array::<NONCE_SIZE>(bytes, "nonce")
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SignWithEcdsaContext {
-    pub request: Request,
-    pub key_id: EcdsaKeyId,
-    pub message_hash: [u8; MESSAGE_HASH_SIZE],
-    pub derivation_path: Vec<Vec<u8>>,
-    pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
-    pub batch_time: Time,
-    pub matched_quadruple: Option<(PreSigId, Height)>,
-    pub nonce: Option<[u8; NONCE_SIZE]>,
-}
-
-impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
-    fn from(context: &SignWithEcdsaContext) -> Self {
-        Self {
-            request: Some((&context.request).into()),
-            key_id: Some((&context.key_id).into()),
-            message_hash: context.message_hash.to_vec(),
-            derivation_path_vec: context.derivation_path.clone(),
-            pseudo_random_id: context.pseudo_random_id.to_vec(),
-            batch_time: context.batch_time.as_nanos_since_unix_epoch(),
-            height: context.matched_quadruple.as_ref().map(|q| q.1.get()),
-            pre_signature_id: context.matched_quadruple.as_ref().map(|q| q.0.id()),
-            nonce: context.nonce.map(|n| n.to_vec()),
-        }
-    }
-}
-
-impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
-    type Error = ProxyDecodeError;
-    fn try_from(context: pb_metadata::SignWithEcdsaContext) -> Result<Self, Self::Error> {
-        let request: Request =
-            try_from_option_field(context.request, "SignWithEcdsaContext::request")?;
-        let key_id: EcdsaKeyId =
-            try_from_option_field(context.key_id, "SignWithEcdsaContext::key_id")?;
-        Ok(SignWithEcdsaContext {
-            message_hash: try_into_array_message_hash(context.message_hash)?,
-            derivation_path: context.derivation_path_vec,
-            request,
-            key_id: key_id.clone(),
-            pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
-            batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
-            matched_quadruple: context
-                .pre_signature_id
-                .map(PreSigId)
-                .zip(context.height)
-                .map(|(q, h)| (q, Height::from(h))),
-            nonce: context.nonce.map(try_into_array_nonce).transpose()?,
-        })
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -959,6 +892,36 @@ pub struct SignWithThresholdContext {
     pub batch_time: Time,
     pub matched_pre_signature: Option<(PreSigId, Height)>,
     pub nonce: Option<[u8; NONCE_SIZE]>,
+}
+
+impl SignWithThresholdContext {
+    /// Returns the key id of the master public key.
+    pub fn key_id(&self) -> MasterPublicKeyId {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
+
+    /// Returns true if arguments are for ECDSA.
+    pub fn is_ecdsa(&self) -> bool {
+        matches!(&self.args, ThresholdArguments::Ecdsa(_))
+    }
+
+    /// Returns true if arguments are for Schnorr.
+    pub fn is_schnorr(&self) -> bool {
+        matches!(&self.args, ThresholdArguments::Schnorr(_))
+    }
+
+    /// Returns ECDSA arguments.
+    /// Panics if arguments are not for ECDSA.
+    /// Should only be called if `is_ecdsa` returns true.
+    pub fn ecdsa_args(&self) -> &EcdsaArguments {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => args,
+            _ => panic!("ECDSA arguments not found."),
+        }
+    }
 }
 
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
@@ -1386,7 +1349,6 @@ mod testing {
         let _subnet_call_context_manager = SubnetCallContextManager {
             next_callback_id: 0,
             setup_initial_dkg_contexts: Default::default(),
-            sign_with_ecdsa_contexts: Default::default(),
             sign_with_threshold_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
             ecdsa_dealings_contexts: Default::default(),

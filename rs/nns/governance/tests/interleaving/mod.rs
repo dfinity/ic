@@ -20,15 +20,9 @@ pub mod test_data;
 /// channel
 #[derive(Debug)]
 pub enum LedgerMessage {
-    Transfer {
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
-        memo: u64,
-    },
+    Transfer,
     TotalSupply,
-    BalanceQuery(AccountIdentifier),
+    BalanceQuery,
 }
 
 pub type LedgerControlMessage = (LedgerMessage, OSender<Result<(), NervousSystemError>>);
@@ -76,13 +70,7 @@ impl IcpLedger for InterleavingTestLedger {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
-        let msg = LedgerMessage::Transfer {
-            amount_e8s,
-            fee_e8s,
-            from_subaccount,
-            to,
-            memo,
-        };
+        let msg = LedgerMessage::Transfer;
         atomic::fence(AOrdering::SeqCst);
         self.notify(msg).await?;
         self.underlying
@@ -101,7 +89,7 @@ impl IcpLedger for InterleavingTestLedger {
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
         atomic::fence(AOrdering::SeqCst);
-        self.notify(LedgerMessage::BalanceQuery(account)).await?;
+        self.notify(LedgerMessage::BalanceQuery).await?;
         self.underlying.account_balance(account).await
     }
 
@@ -114,11 +102,7 @@ impl IcpLedger for InterleavingTestLedger {
 /// channel
 #[derive(Debug)]
 pub enum EnvironmentMessage {
-    CallCanisterMethod {
-        target: CanisterId,
-        method_name: String,
-        request: Vec<u8>,
-    },
+    CallCanisterMethod,
 }
 
 pub type EnvironmentControlMessage = (
@@ -191,11 +175,7 @@ impl Environment for InterleavingTestEnvironment {
         method_name: &str,
         request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        let msg = EnvironmentMessage::CallCanisterMethod {
-            target,
-            method_name: method_name.to_string(),
-            request: request.clone(),
-        };
+        let msg = EnvironmentMessage::CallCanisterMethod;
         atomic::fence(AOrdering::SeqCst);
         self.notify(msg).await?;
         self.underlying

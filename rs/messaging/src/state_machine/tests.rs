@@ -37,7 +37,7 @@ mock! {
             idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
             idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
             current_round: ExecutionRound,
-            next_checkpoint_round: Option<ExecutionRound>,
+            round_summary: Option<ExecutionRoundSummary>,
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
         ) -> ReplicatedState;

@@ -1,0 +1,17 @@
+[package]
+name = "ic-adapter-metrics-client"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-adapter-metrics-service = { path = "../service" }
+ic-async-utils = { path = "../../../async_utils" }
+prometheus = { workspace = true }
+protobuf = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }

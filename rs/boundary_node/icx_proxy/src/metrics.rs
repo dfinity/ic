@@ -27,6 +27,7 @@ use opentelemetry::{
     sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream},
     KeyValue,
 };
+
 use opentelemetry_prometheus::exporter;
 
 use prometheus::{Encoder as PrometheusEncoder, Registry, TextEncoder};

@@ -405,7 +405,7 @@ async fn handle_stream_with_witness_begin() {
 
     let witness_begin = STREAM_BEGIN.increment();
     let msg_begin = witness_begin.increment();
-    let msg_limit = std::usize::MAX;
+    let msg_limit = usize::MAX;
     let url = Url::parse(&format!(
         "http://localhost/api/v1/stream/{}?witness_begin={}&msg_begin={}",
         DST_SUBNET, witness_begin, msg_begin

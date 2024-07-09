@@ -874,12 +874,17 @@ where
                 non_controlled_dapp_canisters: vec![],
             })
         })?;
-
-        // Request that NNS Root make the newly created SNS Root canister the sole controller
-        // of the dapp_canisters, removing itself.
+        // Request that NNS Root add the newly created SNS Root canister as a controller
+        // of the dapp_canisters.
+        // (NNS Root will be removed as a controller after the swap is done)
         let dapp_canister_to_new_controllers: BTreeMap<Canister, Vec<PrincipalId>> = dapp_canisters
             .iter()
-            .map(|canister| (*canister, vec![sns_init_canister_ids.root]))
+            .map(|canister| {
+                (
+                    *canister,
+                    vec![sns_init_canister_ids.root, ROOT_CANISTER_ID.get()],
+                )
+            })
             .collect();
         Self::change_controllers_of_nns_root_owned_canisters(
             nns_root_canister_client,
@@ -4019,6 +4024,7 @@ mod test {
         );
     }
 
+    #[track_caller]
     fn assert_nns_root_calls(
         nns_root_canister_client: &SpyNnsRootCanisterClient,
         expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
@@ -4484,9 +4490,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![root_id.get()]),
-                (dapp_ids[1], vec![root_id.get()]),
-                (dapp_ids[2], vec![root_id.get()]),
+                (dapp_ids[0], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (
                     dapp_ids[1],
                     vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
@@ -4865,9 +4871,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![root_id.get()]),
-                (dapp_ids[1], vec![root_id.get()]),
-                (dapp_ids[2], vec![root_id.get()]),
+                (dapp_ids[0], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
             ],

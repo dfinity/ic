@@ -40,11 +40,6 @@ alias(
 )
 
 alias(
-    name = "bazelifier",
-    actual = "//rs/bazelifier",
-)
-
-alias(
     name = "shfmt-format",
     actual = "//pre-commit:shfmt-format",
 )

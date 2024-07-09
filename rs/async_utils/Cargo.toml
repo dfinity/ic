@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-stream = "0.3.4"
+async-stream = { workspace = true }
 bytes = { workspace = true }
 byte-unit = "4.0.14"
 futures = { workspace = true }

@@ -24,8 +24,9 @@ ic-agent = { workspace = true }
 ic-utils = { workspace = true }
 indoc = "1.0.9"
 mockall = { workspace = true }
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

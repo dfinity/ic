@@ -194,7 +194,7 @@ fn test_heap_range_with_begin_and_limit() {
 }
 
 #[test]
-fn test_add_inactive_neuron() {
+fn test_add_neurons() {
     // Step 1.1: create neuron store with no neurons.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
 
@@ -207,25 +207,20 @@ fn test_add_inactive_neuron() {
     neuron_store.add_neuron(active_neuron.clone()).unwrap();
     neuron_store.add_neuron(inactive_neuron.clone()).unwrap();
 
-    // Step 3.1: verify that the active neuron is not in the stable neuron store.
-    let active_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(active_neuron.id())
-    });
-    match active_neuron_read_result {
-        Ok(_) => panic!("Active neuron appeared in stable neuron store"),
-        Err(error) => match error {
-            NeuronStoreError::NeuronNotFound { neuron_id } => {
-                assert_eq!(neuron_id, active_neuron.id());
-            }
-            _ => panic!("read returns error other than not found: {:?}", error),
-        },
-    }
+    // Step 3.1: verify that the active neuron is in the heap, not in the stable neuron store, and
+    // can be read.
+    assert!(!is_neuron_in_stable(active_neuron.id()));
+    assert!(is_neuron_in_heap(&neuron_store, active_neuron.id()));
+    let active_neuron_read_result =
+        neuron_store.with_neuron(&active_neuron.id(), |neuron| neuron.clone());
+    assert_eq!(active_neuron_read_result, Ok(active_neuron.clone()));
 
-    // Step 3.2: verify that inactive neuron can be read from stable neuron store and it's equal to
-    // the one we added.
-    let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(inactive_neuron.id())
-    });
+    // Step 3.2: verify that inactive neuron is in the stable neuron store, not in the heap, and can
+    // be read.
+    assert!(is_neuron_in_stable(inactive_neuron.id()));
+    assert!(!is_neuron_in_heap(&neuron_store, inactive_neuron.id()));
+    let inactive_neuron_read_result =
+        neuron_store.with_neuron(&inactive_neuron.id(), |neuron| neuron.clone());
     assert_eq!(inactive_neuron_read_result, Ok(inactive_neuron.clone()));
 
     // Step 3.3: verify that the inactive neuron can also be read from neuron store.
@@ -244,18 +239,17 @@ fn test_remove_inactive_neuron() {
 
     // Step 1.3: add the inactive neuron into neuron store and verifies it's in the stable neuron store.
     neuron_store.add_neuron(inactive_neuron.clone()).unwrap();
-    let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(inactive_neuron.id())
-    });
+    assert!(is_neuron_in_stable(inactive_neuron.id()));
+    let inactive_neuron_read_result =
+        neuron_store.with_neuron(&inactive_neuron.id(), |neuron| neuron.clone());
     assert_eq!(inactive_neuron_read_result, Ok(inactive_neuron.clone()));
 
     // Step 2: remove the neuron from neuron store.
     neuron_store.remove_neuron(&inactive_neuron.id());
 
     // Step 3: verify that inactive neuron cannot be read from stable neuron store anymore.
-    let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(inactive_neuron.id())
-    });
+    let inactive_neuron_read_result =
+        neuron_store.with_neuron(&inactive_neuron.id(), |neuron| neuron.clone());
     match inactive_neuron_read_result {
         Ok(_) => panic!("Inactive neuron failed to be removed from stable neuron store"),
         Err(error) => match error {
@@ -633,5 +627,131 @@ fn test_get_neuron_ids_readable_by_caller() {
     assert_eq!(
         neuron_store.get_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(4)),
         hashset! {}
+    );
+}
+
+#[test]
+fn test_get_non_empty_neuron_ids_readable_by_caller() {
+    // Prepare the neurons.
+    let controller = PrincipalId::new_user_test_id(1);
+    let hot_key = PrincipalId::new_user_test_id(2);
+    let neuron_builder = |i| {
+        simple_neuron_builder(i)
+            .with_controller(controller)
+            .with_hot_keys(vec![hot_key])
+    };
+    let neuron_empty = neuron_builder(1).build();
+    let neuron_empty_with_fees = neuron_builder(2)
+        .with_cached_neuron_stake_e8s(1)
+        .with_neuron_fees_e8s(1)
+        .build();
+    let neuron_with_stake = neuron_builder(3).with_cached_neuron_stake_e8s(1).build();
+    let neuron_with_maturity = neuron_builder(4).with_maturity_e8s_equivalent(1).build();
+    let neuron_with_staked_maturity = neuron_builder(5)
+        .with_staked_maturity_e8s_equivalent(1)
+        .build();
+    let neuron_store = NeuronStore::new(btreemap! {
+        1 => neuron_empty,
+        2 => neuron_empty_with_fees,
+        3 => neuron_with_stake,
+        4 => neuron_with_maturity,
+        5 => neuron_with_staked_maturity,
+    });
+
+    // Verify that the non-empty neurons readable by the controller and hot key are neurons 3, 4 and
+    // 5, while a principal that's not controller or hot key can't read any.
+    let neuron_id_vec_to_u64_hash_set = |neuron_ids: Vec<NeuronId>| -> HashSet<u64> {
+        neuron_ids
+            .into_iter()
+            .map(|neuron_id| neuron_id.id)
+            .collect()
+    };
+
+    assert_eq!(
+        neuron_id_vec_to_u64_hash_set(
+            neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller)
+        ),
+        hashset! { 3, 4, 5 }
+    );
+    assert_eq!(
+        neuron_id_vec_to_u64_hash_set(
+            neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key)
+        ),
+        hashset! { 3, 4, 5 }
+    );
+    assert_eq!(
+        neuron_id_vec_to_u64_hash_set(
+            neuron_store
+                .get_non_empty_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(3))
+        ),
+        hashset! {}
+    );
+}
+
+#[test]
+fn test_get_full_neuron() {
+    let principal_id = PrincipalId::new_user_test_id(42);
+    let neuron_controlled = simple_neuron_builder(1)
+        .with_controller(principal_id)
+        .build();
+    let neuron_readable_by_hot_key = simple_neuron_builder(2)
+        .with_hot_keys(vec![principal_id])
+        .build();
+    let neuron_managed_1 = simple_neuron_builder(3)
+        .with_followees(hashmap! {
+            Topic::NeuronManagement as i32 => Followees {
+                followees: vec![neuron_controlled.id()],
+            }
+        })
+        .build();
+    let neuron_managed_2 = simple_neuron_builder(4)
+        .with_followees(hashmap! {
+            Topic::NeuronManagement as i32 => Followees {
+                followees: vec![neuron_readable_by_hot_key.id()],
+            }
+        })
+        .build();
+    // This neuron followes a neuron controlled by the principal on a different topic than
+    // NeuronManagement, and therefore not considered being managed by the controlled neuron.
+    let neuron_not_managed = simple_neuron_builder(5)
+        .with_followees(hashmap! {
+            Topic::Governance as i32 => Followees {
+                followees: vec![neuron_controlled.id()],
+            }
+        })
+        .build();
+    let neuron_store = NeuronStore::new(btreemap! {
+        neuron_controlled.id().id => neuron_controlled.clone(),
+        neuron_readable_by_hot_key.id().id => neuron_readable_by_hot_key.clone(),
+        neuron_managed_1.id().id => neuron_managed_1.clone(),
+        neuron_managed_2.id().id => neuron_managed_2.clone(),
+        neuron_not_managed.id().id => neuron_not_managed.clone(),
+    });
+
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_controlled.id(), principal_id),
+        Ok(neuron_controlled)
+    );
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_readable_by_hot_key.id(), principal_id),
+        Ok(neuron_readable_by_hot_key)
+    );
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_managed_1.id(), principal_id),
+        Ok(neuron_managed_1)
+    );
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_managed_2.id(), principal_id),
+        Ok(neuron_managed_2)
+    );
+
+    assert!(neuron_store.contains(neuron_not_managed.id()));
+
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_not_managed.id(), principal_id),
+        Err(NeuronStoreError::NotAuthorizedToGetFullNeuron {
+            neuron_id: neuron_not_managed.id(),
+            principal_id,
+        })
     );
 }

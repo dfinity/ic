@@ -4,12 +4,11 @@ use crate::common::{
     create_generic_sns_neuron_recipes, create_successful_swap_neuron_basket_for_neurons_fund,
     create_successful_swap_neuron_basket_for_one_direct_participant,
     doubles::{
-        spy_clients, spy_clients_exploding_root, ExplodingSnsRootClient, LedgerExpect,
-        NnsGovernanceClientCall, NnsGovernanceClientReply, SnsGovernanceClientCall,
-        SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient,
-        SpySnsGovernanceClient, SpySnsRootClient,
+        spy_clients, spy_clients_exploding_root, LedgerExpect, NnsGovernanceClientCall,
+        NnsGovernanceClientReply, SnsGovernanceClientCall, SnsGovernanceClientReply,
+        SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient, SpySnsGovernanceClient,
+        SpySnsRootClient,
     },
-    extract_canister_call_error, extract_set_dapp_controller_response,
     get_account_balance_mock_ledger, get_snapshot_of_buyers_index_list, get_sns_balance,
     get_transfer_and_account_balance_mock_ledger, get_transfer_mock_ledger, i2principal_id_string,
     mock_stub, paginate_participants, successful_set_dapp_controllers_call_result,
@@ -444,7 +443,7 @@ fn test_min_max_icp_per_buyer() {
             .now_or_never()
             .unwrap();
         assert!(e.is_err());
-        assert!(swap.buyers.get(&TEST_USER1_PRINCIPAL.to_string()).is_none());
+        assert!(!swap.buyers.contains_key(&TEST_USER1_PRINCIPAL.to_string()));
     }
     // Try to deposit 6 ICP.
     {
@@ -1035,7 +1034,10 @@ fn test_scenario_happy() {
         let sns_governance =
             SpySnsGovernanceClient::new(expected_sns_governance_claim_swap_neurons_calls);
         CanisterClients {
-            sns_root: SpySnsRootClient::new(vec![]),
+            sns_root: SpySnsRootClient::new(vec![
+                // Add a mock reply of a successful call to SNS Root
+                SnsRootClientReply::successful_set_dapp_controllers(),
+            ]),
             sns_governance,
             nns_governance,
             icp_ledger,
@@ -1107,6 +1109,7 @@ async fn test_finalize_swap_ok_matched_funding() {
     let mut swap = SwapBuilder::new()
         .with_nns_governance_canister_id(NNS_GOVERNANCE_CANISTER_ID)
         .with_sns_governance_canister_id(SNS_GOVERNANCE_CANISTER_ID)
+        .with_sns_root_canister_id(SNS_ROOT_CANISTER_ID)
         .with_nns_proposal_id(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID)
         .with_lifecycle(Open)
         .with_swap_start_due(Some(START_TIMESTAMP_SECONDS), Some(END_TIMESTAMP_SECONDS))
@@ -1159,7 +1162,7 @@ async fn test_finalize_swap_ok_matched_funding() {
     // twice: once for when we call `finalize` and once for when we call
     // `try_auto_finalize`
     pub fn get_clients() -> CanisterClients<
-        ExplodingSnsRootClient,
+        SpySnsRootClient,
         SpySnsGovernanceClient,
         SpyLedger,
         SpyLedger,
@@ -1221,7 +1224,9 @@ async fn test_finalize_swap_ok_matched_funding() {
                     },
                 ),
             ]),
-            ..spy_clients_exploding_root()
+            sns_root: SpySnsRootClient::new(vec![
+                SnsRootClientReply::successful_set_dapp_controllers(),
+            ]),
         }
     }
 
@@ -1269,6 +1274,21 @@ async fn test_finalize_swap_ok_matched_funding() {
             "the result from finalization and auto-finalization should be the same"
         );
 
+        // Assert that finalization and auto-finalization performed the same calls
+        // to SNS Governance, NNS Governance, and SNS Root.
+        assert_eq!(
+            clients.sns_governance.calls, try_auto_finalize_clients.sns_governance.calls,
+            "the calls to SNS governance should be the same"
+        );
+        assert_eq!(
+            clients.nns_governance.calls, try_auto_finalize_clients.nns_governance.calls,
+            "the calls to NNS governance should be the same"
+        );
+        assert_eq!(
+            clients.sns_root.observed_calls, try_auto_finalize_clients.sns_root.observed_calls,
+            "the calls to SNS root should be the same"
+        );
+
         finalize_result
     };
 
@@ -1306,7 +1326,9 @@ async fn test_finalize_swap_ok_matched_funding() {
                     global_failures: 0,
                 }),
                 set_mode_call_result: Some(successful_set_mode_call_result()),
-                set_dapp_controllers_call_result: None,
+                set_dapp_controllers_call_result: Some(
+                    successful_set_dapp_controllers_call_result()
+                ),
                 settle_neurons_fund_participation_result: Some(
                     SettleNeuronsFundParticipationResult {
                         possibility: Some(
@@ -1323,6 +1345,15 @@ async fn test_finalize_swap_ok_matched_funding() {
                 // Deprecated field.
                 settle_community_fund_participation_result: None,
             },
+        );
+
+        // Check that root was told to take sole control of the dapp controllers.
+        assert_eq!(
+            clients.sns_root.observed_calls,
+            vec![SnsRootClientCall::set_dapp_controllers(
+                None,
+                vec![SNS_ROOT_CANISTER_ID.get()],
+            )]
         );
     }
 
@@ -2254,7 +2285,10 @@ fn test_finalize_swap_rejects_concurrent_calls() {
             SnsGovernanceClientReply::SetMode(SetModeResponse {}),
         ]),
         sns_ledger: SpyLedger::new(vec![LedgerReply::TransferFunds(Ok(1000))]),
-        sns_root: spy_clients().sns_root,
+        sns_root: SpySnsRootClient::new(vec![
+            // Add a mock reply of a successful call to SNS Root
+            SnsRootClientReply::successful_set_dapp_controllers(),
+        ]),
         nns_governance: SpyNnsGovernanceClient::new(vec![
             NnsGovernanceClientReply::SettleNeuronsFundParticipation(
                 SettleNeuronsFundParticipationResponse {
@@ -2976,66 +3010,6 @@ async fn test_finalization_halts_when_settle_nf_fails() {
     assert_eq!(result.claim_neuron_result, None);
 }
 
-/// Test the restore_dapp_controllers API happy case
-#[tokio::test]
-async fn test_restore_dapp_controllers_happy() {
-    // Create the set of controllers that we will later use to assert with
-    let mut fallback_controllers = vec![(*TEST_USER1_PRINCIPAL), CanisterId::from_u64(1).get()];
-
-    let init = Init {
-        // Provide the fallback controllers in their expected form
-        fallback_controller_principal_ids: fallback_controllers
-            .iter()
-            .map(|pid| pid.to_string())
-            .collect(),
-        ..init()
-    };
-
-    let mut swap = Swap {
-        lifecycle: Pending as i32,
-        init: Some(init),
-        params: Some(params()),
-        ..Default::default()
-    };
-
-    // Set up the series of mocked replies from the SNS Root canister
-    let mut sns_root_client = SpySnsRootClient::default();
-
-    // Step 2: Call restore_dapp_controllers
-
-    // The call to SNS Root will succeed
-    sns_root_client.push_reply(SnsRootClientReply::SetDappControllers(
-        SetDappControllersResponse {
-            failed_updates: vec![],
-        },
-    ));
-
-    let restore_dapp_controllers_response = swap
-        .restore_dapp_controllers(&mut sns_root_client, NNS_GOVERNANCE_CANISTER_ID.get())
-        .await;
-
-    // Step 3: Inspect results
-
-    let set_dapp_controller_response =
-        extract_set_dapp_controller_response(&restore_dapp_controllers_response);
-
-    // Assert that the response contains no failures
-    assert_eq!(set_dapp_controller_response.failed_updates, vec![],);
-
-    // Assert that with a successful call the Lifecycle of the Swap has been set to aborted
-    assert_eq!(swap.lifecycle(), Aborted);
-
-    // Inspect the request to SNS Root and that it has all the fallback controllers
-    match sns_root_client.pop_observed_call() {
-        SnsRootClientCall::SetDappControllers(mut request) => {
-            // Sort the vec so they can be compared
-            request.controller_principal_ids.sort();
-            fallback_controllers.sort();
-            assert_eq!(request.controller_principal_ids, fallback_controllers);
-        }
-    }
-}
-
 /// Test that set_sns_governance_to_normal_mode correctly handles response from SNS Governance
 #[tokio::test]
 async fn test_set_sns_governance_to_normal_mode_handles_responses() {
@@ -3134,169 +3108,6 @@ async fn test_finalization_halts_when_set_mode_fails() {
     assert!(result.claim_neuron_result.is_some());
     // set_dapp_controllers_result is None as this is not the aborted path
     assert!(result.set_dapp_controllers_call_result.is_none());
-}
-
-/// Test that the restore_dapp_controllers API will reject callers that
-/// are not NNS Governance.
-#[tokio::test]
-#[should_panic(expected = "This method can only be called by NNS Governance")]
-async fn test_restore_dapp_controllers_rejects_unauthorized() {
-    // Step 1: Prepare the world.
-
-    // Explicitly set the nns_governance_canister_id.
-    let init = Init {
-        nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
-        ..init()
-    };
-    let mut swap = Swap {
-        lifecycle: Pending as i32,
-        init: Some(init),
-        params: Some(params()),
-        ..Default::default()
-    };
-
-    // Step 2: Call restore_dapp_controllers with an unauthorized caller
-    swap.restore_dapp_controllers(&mut ExplodingSnsRootClient, PrincipalId::new_anonymous())
-        .await;
-}
-
-/// Test that the restore_dapp_controllers API will gracefully handle invalid
-/// fallback_controller_ids
-#[tokio::test]
-async fn test_restore_dapp_controllers_cannot_parse_fallback_controllers() {
-    // Step 1: Prepare the world.
-
-    let init = Init {
-        fallback_controller_principal_ids: vec![
-            PrincipalId::new_anonymous().to_string(), // Valid
-            CanisterId::from_u64(1).to_string(),      // Valid
-            "GARBAGE_DATA_IN".to_string(),            // Invalid
-        ],
-        ..init()
-    };
-    let mut swap = Swap {
-        lifecycle: Pending as i32,
-        init: Some(init),
-        params: Some(params()),
-        ..Default::default()
-    };
-
-    // Step 2: Call restore_dapp_controllers
-    let restore_dapp_controllers_response = swap
-        .restore_dapp_controllers(
-            &mut ExplodingSnsRootClient, // Should fail before using RootClient
-            NNS_GOVERNANCE_CANISTER_ID.get(),
-        )
-        .await;
-
-    // Step 3: Inspect Results
-
-    // Match the error case, panic with message for all other cases
-    let canister_call_error = extract_canister_call_error(&restore_dapp_controllers_response);
-
-    // Assert that the error message contains what is expected
-    assert!(
-        canister_call_error.description.contains(
-            "Could not set_dapp_controllers, \
-            one or more fallback_controller_principal_ids \
-            could not be parsed as a PrincipalId"
-        ),
-        "{}",
-        canister_call_error.description
-    );
-
-    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
-    assert_eq!(swap.lifecycle(), Aborted);
-}
-
-/// Test that the restore_dapp_controllers API will gracefully handle external failures
-/// from SNS Root.
-#[tokio::test]
-async fn test_restore_dapp_controllers_handles_external_root_failures() {
-    // Step 1: Prepare the world.
-
-    let mut swap = Swap {
-        lifecycle: Pending as i32,
-        init: Some(init()),
-        params: Some(params()),
-        ..Default::default()
-    };
-
-    // Set up the series of mocked replies from the SNS Root canister
-    let mut sns_root_client = SpySnsRootClient::default();
-
-    // Step 2: Call restore_dapp_controllers
-
-    // The call to SNS Root will fail due to external reasons to SNS Root
-    sns_root_client.push_reply(SnsRootClientReply::CanisterCallError(CanisterCallError {
-        code: Some(0),
-        description: "EXTERNAL FAILURE".to_string(),
-    }));
-
-    let restore_dapp_controllers_response = swap
-        .restore_dapp_controllers(&mut sns_root_client, NNS_GOVERNANCE_CANISTER_ID.get())
-        .await;
-
-    // Step 3: Inspect results
-
-    let canister_call_error = extract_canister_call_error(&restore_dapp_controllers_response);
-
-    // Assert that the error message contains what is expected
-    assert!(
-        canister_call_error.description.contains("EXTERNAL FAILURE"),
-        "{}",
-        canister_call_error.description
-    );
-
-    // Assert that the error code is expected
-    assert_eq!(canister_call_error.code, Some(0));
-
-    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
-    assert_eq!(swap.lifecycle(), Aborted);
-}
-
-/// Test that the restore_dapp_controllers API will gracefully handle internal failures
-/// from SNS Root.
-#[tokio::test]
-async fn test_restore_dapp_controllers_handles_internal_root_failures() {
-    // Step 1: Prepare the world.
-
-    let mut swap = Swap {
-        lifecycle: Pending as i32,
-        init: Some(init()),
-        params: Some(params()),
-        ..Default::default()
-    };
-
-    // Set up the series of mocked replies from the SNS Root canister
-    let mut sns_root_client = SpySnsRootClient::default();
-
-    // Step 2: Call restore_dapp_controllers
-
-    // The call to SNS Root will fail due to internal reasons to SNS Root
-    sns_root_client.push_reply(SnsRootClientReply::SetDappControllers(
-        SetDappControllersResponse {
-            failed_updates: vec![set_dapp_controllers_response::FailedUpdate::default()],
-        },
-    ));
-
-    let restore_dapp_controllers_response = swap
-        .restore_dapp_controllers(&mut sns_root_client, NNS_GOVERNANCE_CANISTER_ID.get())
-        .await;
-
-    // Step 3: Inspect results
-
-    let set_dapp_controller_response =
-        extract_set_dapp_controller_response(&restore_dapp_controllers_response);
-
-    // Assert that the response contains the expected failures
-    assert_eq!(
-        set_dapp_controller_response.failed_updates,
-        vec![set_dapp_controllers_response::FailedUpdate::default()],
-    );
-
-    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
-    assert_eq!(swap.lifecycle(), Aborted);
 }
 
 #[test]

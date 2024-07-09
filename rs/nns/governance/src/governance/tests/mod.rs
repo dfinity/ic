@@ -3,6 +3,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
+        neuron::DissolveState,
         Neuron as NeuronProto,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
@@ -21,6 +22,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
+mod neurons_fund;
 mod stake_maturity;
 
 #[test]
@@ -945,13 +947,6 @@ mod neuron_archiving_tests {
             .build()
         };
 
-        // Case 0: None: Active
-        let neuron =
-            neuron_with_dissolve_state_and_age(DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds: NOW,
-            });
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
-
         // Case 1a: Dissolved in the "distant" past: Inactive. This is the only case where
         // "inactive" is the expected result.
         let neuron =
@@ -974,13 +969,7 @@ mod neuron_archiving_tests {
             });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        // Case 2a: DissolveDelay(0): Active
-        let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::LegacyDissolved {
-            aging_since_timestamp_seconds: 42,
-        });
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
-
-        // Case 2b: DissolveDelay(positive): Active
+        // Case 2: DissolveDelay(positive): Active
         let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 42,
             aging_since_timestamp_seconds: NOW,
@@ -1234,6 +1223,8 @@ fn test_pre_and_post_upgrade_first_time() {
             }
         },
         account: vec![0; 32],
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+        aging_since_timestamp_seconds: 1,
         ..Default::default()
     };
     let neurons = btreemap! { 1 => neuron1 };

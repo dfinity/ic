@@ -220,10 +220,10 @@ impl StateSyncClient for FakeStateSync {
         }
 
         if is_manifest_chunk(chunk_id) {
-            return Some(vec![0; 100]);
+            return Some(vec![0; 100].into());
         }
 
-        self.global_state.chunk(chunk_id)
+        self.global_state.chunk(chunk_id).map(Chunk::from)
     }
 }
 
@@ -286,7 +286,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
 
         // Add chunk to state if not part of manifest
         if !is_manifest_chunk(chunk_id) {
-            self.local_state.add_chunk(chunk_id, chunk.len())
+            self.local_state.add_chunk(chunk_id, chunk.as_bytes().len())
         }
 
         let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();

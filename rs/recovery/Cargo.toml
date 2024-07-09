@@ -37,8 +37,8 @@ serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-term = "2.6.0"
+slog-async = { workspace = true }
+slog-term = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }

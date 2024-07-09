@@ -27,10 +27,6 @@ pub struct SubnetTopology {
     #[prost(message, optional, tag = "4")]
     pub subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
-    /// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-    #[prost(message, repeated, tag = "5")]
-    pub ecdsa_keys_held:
-        ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, repeated, tag = "6")]
     pub idkg_keys_held:
         ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
@@ -42,15 +38,6 @@ pub struct SubnetsEntry {
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "2")]
     pub subnet_topology: ::core::option::Option<SubnetTopology>,
-}
-/// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaKeyEntry {
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
-    #[prost(message, repeated, tag = "2")]
-    pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -75,9 +62,6 @@ pub struct NetworkTopology {
     pub canister_migrations: ::core::option::Option<
         super::super::super::registry::routing_table::v1::CanisterMigrations,
     >,
-    /// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-    #[prost(message, repeated, tag = "5")]
-    pub ecdsa_signing_subnets: ::prost::alloc::vec::Vec<EcdsaKeyEntry>,
     #[prost(message, repeated, tag = "6")]
     pub bitcoin_testnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
@@ -108,36 +92,6 @@ pub struct SetupInitialDkgContextTree {
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<SetupInitialDkgContext>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignWithEcdsaContext {
-    #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<super::super::queues::v1::Request>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub message_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "5")]
-    pub batch_time: u64,
-    #[prost(bytes = "vec", repeated, tag = "6")]
-    pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(message, optional, tag = "7")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
-    #[prost(uint64, optional, tag = "8")]
-    pub height: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "9")]
-    pub pre_signature_id: ::core::option::Option<u64>,
-    #[prost(bytes = "vec", optional, tag = "10")]
-    pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignWithEcdsaContextTree {
-    #[prost(uint64, tag = "1")]
-    pub callback_id: u64,
-    #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<SignWithEcdsaContext>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -417,8 +371,6 @@ pub struct SubnetCallContextManager {
     pub next_callback_id: u64,
     #[prost(message, repeated, tag = "3")]
     pub setup_initial_dkg_contexts: ::prost::alloc::vec::Vec<SetupInitialDkgContextTree>,
-    #[prost(message, repeated, tag = "4")]
-    pub sign_with_ecdsa_contexts: ::prost::alloc::vec::Vec<SignWithEcdsaContextTree>,
     #[prost(message, repeated, tag = "6")]
     pub canister_http_request_contexts: ::prost::alloc::vec::Vec<CanisterHttpRequestContextTree>,
     /// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.

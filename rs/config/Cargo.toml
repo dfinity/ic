@@ -16,7 +16,6 @@ json5 = "0.4.1"
 serde = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
 proptest = "1.0"

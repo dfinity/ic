@@ -378,11 +378,13 @@ async fn blocks_test() {
         };
         let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
         let resp = req_handler.block(msg).await.unwrap();
-        let transactions = vec![ic_rosetta_api::convert::block_to_transaction(
-            &block,
-            ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
-        )
-        .unwrap()];
+        let transactions = vec![
+            ic_rosetta_api::convert::hashed_block_to_rosetta_core_transaction(
+                &block,
+                ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
+            )
+            .unwrap(),
+        ];
         assert_eq!(resp.clone().block.unwrap().transactions, transactions);
         let transaction = resp.block.unwrap().transactions[0].clone();
         let block_id = BlockIdentifier {
@@ -673,7 +675,7 @@ async fn load_from_store_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     let mut last_verified = 0;
     for hb in &scribe.blockchain {
         blocks.push(hb).unwrap();
@@ -696,7 +698,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let blocks = Blocks::new_persistent(location).unwrap();
+    let blocks = Blocks::new_persistent(location, false).unwrap();
     assert!(blocks.is_verified_by_idx(&10).unwrap());
     assert!(blocks.get_account_balance(&some_acc, &10).is_ok());
     assert!(!blocks.is_verified_by_idx(&20).unwrap());
@@ -708,7 +710,7 @@ async fn load_from_store_test() {
 
     drop(blocks);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     verify_balances(&scribe, &blocks, 0);
 
     // now load pruned
@@ -727,7 +729,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let blocks = Blocks::new_persistent(location).unwrap();
+    let blocks = Blocks::new_persistent(location, false).unwrap();
     verify_balances(&scribe, &blocks, 10);
 
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
@@ -760,7 +762,7 @@ async fn load_unverified_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     for hb in &scribe.blockchain {
         blocks.push(hb).unwrap();
         if hb.index < 20 {
@@ -777,7 +779,7 @@ async fn load_unverified_test() {
 
     drop(blocks);
 
-    let blocks = Blocks::new_persistent(location).unwrap();
+    let blocks = Blocks::new_persistent(location, false).unwrap();
     let last_verified = (scribe.blockchain.len() - 1) as u64;
     blocks.set_hashed_block_to_verified(&last_verified).unwrap();
 
@@ -797,7 +799,7 @@ async fn store_batch_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     for hb in &scribe.blockchain {
         if hb.index < 21 {
             blocks.push(hb).unwrap();

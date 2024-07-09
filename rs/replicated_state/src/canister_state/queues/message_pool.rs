@@ -120,6 +120,26 @@ impl Id {
     }
 }
 
+impl From<&Id> for pb_queues::canister_queue::QueueItem {
+    fn from(item: &Id) -> Self {
+        use pb_queues::canister_queue::queue_item::R;
+
+        pb_queues::canister_queue::QueueItem {
+            r: Some(R::Reference(item.0)),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
+        match item.r {
+            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => Ok(Self(id)),
+            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
+        }
+    }
+}
+
 /// A placeholder for a potential late inbound best-effort response.
 ///
 /// Does not implement `Clone` or `Copy` to ensure that it can only be used
@@ -337,24 +357,6 @@ impl MessagePool {
         id
     }
 
-    /// Retrieves the request with the given `Id`.
-    ///
-    /// Panics if the provided ID was generated for a `Response`.
-    pub(super) fn get_request(&self, id: Id) -> Option<&RequestOrResponse> {
-        assert_eq!(Kind::Request, id.kind());
-
-        self.messages.get(&id)
-    }
-
-    /// Retrieves the response with the given `Id`.
-    ///
-    /// Panics if the provided ID was generated for a `Request`.
-    pub(super) fn get_response(&self, id: Id) -> Option<&RequestOrResponse> {
-        assert_eq!(Kind::Response, id.kind());
-
-        self.messages.get(&id)
-    }
-
     /// Retrieves the message with the given `Id`.
     pub(super) fn get(&self, id: Id) -> Option<&RequestOrResponse> {
         self.messages.get(&id)
@@ -503,6 +505,12 @@ impl MessagePool {
         self.messages.len()
     }
 
+    /// Returns the implicitly assigned deadlines of enqueued outbound guaranteed
+    /// response requests.
+    pub(super) fn outbound_guaranteed_request_deadlines(&self) -> &BTreeMap<Id, CoarseTime> {
+        &self.outbound_guaranteed_request_deadlines
+    }
+
     /// Returns a reference to the pool's message stats.
     pub(super) fn message_stats(&self) -> &MessageStats {
         &self.message_stats
@@ -585,16 +593,18 @@ impl MessagePool {
             ));
         }
 
-        // Validate `message_id_generator` against the largest seen `Id`.
-        let mut max_message_id = 0;
-        self.messages.keys().for_each(|id| {
-            max_message_id = max_message_id.max(id.0);
-        });
-        if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
-            return Err(format!(
-                "Id out of bounds: max Id: {}, message_id_generator: {}",
-                max_message_id, self.message_id_generator
-            ));
+        if !self.messages.is_empty() {
+            // Validate `message_id_generator` against the largest seen `Id`.
+            let mut max_message_id = 0;
+            self.messages.keys().for_each(|id| {
+                max_message_id = max_message_id.max(id.0);
+            });
+            if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
+                return Err(format!(
+                    "`Id` out of bounds: max `Id`: {}, message_id_generator: {}",
+                    max_message_id, self.message_id_generator
+                ));
+            }
         }
 
         Ok(())

@@ -107,6 +107,17 @@ where
         result.map(|o| o.map(|(q, (k, _))| (q, k)))
     }
 
+    /// Removes a task from the [`JoinMap`] with the associated key. Returns true if the key was found.
+    pub fn remove(&mut self, key: &K) -> bool {
+        self.tasks_by_key
+            .remove(key)
+            .map(|(abort_handle, replaced)| {
+                abort_handle.abort();
+                replaced.store(true, Ordering::Release);
+            })
+            .is_some()
+    }
+
     /// Cancels all running tasks and waits for them. Will clear any internal data structure.
     pub async fn shutdown(&mut self) {
         self.tasks.abort_all();

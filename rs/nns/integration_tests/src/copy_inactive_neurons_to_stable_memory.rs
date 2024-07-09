@@ -1,3 +1,4 @@
+use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
@@ -29,6 +30,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     let new_wasm_path = env::var("GOVERNANCE_CANISTER_TEST_WASM_PATH").unwrap();
     let new_wasm_content: Vec<u8> = fs::read(new_wasm_path).unwrap();
     let new_wasm_hash = Sha256::hash(&new_wasm_content);
+    let module_arg = Encode!(&()).unwrap();
     println!("Proposing governance upgrade... ");
     let proposal_id = nns_propose_upgrade_nns_canister(
         &state_machine,
@@ -36,6 +38,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
         neuron_id,
         GOVERNANCE_CANISTER_ID, // Target, i.e. the canister that we want to upgrade.
         new_wasm_content,       // The new code that we want the canister to start running.
+        module_arg,
     );
     println!("Done proposing governance upgrade: {:?}", proposal_id);
 

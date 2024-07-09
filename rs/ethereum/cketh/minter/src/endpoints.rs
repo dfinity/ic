@@ -12,6 +12,11 @@ use std::str::FromStr;
 pub mod ckerc20;
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct Eip1559TransactionPriceArg {
+    pub ckerc20_ledger_id: Principal,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Eip1559TransactionPrice {
     pub gas_limit: Nat,
     pub max_fee_per_gas: Nat,
@@ -424,6 +429,7 @@ pub mod events {
             transaction_hash: Option<String>,
         },
         SkippedBlock {
+            contract_address: Option<String>,
             block_number: Nat,
         },
         AddedCkErc20Token {

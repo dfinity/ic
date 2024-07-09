@@ -1,7 +1,6 @@
 syntax = "proto3";
 package registry.subnet.v1;
 
-import "bitcoin/v1/bitcoin.proto";
 import "registry/crypto/v1/crypto.proto";
 import "types/v1/types.proto";
 
@@ -38,7 +37,8 @@ message SubnetRecord {
   uint64 dkg_interval_length = 10;
 
   // Gossip Config
-  GossipConfig gossip_config = 13;
+  reserved 13;
+  reserved "gossip_config";
 
   // If set to yes, the subnet starts as a (new) NNS
   bool start_as_nns = 14;
@@ -270,33 +270,6 @@ message IDkgOpening {
 message ExtendedDerivationPath {
   types.v1.PrincipalId caller = 1;
   repeated bytes derivation_path = 2;
-}
-
-// Per subnet P2P configuration
-// Note: protoc is mangling the name P2PConfig to P2pConfig
-message GossipConfig {
-  reserved 9;
-  reserved "relay_config";
-  reserved 10;
-  reserved "advert_config";
-
-  // max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
-  uint32 max_artifact_streams_per_peer = 1;
-  // timeout for a outstanding request 3_000/15_000/180_000
-  uint32 max_chunk_wait_ms = 2;
-  // max duplicate requests in underutilized networks 1/28/6000
-  uint32 max_duplicity = 3;
-  // maximum chunk size supported on this subnet 1024/4096/131_072
-  uint32 max_chunk_size = 4;
-  // history size for receive check 1_000/5_000/30_000
-  uint32 receive_check_cache_size = 5;
-  // period for re evaluating the priority function. 1_000/3_000/30_000
-  uint32 pfn_evaluation_period_ms = 6;
-  // period for polling the registry for updates 1_000/3_000/30_000
-  uint32 registry_poll_period_ms = 7;
-  // period for sending a retransmission request
-  uint32 retransmission_request_ms = 8;
-  // config for advert distribution.
 }
 
 // Represents the type of subnet. Subnets of different type might exhibit different

@@ -10,13 +10,13 @@ documentation.workspace = true
 crossbeam-channel = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-registry-common-proto = { path = "../proto" }
-ic-registry-client-helpers = { path = "../helpers" }
 ic-types = { path = "../../types/types" }
 ic-utils-thread = { path = "../../utils/thread" }
 prometheus = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-registry-client-helpers = { path = "../helpers" }
+ic-registry-common-proto = { path = "../proto" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }

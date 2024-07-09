@@ -7,6 +7,11 @@
 # Where:
 #     -f force run benchmarks (do not use cache)
 
+if ! which bazel pee rg >/dev/null; then
+    echo "Error checking dependencies: please ensure 'bazel', 'pee' and 'rg' are installed"
+    exit 1
+fi
+
 # The command-line arguments to pass to the benchmark.
 # See: https://bheisler.github.io/criterion.rs/book/user_guide/command_line_options.html
 BENCHMARK_ARGS=${BENCHMARK_ARGS:=--warm-up-time 1 --sample-size 10 --measurement-time 1}

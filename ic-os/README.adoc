@@ -59,7 +59,10 @@ IC-OS images are first created as docker images and then transformed into "bare-
 
 Rather than installing and relying on a full-blown upstream ISO image, the system is assembled based on a minimal Docker image with the required components added. This approach allows for a minimal, controlled, and well understood system - which is key for a secure platform.
 
-The build process is as follows:
+[NOTE]
+For a detailed overview of the build process, refer to the link:defs.bzl#[Bazel icos_build macro]
+
+The main build stages are as follows:
 
 === Docker
 
@@ -85,6 +88,10 @@ The docker image is then transformed into a bootable "bare-metal" or "virtual-me
 
 Note that all pre-configuration of the system is performed using docker utilities, and the system is actually also operational as a docker container.
 This means that some development and testing could be done on the docker image itself, but an actual VM image is still required for proper testing.
+
+=== Injection of additional binaries
+
+As a caching optimization, additional IC services, configuration, scripts and binaries are added to the image late in the build process.
 
 == IC-OS Directory Organization
 

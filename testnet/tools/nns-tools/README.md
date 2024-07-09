@@ -71,6 +71,42 @@ test. Whereas, by default, you would have to wait until the end to see test
 output (if there is a failure). For tests that take a longer time to run (like
 this one), live results is better.
 
+### Upgrade arguments
+
+Sometimes we prepare a canister release that requires a special upgrade argument. These can be defined per-canister in `NnsCanisterUpgrade::new`. To illustarte, we have the following code:
+
+```
+let module_arg = if nns_canister_name == "cycles-minting" {
+    Encode!(
+        &(Some(CyclesCanisterInitPayload {
+            cycles_ledger_canister_id: Some(
+                CanisterId::try_from(CYCLES_LEDGER_CANISTER_ID).unwrap()
+            ),
+            ledger_canister_id: None,
+            governance_canister_id: None,
+            minting_account_id: None,
+            last_purged_notification: None,
+            exchange_rate_canister: None,
+        }))
+    )
+    .unwrap()
+} else {
+    Encode!(&()).unwrap()
+};
+```
+
+This special CMC upgrade argument was needed only once, but we keep it for illustration since it should be harmless.
+
+_Why we needed this arg in the first place: The CMC can mint cycles and transfer them directly to the cycles ledger. The cycles ledger was (re)installed recently in [this proposal](https://dashboard.internetcomputer.org/proposal/130327). Since it is now available and under NNS control, we needed to provide the canister ID to the CMC to enable the interaction with the cycles ledger._
+
+### Troubleshooting
+
+* `Cannot mkdir: No space`: try to clean up some space, e.g., by running the following command:
+
+  ```
+  ./bazel/bazel_clean.sh
+  ```
+
 ## Replicate mainnet state in a dynamic testnet
 
 *Warning*: There is now a [new (May, 2024)/better way to do release/upgrade

@@ -18,8 +18,7 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, InitialNiDkgTranscriptRecord,
-        SubnetRecord,
+        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetRecord,
     },
 };
 use ic_registry_subnet_features::SubnetFeatures;
@@ -96,9 +95,6 @@ pub struct SubnetConfig {
 
     /// Flags to mark which features are enabled for this subnet.
     pub features: SubnetFeatures,
-
-    /// Optional ecdsa configuration for this subnet.
-    pub ecdsa_config: Option<EcdsaConfig>,
 
     /// Optional chain key configuration for this subnet.
     pub chain_key_config: Option<ChainKeyConfig>,
@@ -230,7 +226,6 @@ impl SubnetConfig {
         max_instructions_per_round: Option<u64>,
         max_instructions_per_install_code: Option<u64>,
         features: Option<SubnetFeatures>,
-        ecdsa_config: Option<EcdsaConfig>,
         chain_key_config: Option<ChainKeyConfig>,
         max_number_of_canisters: Option<u64>,
         ssh_readonly_access: Vec<String>,
@@ -264,7 +259,6 @@ impl SubnetConfig {
             max_instructions_per_install_code: max_instructions_per_install_code
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
             features: features.unwrap_or_default(),
-            ecdsa_config,
             chain_key_config,
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
             ssh_readonly_access,
@@ -310,7 +304,6 @@ impl SubnetConfig {
             replica_version_id: self.replica_version_id.to_string(),
             dkg_interval_length: self.dkg_interval_length.get(),
             dkg_dealings_per_block: self.dkg_dealings_per_block as u64,
-            gossip_config: None,
             // This is not something ic-prep will participate in, so it is safe
             // to set it to false. ic-admin can set it to true when adding a
             // subnet via NNS.
@@ -325,9 +318,8 @@ impl SubnetConfig {
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
-            ecdsa_config: self.ecdsa_config,
+            ecdsa_config: None,
             chain_key_config: self.chain_key_config,
-            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes

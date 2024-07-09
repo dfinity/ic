@@ -1,3 +1,5 @@
+use candid::Encode;
+use cycles_minting_canister::{CyclesCanisterInitPayload, CYCLES_LEDGER_CANISTER_ID};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
@@ -26,6 +28,7 @@ struct NnsCanisterUpgrade {
     environment_variable_name: &'static str,
     wasm_path: String,
     wasm_content: Vec<u8>,
+    module_arg: Vec<u8>,
     wasm_hash: [u8; 32],
 }
 
@@ -46,6 +49,24 @@ impl NnsCanisterUpgrade {
             _ => panic!("Not a known NNS canister type: {}", nns_canister_name,),
         };
 
+        let module_arg = if nns_canister_name == "cycles-minting" {
+            Encode!(
+                &(Some(CyclesCanisterInitPayload {
+                    cycles_ledger_canister_id: Some(
+                        CanisterId::try_from(CYCLES_LEDGER_CANISTER_ID).unwrap()
+                    ),
+                    ledger_canister_id: None,
+                    governance_canister_id: None,
+                    minting_account_id: None,
+                    last_purged_notification: None,
+                    exchange_rate_canister: None,
+                }))
+            )
+            .unwrap()
+        } else {
+            Encode!(&()).unwrap()
+        };
+
         let nns_canister_name = nns_canister_name.to_string();
         let wasm_path = env::var(environment_variable_name)
             .unwrap_or_else(|err| panic!("{}: {}", err, environment_variable_name,));
@@ -58,6 +79,7 @@ impl NnsCanisterUpgrade {
             environment_variable_name,
             wasm_path,
             wasm_content,
+            module_arg,
             wasm_hash,
         }
     }
@@ -90,6 +112,7 @@ impl Debug for NnsCanisterUpgrade {
             environment_variable_name,
             wasm_path,
             wasm_hash,
+            module_arg,
 
             wasm_content: _,
         } = self;
@@ -97,11 +120,19 @@ impl Debug for NnsCanisterUpgrade {
         let wasm_hash = wasm_hash.map(|element| format!("{:02X}", element)).join("");
         let wasm_hash = &wasm_hash;
 
+        let module_arg = module_arg
+            .iter()
+            .map(|element| format!("{:02X}", element))
+            .collect::<Vec<_>>()
+            .join("");
+        let module_arg = &module_arg;
+
         formatter
             .debug_struct("NnsCanisterUpgrade")
             .field("nns_canister_name", nns_canister_name)
             .field("wasm_path", wasm_path)
             .field("wasm_hash", wasm_hash)
+            .field("module_arg", module_arg)
             .field("canister_id", canister_id)
             .field("environment_variable_name", environment_variable_name)
             .finish()
@@ -165,6 +196,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     nns_canister_name,
                     canister_id,
                     wasm_content,
+                    module_arg,
                     wasm_hash,
 
                     wasm_path: _,
@@ -206,6 +238,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     neuron_id,
                     *canister_id,
                     wasm_content.clone(),
+                    module_arg.clone(),
                 );
 
                 // Step 3: Verify result(s): In a short while, the canister should

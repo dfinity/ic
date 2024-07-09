@@ -22,12 +22,11 @@ use ic_test_utilities_consensus::fake::*;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
+use ic_types::{consensus::*, crypto::*, *};
 use ic_types::{
-    artifact_kind::ConsensusArtifact,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     time::UNIX_EPOCH,
 };
-use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Instant;
@@ -752,7 +751,7 @@ impl ConsensusPool for TestConsensusPool {
     }
 }
 
-impl MutablePool<ConsensusArtifact> for TestConsensusPool {
+impl MutablePool<ConsensusMessage> for TestConsensusPool {
     type ChangeSet = ChangeSet;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
@@ -763,7 +762,7 @@ impl MutablePool<ConsensusArtifact> for TestConsensusPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
         self.pool.apply_changes(change_set)
     }
 }

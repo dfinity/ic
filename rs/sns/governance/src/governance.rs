@@ -5141,7 +5141,9 @@ impl Governance {
         // In this case, we do not have a running archive, so we just clone the value so the check
         // does not fail on that account.
         if running_version.archive_wasm_hash.is_empty() {
-            running_version.archive_wasm_hash = target_version.archive_wasm_hash.clone();
+            running_version
+                .archive_wasm_hash
+                .clone_from(&target_version.archive_wasm_hash);
         }
 
         let deployed_version = match self.proto.deployed_version.clone() {

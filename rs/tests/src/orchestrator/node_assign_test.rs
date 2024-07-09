@@ -24,25 +24,25 @@ Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
-use crate::{
-    consensus::catch_up_test::{await_node_certified_height, get_certified_height},
+use crate::consensus::catch_up_test::{await_node_certified_height, get_certified_height};
+use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
+use canister_test;
+use ic_base_types::NodeId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm},
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
-    orchestrator::utils::rw_message::install_nns_and_check_progress,
     util::{
         assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
         MessageCanister,
     },
 };
-use canister_test;
-use ic_base_types::NodeId;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::info;

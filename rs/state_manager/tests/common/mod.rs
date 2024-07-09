@@ -304,7 +304,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
     use std::time::{Duration, Instant};
 
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(20);
     let started = Instant::now();
     while started.elapsed() < timeout {
         match state_manager.get_state_hash_at(h) {
@@ -394,7 +394,7 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable<StateSy
 }
 
 fn alter_chunk_data(chunk: &mut Chunk) {
-    let mut chunk_data = chunk.clone();
+    let mut chunk_data = chunk.as_bytes().to_vec();
     match chunk_data.last_mut() {
         Some(last) => {
             // Alter the last element of chunk_data.
@@ -405,7 +405,7 @@ fn alter_chunk_data(chunk: &mut Chunk) {
             chunk_data = vec![9; 100];
         }
     }
-    *chunk = chunk_data;
+    *chunk = chunk_data.into();
 }
 
 /// Pipe the meta-manifest (chunk 0) from src to dest.

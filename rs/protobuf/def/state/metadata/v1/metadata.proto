@@ -27,21 +27,14 @@ message SubnetTopology {
   bytes public_key = 2;
   registry.subnet.v1.SubnetType subnet_type = 3;
   registry.subnet.v1.SubnetFeatures subnet_features = 4;
-  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-  repeated registry.crypto.v1.EcdsaKeyId ecdsa_keys_held = 5;
+  reserved 5;
+  reserved "ecdsa_keys_held";
   repeated registry.crypto.v1.MasterPublicKeyId idkg_keys_held = 6;
 }
 
 message SubnetsEntry {
   types.v1.SubnetId subnet_id = 1;
   SubnetTopology subnet_topology = 2;
-}
-
-// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-message EcdsaKeyEntry {
-  reserved 1;
-  registry.crypto.v1.EcdsaKeyId key_id = 3;
-  repeated types.v1.SubnetId subnet_ids = 2;
 }
 
 message IDkgKeyEntry {
@@ -54,8 +47,8 @@ message NetworkTopology {
   registry.routing_table.v1.RoutingTable routing_table = 2;
   types.v1.SubnetId nns_subnet_id = 3;
   registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
-  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-  repeated EcdsaKeyEntry ecdsa_signing_subnets = 5;
+  reserved 5;
+  reserved "ecdsa_signing_subnets";
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated IDkgKeyEntry idkg_signing_subnets = 8;
@@ -74,25 +67,6 @@ message SetupInitialDkgContext {
 message SetupInitialDkgContextTree {
   uint64 callback_id = 1;
   SetupInitialDkgContext context = 2;
-}
-
-message SignWithEcdsaContext {
-  state.queues.v1.Request request = 1;
-  bytes pseudo_random_id = 2;
-  bytes message_hash = 3;
-  reserved 4;
-  reserved "derivation_path";
-  uint64 batch_time = 5;
-  repeated bytes derivation_path_vec = 6;
-  registry.crypto.v1.EcdsaKeyId key_id = 7;
-  optional uint64 height = 8;
-  optional uint64 pre_signature_id = 9;
-  optional bytes nonce = 10;
-}
-
-message SignWithEcdsaContextTree {
-  uint64 callback_id = 1;
-  SignWithEcdsaContext context = 2;
 }
 
 message EcdsaArguments {
@@ -261,7 +235,8 @@ message SubnetCallContextManager {
   reserved 2;
   reserved "contexts";
   repeated SetupInitialDkgContextTree setup_initial_dkg_contexts = 3;
-  repeated SignWithEcdsaContextTree sign_with_ecdsa_contexts = 4;
+  reserved 4;
+  reserved "sign_with_ecdsa_contexts";
   reserved 5;
   reserved "sign_with_mock_ecdsa_contexts";
   repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;

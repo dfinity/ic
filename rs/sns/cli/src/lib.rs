@@ -1,5 +1,6 @@
 use crate::{
     deploy::DirectSnsDeployerForTests, init_config_file::InitConfigFileArgs,
+    neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
 };
 use anyhow::{anyhow, Context};
@@ -34,6 +35,7 @@ use tempfile::NamedTempFile;
 
 pub mod deploy;
 pub mod init_config_file;
+pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
 pub mod unit_helpers;
@@ -61,7 +63,7 @@ pub struct CliArgs {
 pub enum SubCommand {
     /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
     /// The SNS canisters remain controlled by the developer after deployment.
-    /// For use in tests only.
+    /// For testing purposes only.
     DeployTestflight(DeployTestflightArgs),
     /// Add a wasms for one of the SNS canisters, skipping the NNS proposal,
     /// for tests.
@@ -72,6 +74,8 @@ pub enum SubCommand {
     PrepareCanisters(PrepareCanistersArgs),
     /// Submit an NNS proposal to create new SNS.
     Propose(ProposeArgs),
+    /// Converts a Neuron ID to a blob for use in ManageNeuron.
+    NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
 }
 
 /// The arguments used to configure a SNS testflight deployment
@@ -115,17 +119,20 @@ pub struct DeployTestflightArgs {
 
 #[derive(Debug, Parser)]
 pub struct AddSnsWasmForTestsArgs {
+    /// The wasm faile to be added to a test instance of SNS-WASM
     #[clap(long, value_parser = clap::value_parser!(std::path::PathBuf))]
     pub wasm_file: PathBuf,
 
+    /// The type of the canister that the wasm is for. Must be one of "archive", "root", "governance", "ledger", "swap", "index".
     pub canister_type: String,
 
-    /// The canister ID of SNS-WASMS to use instead of the default
+    /// The canister ID of SNS-WASM to use instead of the default
     ///
     /// This is useful for testing CLI commands against local replicas without fully deployed NNS
     #[clap(long)]
     pub override_sns_wasm_canister_id_for_tests: Option<String>,
 
+    /// The network to deploy to. This can be "local", "ic", or the URL of an IC network.
     #[structopt(default_value = "local", long)]
     pub network: String,
 }
@@ -763,4 +770,32 @@ fn call_dfx_or_panic(args: &[&str]) {
 pub(crate) fn hex_encode_candid(candid: impl CandidType) -> String {
     let bytes = Encode!(&candid).unwrap();
     hex::encode(bytes)
+}
+
+#[test]
+fn all_arguments_have_description() {
+    fn check_arg_descriptions(cmd: &clap::Command, path: &str) {
+        // Check arguments of the current command
+        for arg in cmd.get_arguments() {
+            if arg.get_help().is_none() && arg.get_long_help().is_none() {
+                let arg_name = arg.get_id().to_string();
+                panic!(
+                    "Argument '{}' in command '{}' doesn't have a description",
+                    arg_name, path
+                );
+            }
+        }
+
+        // Recursively check subcommands
+        for subcmd in cmd.get_subcommands() {
+            let subcmd_name = subcmd.get_name();
+            let new_path = if path.is_empty() {
+                subcmd_name.to_string()
+            } else {
+                format!("{} {}", path, subcmd_name)
+            };
+            check_arg_descriptions(subcmd, &new_path);
+        }
+    }
+    check_arg_descriptions(&<CliArgs as clap::CommandFactory>::command(), "")
 }

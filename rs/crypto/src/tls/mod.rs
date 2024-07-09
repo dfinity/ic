@@ -18,7 +18,7 @@ where
         allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ServerConfig, TlsConfigError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "TlsConfig",
@@ -56,7 +56,7 @@ where
         &self,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ServerConfig, TlsConfigError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "TlsConfig",
@@ -94,7 +94,7 @@ where
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ClientConfig, TlsConfigError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "TlsConfig",

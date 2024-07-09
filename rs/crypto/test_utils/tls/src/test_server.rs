@@ -3,7 +3,7 @@ use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -94,6 +94,9 @@ pub struct Server {
     cert: TlsPublicKeyCert,
 }
 
+#[derive(Debug)]
+pub struct TlsTestServerRunError(pub String);
+
 impl Server {
     pub fn builder(node_id: NodeId) -> ServerBuilder {
         ServerBuilder {
@@ -104,19 +107,21 @@ impl Server {
         }
     }
 
-    pub async fn run(&self) -> Result<AuthenticatedPeer, TlsConfigError> {
+    pub async fn run(&self) -> Result<AuthenticatedPeer, TlsTestServerRunError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
         let server_config = self
             .crypto
-            .server_config(self.allowed_clients.clone(), REG_V1)?;
+            .server_config(self.allowed_clients.clone(), REG_V1)
+            .map_err(|e| {
+                TlsTestServerRunError(format!("handshake error when creating config: {e}"))
+            })?;
 
         let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
-        let tls_stream = tls_acceptor.accept(tcp_stream).await.map_err(|err| {
-            TlsConfigError::MalformedSelfCertificate {
-                internal_error: err.to_string(),
-            }
-        })?;
+        let tls_stream = tls_acceptor
+            .accept(tcp_stream)
+            .await
+            .map_err(|e| TlsTestServerRunError(format!("handshake error when accepting: {e}")))?;
 
         let peer_cert = tls_stream
             .get_ref()

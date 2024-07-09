@@ -17,7 +17,9 @@ Success::
 
 end::catalog[] */
 
-use crate::{
+use ic_base_types::NodeId;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::ic::{InternetComputer, Subnet},
     driver::{
         test_env::TestEnv,
@@ -30,8 +32,6 @@ use crate::{
         assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, EndpointsStatus,
     },
 };
-use ic_base_types::NodeId;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;

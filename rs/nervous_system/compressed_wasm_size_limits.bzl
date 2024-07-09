@@ -27,5 +27,5 @@ SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "sns-governance-canister.wasm.gz": "10",
     "sns-governance-canister_test.wasm.gz": "10",
     "sns-root-canister.wasm.gz": "4",
-    "sns-swap-canister.wasm.gz": "6",
+    "sns-swap-canister.wasm.gz": "7",
 }

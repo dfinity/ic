@@ -643,7 +643,9 @@ fn test_state_sync_abortion() {
                 ]
             });
         s1.get_mut().expect_available_states().return_const(vec![]);
-        s1.get_mut().expect_chunk().returning(|_, _| Some(vec![]));
+        s1.get_mut()
+            .expect_chunk()
+            .returning(|_, _| Some(vec![].into()));
 
         // Verify that peers got expected number of adverts. The last advert on node 2
         // is used to start the state sync.
@@ -684,7 +686,9 @@ fn test_state_sync_abortion() {
 
         // Add Node 3 to state sync by advertising the state once.
         s3.get_mut().checkpoint();
-        s3.get_mut().expect_chunk().returning(|_, _| Some(vec![]));
+        s3.get_mut()
+            .expect_chunk()
+            .returning(|_, _| Some(vec![].into()));
         s3.get_mut()
             .expect_available_states()
             .once()

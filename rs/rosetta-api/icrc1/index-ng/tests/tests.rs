@@ -1331,3 +1331,24 @@ fn test_principal_subaccounts() {
     // The subaccount 1 should show up in a `list_subaccount` query although it has only been involved in an Approve transaction
     assert!(subaccounts.contains(&account(2, 1).subaccount.unwrap()));
 }
+
+mod metrics {
+    use crate::index_wasm;
+    use candid::Principal;
+    use ic_icrc1_index_ng::InitArg;
+
+    #[test]
+    fn should_export_total_memory_usage_bytes_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+            index_wasm(),
+            encode_init_args,
+        );
+    }
+
+    fn encode_init_args(ledger_id: Principal) -> InitArg {
+        InitArg {
+            ledger_id,
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        }
+    }
+}

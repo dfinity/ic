@@ -201,11 +201,13 @@ type GovernanceCachedMetrics = record {
   not_dissolving_neurons_count : nat64;
   total_locked_e8s : nat64;
   neurons_fund_total_active_neurons : nat64;
+  total_voting_power_non_self_authenticating_controller : opt nat64;
   total_staked_maturity_e8s_equivalent : nat64;
   not_dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
   total_staked_e8s_ect : nat64;
   not_dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;
   dissolved_neurons_e8s : nat64;
+  total_staked_e8s_non_self_authenticating_controller : opt nat64;
   dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   neurons_with_less_than_6_months_dissolve_delay_e8s : nat64;
   not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets : vec record {
@@ -261,6 +263,7 @@ type LedgerParameters = record {
 type ListKnownNeuronsResponse = record { known_neurons : vec KnownNeuron };
 type ListNeurons = record {
   neuron_ids : vec nat64;
+  include_empty_neurons_readable_by_caller : opt bool;
   include_neurons_readable_by_caller : bool;
 };
 type ListNeuronsResponse = record {

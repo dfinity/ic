@@ -13,6 +13,7 @@ rust_library(
         ["src/**"],
     ),
     deps = [
+        # Keep sorted.
         "@crate_index//:base32",
         "@crate_index//:candid",
         "@crate_index//:crc32fast",
@@ -24,6 +25,8 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:sha2",
+        "@crate_index//:strum",
+        "@crate_index//:time",
     ],
 )
 
@@ -31,6 +34,7 @@ rust_test(
     name = "test",
     crate = ":icrc_ledger_types",
     deps = [
+        # Keep sorted.
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
         "@crate_index//:num-bigint",

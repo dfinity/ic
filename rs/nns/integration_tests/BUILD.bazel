@@ -6,8 +6,10 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/handlers/lifeline/impl:lifeline",
@@ -21,8 +23,8 @@ BASE_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:bytes",
     "@crate_index//:candid",
-    "@crate_index//:futures",
     "@crate_index//:fs_extra",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
@@ -38,7 +40,6 @@ BASE_DEPENDENCIES = [
         "//rs/config",
         "//rs/crypto",
         "//rs/crypto/sha2",
-        "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
         "//rs/phantom_newtype",
         "//rs/protobuf",
@@ -103,6 +104,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 })
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ] + select({
@@ -114,6 +116,7 @@ MACRO_DEPENDENCIES = [
 })
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
 ]
@@ -391,7 +394,8 @@ rust_ic_test(
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
-        "manual",  # CI should not be downloading nns_state.tar.zst.
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

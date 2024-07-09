@@ -15,7 +15,6 @@ use ic_types::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
     },
-    xnet::QueueId,
     CountBytes, SubnetId,
 };
 #[cfg(test)]
@@ -258,10 +257,10 @@ impl StreamBuilderImpl {
         ///    peeked one.
         fn validated_next(
             iterator: &mut dyn PeekableOutputIterator,
-            (expected_id, expected_message): (QueueId, &RequestOrResponse),
+            expected_message: &RequestOrResponse,
         ) -> RequestOrResponse {
-            let (queue_id, message) = iterator.next().unwrap();
-            debug_assert_eq!((queue_id, &message), (expected_id, expected_message));
+            let message = iterator.next().unwrap();
+            debug_assert_eq!(&message, expected_message);
             message
         }
 
@@ -315,12 +314,12 @@ impl StreamBuilderImpl {
         // Route all messages into the appropriate stream or generate reject Responses
         // when unable to (no route to canister). When a stream's byte size reaches or
         // exceeds `target_stream_size_bytes`, any matching queues are skipped.
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
             // Safeguard to guarantee that iteration always terminates. Will always loop at
             // least once, if messages are available.
-            let output_size = output_iter.size_hint().0;
+            let output_size = output_iter.size();
             debug_assert!(output_size < last_output_size);
             if output_size >= last_output_size {
                 error!(
@@ -334,7 +333,7 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            match routing_table.route(queue_id.dst_canister.get()) {
+            match routing_table.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
                     if is_at_limit(
@@ -352,7 +351,7 @@ impl StreamBuilderImpl {
                     }
 
                     // We will route (or reject) the message, pop it.
-                    let mut msg = validated_next(&mut output_iter, (queue_id, &msg));
+                    let mut msg = validated_next(&mut output_iter, &msg);
 
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
@@ -425,9 +424,9 @@ impl StreamBuilderImpl {
 
                 // Destination subnet not found.
                 None => {
-                    warn!(self.log, "No route to canister {}", queue_id.dst_canister);
+                    warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match validated_next(&mut output_iter, (queue_id, &msg)) {
+                    match validated_next(&mut output_iter, &msg) {
                         // A Request: generate a reject Response.
                         RequestOrResponse::Request(req) => {
                             requests_to_reject.push(req);

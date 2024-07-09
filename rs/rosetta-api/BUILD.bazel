@@ -9,6 +9,7 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
     "//rs/constants",
@@ -54,17 +55,18 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_macro",
     "@crate_index//:async-trait",
-    "@crate_index//:serde_derive",
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/ed25519",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/test_utils",
     "//rs/types/base_types",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:proptest",
@@ -207,8 +209,6 @@ container_image(
     directory = "/home/rosetta",
     entrypoint = [
         "/home/rosetta/ic-rosetta-api",
-        "--store-location",
-        "/data",
     ],
     files = [
         ":ic-rosetta-api",

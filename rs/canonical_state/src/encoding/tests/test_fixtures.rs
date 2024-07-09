@@ -7,7 +7,7 @@ use ic_types::{
         NO_DEADLINE,
     },
     time::CoarseTime,
-    xnet::{StreamFlags, StreamHeader},
+    xnet::{RejectReason, RejectSignal, StreamFlags, StreamHeader},
     Cycles, Time,
 };
 use std::collections::VecDeque;
@@ -16,7 +16,12 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
     let reject_signals = if certification_version < CertificationVersion::V8 {
         VecDeque::new()
     } else {
-        vec![10.into(), 200.into(), 250.into()].into()
+        vec![
+            RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
+            RejectSignal::new(RejectReason::CanisterMigrating, 200.into()),
+            RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+        ]
+        .into()
     };
     let flags = StreamFlags {
         deprecated_responses_only: certification_version >= CertificationVersion::V17,

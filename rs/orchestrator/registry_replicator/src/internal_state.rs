@@ -392,7 +392,7 @@ impl InternalState {
         // has any of the urls or the pub key changed?
         if pub_key_changed || urls_changed {
             self.nns_pub_key = Some(pub_key);
-            self.nns_urls = urls.clone();
+            self.nns_urls.clone_from(&urls);
 
             // reinitialize client
             self.registry_canister = Some(Arc::new(RegistryCanister::new_with_query_timeout(

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:chacha20poly1305",
@@ -14,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:nix",
     "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:prometheus",
     "@crate_index//:reqwest",
     "@crate_index//:rsa",
@@ -27,6 +29,7 @@ DEPENDENCIES = [
 ]
 
 DENYLIST_ENCODER_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:chacha20poly1305",
     "@crate_index//:clap_3_2_25",
@@ -38,6 +41,7 @@ DENYLIST_ENCODER_DEPENDENCIES = [
 ]
 
 GENERATE_KEY_PAIR_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:rsa",
@@ -45,10 +49,12 @@ GENERATE_KEY_PAIR_DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:tempfile",
 ]
 

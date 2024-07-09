@@ -15,14 +15,16 @@ end::catalog[] */
 
 use std::time::Duration;
 
-use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
-use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+};
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::util::{assert_create_agent, block_on, MessageCanister};
-use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::{assert_create_agent, block_on, MessageCanister};
 use ic_types::Height;
 use slog::info;
 

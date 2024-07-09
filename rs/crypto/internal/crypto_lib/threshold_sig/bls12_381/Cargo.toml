@@ -17,7 +17,7 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
@@ -28,7 +28,7 @@ strum_macros = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 proptest = "1.0"
 proptest-derive = "0.3.0"

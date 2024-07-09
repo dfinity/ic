@@ -11,6 +11,7 @@ on:
       - '.bazelversion'
       - 'rust-toolchain.toml'
       - 'gitlab-ci/container/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -82,7 +83,9 @@ jobs:
           file: gitlab-ci/container/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ env.IMAGE_TAG }}
-          build-args: "RUST_VERSION=${{ env.RUST_VERSION }}"
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            CI_USER=1001
 
       - name: Update Image References
         shell: bash

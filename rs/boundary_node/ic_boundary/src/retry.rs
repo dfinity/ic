@@ -16,6 +16,7 @@ use crate::{
 pub struct RetryParams {
     pub retry_count: usize,
     pub retry_update_call: bool,
+    pub disable_latency_routing: bool,
 }
 
 #[derive(Clone)]
@@ -78,7 +79,14 @@ pub async fn retry_request(
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Select up to 1+retry_count nodes from the subnet if there are any
-    let nodes = subnet.pick_random_nodes(1 + params.retry_count)?;
+    let nodes = if !params.disable_latency_routing
+        && (ctx.request_type == RequestType::Call || ctx.request_type == RequestType::CallV3)
+    {
+        let factor = subnet.fault_tolerance_factor() + 1;
+        subnet.pick_n_out_of_m_closest(1 + params.retry_count, factor)?
+    } else {
+        subnet.pick_random_nodes(1 + params.retry_count)?
+    };
 
     // Skip retrying in certain cases
     if params.retry_count == 0

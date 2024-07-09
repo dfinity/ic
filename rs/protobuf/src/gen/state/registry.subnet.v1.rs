@@ -21,9 +21,6 @@ pub struct SubnetRecord {
     /// The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
     #[prost(uint64, tag = "10")]
     pub dkg_interval_length: u64,
-    /// Gossip Config
-    #[prost(message, optional, tag = "13")]
-    pub gossip_config: ::core::option::Option<GossipConfig>,
     /// If set to yes, the subnet starts as a (new) NNS
     #[prost(bool, tag = "14")]
     pub start_as_nns: bool,
@@ -312,38 +309,6 @@ pub struct ExtendedDerivationPath {
     pub caller: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub derivation_path: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-}
-/// Per subnet P2P configuration
-/// Note: protoc is mangling the name P2PConfig to P2pConfig
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipConfig {
-    /// max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
-    #[prost(uint32, tag = "1")]
-    pub max_artifact_streams_per_peer: u32,
-    /// timeout for a outstanding request 3_000/15_000/180_000
-    #[prost(uint32, tag = "2")]
-    pub max_chunk_wait_ms: u32,
-    /// max duplicate requests in underutilized networks 1/28/6000
-    #[prost(uint32, tag = "3")]
-    pub max_duplicity: u32,
-    /// maximum chunk size supported on this subnet 1024/4096/131_072
-    #[prost(uint32, tag = "4")]
-    pub max_chunk_size: u32,
-    /// history size for receive check 1_000/5_000/30_000
-    #[prost(uint32, tag = "5")]
-    pub receive_check_cache_size: u32,
-    /// period for re evaluating the priority function. 1_000/3_000/30_000
-    #[prost(uint32, tag = "6")]
-    pub pfn_evaluation_period_ms: u32,
-    /// period for polling the registry for updates 1_000/3_000/30_000
-    #[prost(uint32, tag = "7")]
-    pub registry_poll_period_ms: u32,
-    /// period for sending a retransmission request
-    ///
-    /// config for advert distribution.
-    #[prost(uint32, tag = "8")]
-    pub retransmission_request_ms: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
