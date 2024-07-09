@@ -63,37 +63,19 @@ where
     }
 }
 
-// // Define a struct for your custom iterator
-// struct CopyingBTreeMapIter<'a, K, V> {
-//     //iter: std::iter::Enumerate<BTreeMap<'a, K, V>::Iter<'a>>,
-// }
+impl<AccountId, Tokens> InspectableBalancesStore for BTreeMap<AccountId, Tokens>
+where
+    AccountId: Eq + Clone + std::cmp::Ord,
+    Tokens: TokensType,
+{
+    fn len(&self) -> usize {
+        self.len()
+    }
 
-// // Implement Iterator trait for CopyingBTreeMapIter
-// impl<'a, K, V> Iterator for CopyingBTreeMapIter<'a, K, V>
-// where
-//     K: Clone,
-//     V: Clone,
-// {
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.iter
-//             .next()
-//             .map(|(i, (key, value))| (key.clone(), value.clone()))
-//     }
-// }
-
-// impl<AccountId, Tokens> InspectableBalancesStore for BTreeMap<AccountId, Tokens>
-// where
-//     AccountId: Eq + Clone + std::cmp::Ord,
-//     Tokens: TokensType,
-// {
-//     fn len(&self) -> usize {
-//         self.len()
-//     }
-
-//     fn iter(&self) -> Box<dyn Iterator<Item = (Self::AccountId, Self::Tokens)> + '_> {
-//         Box::new(self.iter())
-//     }
-// }
+    // fn iter(&self) -> Box<dyn Iterator<Item = (Self::AccountId, Self::Tokens)> + '_> {
+    //     Box::new(self.iter())
+    // }
+}
 
 /// An error returned by `Balances` if the debit operation fails.
 #[derive(Debug)]

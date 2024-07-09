@@ -461,12 +461,12 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 )
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
-            // apply_transaction(&mut ledger, mint, now, Tokens::zero()).unwrap_or_else(|err| {
-            //     panic!(
-            //         "failed to mint {} tokens to {}: {:?}",
-            //         balance, account, err
-            //     )
-            // });
+            apply_transaction(&mut ledger, mint, now, Tokens::zero()).unwrap_or_else(|err| {
+                panic!(
+                    "failed to mint {} tokens to {}: {:?}",
+                    balance, account, err
+                )
+            });
         }
 
         ledger
