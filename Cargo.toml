@@ -274,6 +274,7 @@ members = [
     "rs/rosetta-api/icrc1/tokens_u256",
     "rs/rosetta-api/hardware_wallet_tests",
     "rs/rosetta-api/test_utils",
+    "rs/rosetta-api/test_utils/sender_canister",
     "rs/rosetta-api/tvl",
     "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/call_tree_test",
@@ -603,7 +604,9 @@ threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.38.0", features = ["full"] }
 tokio-metrics = "0.3.1"
-tokio-rustls = { version = "0.26.0", default-features = false, features = ["ring"] }
+tokio-rustls = { version = "0.26.0", default-features = false, features = [
+    "ring",
+] }
 tokio-util = { version = "0.7.11", features = ["full"] }
 tonic = "0.11.0"
 tonic-build = "0.11.0"

@@ -10804,6 +10804,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sender-canister"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "futures",
+ "ic-cdk 0.13.2",
+ "serde",
+]
+
+[[package]]
 name = "ic-sns-audit"
 version = "0.9.0"
 dependencies = [
