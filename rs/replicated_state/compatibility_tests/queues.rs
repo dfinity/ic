@@ -47,7 +47,7 @@ const TESTS: [(&str, &str); 1] = [(
 
 #[test]
 fn compatibility_test() {
-    /// TODO: Add the actual up/downgrade tests once the basic test is merged to master
+    // TODO: Add the actual up/downgrade tests once the basic test is merged to master
     for (binary_name, test_fqn_prefix) in TESTS {
         let binary = data_dependency_file(binary_name);
         let tmp_dir = tempfile::tempdir().unwrap();
@@ -55,14 +55,14 @@ fn compatibility_test() {
         run_unit_test(
             &binary,
             &format!("{}serialize", test_fqn_prefix),
-            &tmp_dir_path,
+            tmp_dir_path,
         );
-        let nr_files = fs::read_dir(&tmp_dir_path).unwrap().count();
+        let nr_files = fs::read_dir(tmp_dir_path).unwrap().count();
         assert_eq!(nr_files, 1);
         run_unit_test(
             &binary,
             &format!("{}deserialize", test_fqn_prefix),
-            &tmp_dir_path,
+            tmp_dir_path,
         );
     }
 }
