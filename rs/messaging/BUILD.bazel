@@ -41,6 +41,7 @@ rust_library(
         "//rs/utils/thread",
         "@crate_index//:prometheus",
         "@crate_index//:slog",
+        "@crate_index//:tracing",
     ],
 )
 

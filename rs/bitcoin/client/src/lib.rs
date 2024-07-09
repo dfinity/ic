@@ -22,6 +22,7 @@ use std::{convert::TryFrom, path::PathBuf};
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
+use tracing::instrument;
 
 fn convert_tonic_error(status: tonic::Status) -> RpcError {
     match status.code() {
@@ -51,6 +52,7 @@ impl BitcoinAdapterClientImpl {
 impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl {
     type Response = BitcoinAdapterResponseWrapper;
 
+    #[instrument(skip_all)]
     fn send_blocking(
         &self,
         request: BitcoinAdapterRequestWrapper,

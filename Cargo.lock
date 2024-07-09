@@ -5187,6 +5187,7 @@ dependencies = [
  "ic-types",
  "prometheus",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -5520,6 +5521,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -7835,6 +7837,7 @@ dependencies = [
  "threadpool",
  "tokio",
  "tower",
+ "tracing",
  "wasmparser 0.201.0",
  "wat",
 ]
@@ -8056,6 +8059,7 @@ dependencies = [
  "tonic",
  "tower",
  "tower-test",
+ "tracing",
 ]
 
 [[package]]
@@ -9027,6 +9031,7 @@ dependencies = [
  "serde",
  "slog",
  "tempfile",
+ "tracing",
  "xnet-test",
 ]
 
