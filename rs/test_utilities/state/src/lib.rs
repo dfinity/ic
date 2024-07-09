@@ -843,8 +843,8 @@ prop_compose! {
     pub fn arb_stream_with_config(
         min_size: usize,
         max_size: usize,
-        min_signal_count:
-        usize, max_signal_count: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
     )(
         msg_start in 0..10000u64,
