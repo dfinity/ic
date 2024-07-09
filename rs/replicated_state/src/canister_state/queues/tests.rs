@@ -845,7 +845,7 @@ fn test_peek_canister_input_does_not_affect_schedule() {
             .get(&canister_test_id(1))
             .unwrap()
             .0
-            .num_messages(),
+            .len(),
         2
     );
 }
@@ -902,7 +902,7 @@ fn test_skip_canister_input() {
             .get(&canister_test_id(1))
             .unwrap()
             .0
-            .num_messages(),
+            .len(),
         2
     );
 }
@@ -2221,7 +2221,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
         if let Some((input_queue, output_queue)) = canister_queues.canister_queues.get(canister_id)
         {
             assert_eq!(num_output_messages, output_queue.num_messages());
-            assert_eq!(1, input_queue.num_messages());
+            assert_eq!(1, input_queue.len());
         }
     }
 
@@ -2268,7 +2268,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
         canister_queues.canister_queues.get(&remote_canister_id)
     {
         assert_eq!(0, output_queue.num_messages());
-        assert_eq!(2, input_queue.num_messages());
+        assert_eq!(2, input_queue.len());
     }
     // Check that timing out twice does not lead to duplicate entries in subnet input schedules.
     assert_eq!(
