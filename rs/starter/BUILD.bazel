@@ -3,13 +3,14 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/monitoring/logger",
     "//rs/prep",
     "//rs/protobuf",
     "//rs/registry/provisional_whitelist",
-    "//rs/registry/subnet_type",
     "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",

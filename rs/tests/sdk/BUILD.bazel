@@ -14,6 +14,7 @@ rust_library(
     crate_name = "sdk_system_tests",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
+        # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:backoff",
@@ -38,6 +39,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + BOUNDARY_NODE_RUNTIME_DEPS,
     deps = [
+        # Keep sorted.
         "sdk-system-tests",
         "//rs/registry/subnet_type",
         "//rs/tests",
@@ -55,6 +57,7 @@ system_test(
         "@wallet_canister_0.7.2//file",
     ],
     deps = [
+        # Keep sorted.
         "sdk-system-tests",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",

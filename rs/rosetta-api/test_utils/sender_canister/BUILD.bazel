@@ -4,6 +4,7 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPS = [
+    # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
@@ -14,6 +15,7 @@ rust_canister(
     name = "ic-sender-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:ic-cdk-macros",
     ],
     service_file = ":sender.did",

@@ -4,15 +4,16 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:schemars",
-    "@crate_index//:reqwest",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:candid",
+    # Keep sorted.
     "@crate_index//:base64",
+    "@crate_index//:candid",
     "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:reqwest",
+    "@crate_index//:schemars",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
     "@crate_index//:sha2",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
@@ -23,10 +24,11 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 TEST_DEPENDENCIES = [
-    "//rs/universal_canister/lib",
-    "//rs/test_utilities/load_wasm",
+    # Keep sorted.
     "//rs/rosetta-api/icp_ledger",
+    "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
+    "//rs/universal_canister/lib",
     "@crate_index//:candid_parser",
     "@crate_index//:flate2",
     "@crate_index//:k256",
@@ -47,6 +49,7 @@ rust_canister(
     srcs = ["tests/test_canister.rs"],
     service_file = ":tests/test_canister.did",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
     ],

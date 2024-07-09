@@ -4,6 +4,7 @@ load("//bazel:prost.bzl", "protobuf_generator")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/utils/rustfmt",
     "@crate_index//:prost-build",
 ]

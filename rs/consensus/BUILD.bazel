@@ -74,10 +74,12 @@ DEV_DEPENDENCIES = [
 ]
 
 MALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
@@ -152,6 +154,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":consensus",
         "//rs/artifact_pool",
         "//rs/config",

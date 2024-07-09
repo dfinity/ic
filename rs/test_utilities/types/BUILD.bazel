@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/crypto/ed25519",
     "//rs/types/types",
@@ -22,6 +23,7 @@ rust_test(
     name = "test_utilities_types_test",
     crate = ":types",
     deps = [
+        # Keep sorted.
         "@crate_index//:assert_matches",
         "@crate_index//:bincode",
         "@crate_index//:serde_cbor",

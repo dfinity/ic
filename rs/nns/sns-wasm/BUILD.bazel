@@ -12,6 +12,7 @@ filegroup(
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
@@ -29,6 +30,7 @@ BASE_DEPENDENCIES = [
     "//rs/utils",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-wasm",
@@ -36,7 +38,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:hex",
     "@crate_index//:serde_json",
 ]
 
@@ -55,16 +56,18 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/sns-wasm/protobuf_generator:lib",
     "//rs/nns/test_utils",
     "//rs/registry/helpers",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/canister_test",
     "//rs/sns/swap",  # FIXME
     "//rs/state_machine_tests",
@@ -222,6 +225,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/nns/sns-wasm",
     deps = [
+        # Keep sorted.
         "//rs/nns/sns-wasm/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
