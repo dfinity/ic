@@ -72,6 +72,7 @@ BINARIES = {
     "drun": "//rs/drun:drun",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
+    "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary"
 }
 
 # test binaries or binaries using test utils
@@ -91,6 +92,7 @@ TESTONLY_BINARIES = [
     "pocket-ic",
     "sns-test-feature",
     "types-test",
+    "replicated-state-test",
 ]
 
 LIBRARIES = {

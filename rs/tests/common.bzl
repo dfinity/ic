@@ -3,6 +3,7 @@ Common dependencies for system-tests.
 """
 
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
+load("@rules_rust//rust:defs.bzl", "rust_test")
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
@@ -429,6 +430,24 @@ symlink_dir_test = rule(
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },
 )
+
+def rust_test_with_binary(name, binary_name, **kwargs):
+    """
+    A Rust test with a stable link to its produced test binary
+
+    One can then declare a data dependency on the binary_name target, and use it in tests.
+    """
+    symlink_dir_test(
+        name = binary_name,
+        targets = {
+            name: name,
+        },
+    )
+    rust_test(
+        name = name,
+        **kwargs,
+    )
+    
 
 def _symlink_dirs(ctx):
     dirname = ctx.attr.name

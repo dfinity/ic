@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
+load("//rs/tests:common.bzl", "rust_test_with_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -115,12 +116,24 @@ rust_bench(
     deps = [":replicated_state"] + BIN_DEPENDENCIES,
 )
 
-rust_test(
+rust_test_with_binary(
     name = "replicated_state_test",
+    binary_name = "replicated_state_test_binary",
     aliases = ALIASES,
     crate = ":replicated_state",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "queue_compatibility_test",
+    data = [
+        ":replicated_state_test_binary"
+    ],
+    srcs = glob(["compatibility_tests/*.rs"]),
+    deps = [
+        "@crate_index//:tempfile",
+    ]
 )
 
 rust_test_suite(
