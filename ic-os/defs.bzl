@@ -557,7 +557,12 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT"
+# Hack to switch nested for SetupOS
+nested=""
+if [[ "$@" =~ "setupos" ]]; then
+    nested="--nested"
+fi
+$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT" \\$${nested}
 EOF
         """,
         executable = True,
