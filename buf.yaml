@@ -22,6 +22,8 @@ lint:
 breaking:
   ignore:
     - types/v1/idkg.proto
+    # TODO remove this immediately after this MR is merged
+    - ic_nns_governance/pb/v1/governance.proto
   use:
     - WIRE
   except:
