@@ -26,7 +26,6 @@ rust_library(
     crate_name = "icp_ledger",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:prost-derive",
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",

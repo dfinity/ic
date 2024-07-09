@@ -929,9 +929,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "prost-build": crate.spec(
                 version = "^0.12",
             ),
-            "prost-derive": crate.spec(
-                version = "^0.12",
-            ),
             "protobuf": crate.spec(
                 version = "^2.28.0",
             ),

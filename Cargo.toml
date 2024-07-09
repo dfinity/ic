@@ -552,7 +552,6 @@ pprof = { version = "0.13.0", default-features = false, features = [
 prometheus = { version = "0.13.4", features = ["process"] }
 prost = "=0.12.2"
 prost-build = "=0.12.2"
-prost-derive = "=0.12.2"
 protobuf = "2.28.0"
 quinn = { version = "0.10.2", features = ["ring"] }
 quinn-udp = "0.5.1"
