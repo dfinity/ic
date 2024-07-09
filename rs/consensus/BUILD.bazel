@@ -37,7 +37,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/ni-dkg",

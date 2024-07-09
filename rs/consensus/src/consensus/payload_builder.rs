@@ -239,7 +239,7 @@ impl PayloadBuilderImpl {
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
-    use ic_btc_types_internal::{
+    use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{dependencies, Dependencies};

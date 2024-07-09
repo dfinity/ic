@@ -1,4 +1,4 @@
-use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
+use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
 use ic_protobuf::{

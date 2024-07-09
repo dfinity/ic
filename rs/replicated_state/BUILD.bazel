@@ -4,7 +4,7 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/canonical_state/certification_version",
     "//rs/config",
     "//rs/constants",

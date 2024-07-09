@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/bitcoin/service",
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/execution_environment",
