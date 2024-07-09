@@ -5479,8 +5479,8 @@ dependencies = [
  "ic-btc-adapter-client",
  "ic-btc-adapter-test-utils",
  "ic-btc-interface",
+ "ic-btc-replica-types",
  "ic-btc-service",
- "ic-btc-types-internal",
  "ic-btc-validation",
  "ic-config",
  "ic-interfaces-adapter-client",
@@ -5509,8 +5509,8 @@ version = "0.9.0"
 dependencies = [
  "ic-adapter-metrics-client",
  "ic-async-utils",
+ "ic-btc-replica-types",
  "ic-btc-service",
- "ic-btc-types-internal",
  "ic-config",
  "ic-interfaces-adapter-client",
  "ic-logger",
@@ -5541,7 +5541,7 @@ name = "ic-btc-consensus"
 version = "0.9.0"
 dependencies = [
  "ic-btc-interface",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-config",
  "ic-error-types",
  "ic-interfaces",
@@ -5582,6 +5582,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-replica-types"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-btc-interface",
+ "ic-error-types",
+ "ic-protobuf",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-btc-service"
 version = "0.9.0"
 dependencies = [
@@ -5597,18 +5609,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be8e0a43145188ba239150f8460d314b0dd6e0ddf7d753c0ef99296103c622dd"
 dependencies = [
  "bitcoin 0.28.2",
-]
-
-[[package]]
-name = "ic-btc-types-internal"
-version = "0.9.0"
-dependencies = [
- "candid",
- "ic-btc-interface",
- "ic-error-types",
- "ic-protobuf",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]
@@ -6208,7 +6208,7 @@ dependencies = [
  "assert_matches",
  "criterion",
  "ic-artifact-pool",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-config",
  "ic-consensus-mocks",
  "ic-consensus-utils",
@@ -8933,7 +8933,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-btc-interface",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-error-types",
  "ic-protobuf",
  "num-traits",
@@ -10559,8 +10559,8 @@ dependencies = [
  "ic-async-utils",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-btc-replica-types",
  "ic-btc-service",
- "ic-btc-types-internal",
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto-sha2",
@@ -10612,8 +10612,8 @@ dependencies = [
  "cvt",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-btc-replica-types",
  "ic-btc-test-utils",
- "ic-btc-types-internal",
  "ic-certification-version",
  "ic-config",
  "ic-constants",
@@ -11855,7 +11855,7 @@ version = "0.9.0"
 dependencies = [
  "hex-literal",
  "ic-artifact-pool",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-types",
@@ -12055,7 +12055,7 @@ name = "ic-test-utilities-state"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-interfaces",
  "ic-management-canister-types",
  "ic-registry-routing-table",
@@ -12165,7 +12165,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "ic-base-types",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-constants",
  "ic-crypto-internal-types",
  "ic-crypto-sha2",

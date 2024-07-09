@@ -28,7 +28,7 @@ use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
 use crate::xnet::CertifiedStreamSlice;
 use crate::{CryptoHashOfState, ReplicaVersion};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
     GetSuccessorsResponseComplete, SendTransactionResponse,
 };

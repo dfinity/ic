@@ -97,7 +97,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/bitcoin/client/                                     @dfinity-lab/teams/networking-team
 /rs/bitcoin/consensus/                                  @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners
 /rs/bitcoin/service/                                    @dfinity-lab/teams/networking-team
-/rs/bitcoin/types/                                      @dfinity-lab/teams/execution-owners
+/rs/bitcoin/replica_types/                              @dfinity-lab/teams/execution-owners
 /rs/boundary_node/                                      @dfinity-lab/teams/boundarynode-team
 /rs/canister_client/                                    @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                                   @dfinity-lab/teams/runtime-owners

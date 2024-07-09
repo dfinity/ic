@@ -42,7 +42,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:ic-btc-interface",
     "//rs/bitcoin/adapter/test_utils",
     "//rs/bitcoin/client",
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/interfaces/adapter_client",
     "//rs/test_utilities/logger",
 ]

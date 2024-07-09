@@ -11,7 +11,7 @@ crossbeam-channel = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-service = { path = "../bitcoin/service" }
 ic-btc-interface = { workspace = true }
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-error-types = { path = "../types/error_types" }

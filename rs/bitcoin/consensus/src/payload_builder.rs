@@ -9,7 +9,7 @@ mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject,
 };

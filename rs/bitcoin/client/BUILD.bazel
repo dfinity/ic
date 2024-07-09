@@ -13,8 +13,8 @@ rust_library(
     version = "0.1.0",
     deps = [
         "//rs/async_utils",
+        "//rs/bitcoin/replica_types",
         "//rs/bitcoin/service",
-        "//rs/bitcoin/types/internal",
         "//rs/config",
         "//rs/interfaces/adapter_client",
         "//rs/monitoring/adapter_metrics/client",
