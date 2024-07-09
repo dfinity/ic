@@ -54,7 +54,7 @@ pub struct Config {
 }
 
 fn default_block_on_overflow() -> bool {
-    true
+    false
 }
 
 impl Default for Config {
@@ -63,7 +63,7 @@ impl Default for Config {
             level: Level::Debug,
             format: LogFormat::TextFull,
             log_destination: LogDestination::default(),
-            block_on_overflow: true,
+            block_on_overflow: false,
         }
     }
 }
