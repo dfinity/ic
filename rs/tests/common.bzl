@@ -2,8 +2,8 @@
 Common dependencies for system-tests.
 """
 
-load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 load("@rules_rust//rust:defs.bzl", "rust_test")
+load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
@@ -445,9 +445,8 @@ def rust_test_with_binary(name, binary_name, **kwargs):
     )
     rust_test(
         name = name,
-        **kwargs,
+        **kwargs
     )
-    
 
 def _symlink_dirs(ctx):
     dirname = ctx.attr.name
