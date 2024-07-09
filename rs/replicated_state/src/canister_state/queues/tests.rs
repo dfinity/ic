@@ -2086,6 +2086,9 @@ fn time_out_requests_pushes_correct_reject_responses() {
     );
 }
 
+// These tests are used to check the compatibility with the mainnet version.
+// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
+// but instead invoked from the compiled test binary by a separate compatibility test.
 mod mainnet_compatibility_tests {
     use prost::Message;
     use std::fs::File;
