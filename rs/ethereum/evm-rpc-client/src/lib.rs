@@ -4,7 +4,8 @@ mod tests;
 pub mod types;
 
 use crate::types::candid::{
-    Block, BlockTag, MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices,
+    Block, BlockTag, GetLogsArgs, LogEntry, MultiRpcResult, ProviderError, RpcConfig, RpcError,
+    RpcServices,
 };
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
@@ -51,6 +52,10 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
 
     pub async fn eth_get_block_by_number(&self, block: BlockTag) -> MultiRpcResult<Block> {
         self.call_internal("eth_getBlockByNumber", block).await
+    }
+
+    pub async fn eth_get_logs(&self, args: GetLogsArgs) -> MultiRpcResult<Vec<LogEntry>> {
+        self.call_internal("eth_getLogs", args).await
     }
 
     async fn call_internal<In, Out>(&self, method: &str, args: In) -> MultiRpcResult<Out>
