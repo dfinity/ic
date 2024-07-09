@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:prometheus",
     "@crate_index//:tokio",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = []

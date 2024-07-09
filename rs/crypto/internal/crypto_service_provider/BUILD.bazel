@@ -58,6 +58,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tokio-serde",
     "@crate_index//:tokio-util",
+    "@crate_index//:tracing",
     "@crate_index//:x509-parser",
     "@crate_index//:zeroize",
 ]
@@ -85,7 +86,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:rsa",
     "@crate_index//:slog-async",
-    "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
 ]
 
