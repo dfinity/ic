@@ -31,7 +31,7 @@ fn run_unit_test(binary: &Path, test_name: &str, current_dir: &Path) -> std::pro
     assert!(
         std::str::from_utf8(&output.stdout).unwrap().contains("1 passed"),
         "Trying to execute {} from {:?}, but no test with such name was found.\nCheck that you don't have a typo in the name of the target module or test?",
-        test_name, 
+        test_name,
         binary.file_name().unwrap(),
     );
     output
