@@ -6,7 +6,7 @@ use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager
 use crate::CanisterQueues;
 use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
 use ic_base_types::CanisterId;
-use ic_btc_types_internal::BlockBlob;
+use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};

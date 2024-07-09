@@ -35,7 +35,7 @@ jobs:
           fi
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
         env:
-          BRANCH_NAME: "${{ github.head_ref || github.ref_name }}"
+          BRANCH_NAME: "${{ github.event.workflow_run.head_branch }}"
           MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
 
       - name: Post Slack Notification

@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 hex-literal = "0.4.1"
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }

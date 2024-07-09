@@ -3,11 +3,12 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "internal",
+    name = "replica_types",
     srcs = glob(["src/**"]),
-    crate_name = "ic_btc_types_internal",
+    crate_name = "ic_btc_replica_types",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/types/error_types",
         "@crate_index//:candid",
@@ -18,6 +19,6 @@ rust_library(
 )
 
 rust_test(
-    name = "internal_test",
-    crate = ":internal",
+    name = "replica_types_test",
+    crate = ":replica_types",
 )

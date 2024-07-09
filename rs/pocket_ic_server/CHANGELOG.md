@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New CLI option `--ready-file` to specify a file which is created by the PocketIC server once it is ready to accept HTTP connections.
 - A new endpoint `/instances/<instance_id>/_/dashboard` serving a PocketIC dashboard.
 - ECDSA support (IC mainnet-like): there are three ECDSA keys with names `dfx_test_key1`, `test_key_1`, and `key_1` on the II subnet.
+- The argument of the endpoint `/instances/` to create a new PocketIC instance becomes a struct with two fields:
+  the original argument of that endpoint is the field `subnet_config_set` and the new optional field `state_dir`
+  specifies a directory in which the state of the PocketIC instance can be preserved across the PocketIC instance lifetime
+  (that directory should be empty when specified as `state_dir` for the very first time).
+  The topology contains a new field `subnet_seed` which is equal to the directory name of the directory in the `state_dir`
+  storing the state of the corresponding subnet.
 
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.

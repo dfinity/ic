@@ -157,7 +157,7 @@ use std::{
     convert::TryFrom,
     fmt,
     io::{self, stderr},
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
     sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
@@ -563,24 +563,24 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
 pub struct StateMachineNode {
     pub node_id: NodeId,
     pub node_pk_proto: PublicKeyProto,
-    pub signing_key: ed25519_consensus::SigningKey,
+    pub signing_key: ic_crypto_ed25519::PrivateKey,
 }
 
 impl From<u64> for StateMachineNode {
     fn from(i: u64) -> Self {
         let mut bytes = [0; 32];
         bytes[..8].copy_from_slice(&i.to_le_bytes());
-        let signing_key: ed25519_consensus::SigningKey = bytes.into();
+        let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
         let node_pk_proto = PublicKeyProto {
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: signing_key.verification_key().to_bytes().to_vec(),
+            key_value: signing_key.public_key().serialize_raw().to_vec(),
             version: 0,
             proof_data: None,
             timestamp: None,
         };
         Self {
             node_id: PrincipalId::new_self_authenticating(
-                &signing_key.verification_key().to_bytes(),
+                &signing_key.public_key().serialize_raw(),
             )
             .into(),
             node_pk_proto,
@@ -624,7 +624,7 @@ pub struct StateMachine {
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
-    pub state_dir: TempDir,
+    state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
 }
 
@@ -643,8 +643,34 @@ impl fmt::Debug for StateMachine {
     }
 }
 
+/// A state directory for a `StateMachine` in which
+/// the `StateMachine` maintains its state.
+pub trait StateMachineStateDir: Send + Sync {
+    fn path(&self) -> PathBuf;
+}
+
+/// A state directory based on a `TempDir` which
+/// gets deleted once the `StateMachine` is dropped.
+impl StateMachineStateDir for TempDir {
+    fn path(&self) -> PathBuf {
+        self.path().to_path_buf()
+    }
+}
+
+/// A state directory based on a `PathBuf` which
+/// is persisted once the `StateMachine` is dropped.
+/// To reuse the state in another `StateMachine`,
+/// you need to run `state_machine.checkpointed_tick()`
+/// followed by `state_machine.await_state_hash()`
+/// before dropping the `StateMachine`.
+impl StateMachineStateDir for PathBuf {
+    fn path(&self) -> PathBuf {
+        self.clone()
+    }
+}
+
 pub struct StateMachineBuilder {
-    state_dir: TempDir,
+    state_dir: Box<dyn StateMachineStateDir>,
     nonce: u64,
     time: Time,
     config: Option<StateMachineConfig>,
@@ -671,7 +697,7 @@ pub struct StateMachineBuilder {
 impl StateMachineBuilder {
     pub fn new() -> Self {
         Self {
-            state_dir: TempDir::new().expect("failed to create a temporary directory"),
+            state_dir: Box::new(TempDir::new().expect("failed to create a temporary directory")),
             nonce: 0,
             time: GENESIS,
             config: None,
@@ -705,7 +731,7 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_state_dir(self, state_dir: TempDir) -> Self {
+    pub fn with_state_machine_state_dir(self, state_dir: Box<dyn StateMachineStateDir>) -> Self {
         Self { state_dir, ..self }
     }
 
@@ -1110,7 +1136,7 @@ impl StateMachine {
     /// directory for storing states.
     #[allow(clippy::too_many_arguments)]
     fn setup_from_dir(
-        state_dir: TempDir,
+        state_dir: Box<dyn StateMachineStateDir>,
         nonce: u64,
         time: Time,
         config: Option<StateMachineConfig>,
@@ -1368,18 +1394,13 @@ impl StateMachine {
         }
     }
 
-    fn into_components(self) -> (TempDir, u64, Time, u64) {
+    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         (
             self.state_dir,
             self.nonce.into_inner(),
             Time::from_nanos_since_unix_epoch(self.time.into_inner()),
             self.checkpoint_interval_length.load(Ordering::Relaxed),
         )
-    }
-
-    pub fn into_state_dir(self) -> TempDir {
-        let (path, _, _, _) = self.into_components();
-        path
     }
 
     /// Emulates a node restart, including checkpoint recovery.
@@ -1389,7 +1410,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
@@ -1403,7 +1424,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
@@ -1419,7 +1440,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_config(Some(config))
@@ -1857,6 +1878,16 @@ impl StateMachine {
         fetch_int_gauge(&self.metrics_registry, "canister_memory_usage_bytes").unwrap_or(0)
     }
 
+    /// Get the time stored in the latest state. This is useful when starting
+    /// the `StateMachine` on an already existing state since time
+    /// must be monotone and thus the time of the `StateMachine`
+    /// which is used when executing rounds must be set to be
+    /// no smaller than the time stored in the latest state.
+    pub fn get_state_time(&self) -> Time {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        replicated_state.metadata.batch_time
+    }
+
     /// Sets the time that the state machine will use for executing next
     /// messages.
     pub fn set_time(&self, time: SystemTime) {
@@ -2074,7 +2105,7 @@ impl StateMachine {
     }
 
     // Enable checkpoints and make a tick to write a checkpoint.
-    fn checkpointed_tick(&self) {
+    pub fn checkpointed_tick(&self) {
         let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);
         self.tick();

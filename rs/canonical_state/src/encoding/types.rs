@@ -211,6 +211,9 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
         let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
         for (i, reject_signal) in header.reject_signals().iter().enumerate().rev() {
             assert!(next_index > reject_signal.index);
+            // Reject signals at certification version <= 18 may not produce signals other
+            // than `CanisterMigrating`.
+            assert_eq!(RejectReason::CanisterMigrating, reject_signal.reason);
             reject_signal_deltas[i] = next_index.get() - reject_signal.index.get();
             next_index = reject_signal.index;
         }

@@ -51,12 +51,11 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    time::Instant,
-};
-use std::{
     convert::TryFrom,
     net::{Ipv4Addr, Ipv6Addr},
+    time::Instant,
 };
+use tracing::instrument;
 
 #[cfg(test)]
 mod tests;
@@ -1078,6 +1077,7 @@ impl BatchProcessorImpl {
 }
 
 impl BatchProcessor for BatchProcessorImpl {
+    #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let _process_batch_start = Instant::now();
         let since = Instant::now();
@@ -1402,6 +1402,7 @@ impl MessageRoutingImpl {
 }
 
 impl MessageRouting for MessageRoutingImpl {
+    #[instrument(skip_all)]
     fn deliver_batch(&self, batch: Batch) -> Result<(), MessageRoutingError> {
         let batch_number = batch.batch_number;
         let expected_number = self.expected_batch_height();
