@@ -239,6 +239,14 @@ mod tests {
                     deprecated_responses_only: true,
                 });
             }
+            if certification_version >= CertificationVersion::V19 {
+                stream.push_reject_signal(RejectReason::CanisterNotFound);
+                stream.push_reject_signal(RejectReason::QueueFull);
+                stream.push_reject_signal(RejectReason::CanisterStopped);
+                stream.push_reject_signal(RejectReason::OutOfMemory);
+                stream.push_reject_signal(RejectReason::Unknown);
+                stream.push_reject_signal(RejectReason::CanisterStopping);
+            }
             state.modify_streams(|streams| {
                 streams.insert(subnet_test_id(5), stream);
             });
@@ -369,6 +377,7 @@ mod tests {
             "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
             "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
             "E739B8EA1585E9BB97988C80ED0C0CDFDF064D4BC5A2B6B06EB414BFF6139CCE",
+            "31F4593CC82CDB0B858F190E00112AF4599B5333F7AED9403EEAE88B656738D5",
         ];
 
         for certification_version in CertificationVersion::iter() {
