@@ -2139,17 +2139,17 @@ mod mainnet_compatibility_tests {
             ))
             .expect("Failed to convert the protobuf to CanisterQueues");
             let mut queues = CanisterQueuesFixture {
-                queues: queues,
+                queues,
                 this: CANISTER_ID,
                 other: OTHER_CANISTER_ID,
             };
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(_));
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(_));
-            assert_eq!(queues.queues.has_input(), false);
+            assert!(!queues.queues.has_input());
 
             assert_matches!(queues.pop_output().unwrap(), RequestOrResponse::Request(_));
             assert_matches!(queues.pop_output().unwrap(), RequestOrResponse::Response(_));
-            assert_eq!(queues.queues.has_output(), false);
+            assert!(!queues.queues.has_output());
         }
     }
 }
