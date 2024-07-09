@@ -74,6 +74,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:criterion",
     "@crate_index//:ic-btc-test-utils",
     "@crate_index//:insta",
+    "@crate_index//:itertools",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
     "@crate_index//:more-asserts",
