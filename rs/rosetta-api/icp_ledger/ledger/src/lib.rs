@@ -8,6 +8,7 @@ use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
 use ic_ledger_core::balances::BalancesStore;
+use ic_ledger_core::balances::InspectableBalancesStore;
 use ic_ledger_core::tokens::{CheckedSub, Zero};
 use ic_ledger_core::{
     approvals::{
@@ -184,12 +185,13 @@ fn default_transfer_fee() -> Tokens {
 fn unknown_token() -> String {
     "???".to_string()
 }
+pub type StableLedgerBalances = Balances<StableBalances>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]
-    pub stable_balances: StableBalances,
+    pub stable_balances: StableLedgerBalances,
     #[serde(default)]
     pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>,
     #[serde(default)]
@@ -245,15 +247,15 @@ pub struct Ledger {
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
     type Approvals = StableApprovals;
-    type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
+    type BalancesStore = StableBalances;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        &self.balances
+        &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        &mut self.balances
+        &mut self.stable_balances
     }
 
     fn approvals(&self) -> &Self::Approvals {
@@ -469,7 +471,7 @@ impl Ledger {
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
-        self.balances.token_pool = Tokens::MAX;
+        self.stable_balances.token_pool = Tokens::MAX;
         self.minting_account_id = Some(minting_account);
         self.icrc1_minting_account = icrc1_minting_account;
         if let Some(t) = transaction_window {
@@ -654,7 +656,7 @@ pub fn change_notification_state(
     )
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
 pub struct StableBalances {}
 
 impl BalancesStore for StableBalances {
@@ -689,6 +691,16 @@ impl BalancesStore for StableBalances {
             }
         }
     }
+}
+
+impl InspectableBalancesStore for StableBalances {
+    fn len(&self) -> usize {
+        BALANCES_MEMORY.with_borrow(|balances| balances.len()) as usize
+    }
+
+    // fn iter(&self) -> Box<dyn Iterator<Item = (AccountIdentifier, Tokens)> + '_> {
+    //     BALANCES_MEMORY.with_borrow(|balances| balances.iter())
+    // }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

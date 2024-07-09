@@ -21,6 +21,7 @@ use ic_ledger_canister_core::{
     },
     range_utils,
 };
+use ic_ledger_core::balances::InspectableBalancesStore;
 use ic_ledger_core::{
     approvals::Approvals,
     block::{BlockIndex, BlockType, EncodedBlock},
@@ -54,7 +55,8 @@ use icrc_ledger_types::{
 };
 use ledger_canister::{
     Ledger, LedgerState, LedgerStateType, ALLOWANCES_ARRIVALS_MEMORY,
-    ALLOWANCES_EXPIRATIONS_MEMORY, ALLOWANCES_MEMORY, BALANCES_MEMORY, LEDGER, MAX_MESSAGE_SIZE_BYTES,
+    ALLOWANCES_EXPIRATIONS_MEMORY, ALLOWANCES_MEMORY, BALANCES_MEMORY, LEDGER,
+    MAX_MESSAGE_SIZE_BYTES,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -298,7 +300,7 @@ async fn icrc1_send(
             });
         }
         let ledger = LEDGER.read().unwrap();
-        let balance = ledger.balances.account_balance(&from);
+        let balance = ledger.stable_balances.account_balance(&from);
         let min_burn_amount = ledger.transfer_fee.min(balance);
         if amount < min_burn_amount {
             return Err(CoreTransferError::BadBurn { min_burn_amount });
@@ -583,7 +585,11 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
 /// Get an account balance.
 /// If the account does not exist it will return 0 Tokens
 fn account_balance(account: AccountIdentifier) -> Tokens {
-    LEDGER.read().unwrap().balances.account_balance(&account)
+    LEDGER
+        .read()
+        .unwrap()
+        .stable_balances
+        .account_balance(&account)
 }
 
 #[candid_method(query, rename = "icrc1_balance_of")]
@@ -643,12 +649,19 @@ fn icrc1_fee() -> Nat {
 
 /// The total number of Tokens not inside the minting canister
 fn total_supply() -> Tokens {
-    LEDGER.read().unwrap().balances.total_supply()
+    LEDGER.read().unwrap().stable_balances.total_supply()
 }
 
 #[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
-    Nat::from(LEDGER.read().unwrap().balances.total_supply().get_e8s())
+    Nat::from(
+        LEDGER
+            .read()
+            .unwrap()
+            .stable_balances
+            .total_supply()
+            .get_e8s(),
+    )
 }
 
 #[candid_method(query, rename = "symbol")]
@@ -1469,12 +1482,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_balances_token_pool",
-        ledger.balances.token_pool.get_tokens() as f64,
+        ledger.stable_balances.token_pool.get_tokens() as f64,
         "Total number of Tokens in the pool.",
     )?;
     w.encode_gauge(
         "ledger_balance_store_entries",
-        ledger.balances.store.len() as f64,
+        ledger.stable_balances.store.len() as f64,
         "Total number of accounts in the balance store.",
     )?;
     w.encode_gauge(

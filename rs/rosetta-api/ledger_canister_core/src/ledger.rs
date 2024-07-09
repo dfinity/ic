@@ -487,23 +487,23 @@ where
         std::collections::BinaryHeap::new();
 
     let num_accounts = ledger.accounts_overflow_trim_quantity();
-    let mut iter = ledger.balances().store.iter();
+    // let mut iter = ledger.balances().store.iter();
 
-    // Accumulate up to `trim_quantity` accounts
-    for (account, balance) in iter.by_ref().take(num_accounts) {
-        to_trim.push((balance.clone(), account.clone()));
-    }
+    // // Accumulate up to `trim_quantity` accounts
+    // for (account, balance) in iter.by_ref().take(num_accounts) {
+    //     to_trim.push((balance.clone(), account.clone()));
+    // }
 
-    for (account, balance) in iter {
-        // If any account's balance is lower than the maximum in our set,
-        // include that account, and remove the current maximum
-        if let Some((greatest_balance, _)) = to_trim.peek() {
-            if balance < greatest_balance {
-                to_trim.push((balance.clone(), account.clone()));
-                to_trim.pop();
-            }
-        }
-    }
+    // for (account, balance) in iter {
+    //     // If any account's balance is lower than the maximum in our set,
+    //     // include that account, and remove the current maximum
+    //     if let Some((greatest_balance, _)) = to_trim.peek() {
+    //         if balance < *greatest_balance {
+    //             to_trim.push((balance.clone(), account.clone()));
+    //             to_trim.pop();
+    //         }
+    //     }
+    // }
 
     to_trim.into_vec()
 }

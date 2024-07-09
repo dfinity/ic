@@ -1,3 +1,4 @@
+use crate::StableLedgerBalances;
 use crate::{AccountIdentifier, Ledger};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::{
@@ -5,6 +6,8 @@ use ic_ledger_canister_core::{
     ledger as core_ledger,
     ledger::{LedgerContext, LedgerTransaction, TxApplyError},
 };
+use ic_ledger_core::balances::BalancesStore;
+use ic_ledger_core::balances::InspectableBalancesStore;
 use ic_ledger_core::{
     approvals::{Allowance, Approvals},
     block::{BlockIndex, BlockType},
@@ -33,18 +36,18 @@ fn ts(n: u64) -> TimeStamp {
 
 #[test]
 fn balances_overflow() {
-    let balances = LedgerBalances::new();
+    let stable_balances = StableLedgerBalances::new();
     let mut state = Ledger {
-        balances,
+        stable_balances,
         maximum_number_of_accounts: 8,
         accounts_overflow_trim_quantity: 2,
         minting_account_id: Some(PrincipalId::new_user_test_id(137).into()),
         ..Default::default()
     };
-    assert_eq!(state.balances.token_pool, Tokens::MAX);
+    assert_eq!(state.stable_balances.token_pool, Tokens::MAX);
     println!(
         "minting canister initial balance: {}",
-        state.balances.token_pool
+        state.stable_balances.token_pool
     );
     let mut credited = Tokens::ZERO;
 
@@ -68,20 +71,20 @@ fn balances_overflow() {
     }
     println!("amount credited to accounts: {}", credited);
 
-    println!("balances: {:?}", state.balances);
+    println!("balances: {:?}", state.stable_balances);
 
     // The two accounts with lowest balances, 0 and 1 respectively, have been
     // removed
-    assert_eq!(state.balances.store.len(), 8);
+    assert_eq!(state.stable_balances.store.len(), 8);
     assert_eq!(
         state
-            .balances
+            .stable_balances
             .account_balance(&PrincipalId::new_user_test_id(0).into()),
         Tokens::ZERO
     );
     assert_eq!(
         state
-            .balances
+            .stable_balances
             .account_balance(&PrincipalId::new_user_test_id(1).into()),
         Tokens::ZERO
     );
@@ -93,7 +96,10 @@ fn balances_overflow() {
         .unwrap()
         .checked_add(&Tokens::new(1 + 2, 0).unwrap())
         .unwrap();
-    assert_eq!(state.balances.token_pool, expected_minting_canister_balance);
+    assert_eq!(
+        state.stable_balances.token_pool,
+        expected_minting_canister_balance
+    );
 }
 
 #[test]
@@ -113,8 +119,8 @@ fn balances_remove_accounts_with_zero_balance() {
     .unwrap();
     // verify that an account entry exists for the `canister`
     assert_eq!(
-        ctx.balances().store.get(&canister),
-        Some(&Tokens::from_e8s(1000))
+        ctx.balances().store.get_balance(&canister),
+        Some(Tokens::from_e8s(1000))
     );
     // make 2 transfers that empty the account
     for _ in 0..2 {
@@ -133,11 +139,11 @@ fn balances_remove_accounts_with_zero_balance() {
     }
     // target canister's balance adds up
     assert_eq!(
-        ctx.balances().store.get(&target_canister),
-        Some(&Tokens::from_e8s(800))
+        ctx.balances().store.get_balance(&target_canister),
+        Some(Tokens::from_e8s(800))
     );
     // source canister has been removed
-    assert_eq!(ctx.balances().store.get(&canister), None);
+    assert_eq!(ctx.balances().store.get_balance(&canister), None);
     assert_eq!(ctx.balances().account_balance(&canister), Tokens::ZERO);
 
     // one account left in the store
@@ -159,8 +165,8 @@ fn balances_remove_accounts_with_zero_balance() {
     assert_eq!(ctx.balances().store.len(), 1);
     // and the fee should have been taken from sender
     assert_eq!(
-        ctx.balances().store.get(&target_canister),
-        Some(&Tokens::from_e8s(700))
+        ctx.balances().store.get_balance(&target_canister),
+        Some(Tokens::from_e8s(700))
     );
 
     apply_operation(
@@ -325,7 +331,10 @@ fn serialize() {
         state.blockchain.blocks.len(),
         state_decoded.blockchain.blocks.len()
     );
-    assert_eq!(state.balances.store, state_decoded.balances.store);
+    assert_eq!(
+        state.stable_balances.store,
+        state_decoded.stable_balances.store
+    );
 }
 
 /// Check that 'created_at_time' is not too far in the past or
