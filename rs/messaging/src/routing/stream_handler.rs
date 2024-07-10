@@ -656,8 +656,7 @@ impl StreamHandlerImpl {
                     StateError::CanisterMigrating { .. } => RejectCode::SysTransient,
                     StateError::QueueFull { .. } => RejectCode::SysTransient,
                     StateError::OutOfMemory { .. } => RejectCode::CanisterError,
-                    StateError::InvariantBroken { .. }
-                    | StateError::NonMatchingResponse { .. }
+                    StateError::NonMatchingResponse { .. }
                     | StateError::BitcoinNonMatchingResponse { .. } => {
                         unreachable!("Not a user error: {}", err);
                     }

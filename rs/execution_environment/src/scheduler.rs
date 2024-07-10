@@ -1254,9 +1254,9 @@ impl SchedulerImpl {
             .inc_by(inducted_messages_to_others as u64);
     }
 
-    // Iterates through the provided canisters and checks if the invariants are still valid.
-    //
-    // Returns `true` if all canisters are valid, `false` otherwise.
+    /// Iterates through the provided canisters and checks if the invariants are still valid.
+    ///
+    /// Returns `true` if all canisters are valid, `false` otherwise.
     fn check_canister_invariants(
         &self,
         round_log: &ReplicaLogger,
@@ -1267,25 +1267,20 @@ impl SchedulerImpl {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
             if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
+                let msg = format!(
+                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
+                    CANISTER_INVARIANT_BROKEN,
+                    current_round,
+                    state.time(),
+                    canister_id,
+                    err
+                );
+
                 // Crash in debug mode if any invariant fails.
-                debug_assert!(false,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                debug_assert!(false, "{}", msg);
+
                 self.metrics.canister_invariants.inc();
-                warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                warn!(round_log, "{}", msg);
                 return false;
             }
         }
@@ -1322,7 +1317,7 @@ impl SchedulerImpl {
             });
     }
 
-    // Code that must be executed unconditionally after each round.
+    /// Code that must be executed unconditionally after each round.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
