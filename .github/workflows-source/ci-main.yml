@@ -360,34 +360,34 @@ jobs:
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               cargo build --release
 
-check-rc-branch:
-  runs-on: ubuntu-latest
-  outputs:
-    match: ${{ steps.branch-check.outputs.match }}
-  steps:
-    - id: branch-check
-      run: |
-        echo "match=false"
-        if [[ "${{ github.ref }}" =~ refs/heads/hotfix-.*-rc--.* || "${{ github.ref }}" =~ refs/heads/rc--.* ]]; then
-          echo "match=true"
-        fi
-        echo "match=${match}" >> $GITHUB_OUTPUT
-
-send-rc-slack-alert-failure:
-  needs: 
-    - bazel-test-all
-    - bazel-build-all-config-check
-    - bazel-test-darwin-x86-64
-    - bazel-build-fuzzers
-    - bazel-build-fuzzers-afl
-    - python-ci-tests
-    - build-ic
-    - build-determinism
-    - cargo-clippy-linux
-    - cargo-build-release-linux
-    - check-rc-branch
-  if: ${{ needs.check-rc-branch.outputs.match == 'true' && failure() }}
-  uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
+  check-rc-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      match: ${{ steps.branch-check.outputs.match }}
+    steps:
+      - id: branch-check
+        run: |
+          echo "match=false"
+          if [[ "${{ github.ref }}" =~ refs/heads/hotfix-.*-rc--.* || "${{ github.ref }}" =~ refs/heads/rc--.* ]]; then
+            echo "match=true"
+          fi
+          echo "match=${match}" >> $GITHUB_OUTPUT
+  
+  send-rc-slack-alert-failure:
+    needs: 
+      - bazel-test-all
+      - bazel-build-all-config-check
+      - bazel-test-darwin-x86-64
+      - bazel-build-fuzzers
+      - bazel-build-fuzzers-afl
+      - python-ci-tests
+      - build-ic
+      - build-determinism
+      - cargo-clippy-linux
+      - cargo-build-release-linux
+      - check-rc-branch
+    if: ${{ needs.check-rc-branch.outputs.match == 'true' && failure() }}
+    uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
   with:
     name: CI Main
     conclusion: Failure
