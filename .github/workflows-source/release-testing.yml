@@ -67,6 +67,9 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly --deleted_packages=gitlab-ci/src/gitlab_config"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Set job result output
+        if: always()
+        run: echo "job_result=${{ success() }}" >> $GITHUB_OUTPUT
 
   bazel-system-test-staging:
     name: Bazel System Test Staging
@@ -85,6 +88,9 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_staging --deleted_packages=gitlab-ci/src/gitlab_config"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Set job result output
+        if: always()
+        run: echo "job_result=${{ success() }}" >> $GITHUB_OUTPUT
 
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
@@ -103,6 +109,9 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS_RULES: "--test_tag_filters=system_test_hotfix --deleted_packages=gitlab-ci/src/gitlab_config"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Set job result output
+        if: always()
+        run: echo "job_result=${{ success() }}" >> $GITHUB_OUTPUT
 
   send-slack-alert:
     name: Send Slack Alert
@@ -110,8 +119,17 @@ jobs:
     needs: [bazel-system-test-nightly, bazel-system-test-staging, bazel-system-test-hotfix]
     if: always()
     steps:
+      - name: Determine conclusion
+      id: overall-conclusion
+      run: |
+        conclusion="success"
+        if [ "${{ needs.bazel-system-test-nightly.result }}" != "success" ] || [ "${{ needs.bazel-system-test-staging.result }}" != "success" ] || [ "${{ needs.bazel-system-test-hotfix.result }}" != "success" ]; then
+          conclusion="failure"
+        fi
+        echo "conclusion=$conclusion" >> $GITHUB_ENV
       - name: Send Slack Alert
         uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
         with:
           name: Release Testing
+          conclusion: ${{ env.conclusion }}
           branch: ${{ env.BRANCH_NAME }}
