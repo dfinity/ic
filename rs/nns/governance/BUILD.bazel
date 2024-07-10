@@ -107,6 +107,7 @@ DEV_DEPENDENCIES = [
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:futures",
+    "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

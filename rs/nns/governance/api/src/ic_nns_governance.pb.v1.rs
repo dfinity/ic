@@ -2541,10 +2541,52 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,
         #[prost(uint64, optional, tag = "37")]
         pub total_staked_e8s_non_self_authenticating_controller: ::core::option::Option<u64>,
+        #[prost(message, optional, tag = "38")]
+        pub non_self_authenticating_controller_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+    }
+    /// Nested message and enum types in `GovernanceCachedMetrics`.
+    pub mod governance_cached_metrics {
+        /// Statistics about some subset (not necessarily a proper subset) of
+        /// neurons. So far, these are mostly totals.
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct NeuronSubsetMetrics {
+            /// The values in these fields can be derived from the value in the
+            /// analogous fields (declared a little lower in this message). For
+            /// example, count = count_buckets.values().sum().
+            #[prost(uint64, optional, tag = "1")]
+            pub count: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "2")]
+            pub total_staked_e8s: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "3")]
+            pub total_staked_maturity_e8s_equivalent: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "4")]
+            pub total_maturity_e8s_equivalent: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "5")]
+            pub total_voting_power: ::core::option::Option<u64>,
+            /// These fields are keyed by floor(dissolve delay / 0.5 years). These are
+            /// analogous to the (singular) fields above. Here, the usual definition of
+            /// year for the IC is used: exactly 365.25 days.
+            #[prost(map = "uint64, uint64", tag = "6")]
+            pub count_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "7")]
+            pub staked_e8s_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "8")]
+            pub staked_maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "9")]
+            pub maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "10")]
+            pub voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+        }
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
     /// proposal is in progress. We only want one of these to be happening at the same time,

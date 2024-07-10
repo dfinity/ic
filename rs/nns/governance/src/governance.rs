@@ -13,7 +13,7 @@ use crate::{
     migrations::maybe_run_migrations,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
-    neuron_store::{NeuronMetrics, NeuronStore},
+    neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
@@ -23,6 +23,7 @@ use crate::{
         create_service_nervous_system::LedgerParameters,
         get_neurons_fund_audit_info_response,
         governance::{
+            governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
             GovernanceCachedMetrics, NeuronInFlightCommand,
         },
@@ -7567,16 +7568,18 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
-            total_voting_power_non_self_authenticating_controller,
-            total_staked_e8s_non_self_authenticating_controller,
+            non_self_authenticating_controller_neuron_subset_metrics,
         } = self
             .neuron_store
             .compute_neuron_metrics(now, self.economics().neuron_minimum_stake_e8s);
 
-        let total_voting_power_non_self_authenticating_controller =
-            Some(total_voting_power_non_self_authenticating_controller);
         let total_staked_e8s_non_self_authenticating_controller =
-            Some(total_staked_e8s_non_self_authenticating_controller);
+            Some(non_self_authenticating_controller_neuron_subset_metrics.total_staked_e8s);
+        let total_voting_power_non_self_authenticating_controller =
+            Some(non_self_authenticating_controller_neuron_subset_metrics.total_voting_power);
+        let non_self_authenticating_controller_neuron_subset_metrics = Some(
+            NeuronSubsetMetricsPb::from(non_self_authenticating_controller_neuron_subset_metrics),
+        );
 
         GovernanceCachedMetrics {
             timestamp_seconds: now,
@@ -7614,8 +7617,11 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
-            total_voting_power_non_self_authenticating_controller,
+
+            // Non-self-authenticating neurons.
             total_staked_e8s_non_self_authenticating_controller,
+            total_voting_power_non_self_authenticating_controller,
+            non_self_authenticating_controller_neuron_subset_metrics,
         }
     }
 
@@ -7625,6 +7631,44 @@ impl Governance {
 
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
+    }
+}
+
+impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
+    fn from(src: NeuronSubsetMetrics) -> NeuronSubsetMetricsPb {
+        let NeuronSubsetMetrics {
+            count,
+            total_staked_e8s,
+            total_staked_maturity_e8s_equivalent,
+            total_maturity_e8s_equivalent,
+            total_voting_power,
+
+            count_buckets,
+            staked_e8s_buckets,
+            staked_maturity_e8s_equivalent_buckets,
+            maturity_e8s_equivalent_buckets,
+            voting_power_buckets,
+        } = src;
+
+        let count = Some(count);
+        let total_staked_e8s = Some(total_staked_e8s);
+        let total_staked_maturity_e8s_equivalent = Some(total_staked_maturity_e8s_equivalent);
+        let total_maturity_e8s_equivalent = Some(total_maturity_e8s_equivalent);
+        let total_voting_power = Some(total_voting_power);
+
+        NeuronSubsetMetricsPb {
+            count,
+            total_staked_e8s,
+            total_staked_maturity_e8s_equivalent,
+            total_maturity_e8s_equivalent,
+            total_voting_power,
+
+            count_buckets,
+            staked_e8s_buckets,
+            staked_maturity_e8s_equivalent_buckets,
+            maturity_e8s_equivalent_buckets,
+            voting_power_buckets,
+        }
     }
 }
 
