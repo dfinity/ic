@@ -2011,8 +2011,7 @@ mod tests {
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
                         receiver.load_tecdsa_sig_transcripts(&sig_inputs);
-                        let share = receiver
-                            .create_schnorr_sig_share(&sig_inputs)
+                        let share = ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs)
                             .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
@@ -2149,8 +2148,7 @@ mod tests {
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
                         receiver.load_tschnorr_sig_transcripts(&sig_inputs);
-                        let share = receiver
-                            .create_schnorr_sig_share(&sig_inputs)
+                        let share = ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
                             .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),
