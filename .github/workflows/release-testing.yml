@@ -131,8 +131,5 @@ send-slack-alert-failure:
       uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
       with:
         name: Release Testing Failure
+        conclusion: Failure
         branch: ${{ env.BRANCH_NAME }}
-        with:
-          name: Release Testing
-          conclusion: "failure"
-          branch: ${{ env.BRANCH_NAME }}
