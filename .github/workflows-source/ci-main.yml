@@ -73,6 +73,8 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
+    runs-on:
+      group: zh1
     steps:
       - <<: *checkout
       - <<: *before-script
