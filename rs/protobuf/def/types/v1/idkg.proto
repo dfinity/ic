@@ -265,21 +265,36 @@ message IDkgDealingSupport {
 message IDkgPrefix {
   uint64 group_tag = 1;
   uint64 meta_hash = 2;
-  uint64 height = 3;
 }
 
-message PrefixHashPair {
-  IDkgPrefix prefix = 1;
+message IDkgArtifactIdData {
+  uint64 height = 1;
   bytes hash = 2;
+  types.v1.SubnetId subnet_id = 3;
+}
+
+message SigShareIdData {
+  uint64 height = 1;
+  bytes hash = 2;
+}
+
+message PrefixPairIDkg {
+  IDkgPrefix prefix = 1;
+  IDkgArtifactIdData id_data = 2;
+}
+
+message PrefixPairSigShare {
+  IDkgPrefix prefix = 1;
+  SigShareIdData id_data = 2;
 }
 
 message IDkgArtifactId {
   oneof kind {
-    PrefixHashPair dealing = 1;
-    PrefixHashPair dealing_support = 2;
-    PrefixHashPair ecdsa_sig_share = 3;
-    PrefixHashPair complaint = 4;
-    PrefixHashPair opening = 5;
-    PrefixHashPair schnorr_sig_share = 6;
+    PrefixPairIDkg dealing = 1;
+    PrefixPairIDkg dealing_support = 2;
+    PrefixPairSigShare ecdsa_sig_share = 3;
+    PrefixPairIDkg complaint = 4;
+    PrefixPairIDkg opening = 5;
+    PrefixPairSigShare schnorr_sig_share = 6;
   }
 }

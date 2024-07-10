@@ -541,7 +541,17 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
         );
         Ok(certified_stream
             .map(|certified_stream| {
-                let num_bytes = certified_slice_count_bytes(&certified_stream).unwrap();
+                let mut num_bytes = certified_slice_count_bytes(&certified_stream).unwrap();
+                // Because `StateMachine::generate_certified_stream_slice` only uses a size estimate
+                // when constructing a slice (this estimate can be off by at most a few KB),
+                // we fake the reported slice size if it exceeds the specified size limit to make sure the payload builder will accept the slice as valid and include it into the block.
+                // This is fine since we don't actually validate the payload in the context of Pocket IC, and so blocks containing
+                // a XNet slice exceeding the byte limit won't be rejected as invalid.
+                if let Some(byte_limit) = byte_limit {
+                    if num_bytes > byte_limit {
+                        num_bytes = byte_limit;
+                    }
+                }
                 (certified_stream, num_bytes)
             })
             .ok())
