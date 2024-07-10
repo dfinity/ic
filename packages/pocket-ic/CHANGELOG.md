@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an arbitrary unassigned port) and optionally specified domains (default to `localhost`) and using an optionally specified TLS certificate (if provided,
   an HTTPS gateway is created) and configures the PocketIC instance to make progress automatically, i.e., periodically update the time of the PocketIC instance to the real time
   and execute rounds on the subnets.
+- The library function `PocketIc::make_live_https` configuring a PocketIc instance to automatically make progress (updating time and executing rounds)
+  and creating an HTTPS gateway for that instance listening at a dedicated domain and port and using a specified TLS certificate.
+- The function `PocketIcBuilder::with_server_url` to specify the URL of the PocketIC server (if not used, then the URL of an already running PocketIC server
+  is derived or a new PocketIC server is started).
+- The function `PocketIcBuilder::with_state_dir` to specify a directory in which the state of the PocketIC instance can be preserved across the PocketIC instance lifetime
+  (that directory should be empty when specified as `state_dir` for the very first time).
 
 ### Removed
 - Public field `instance_id` in the synchronous PocketIc library, use the function `instance_id` instead

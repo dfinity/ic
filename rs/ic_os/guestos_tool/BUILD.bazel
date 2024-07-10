@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/ic_os/config",
     "//rs/ic_os/network",
     "//rs/ic_os/utils",
@@ -11,6 +12,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:indoc",
 ]
 

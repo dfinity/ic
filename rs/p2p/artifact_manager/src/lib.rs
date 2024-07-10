@@ -23,6 +23,7 @@ use tokio::{
     sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
     time::timeout,
 };
+use tracing::instrument;
 
 type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
 
@@ -324,6 +325,7 @@ impl<
         C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
     > ArtifactProcessor<A> for Processor<A, P, C>
 {
+    #[instrument(skip_all)]
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
@@ -385,6 +387,7 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
     for IngressProcessor<P>
 {
     /// The method processes changes in the ingress pool.
+    #[instrument(skip_all)]
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,

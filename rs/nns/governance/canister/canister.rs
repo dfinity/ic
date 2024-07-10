@@ -50,8 +50,8 @@ use ic_nns_governance::{
         GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
         Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
         ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
-        ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
+        ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+        NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
         RewardEvent, RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
@@ -886,17 +886,13 @@ fn list_node_providers_() -> ListNodeProvidersResponse {
 
 #[export_name = "canister_query get_most_recent_monthly_node_provider_rewards"]
 fn get_most_recent_monthly_node_provider_rewards() {
-    over(
-        candid,
-        |()| -> Option<MostRecentMonthlyNodeProviderRewards> {
-            get_most_recent_monthly_node_provider_rewards_()
-        },
-    )
+    over(candid, |()| -> Option<MonthlyNodeProviderRewards> {
+        get_most_recent_monthly_node_provider_rewards_()
+    })
 }
 
 #[candid_method(query, rename = "get_most_recent_monthly_node_provider_rewards")]
-fn get_most_recent_monthly_node_provider_rewards_() -> Option<MostRecentMonthlyNodeProviderRewards>
-{
+fn get_most_recent_monthly_node_provider_rewards_() -> Option<MonthlyNodeProviderRewards> {
     governance()
         .heap_data
         .most_recent_monthly_node_provider_rewards

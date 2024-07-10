@@ -15,6 +15,7 @@ rust_library(
     crate_name = "canister_http",
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
+        # Keep sorted.
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",

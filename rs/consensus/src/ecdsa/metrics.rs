@@ -231,14 +231,6 @@ impl EcdsaPayloadMetrics {
             "key_transcripts",
             payload.key_transcripts.len(),
         );
-        self.payload_metrics_set_without_key_id_label(
-            "key_transcripts_with_ecdsa_key_id",
-            payload
-                .key_transcripts
-                .values()
-                .filter(|k| k.deprecated_key_id.is_some())
-                .count(),
-        );
     }
 
     fn payload_metrics_set_without_key_id_label(&self, label: &str, value: usize) {

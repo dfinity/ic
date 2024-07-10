@@ -5,8 +5,9 @@ package(default_visibility = ["//visibility:private"])
 MACRO_DEPENDENCIES = []
 
 UPDATE_SETTINGS_DEPENDENCIES = [
-    "//rs/types/management_canister_types",
+    # Keep sorted.
     "//rs/test_utilities/execution_environment",
+    "//rs/types/management_canister_types",
     "@crate_index//:libfuzzer-sys",
 ]
 

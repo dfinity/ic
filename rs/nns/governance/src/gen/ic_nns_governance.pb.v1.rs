@@ -2376,7 +2376,7 @@ pub struct Governance {
     pub metrics: ::core::option::Option<governance::GovernanceCachedMetrics>,
     #[prost(message, optional, tag = "16")]
     pub most_recent_monthly_node_provider_rewards:
-        ::core::option::Option<MostRecentMonthlyNodeProviderRewards>,
+        ::core::option::Option<MonthlyNodeProviderRewards>,
     /// Cached value for the maturity modulation as calculated each day.
     #[prost(int32, optional, tag = "17")]
     pub cached_daily_maturity_modulation_basis_points: ::core::option::Option<i32>,
@@ -2857,11 +2857,11 @@ pub mod claim_or_refresh_neuron_from_account_response {
         NeuronId(::ic_nns_common::pb::v1::NeuronId),
     }
 }
-/// The most recent monthly Node Provider rewards
+/// The monthly Node Provider rewards as of a point in time.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MostRecentMonthlyNodeProviderRewards {
+pub struct MonthlyNodeProviderRewards {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
     #[prost(message, repeated, tag = "2")]

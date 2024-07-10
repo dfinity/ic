@@ -45,7 +45,7 @@ use crate::{
         GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
         Governance as GovernanceProto, GovernanceError, KnownNeuron, ListKnownNeuronsResponse,
         ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics,
+        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics,
         Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
@@ -219,7 +219,7 @@ const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..
 /// Given the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count),
 /// this constant can be used to obtain an upper bound for the number of SNS neurons created
 /// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
-const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
+pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
@@ -4167,7 +4167,7 @@ impl Governance {
         &mut self,
         rewards: Vec<RewardNodeProvider>,
     ) {
-        let most_recent_rewards = MostRecentMonthlyNodeProviderRewards {
+        let most_recent_rewards = MonthlyNodeProviderRewards {
             timestamp: self.env.now(),
             rewards,
         };

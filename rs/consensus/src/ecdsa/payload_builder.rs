@@ -554,7 +554,7 @@ pub(crate) fn create_data_payload_helper(
         certified_height,
         &receivers,
         all_signing_requests,
-        &idkg_dealings_contexts,
+        idkg_dealings_contexts,
         block_reader,
         transcript_builder,
         signature_builder,
@@ -1763,7 +1763,6 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 
@@ -1801,7 +1800,6 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 
@@ -1817,7 +1815,6 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 
@@ -1899,7 +1896,6 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 

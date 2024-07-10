@@ -169,13 +169,6 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialEcdsaDealings => ic00::ComputeInitialEcdsaDealingsArgs::new(
-            into_inner_ecdsa(key_id),
-            subnet_id,
-            nodes,
-            registry_version,
-        )
-        .encode(),
         Method::ComputeInitialIDkgDealings => {
             ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
                 .encode()
@@ -2161,10 +2154,6 @@ fn into_inner_schnorr(key_id: MasterPublicKeyId) -> SchnorrKeyId {
 
 fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
     vec![
-        (
-            Method::ComputeInitialEcdsaDealings,
-            make_ecdsa_key("some_key"),
-        ),
         (
             Method::ComputeInitialIDkgDealings,
             make_ecdsa_key("some_key"),

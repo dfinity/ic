@@ -12,6 +12,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
@@ -38,8 +39,8 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:lazy_static",
     "@crate_index//:ipnet",
+    "@crate_index//:lazy_static",
     "@crate_index//:leb128",
     "@crate_index//:prost",
     "@crate_index//:serde",
@@ -47,16 +48,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid_parser",
-    "@crate_index//:itertools",
-    "@crate_index//:maplit",
-    "@crate_index//:rand",
-    "@crate_index//:rand_distr",
-    "@crate_index//:serde_json",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "//rs/rust_canisters/canister_test",
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
@@ -66,25 +58,38 @@ DEV_DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/test_utils",
-    "//rs/replica_tests",
     "//rs/registry/fake",
     "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
+    "//rs/replica_tests",
+    "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
+    "@crate_index//:candid_parser",
+    "@crate_index//:itertools",
+    "@crate_index//:maplit",
+    "@crate_index//:rand",
+    "@crate_index//:rand_distr",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/test_utils_macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
@@ -181,6 +186,7 @@ generated_files_check(
     ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/canister",
     deps = [
+        # Keep sorted.
         "//rs/registry/canister/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

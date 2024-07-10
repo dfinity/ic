@@ -277,6 +277,7 @@ pub fn default_init_arg() -> InitArg {
 
 pub fn new_state_machine() -> StateMachine {
     StateMachineBuilder::new()
+        .with_master_ecdsa_public_key()
         .with_default_canister_range()
         .build()
 }

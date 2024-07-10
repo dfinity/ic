@@ -192,30 +192,6 @@ pub struct CanisterHttpRequestContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<CanisterHttpRequestContext>,
 }
-/// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaDealingsContext {
-    #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<super::super::queues::v1::Request>,
-    #[prost(message, repeated, tag = "3")]
-    pub nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
-    #[prost(uint64, tag = "4")]
-    pub registry_version: u64,
-    #[prost(message, optional, tag = "5")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
-    #[prost(message, optional, tag = "6")]
-    pub time: ::core::option::Option<Time>,
-}
-/// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaDealingsContextTree {
-    #[prost(uint64, tag = "1")]
-    pub callback_id: u64,
-    #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<EcdsaDealingsContext>,
-}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgDealingsContext {
@@ -373,9 +349,6 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: ::prost::alloc::vec::Vec<SetupInitialDkgContextTree>,
     #[prost(message, repeated, tag = "6")]
     pub canister_http_request_contexts: ::prost::alloc::vec::Vec<CanisterHttpRequestContextTree>,
-    /// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
-    #[prost(message, repeated, tag = "7")]
-    pub ecdsa_dealings_contexts: ::prost::alloc::vec::Vec<EcdsaDealingsContextTree>,
     #[prost(message, repeated, tag = "8")]
     pub bitcoin_get_successors_contexts: ::prost::alloc::vec::Vec<BitcoinGetSuccessorsContextTree>,
     #[prost(message, repeated, tag = "9")]

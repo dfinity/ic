@@ -33,6 +33,7 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
+    utils::http_endpoint_to_url,
 };
 use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
@@ -172,15 +173,7 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let url_str = format!("http://[{}]:{}", http.ip_addr, http.port);
-        let url = Url::parse(&url_str)
-            .map_err(|err| {
-                warn!(
-                    self.logger,
-                    "Unable to parse the peer url {}: {:?}", url_str, err
-                );
-            })
-            .ok()?;
+        let url = http_endpoint_to_url(&http, &self.logger)?;
 
         let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
         let cup = CatchUpPackage::try_from(&protobuf)
