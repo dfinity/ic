@@ -2225,6 +2225,13 @@ fn observe_replicated_state_metrics(
         .ecdsa_signature_agreements
         .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
 
+    for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
+        metrics
+            .threshold_signature_agreements
+            .with_label_values(&[&key_id.to_string()])
+            .set(*count as i64);
+    }
+
     let observe_reading = |status: CanisterStatusType, num: i64| {
         metrics
             .registered_canisters

@@ -11,6 +11,9 @@
 use crate::{all_supported_versions, encoding::*, CertificationVersion};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::CyclesUseCase,
@@ -305,6 +308,10 @@ fn canonical_encoding_stream_header_v19_plus() {
 ///     num_canisters: 5,
 ///     canister_state_bytes: (5 * 1024 * 1024).into(),
 ///     update_transactions_total: 4200,
+///     threshold_signature_agreements: btreemap!{
+///         schnorr_key_id => 15,
+///         ecdsa_key_id => 16,
+///     }
 /// }
 /// ```
 ///
@@ -351,6 +358,16 @@ fn canonical_encoding_subnet_metrics_v15_plus() {
             CyclesUseCase::RequestAndResponseTransmission,
             NominalCycles::from(20_000_000_000),
         );
+        let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "schnorr_key_id".into(),
+        });
+        let ecdsa_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "ecdsa_key_id".into(),
+        });
+        metrics.threshold_signature_agreements =
+            BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
         assert_eq!(
             "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68",
