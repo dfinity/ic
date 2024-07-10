@@ -894,122 +894,8 @@ impl Validator {
             .block_proposal()
             .get_by_height_range(range)
         {
-            if proposal.check_integrity() {
-                // Attempt to validate the proposal through a notarization
-                if let Some(notarization) = pool_reader
-                    .pool()
-                    .unvalidated()
-                    .notarization()
-                    .get_by_height(proposal.height())
-                    .find(|notarization| &notarization.content.block == proposal.content.get_hash())
-                {
-                    // Verify notarization signature before checking block validity.
-                    let verification = self.verify_artifact(pool_reader, &notarization);
-                    if let Err(ValidationError::InvalidArtifact(e)) = verification {
-                        change_set.push(ChangeAction::HandleInvalid(
-                            notarization.into_message(),
-                            format!("{:?}", e),
-                        ));
-                    } else if verification.is_ok() {
-                        if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                            self.metrics
-                                .observe_data_payload(&proposal, self.ingress_selector.as_deref());
-                            self.metrics.observe_block(pool_reader, &proposal);
-                            known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
-                            change_set
-                                .push(ChangeAction::MoveToValidated(notarization.into_message()));
-                        }
-                        // If the parent is notarized, this block and its notarization are
-                        // validated. If not, this block currently cannot be
-                        // validated through parent either.
-                        continue;
-                    }
-                    // Note that transient errors on notarization signature
-                    // verification should cause fall through, and the block
-                    // proposals proceed to be checked normally.
-                }
-
-                // Skip validation and drop the block if it has a higher rank than a known valid
-                // block. Note that this must happen after we first allow "block with
-                // notarization" validation (see above). Otherwise we may get stuck when a block
-                // maker equivocates.
-                if let Some(Some(min_rank)) = known_ranks.get(&proposal.height()) {
-                    if proposal.rank() > *min_rank {
-                        // Skip them instead of removal because we don't want to end up
-                        // requesting these artifacts again.
-                        let id = proposal.get_id();
-                        if self.unvalidated_for_too_long(pool_reader, &id) {
-                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                  self.log,
-                                  "Due a valid proposal with a lower rank {}, /
-                                  skipping validating the proposal: {:?} with rank {}",
-                                  min_rank.0, id, proposal.rank().0
-                            );
-                        }
-                        continue;
-                    }
-                }
-
-                // We only validate blocks from a block maker of a certain rank after a
-                // rank-based delay. If this time has not elapsed yet, we ignore the block for
-                // now.
-                if !is_time_to_make_block(
-                    &self.log,
-                    self.registry_client.as_ref(),
-                    self.replica_config.subnet_id,
-                    pool_reader,
-                    proposal.height(),
-                    proposal.rank(),
-                    self.time_source.as_ref(),
-                ) {
-                    continue;
-                }
-
-                // If there exists an equivocation proof for the signer of the
-                // proposal at the same height, we ignore the block. The only
-                // way in which we would validate such a proposal is through
-                // the notarization fast-path.
-                if pool_reader
-                    .pool()
-                    .validated()
-                    .equivocation_proof()
-                    .get_by_height(proposal.height())
-                    .find(|proof| proof.signer == proposal.signature.signer)
-                    .is_some()
-                {
-                    continue;
-                }
-
-                match self.check_block_validity(pool_reader, &proposal) {
-                    Ok(()) => {
-                        self.metrics
-                            .observe_data_payload(&proposal, self.ingress_selector.as_deref());
-                        self.metrics.observe_block(pool_reader, &proposal);
-                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
-                    }
-                    Err(ValidationError::InvalidArtifact(
-                        InvalidArtifactReason::ReplicaVersionMismatch,
-                    )) => change_set
-                        .push(ChangeAction::RemoveFromUnvalidated(proposal.into_message())),
-                    Err(ValidationError::InvalidArtifact(err)) => change_set.push(
-                        ChangeAction::HandleInvalid(proposal.into_message(), format!("{:?}", err)),
-                    ),
-                    Err(ValidationError::ValidationFailed(err)) => {
-                        if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
-                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                  self.log,
-                                  "Couldn't check the block validity: {:?}", err
-                            );
-                        }
-                    }
-                }
-            } else {
-                warn!(
-                    self.log,
-                    "Invalid block (compromised payload integrity): {:?}", proposal
-                );
+            // Handle integrity check and verification errors early
+            if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
                     proposal.clone().into_message(),
                     format!(
@@ -1018,7 +904,129 @@ impl Validator {
                         proposal.as_ref().payload.get_hash(),
                         proposal.as_ref().payload.as_ref()
                     ),
-                ))
+                ));
+                continue;
+            }
+            let verification_result = self.verify_artifact(pool_reader, &proposal);
+            if let Err(error) = verification_result {
+                if let Some(action) = self.compute_action_from_validation_error(
+                    pool_reader,
+                    error,
+                    proposal.into_message(),
+                ) {
+                    change_set.push(action);
+                }
+                continue;
+            }
+
+            // Attempt to validate the proposal through a notarization (fast-path)
+            if let Some(notarization) = pool_reader
+                .pool()
+                .unvalidated()
+                .notarization()
+                .get_by_height(proposal.height())
+                .find(|notarization| &notarization.content.block == proposal.content.get_hash())
+            {
+                // Verify notarization signature. If the signature is valid, both
+                // artifacts may be validated.
+                let verification = self.verify_artifact(pool_reader, &notarization);
+                if let Err(ValidationError::InvalidArtifact(e)) = verification {
+                    change_set.push(ChangeAction::HandleInvalid(
+                        notarization.into_message(),
+                        format!("{:?}", e),
+                    ));
+                } else if verification.is_ok() {
+                    if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
+                        // A successful verification is enough to validate this block,
+                        // because from the notarization we know that the block validity
+                        // was already checked.
+                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
+                    }
+                    // If the parent is notarized, this block and its notarization are
+                    // validated. If not, this block currently cannot be
+                    // validated through parent either.
+                    continue;
+                }
+                // Note that transient errors on notarization signature
+                // verification should cause fall through, and the block
+                // proposals proceed to be checked normally.
+            }
+
+            // Skip validation and drop the block if it has a higher rank than a known valid
+            // block. Note that this must happen after we first allow "block with
+            // notarization" validation (see above). Otherwise we may get stuck when a block
+            // maker equivocates.
+            if let Some(Some(min_rank)) = known_ranks.get(&proposal.height()) {
+                if proposal.rank() > *min_rank {
+                    // Skip them instead of removal because we don't want to end up
+                    // requesting these artifacts again.
+                    let id = proposal.get_id();
+                    if self.unvalidated_for_too_long(pool_reader, &id) {
+                        warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                              self.log,
+                              "Due a valid proposal with a lower rank {}, /
+                              skipping validating the proposal: {:?} with rank {}",
+                              min_rank.0, id, proposal.rank().0
+                        );
+                    }
+                    continue;
+                }
+            }
+
+            // We only validate blocks from a block maker of a certain rank after a
+            // rank-based delay. If this time has not elapsed yet, we ignore the block for
+            // now.
+            if !is_time_to_make_block(
+                &self.log,
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                pool_reader,
+                proposal.height(),
+                proposal.rank(),
+                self.time_source.as_ref(),
+            ) {
+                continue;
+            }
+
+            // If there exists an equivocation proof for the signer of the
+            // proposal at the same height, we ignore the block. The only
+            // way in which we would validate such a proposal is through
+            // the notarization fast-path.
+            if pool_reader
+                .pool()
+                .validated()
+                .equivocation_proof()
+                .get_by_height(proposal.height())
+                .any(|proof| proof.signer == proposal.signature.signer)
+            {
+                continue;
+            }
+
+            // The artifact was already verified at this point, so we can do
+            // all the remaining block validity checks.
+            let check = self.check_block_validity(pool_reader, &proposal);
+            if let Some(action) = self.compute_action_from_artifact_verification(
+                pool_reader,
+                check,
+                proposal.into_message(),
+            ) {
+                if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) =
+                    &action
+                {
+                    known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                }
+                change_set.push(action);
+            }
+        }
+
+        for action in &change_set {
+            if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) = action
+            {
+                self.metrics
+                    .observe_data_payload(proposal, self.ingress_selector.as_deref());
+                self.metrics.observe_block(pool_reader, proposal);
             }
         }
         self.metrics.observe_and_reset_dkg_time_per_validator_run();
@@ -1026,8 +1034,9 @@ impl Validator {
     }
 
     /// Check whether or not the provided `BlockProposal` can be moved into the
-    /// validated pool. A `ValidatiorError::ValidationFailure` value is returned
-    /// when any of the following conditions are met:
+    /// validated pool. This function assumes that the block proposal was already
+    /// verified (see [`SignatureVerify`]). A `ValidatiorError::ValidationFailure`
+    /// value is returned when any of the following conditions are met:
     ///
     /// - the `Block`'s validation context is not available locally.
     /// - The `Block`'s parent is not in the validated pool
@@ -1037,9 +1046,6 @@ impl Validator {
     /// A `ValidatorError::InvalidArtifact` is returned when any of the following
     /// conditions are met:
     ///
-    /// - The signer of the `BlockProposal` does not have the rank claimed on
-    ///   the `Block`
-    /// - The signature on the `BlockProposal` is invalid.
     /// - Any messages included in the payload are present in some ancestor of
     ///   the block
     /// - Any of the values in the `ValidationContext` on the `Block` are less
@@ -1075,7 +1081,6 @@ impl Validator {
 
         let proposer = proposal.signature.signer;
         let parent = get_notarized_parent(pool_reader, proposal)?;
-        self.verify_artifact(pool_reader, proposal)?;
 
         // Ensure registry_version, certified_height increase monotonically and that
         // time increases *strictly* monotonically.
@@ -1661,17 +1666,28 @@ impl Validator {
     ) -> Option<ChangeAction> {
         match result {
             Ok(()) => Some(ChangeAction::MoveToValidated(message)),
-            Err(ValidationError::InvalidArtifact(
-                InvalidArtifactReason::ReplicaVersionMismatch,
-            )) => Some(ChangeAction::RemoveFromUnvalidated(message)),
-            Err(ValidationError::InvalidArtifact(s)) => {
+            Err(err) => self.compute_action_from_validation_error(pool_reader, err, message),
+        }
+    }
+
+    fn compute_action_from_validation_error(
+        &self,
+        pool_reader: &PoolReader<'_>,
+        error: ValidatorError,
+        message: ConsensusMessage,
+    ) -> Option<ChangeAction> {
+        match error {
+            ValidationError::InvalidArtifact(InvalidArtifactReason::ReplicaVersionMismatch) => {
+                Some(ChangeAction::RemoveFromUnvalidated(message))
+            }
+            ValidationError::InvalidArtifact(s) => {
                 Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
             }
-            Err(ValidationError::ValidationFailed(err)) => {
+            ValidationError::ValidationFailed(err) => {
                 if self.unvalidated_for_too_long(pool_reader, &message.get_id()) {
                     warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
                           self.log,
-                          "Could not verify signature: {:?}", err
+                          "Could not determine if artifact is valid: {:?}", err
                     );
                 }
                 None
@@ -2481,7 +2497,6 @@ pub mod test {
                 data_provider,
                 registry_client,
                 mut pool,
-                time_source,
                 replica_config,
                 ..
             } = setup_dependencies(pool_config, &committee);
@@ -2539,38 +2554,6 @@ pub mod test {
             pool.finalize(&block_chain[1]);
             pool.finalize(&block_chain[2]);
 
-            // ensure that the validator initially does not validate anything, as it is not
-            // time for rank 1 yet
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty(),);
-
-            // Time between blocks increases by at least initial_notary_delay + 1ns
-            let monotonic_block_increment = registry_client
-                .get_notarization_delay_settings(
-                    replica_config.subnet_id,
-                    test_block.context.registry_version,
-                )
-                .unwrap()
-                .expect("subnet record should be available")
-                .initial_notary_delay
-                + Duration::from_nanos(1);
-
-            // After sufficiently advancing the time, ensure that the validator validates
-            // the block
-            let delay = monotonic_block_increment
-                + get_block_maker_delay(
-                    &no_op_logger(),
-                    registry_client.as_ref(),
-                    replica_config.subnet_id,
-                    PoolReader::new(&pool)
-                        .registry_version(test_block.height())
-                        .unwrap(),
-                    rank,
-                )
-                .unwrap();
-
-            time_source.set_time(parent.context.time + delay).unwrap();
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(results.len(), 1);
             assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
@@ -3396,8 +3379,8 @@ pub mod test {
             assert_eq!(
                 changeset,
                 vec![
-                    ChangeAction::MoveToValidated(block.into_message()),
-                    ChangeAction::MoveToValidated(notarization.into_message())
+                    ChangeAction::MoveToValidated(notarization.into_message()),
+                    ChangeAction::MoveToValidated(block.into_message())
                 ]
             );
             pool.apply_changes(changeset);
@@ -3602,6 +3585,47 @@ pub mod test {
         });
     }
 
+    /// The validation logic may have a fast path for validating blocks for
+    /// which there exists a valid notarization.
+    #[test]
+    fn test_validator_rejects_incorrect_signature_in_notarization_fast_path() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            pool.advance_round_normal_operation_n(9);
+
+            let mut block = pool.make_next_block();
+
+            // Insert notarization into unvalidated pool, not the block
+            let mut notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            notarization.signature.signers =
+                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+            pool.insert_unvalidated(notarization);
+
+            // Insert tampered block into unvalidated pool
+            assert_ne!(block.signature.signer, node_test_id(100));
+            block.signature.signer = node_test_id(3);
+            pool.insert_unvalidated(block);
+
+            // Incorrect block proposals should not get validated
+            assert_matches!(
+                validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::BlockProposal(_),
+                    _
+                )]
+            );
+        });
+    }
+
     #[test]
     fn test_ignore_blockmaker_if_equivocation_proof_exists() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -3611,7 +3635,6 @@ pub mod test {
                 payload_builder,
                 membership,
                 state_manager,
-                registry_client,
                 mut pool,
                 time_source,
                 replica_config,
@@ -3692,8 +3715,8 @@ pub mod test {
             assert_matches!(
                 changeset[..],
                 [
-                    ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(_)),
-                    ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
+                    ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_)),
+                    ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(_))
                 ]
             );
         })
