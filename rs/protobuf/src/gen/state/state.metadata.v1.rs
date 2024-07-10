@@ -395,6 +395,8 @@ pub struct SubnetMetrics {
     pub canister_state_bytes: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "10")]
     pub update_transactions_total: ::core::option::Option<u64>,
+    #[prost(message, repeated, tag = "11")]
+    pub threshold_signature_agreements: ::prost::alloc::vec::Vec<ThresholdSignatureAgreementsEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -425,6 +427,15 @@ pub struct ApiBoundaryNodeEntry {
     pub ipv6_address: ::prost::alloc::string::String,
     #[prost(bytes = "vec", optional, tag = "5")]
     pub pubkey: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ThresholdSignatureAgreementsEntry {
+    #[prost(message, optional, tag = "1")]
+    pub key_id:
+        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    #[prost(uint64, tag = "2")]
+    pub count: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

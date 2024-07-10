@@ -36,6 +36,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:assert_matches",
