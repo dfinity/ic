@@ -16,7 +16,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
 use ic_registry_routing_table::RoutingTable;
@@ -414,24 +414,6 @@ impl From<&IngressInductionError> for ErrorCode {
             IngressInductionError::CanisterMethodNotFound(_) => ErrorCode::CanisterMethodNotFound,
             IngressInductionError::InvalidManagementPayload => ErrorCode::InvalidManagementPayload,
             IngressInductionError::IngressHistoryFull { .. } => ErrorCode::IngressHistoryFull,
-        }
-    }
-}
-
-impl From<&StateError> for RejectCode {
-    fn from(err: &StateError) -> Self {
-        match err {
-            StateError::CanisterNotFound(_) => Self::DestinationInvalid,
-            StateError::CanisterStopped(_) => Self::CanisterError,
-            StateError::CanisterStopping(_) => Self::CanisterError,
-            StateError::CanisterMigrating { .. } => Self::SysTransient,
-            StateError::QueueFull { .. } => Self::SysTransient,
-            StateError::OutOfMemory { .. } => Self::CanisterError,
-            StateError::InvariantBroken { .. }
-            | StateError::NonMatchingResponse { .. }
-            | StateError::BitcoinNonMatchingResponse { .. } => {
-                unreachable!("Not a user error: {}", err);
-            }
         }
     }
 }
