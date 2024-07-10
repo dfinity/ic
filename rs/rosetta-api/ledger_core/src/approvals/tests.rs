@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::cmp;
 
 fn ts(n: u64) -> TimeStamp {

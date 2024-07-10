@@ -61,7 +61,7 @@ pub trait AllowancesData {
 
     fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
-    fn oldest_arrival(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
+    fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 
     fn len_allowances(&self) -> usize;
 
@@ -172,8 +172,15 @@ where
         None
     }
 
-    fn oldest_arrival(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        self.arrival_queue.first().cloned()
+    fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
+        let mut result = vec![];
+        for (_t, key) in &self.arrival_queue {
+            if result.len() >= n {
+                break;
+            }
+            result.push(key.clone());
+        }
+        result
     }
 
     fn len_allowances(&self) -> usize {
@@ -465,14 +472,7 @@ where
     }
 
     pub fn select_approvals_to_trim(&self, n: usize) -> Vec<(S::AccountId, S::AccountId)> {
-        let mut result = vec![];
-        for (_expiration, key) in &self.allowances_data.oldest_arrival() {
-            if result.len() >= n {
-                break;
-            }
-            result.push(key.clone().into());
-        }
-        result
+        self.allowances_data.oldest_arrivals(n)
     }
 
     pub fn prune(&mut self, now: TimeStamp, limit: usize) -> usize {
