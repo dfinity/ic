@@ -1,16 +1,17 @@
 name: Slack Workflow Run
 
 on:
-  workflow_run:
-    types:
-      - completed
-    branches:
-      - master
-      - rc--*
-    workflows:
-      - Schedule Daily
-      - Schedule Weekly
-      - Release Testing
+  workflow_call:
+    inputs:
+      conclusion:
+        required: true
+        type: string
+      workflow-name:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
 
 jobs:
   slack-workflow-run:
@@ -24,19 +25,18 @@ jobs:
           # TODO: change to 'eng-idx-alerts,release-management-alerts'
           CHANNEL="eng-idx-alerts"
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
-          TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
 
           FULL_MESSAGE="nothing"
-          if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
-            if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
+          if [[ "${{ inputs.conclusion }}" =~ ^(success)$ ]]; then
+            if [[ ${{ inputs.workflow-name }} == "Release Testing" ]]; then
               FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
             fi
-          elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
+          elif [[ "${{ inputs.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
           fi
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
         env:
-          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
+          MESSAGE: "*${{ inputs.workflow-name }}* ${{ inputs.conclusion }} on ${{ inputs.branch }} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
 
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
