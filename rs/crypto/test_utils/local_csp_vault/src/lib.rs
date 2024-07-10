@@ -45,7 +45,7 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -203,7 +203,7 @@ mock! {
             kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
             key_times_lambda_raw: IDkgTranscriptInternalBytes,
             algorithm_id: AlgorithmId,
-        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError>;
     }
 
     impl ThresholdSchnorrSignerCspVault for LocalCspVault {

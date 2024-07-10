@@ -26,7 +26,7 @@ use ic_types::consensus::idkg::{
 use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifySigShareError,
     ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
     ThresholdSchnorrVerifySigShareError,
 };
@@ -41,7 +41,7 @@ use super::utils::{build_signature_inputs, get_context_request_id, update_purge_
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 enum CreateSigShareError {
-    Ecdsa(ThresholdEcdsaSignShareError),
+    Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
 }
 

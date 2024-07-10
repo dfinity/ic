@@ -10,7 +10,7 @@ mod ecdsa_sign_share {
         IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
         ThresholdEcdsaSigShareInternal,
     };
-    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
+    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
     use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::AlgorithmId;
     use ic_types::Randomness;
@@ -34,7 +34,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
+            Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { commitment_string })
             if commitment_string == format!("{:?}", parameters.lambda_masked.combined_commitment.commitment())
         )
     }
@@ -62,7 +62,7 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
                 if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
@@ -83,7 +83,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
+            Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { commitment_string })
             if commitment_string == format!("{:?}", parameters.kappa_times_lambda.combined_commitment.commitment())
         )
     }
@@ -116,7 +116,7 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
                 if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
@@ -138,7 +138,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
+            Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { commitment_string })
             if commitment_string == format!("{:?}", parameters.key_times_lambda.combined_commitment.commitment())
         )
     }
@@ -168,7 +168,7 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
                 if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
@@ -199,7 +199,7 @@ mod ecdsa_sign_share {
 
                 assert_matches!(
                     result,
-                    Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                    Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
                     if internal_error.contains("unsupported algorithm")
                 )
             });
@@ -228,7 +228,7 @@ mod ecdsa_sign_share {
             //TODO CRP-1340 add dedicated error type for hash length mismatch
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
                 if internal_error.contains("length of hashed_message")
                 && internal_error.contains("not matching expected length (32)")
             )
@@ -267,7 +267,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+            Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
             if internal_error.contains("UnexpectedCommitmentType")
         )
     }
@@ -304,7 +304,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+            Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
             if internal_error.contains("UnexpectedCommitmentType")
         )
     }
@@ -341,7 +341,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+            Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
             if internal_error.contains("UnexpectedCommitmentType")
         )
     }
@@ -401,7 +401,7 @@ mod ecdsa_sign_share {
                     transcript_key_times_lambda,
                     parameters.algorithm_id,
                 ),
-                Err(ThresholdEcdsaSignShareError::SerializationError { .. })
+                Err(ThresholdEcdsaCreateSigShareError::SerializationError { .. })
             );
         }
     }
@@ -449,7 +449,7 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 parameters.ecdsa_sign_share(&vault),
-                Err(ThresholdEcdsaSignShareError::SerializationError { internal_error })
+                Err(ThresholdEcdsaCreateSigShareError::SerializationError { internal_error })
                 if internal_error == "CanisterThresholdSerializationError(\"failed to deserialize EccScalar: invalid encoding\")"
             );
         }
@@ -510,7 +510,7 @@ mod ecdsa_sign_share {
         fn ecdsa_sign_share<V: ThresholdEcdsaSignerCspVault>(
             &self,
             vault: &V,
-        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
             vault.create_ecdsa_sig_share(
                 self.derivation_path.clone(),
                 self.hashed_message.clone(),

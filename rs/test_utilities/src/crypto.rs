@@ -445,7 +445,7 @@ impl ThresholdEcdsaSigner for CryptoReturningOk {
     fn create_sig_share(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
         Ok(ThresholdEcdsaSigShare {
             sig_share_raw: vec![],
         })

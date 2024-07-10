@@ -322,7 +322,7 @@ pub mod node {
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
         IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
         ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
         ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
@@ -577,7 +577,7 @@ pub mod node {
         fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
             ThresholdEcdsaSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }

@@ -13,7 +13,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
@@ -130,7 +130,7 @@ mod sign_share {
 
             let result = bad_crypto_component.create_sig_share(&inputs);
             let err = result.unwrap_err();
-            assert_matches!(err, ThresholdEcdsaSignShareError::NotAReceiver);
+            assert_matches!(err, ThresholdEcdsaCreateSigShareError::NotAReceiver);
         }
     }
 
@@ -190,7 +190,7 @@ mod sign_share {
                 let result = receiver.create_sig_share(&inputs);
                 assert_matches!(
                     result,
-                    Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. })
+                    Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { .. })
                 );
             }
         }
@@ -366,7 +366,7 @@ mod sign_share {
                         } else {
                             assert_matches!(
                                 result,
-                                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }),
+                                Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { .. }),
                                 "{} should not have been able to sign a share with state {:?}",
                                 receiver.id(),
                                 signer_state

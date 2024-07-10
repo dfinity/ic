@@ -35,7 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifyCombinedSignatureError,
     ThresholdEcdsaVerifySigShareError, ThresholdSchnorrCombineSigSharesError,
     ThresholdSchnorrCreateSigShareError, ThresholdSchnorrVerifyCombinedSigError,
     ThresholdSchnorrVerifySigShareError,
@@ -556,7 +556,7 @@ pub trait ThresholdEcdsaSigner {
     fn create_sig_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError>;
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError>;
 }
 
 /// A Crypto Component interface to perform public operations during the online phase of the
