@@ -11,9 +11,12 @@ use ic_interfaces::{
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::idkg::SigShare;
+use ic_types::consensus::idkg::{
+    IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
+};
 use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
@@ -1563,6 +1566,26 @@ impl crate::certification_pool::MutablePoolSection
 
 ///////////////////////////// IDKG Pool /////////////////////////////
 
+/// The message id as a database key. The first 8 bytes are the big-endian representation
+/// of the group tag (transcript ID / pre-signature ID). The next 8 bytes are a hash of meta
+/// data (i.e. dealer ID, sig share sender, dealer ID + support sender, ...).
+/// The remaining bytes are a proto encoding of additional ID data (height, message hash, [subnet Id]).
+///
+/// ```text
+/// -----------------------------------------------------------------------------
+/// |0   <group tag>   7|8   <meta hash>   15|16   <proto encoded ID data>   ...|
+/// -----------------------------------------------------------------------------
+/// ```
+///
+/// Two kinds of look up are possible with this:
+/// 1. Look up by full key of <16 bytes prefix + id data>, which would return the matching
+/// artifact if present.
+/// 2. Look up by prefix match. This can return 0 or more entries, as several artifacts may share
+/// the same prefix. The caller is expected to filter the returned entries as needed. The look up
+/// by prefix makes some frequent queries more efficient (e.g) to know if a node has already
+/// issued a support for a <transcript Id, dealer Id>, we could iterate through all the entries
+/// in the support pool looking for a matching artifact. Instead, this implementation allows
+/// us to issue a single prefix query for prefix = <transcript Id, dealer Id + support signer Id>.
 #[derive(Debug)]
 pub(crate) struct IDkgIdKey(Vec<u8>);
 
@@ -1578,50 +1601,107 @@ impl From<&[u8]> for IDkgIdKey {
     }
 }
 
-impl From<&IDkgMessageId> for IDkgIdKey {
-    fn from(msg_id: &IDkgMessageId) -> IDkgIdKey {
+impl From<IDkgMessageId> for IDkgIdKey {
+    fn from(msg_id: IDkgMessageId) -> IDkgIdKey {
+        // Serialize the prefix
         let prefix = msg_id.prefix();
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
-        bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
-        bytes.extend_from_slice(&msg_id.hash().0);
+
+        // Serialize the ID data
+        let id_data_bytes = match msg_id {
+            IDkgArtifactId::Dealing(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::DealingSupport(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::EcdsaSigShare(_, data) => {
+                pb::SigShareIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::SchnorrSigShare(_, data) => {
+                pb::SigShareIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::Complaint(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::Opening(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+        };
+        bytes.extend_from_slice(&id_data_bytes);
         IDkgIdKey(bytes)
     }
 }
 
-impl From<&IDkgPrefix> for IDkgIdKey {
-    fn from(prefix: &IDkgPrefix) -> IDkgIdKey {
+impl From<IDkgPrefix> for IDkgIdKey {
+    fn from(prefix: IDkgPrefix) -> IDkgIdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
-        bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
         IDkgIdKey(bytes)
     }
 }
 
-fn deser_idkg_message_id(message_type: IDkgMessageType, id_key: IDkgIdKey) -> IDkgMessageId {
+fn deser_idkg_artifact_id_data(bytes: &[u8]) -> Result<IDkgArtifactIdData, ProxyDecodeError> {
+    pb::IDkgArtifactIdData::decode(bytes)
+        .map_err(ProxyDecodeError::DecodeError)
+        .and_then(IDkgArtifactIdData::try_from)
+}
+
+fn deser_sig_share_id_data(bytes: &[u8]) -> Result<SigShareIdData, ProxyDecodeError> {
+    pb::SigShareIdData::decode(bytes)
+        .map_err(ProxyDecodeError::DecodeError)
+        .and_then(SigShareIdData::try_from)
+}
+
+fn deser_idkg_message_id(
+    message_type: IDkgMessageType,
+    id_key: IDkgIdKey,
+) -> Result<IDkgMessageId, ProxyDecodeError> {
+    // Deserialize the prefix
     let mut group_tag_bytes = [0; 8];
     group_tag_bytes.copy_from_slice(&id_key.0[0..8]);
 
     let mut meta_hash_bytes = [0; 8];
     meta_hash_bytes.copy_from_slice(&id_key.0[8..16]);
 
-    let mut height_bytes = [0; 8];
-    height_bytes.copy_from_slice(&id_key.0[16..24]);
+    let prefix = IDkgPrefix::new_with_meta_hash(
+        u64::from_be_bytes(group_tag_bytes),
+        u64::from_be_bytes(meta_hash_bytes),
+    );
 
-    let crypto_hash_bytes: &[u8] = &id_key.0[24..];
+    // Deserialize the remaining bytes as the ID data
+    let id_data_bytes: &[u8] = &id_key.0[16..];
 
-    (
-        message_type,
-        IDkgPrefix::new_with_meta_hash(
-            u64::from_be_bytes(group_tag_bytes),
-            u64::from_be_bytes(meta_hash_bytes),
-            Height::from(u64::from_be_bytes(height_bytes)),
+    let id = match message_type {
+        IDkgMessageType::Dealing => IDkgArtifactId::Dealing(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
         ),
-        CryptoHash(crypto_hash_bytes.to_vec()),
-    )
-        .into()
+        IDkgMessageType::DealingSupport => IDkgArtifactId::DealingSupport(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::EcdsaSigShare => IDkgArtifactId::EcdsaSigShare(
+            IDkgPrefixOf::new(prefix),
+            SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::SchnorrSigShare => IDkgArtifactId::SchnorrSigShare(
+            IDkgPrefixOf::new(prefix),
+            SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::Complaint => IDkgArtifactId::Complaint(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::Opening => IDkgArtifactId::Opening(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
+        ),
+    };
+    Ok(id)
 }
 
 /// The per-message type DB
@@ -1654,7 +1734,7 @@ impl IDkgMessageDb {
     /// false otherwise.
     fn insert_txn(&self, message: IDkgMessage, tx: &mut RwTransaction) -> bool {
         assert_eq!(IDkgMessageType::from(&message), self.object_type);
-        let key = IDkgIdKey::from(&IDkgArtifactId::from(&message));
+        let key = IDkgIdKey::from(IDkgArtifactId::from(&message));
         let bytes = match bincode::serialize::<IDkgMessage>(&message) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -1680,7 +1760,7 @@ impl IDkgMessageDb {
     }
 
     fn get_object(&self, id: &IDkgMessageId) -> Option<IDkgMessage> {
-        let key = IDkgIdKey::from(id);
+        let key = IDkgIdKey::from(id.clone());
         let tx = match self.db_env.begin_ro_txn() {
             Ok(tx) => tx,
             Err(err) => {
@@ -1721,7 +1801,7 @@ impl IDkgMessageDb {
 
     /// Adds the serialized <key> to be removed to the transaction. Returns true on success,
     /// false otherwise.
-    fn remove_txn(&self, id: &IDkgMessageId, tx: &mut RwTransaction) -> bool {
+    fn remove_txn(&self, id: IDkgMessageId, tx: &mut RwTransaction) -> bool {
         let key = IDkgIdKey::from(id);
         if let Err(err) = tx.del(self.db, &key, None) {
             error!(
@@ -1749,7 +1829,18 @@ impl IDkgMessageDb {
             let mut key_bytes = Vec::<u8>::new();
             key_bytes.extend_from_slice(key);
             let id_key = IDkgIdKey(key_bytes);
-            let id = deser_idkg_message_id(message_type, id_key);
+            let id = match deser_idkg_message_id(message_type, id_key) {
+                Ok(id) => id,
+                Err(err) => {
+                    error!(
+                        log,
+                        "IDkgMessageDb::iter(): deser_idkg_message_id() for key of length {} failed: {:?}",
+                        key.len(),
+                        err,
+                    );
+                    return None;
+                }
+            };
 
             // Stop iterating if we hit a different prefix.
             if let Some(prefix) = &prefix_cl {
@@ -1794,7 +1885,7 @@ impl IDkgMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| IDkgIdKey::from(&p.get())),
+            prefix.map(|p| IDkgIdKey::from(p.get())),
             self.log.clone(),
         ))
     }
@@ -2039,7 +2130,7 @@ impl MutableIDkgPoolSection for PersistentIDkgPoolSection {
                 IDkgPoolSectionOp::Remove(id) => {
                     let message_type = IDkgMessageType::from(&id);
                     let db = self.get_message_db(message_type);
-                    if !db.remove_txn(&id, &mut tx) {
+                    if !db.remove_txn(id, &mut tx) {
                         return;
                     }
                     self.metrics.observe_remove(message_type.as_str())
@@ -2078,7 +2169,7 @@ mod tests {
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::consensus::Rank;
+    use ic_types::{consensus::Rank, PrincipalId, SubnetId};
     use std::{panic, path::PathBuf};
 
     #[test]
@@ -2100,6 +2191,60 @@ mod tests {
             id_key.type_key().expect("Should deserialize the key"),
             TypeKey::BlockPayload
         );
+    }
+
+    #[test]
+    fn test_encode_decode_idkg_key() {
+        let data = [1u8; PrincipalId::MAX_LENGTH_IN_BYTES];
+        let max_principal = PrincipalId::new(data.len(), data);
+        let small_principal = PrincipalId::new(20, data);
+        let one_byte_principal = PrincipalId::new(1, data);
+        let empty_principal = PrincipalId::new(0, data);
+
+        let subnet_ids = [
+            SubnetId::new(max_principal),
+            SubnetId::new(small_principal),
+            SubnetId::new(one_byte_principal),
+            SubnetId::new(empty_principal),
+        ];
+
+        let hashes = [
+            CryptoHash(vec![]),
+            CryptoHash(vec![2u8; 1]),
+            CryptoHash(vec![2u8; 32]),
+            CryptoHash(vec![2u8; 128]),
+        ];
+
+        let message_types = [IDkgMessageType::Dealing, IDkgMessageType::EcdsaSigShare];
+
+        for message_type in &message_types {
+            for subnet_id in &subnet_ids {
+                for hash in &hashes {
+                    let prefix = IDkgPrefix::new_with_meta_hash(1, 2);
+                    let id = match message_type {
+                        IDkgMessageType::Dealing => IDkgArtifactId::Dealing(
+                            IDkgPrefixOf::new(prefix),
+                            IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
+                                height: Height::from(3),
+                                hash: hash.clone(),
+                                subnet_id: *subnet_id,
+                            }),
+                        ),
+                        IDkgMessageType::EcdsaSigShare => IDkgArtifactId::EcdsaSigShare(
+                            IDkgPrefixOf::new(prefix),
+                            SigShareIdDataOf::new(SigShareIdData {
+                                height: Height::from(3),
+                                hash: hash.clone(),
+                            }),
+                        ),
+                        _ => panic!("Unexpected type: {:?}", message_type),
+                    };
+                    let id_key = IDkgIdKey::from(id.clone());
+                    let deser_id = deser_idkg_message_id(*message_type, id_key).unwrap();
+                    assert_eq!(id, deser_id);
+                }
+            }
+        }
     }
 
     // TODO: Remove this after it is no longer needed
