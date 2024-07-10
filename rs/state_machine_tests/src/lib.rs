@@ -2233,8 +2233,12 @@ impl StateMachine {
 
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(canister_state);
-        self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Metadata);
+        self.state_manager.commit_and_certify(
+            state,
+            h.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
     }
 
     // Enable checkpoints and make a tick to write a checkpoint.
@@ -2258,7 +2262,7 @@ impl StateMachine {
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Full);
+            .commit_and_certify(state, h.increment(), CertificationScope::Full, None);
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -2286,6 +2290,7 @@ impl StateMachine {
                 state,
                 height.increment(),
                 CertificationScope::Full,
+                None,
             );
 
             other_env.import_canister_state(
@@ -2945,6 +2950,7 @@ impl StateMachine {
             replicated_state,
             height.increment(),
             CertificationScope::Metadata,
+            None,
         );
     }
 
@@ -2976,8 +2982,12 @@ impl StateMachine {
             .scheduler_state
             .total_query_stats = total_query_stats;
 
-        self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Metadata);
+        self.state_manager.commit_and_certify(
+            state,
+            h.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -3013,6 +3023,7 @@ impl StateMachine {
             state,
             height.increment(),
             CertificationScope::Metadata,
+            None,
         );
         balance
     }

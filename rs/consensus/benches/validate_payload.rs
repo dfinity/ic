@@ -217,6 +217,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
         state,
         Height::new(CERTIFIED_HEIGHT),
         CertificationScope::Full,
+        None,
     );
 
     let to_certify = state_manager.list_state_hashes_to_certify();
