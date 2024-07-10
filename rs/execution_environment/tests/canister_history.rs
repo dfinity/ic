@@ -1065,7 +1065,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
-    // check canister history
+    // Check canister history.
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
         1,
