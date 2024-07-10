@@ -68,8 +68,6 @@ pub trait AllowancesData {
     fn len_expirations(&self) -> usize;
 
     fn len_arrivals(&self) -> usize;
-
-    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -188,10 +186,6 @@ where
 
     fn len_arrivals(&self) -> usize {
         self.arrival_queue.len()
-    }
-
-    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
-        todo!()
     }
 }
 
