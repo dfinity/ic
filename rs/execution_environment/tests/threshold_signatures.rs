@@ -61,13 +61,6 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialEcdsaDealings => ic00::ComputeInitialEcdsaDealingsArgs::new(
-            into_inner_ecdsa(key_id),
-            subnet_id,
-            nodes,
-            registry_version,
-        )
-        .encode(),
         Method::ComputeInitialIDkgDealings => {
             ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
                 .encode()
@@ -128,10 +121,6 @@ where
 fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
     vec![
         (
-            Method::ComputeInitialEcdsaDealings,
-            make_ecdsa_key("some_key"),
-        ),
-        (
             Method::ComputeInitialIDkgDealings,
             make_ecdsa_key("some_key"),
         ),
@@ -163,23 +152,14 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
         let canister_id = create_universal_canister(&env);
 
         // Expect no dealings contexts before the call.
-        let expected_dealings_context_len = 0;
-        let cm = &env.get_latest_state().metadata.subnet_call_context_manager;
-        match method {
-            Method::ComputeInitialEcdsaDealings => {
-                assert_eq!(
-                    cm.ecdsa_dealings_contexts.len(),
-                    expected_dealings_context_len
-                );
-            }
-            Method::ComputeInitialIDkgDealings => {
-                assert_eq!(
-                    cm.idkg_dealings_contexts.len(),
-                    expected_dealings_context_len
-                );
-            }
-            _ => (),
-        };
+        assert_eq!(
+            env.get_latest_state()
+                .metadata
+                .subnet_call_context_manager
+                .idkg_dealings_contexts
+                .len(),
+            0
+        );
 
         // Make the call.
         let _msg_id = env.send_ingress(
@@ -203,23 +183,14 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
         env.tick();
 
         // Expect dealings context added to the context manager after the call.
-        let expected_dealings_context_len = 1;
-        let cm = &env.get_latest_state().metadata.subnet_call_context_manager;
-        match method {
-            Method::ComputeInitialEcdsaDealings => {
-                assert_eq!(
-                    cm.ecdsa_dealings_contexts.len(),
-                    expected_dealings_context_len
-                );
-            }
-            Method::ComputeInitialIDkgDealings => {
-                assert_eq!(
-                    cm.idkg_dealings_contexts.len(),
-                    expected_dealings_context_len
-                );
-            }
-            _ => (),
-        };
+        assert_eq!(
+            env.get_latest_state()
+                .metadata
+                .subnet_call_context_manager
+                .idkg_dealings_contexts
+                .len(),
+            1
+        );
     }
 }
 
