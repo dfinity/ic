@@ -283,7 +283,7 @@ impl CanisterSnapshot {
     }
 }
 
-/// Errors that can occur when trying to create a `CanisterSnapshot` from (&CanisterState, Time).
+/// Errors that can occur when trying to create a `CanisterSnapshot` from a canister.
 #[derive(Debug)]
 pub enum CanisterSnapshotError {
     EmptyExecutionState(CanisterId),

@@ -2606,7 +2606,7 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!(
-                        "Could not create new snapshot for canister {}: ", canister_id,
+                        "Failed to create snapshot for empty canister {}:", canister_id,
                     )
                 )
             }
