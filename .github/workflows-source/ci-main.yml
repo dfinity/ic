@@ -367,9 +367,9 @@ jobs:
     steps:
       - id: branch-check
         run: |
-          echo "match=false"
+          match=false
           if [[ "${{ github.ref }}" =~ refs/heads/hotfix-.*-rc--.* || "${{ github.ref }}" =~ refs/heads/rc--.* ]]; then
-            echo "match=true"
+            match=true
           fi
           echo "match=${match}" >> $GITHUB_OUTPUT
   
