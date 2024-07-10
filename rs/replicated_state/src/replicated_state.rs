@@ -18,7 +18,6 @@ use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
@@ -681,31 +680,11 @@ impl ReplicatedState {
     }
 
     /// Returns all IDKG dealings contexts.
-    pub fn idkg_dealings_contexts(&self) -> BTreeMap<CallbackId, IDkgDealingsContext> {
-        self.metadata
+    pub fn idkg_dealings_contexts(&self) -> &BTreeMap<CallbackId, IDkgDealingsContext> {
+        &self
+            .metadata
             .subnet_call_context_manager
             .idkg_dealings_contexts
-            .clone()
-            .into_iter()
-            .chain(
-                self.metadata
-                    .subnet_call_context_manager
-                    .ecdsa_dealings_contexts
-                    .iter()
-                    .map(|(callback, ecdsa_context)| {
-                        (
-                            *callback,
-                            IDkgDealingsContext {
-                                request: ecdsa_context.request.clone(),
-                                key_id: MasterPublicKeyId::Ecdsa(ecdsa_context.key_id.clone()),
-                                nodes: ecdsa_context.nodes.clone(),
-                                registry_version: ecdsa_context.registry_version,
-                                time: ecdsa_context.time,
-                            },
-                        )
-                    }),
-            )
-            .collect()
     }
 
     /// Retrieves a reference to the stream from this subnet to the destination

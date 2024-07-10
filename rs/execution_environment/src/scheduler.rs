@@ -2356,7 +2356,6 @@ fn get_instructions_limits_for_subnet_message(
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
-            | ComputeInitialEcdsaDealings
             | ComputeInitialIDkgDealings
             | SchnorrPublicKey
             | SignWithSchnorr
