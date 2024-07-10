@@ -2428,8 +2428,28 @@ message ClaimOrRefreshNeuronFromAccountResponse {
 
 // The monthly Node Provider rewards as of a point in time.
 message MonthlyNodeProviderRewards {
+  // The time when the rewards were calculated.
   uint64 timestamp = 1;
+  // The Rewards calculated and rewarded.
   repeated RewardNodeProvider rewards = 2;
+
+  // The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+  // This field snapshots the actual rate used by governance when the rewards were calculated.
+  optional XdrConversionRate xdr_conversion_rate = 3;
+
+  // The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+  // why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+  optional uint64 minimum_xdr_permyriad_per_icp = 4;
+
+  // The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+  // from the value in network economics.
+  optional uint64 maximum_node_provider_rewards_e8s = 5;
+
+  // The registry version used to calculate these rewards at the time the rewards were calculated.
+  optional uint64 registry_version = 6;
+
+  // The list of node_provieders at the time when the rewards were calculated.
+  repeated NodeProvider node_providers = 7;
 }
 
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be

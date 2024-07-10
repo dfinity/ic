@@ -4088,12 +4088,12 @@ impl Governance {
     /// Mint and transfer the specified Node Provider rewards
     async fn reward_node_providers(
         &mut self,
-        rewards: Vec<RewardNodeProvider>,
+        rewards: &[RewardNodeProvider],
     ) -> Result<(), GovernanceError> {
         let mut result = Ok(());
 
         for reward in rewards {
-            let reward_result = self.reward_node_provider_helper(&reward).await;
+            let reward_result = self.reward_node_provider_helper(reward).await;
             if reward_result.is_err() {
                 println!(
                     "Rewarding {:?} failed. Reason: {:}",
@@ -4116,7 +4116,7 @@ impl Governance {
         let result = if reward_nps.use_registry_derived_rewards == Some(true) {
             self.mint_monthly_node_provider_rewards().await
         } else {
-            self.reward_node_providers(reward_nps.rewards).await
+            self.reward_node_providers(&reward_nps.rewards).await
         };
 
         self.set_proposal_execution_status(pid, result);
@@ -4144,9 +4144,11 @@ impl Governance {
         // Acquire the lock before doing anything meaningful.
         self.minting_node_provider_rewards = true;
 
-        let rewards = self.get_monthly_node_provider_rewards().await?.rewards;
-        let _ = self.reward_node_providers(rewards.clone()).await;
-        self.update_most_recent_monthly_node_provider_rewards(rewards);
+        let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
+        let _ = self
+            .reward_node_providers(&monthly_node_provider_rewards.rewards)
+            .await;
+        self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
 
         // Release the lock before committing the result.
         self.minting_node_provider_rewards = false;
@@ -4166,13 +4168,8 @@ impl Governance {
 
     fn update_most_recent_monthly_node_provider_rewards(
         &mut self,
-        rewards: Vec<RewardNodeProvider>,
+        most_recent_rewards: MonthlyNodeProviderRewards,
     ) {
-        let most_recent_rewards = MonthlyNodeProviderRewards {
-            timestamp: self.env.now(),
-            rewards,
-        };
-
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
@@ -7397,25 +7394,24 @@ impl Governance {
     /// node provider's XDR rewards to ICP.
     pub async fn get_monthly_node_provider_rewards(
         &mut self,
-    ) -> Result<RewardNodeProviders, GovernanceError> {
-        let mut rewards = RewardNodeProviders::default();
+    ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
+        let mut rewards = vec![];
 
         // Maps node providers to their rewards in XDR
         let xdr_permyriad_rewards: NodeProvidersMonthlyXdrRewards =
             self.get_node_providers_monthly_xdr_rewards().await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
-        let avg_xdr_permyriad_per_icp = self
-            .get_average_icp_xdr_conversion_rate()
-            .await?
-            .data
-            .xdr_permyriad_per_icp;
+        let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
+        let avg_xdr_permyriad_per_icp = icp_xdr_conversion_rate.xdr_permyriad_per_icp;
 
         // Convert minimum_icp_xdr_rate to basis points for comparison with avg_xdr_permyriad_per_icp
         let minimum_xdr_permyriad_per_icp = self
             .economics()
             .minimum_icp_xdr_rate
             .saturating_mul(NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER);
+
+        let maximum_node_provider_rewards_e8s = self.economics().maximum_node_provider_rewards_e8s;
 
         let xdr_permyriad_per_icp = max(avg_xdr_permyriad_per_icp, minimum_xdr_permyriad_per_icp);
 
@@ -7430,12 +7426,27 @@ impl Governance {
                 if let Some(reward_node_provider) =
                     get_node_provider_reward(np, xdr_permyriad_reward, xdr_permyriad_per_icp)
                 {
-                    rewards.rewards.push(reward_node_provider);
+                    rewards.push(reward_node_provider);
                 }
             }
         }
 
-        Ok(rewards)
+        let xdr_conversion_rate = XdrConversionRate {
+            timestamp_seconds: icp_xdr_conversion_rate.timestamp_seconds,
+            xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
+        };
+
+        let registry_version = xdr_permyriad_rewards.registry_version.unwrap();
+
+        Ok(MonthlyNodeProviderRewards {
+            timestamp: self.env.now(),
+            rewards,
+            xdr_conversion_rate: Some(xdr_conversion_rate.into()),
+            minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
+            maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
+            registry_version: Some(registry_version),
+            node_providers: self.heap_data.node_providers.clone(),
+        })
     }
 
     /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method

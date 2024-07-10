@@ -1461,13 +1461,19 @@ async fn test_mint_monthly_node_provider_rewards() {
         AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None),
         1_000_000_000,
     );
+    let default_economics = NetworkEconomics::with_default_values();
     let mut gov = Governance::new(
         GovernanceProto {
-            economics: Some(NetworkEconomics::with_default_values()),
+            economics: Some(default_economics.clone()),
             node_providers: vec![node_provider.clone()],
             most_recent_monthly_node_provider_rewards: Some(MonthlyNodeProviderRewards {
                 timestamp: 0,
                 rewards: vec![],
+                xdr_conversion_rate: None,
+                minimum_xdr_permyriad_per_icp: None,
+                maximum_node_provider_rewards_e8s: None,
+                registry_version: None,
+                node_providers: vec![],
             }),
             ..Default::default()
         },
@@ -1487,8 +1493,29 @@ async fn test_mint_monthly_node_provider_rewards() {
         .unwrap();
     assert!(most_recent_monthly_node_provider_rewards.timestamp > 0);
     assert_eq!(most_recent_monthly_node_provider_rewards.rewards.len(), 1);
-    let reward = most_recent_monthly_node_provider_rewards.rewards[0].clone();
+    let MonthlyNodeProviderRewards {
+        timestamp: _,
+        rewards,
+        xdr_conversion_rate,
+        minimum_xdr_permyriad_per_icp,
+        maximum_node_provider_rewards_e8s,
+        registry_version,
+        node_providers,
+    } = most_recent_monthly_node_provider_rewards;
+    let reward = rewards[0].clone();
     assert_eq!(reward.node_provider.unwrap(), node_provider);
+    let xdr_conversion_rate = xdr_conversion_rate.unwrap();
+    assert_eq!(xdr_conversion_rate.xdr_permyriad_per_icp.unwrap(), 1);
+    assert!(xdr_conversion_rate.timestamp_seconds.unwrap() > 0);
+    // Default value (100) * conversion to permyriad
+    assert_eq!(minimum_xdr_permyriad_per_icp, Some(10_000));
+    assert_eq!(
+        maximum_node_provider_rewards_e8s,
+        Some(default_economics.maximum_node_provider_rewards_e8s)
+    );
+    // It happens to be 5, we just want to ensure it is set.
+    assert_eq!(registry_version, Some(5));
+    assert_eq!(node_providers.len(), 1);
 }
 
 #[tokio::test]
