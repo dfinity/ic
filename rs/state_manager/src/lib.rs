@@ -1421,19 +1421,24 @@ impl StateManagerImpl {
             });
 
         for h in unfiltered_checkpoint_heights {
-            let cp_layout = state_layout.checkpoint_untracked(h).unwrap_or_else(|err| {
-                fatal!(
-                    log,
-                    "Failed to create untracked checkpoint layout @{}: {}",
-                    h,
-                    err
-                )
-            });
-            if !cp_layout.is_checkpoint_verified() {
-                info!(log, "Archiving unverified checkpoint {} ", h);
-                state_layout
-                    .archive_checkpoint(h)
-                    .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+            match state_layout.checkpoint_verification_status(h) {
+                // If the checkpoint is verified, we don't need to do anything.
+                Ok(true) => {}
+                // If the checkpoint is unverified, we archive it.
+                Ok(false) => {
+                    info!(log, "Archiving unverified checkpoint {}", h);
+                    state_layout
+                        .archive_checkpoint(h)
+                        .unwrap_or_else(|err| fatal!(&log, "{:?}", err))
+                }
+                Err(err) => {
+                    fatal!(
+                        log,
+                        "Failed to retrieve the checkpoint status @{} from disk: {}",
+                        h,
+                        err
+                    )
+                }
             }
         }
 
@@ -2799,15 +2804,14 @@ impl StateManager for StateManagerImpl {
                     info!(self.log,
                           "Copying checkpoint {} with root hash {:?} under new height {}",
                           checkpoint_height, root_hash, height);
-                    match self.state_layout.checkpoint_untracked(checkpoint_height) {
-                        Ok(cp_layout) => {
-                            if !cp_layout.is_checkpoint_verified() {
-                                warn!(self.log,
-                                      "Unverified checkpoint @{} is not expected to be found in states metadata.",
-                                      checkpoint_height
-                                );
-                                return;
-                            }
+                    match self.state_layout.checkpoint_verification_status(checkpoint_height) {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            warn!(self.log,
+                                "Unverified checkpoint @{} is not expected to be found in states metadata.",
+                                checkpoint_height
+                            );
+                            return;
                         }
                         Err(_) => {
                             warn!(self.log,
@@ -2818,7 +2822,7 @@ impl StateManager for StateManagerImpl {
                         }
                     }
 
-                    // Clone the checkpoint if it is not marked as unverified.
+                    // Clone the checkpoint if it is verified.
                     match self.state_layout.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
                             let (state, cp_layout) = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))

@@ -708,17 +708,14 @@ impl StateLayout {
         CheckpointLayout::new(path, height, self.clone())
     }
 
-    /// Returns the untracked `CheckpointLayout` for the given height (if there is one).
-    pub fn checkpoint_untracked(
-        &self,
-        height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
-        CheckpointLayout::new_untracked(path, height)
+        let cp = CheckpointLayout::<ReadOnly>::new_untracked(path, height)?;
+        Ok(cp.is_checkpoint_verified())
     }
 
     fn increment_checkpoint_ref_counter(&self, height: Height) {
@@ -771,11 +768,7 @@ impl StateLayout {
         let checkpoint_heights = self
             .unfiltered_checkpoint_heights()?
             .into_iter()
-            .filter(|h| {
-                self.checkpoint_untracked(*h)
-                    .map(|cp| cp.is_checkpoint_verified())
-                    .unwrap_or(false)
-            })
+            .filter(|h| self.checkpoint_verification_status(*h).unwrap_or(false))
             .collect();
 
         Ok(checkpoint_heights)
