@@ -1001,6 +1001,12 @@ impl Validator {
                 .get_by_height(proposal.height())
                 .any(|proof| proof.signer == proposal.signature.signer)
             {
+                warn!(
+                    every_n_seconds => LOG_EVERY_N_SECONDS,
+                    self.log,
+                    "Ignoring equivocating blockmaker's proposal: {:?}",
+                    proposal,
+                );
                 continue;
             }
 
