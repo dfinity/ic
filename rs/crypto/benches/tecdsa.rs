@@ -85,7 +85,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
 }
 
 fn sign_share(signer: &Node, inputs: &ThresholdEcdsaSigInputs) -> ThresholdEcdsaSigShare {
-    signer.sign_share(inputs).unwrap_or_else(|error| {
+    signer.create_sig_share(inputs).unwrap_or_else(|error| {
         panic!(
             "failed to generate threshold ECDSA signature share for signer {:?} with inputs {:?}: {:?}",
             signer.id(),

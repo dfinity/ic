@@ -192,7 +192,7 @@ mock! {
     }
 
     impl ThresholdEcdsaSignerCspVault for LocalCspVault {
-        fn ecdsa_sign_share(
+        fn create_ecdsa_sig_share(
             &self,
             derivation_path: ExtendedDerivationPath,
             hashed_message: Vec<u8>,

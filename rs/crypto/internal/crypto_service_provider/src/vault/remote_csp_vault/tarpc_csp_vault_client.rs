@@ -749,7 +749,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
     #[instrument(skip_all)]
     #[inline]
-    fn ecdsa_sign_share(
+    fn create_ecdsa_sig_share(
         &self,
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
@@ -761,7 +761,7 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-        self.tokio_block_on(self.tarpc_csp_client.ecdsa_sign_share(
+        self.tokio_block_on(self.tarpc_csp_client.create_ecdsa_sig_share(
             context_with_timeout(self.rpc_timeout),
             derivation_path,
             ByteBuf::from(hashed_message),

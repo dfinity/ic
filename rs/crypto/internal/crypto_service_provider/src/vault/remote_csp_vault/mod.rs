@@ -219,9 +219,9 @@ pub trait TarpcCspVault {
         opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
 
-    // Corresponds to `ThresholdEcdsaSignerCspVault.ecdsa_sign_share`
+    // Corresponds to `ThresholdEcdsaSignerCspVault.create_ecdsa_sig_share`
     #[allow(clippy::too_many_arguments)]
-    async fn ecdsa_sign_share(
+    async fn create_ecdsa_sig_share(
         derivation_path: ExtendedDerivationPath,
         hashed_message: ByteBuf,
         nonce: Randomness,

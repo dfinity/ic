@@ -389,7 +389,7 @@ impl EcdsaSignerImpl {
     ) -> Result<IDkgMessage, CreateSigShareError> {
         match sig_inputs {
             ThresholdSigInputs::Ecdsa(inputs) => {
-                ThresholdEcdsaSigner::sign_share(&*self.crypto, inputs).map_or_else(
+                ThresholdEcdsaSigner::create_sig_share(&*self.crypto, inputs).map_or_else(
                     |err| Err(CreateSigShareError::Ecdsa(err)),
                     |share| {
                         let sig_share = EcdsaSigShare {
@@ -2012,7 +2012,7 @@ mod tests {
                     .map(|receiver| {
                         receiver.load_tecdsa_sig_transcripts(&sig_inputs);
                         let share = receiver
-                            .sign_share(&sig_inputs)
+                            .create_schnorr_sig_share(&sig_inputs)
                             .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
@@ -2150,7 +2150,7 @@ mod tests {
                     .map(|receiver| {
                         receiver.load_tschnorr_sig_transcripts(&sig_inputs);
                         let share = receiver
-                            .create_sig_share(&sig_inputs)
+                            .create_schnorr_sig_share(&sig_inputs)
                             .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),

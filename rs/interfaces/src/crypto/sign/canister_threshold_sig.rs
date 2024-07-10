@@ -553,7 +553,7 @@ pub trait ThresholdEcdsaSigner {
     ///   [`IDkgProtocol::load_transcript`] may be necessary.
     /// * [`ThresholdEcdsaSignShareError::TransientInternalError`] if there was a transient internal
     ///   error, e.g., when communicating with the remote CSP vault.
-    fn sign_share(
+    fn create_sig_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
     ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError>;

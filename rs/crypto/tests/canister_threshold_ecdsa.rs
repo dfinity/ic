@@ -75,7 +75,7 @@ mod sign_share {
                     .nodes
                     .random_filtered_by_receivers(inputs.receivers(), rng);
                 receiver.load_tecdsa_sig_transcripts(&inputs);
-                let result = receiver.sign_share(&inputs);
+                let result = receiver.create_sig_share(&inputs);
                 assert_matches!(result, Ok(_));
             }
         }
@@ -128,7 +128,7 @@ mod sign_share {
                 .with_rng(rng.fork())
                 .build();
 
-            let result = bad_crypto_component.sign_share(&inputs);
+            let result = bad_crypto_component.create_sig_share(&inputs);
             let err = result.unwrap_err();
             assert_matches!(err, ThresholdEcdsaSignShareError::NotAReceiver);
         }
@@ -178,7 +178,7 @@ mod sign_share {
                     .nodes
                     .random_filtered_by_receivers(inputs.receivers(), rng);
                 receiver.load_tecdsa_sig_transcripts(&inputs);
-                assert_matches!(receiver.sign_share(&inputs), Ok(_));
+                assert_matches!(receiver.create_sig_share(&inputs), Ok(_));
                 let another_key_transcript =
                     generate_key_transcript(&env, &dealers, &receivers, alg, rng);
                 let active_transcripts = hashset!(another_key_transcript);
@@ -187,7 +187,7 @@ mod sign_share {
                     Ok(())
                 );
 
-                let result = receiver.sign_share(&inputs);
+                let result = receiver.create_sig_share(&inputs);
                 assert_matches!(
                     result,
                     Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. })
@@ -337,7 +337,7 @@ mod sign_share {
                             .random_filtered_by_receivers(inputs.receivers(), &mut inner_rng);
                         receiver.load_tecdsa_sig_transcripts(&inputs);
                         assert_matches!(
-                            receiver.sign_share(&inputs),
+                            receiver.create_sig_share(&inputs),
                             Ok(_),
                             "{} failed to sign share with all transcripts loaded for state {:?}",
                             receiver.id(),
@@ -353,7 +353,7 @@ mod sign_share {
                             signer_state
                         );
 
-                        let result = receiver.sign_share(&inputs);
+                        let result = receiver.create_sig_share(&inputs);
 
                         if signer_state.should_be_able_to_sign_share() {
                             assert_matches!(
@@ -642,7 +642,7 @@ mod verify_sig_share {
             .random_filtered_by_receivers(inputs.receivers(), rng);
         signer.load_tecdsa_sig_transcripts(inputs);
         let sig_share = signer
-            .sign_share(inputs)
+            .create_sig_share(inputs)
             .expect("failed to generate sig share");
         (signer.id(), sig_share)
     }

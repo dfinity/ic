@@ -471,7 +471,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     }
 
     // `ThresholdEcdsaSignerCspVault`-methods
-    async fn ecdsa_sign_share(
+    async fn create_ecdsa_sig_share(
         self,
         _: context::Context,
         derivation_path: ExtendedDerivationPath,
@@ -486,7 +486,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         let vault = self.local_csp_vault;
         let job = move || {
-            vault.ecdsa_sign_share(
+            vault.create_ecdsa_sig_share(
                 derivation_path,
                 hashed_message.into_vec(),
                 nonce,

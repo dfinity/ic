@@ -836,7 +836,7 @@ pub enum IDkgCreateDealingVaultError {
 pub trait ThresholdEcdsaSignerCspVault {
     /// Generate a signature share.
     #[allow(clippy::too_many_arguments)]
-    fn ecdsa_sign_share(
+    fn create_ecdsa_sig_share(
         &self,
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,

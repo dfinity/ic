@@ -390,7 +390,7 @@ mod ecdsa_sign_share {
             *transcripts[i] = IDkgTranscriptInternalBytes::from(invalid_serialization.clone());
 
             assert_matches!(
-                vault.ecdsa_sign_share(
+                vault.create_ecdsa_sig_share(
                     parameters.derivation_path.clone(),
                     parameters.hashed_message.clone(),
                     parameters.nonce,
@@ -511,7 +511,7 @@ mod ecdsa_sign_share {
             &self,
             vault: &V,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-            vault.ecdsa_sign_share(
+            vault.create_ecdsa_sig_share(
                 self.derivation_path.clone(),
                 self.hashed_message.clone(),
                 self.nonce,

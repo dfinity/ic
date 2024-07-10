@@ -574,11 +574,11 @@ pub mod node {
     }
 
     impl ThresholdEcdsaSigner for Node {
-        fn sign_share(
+        fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
         ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            ThresholdEcdsaSigner::sign_share(self.crypto_component.as_ref(), inputs)
+            ThresholdEcdsaSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -627,7 +627,7 @@ pub mod node {
             &self,
             inputs: &ThresholdSchnorrSigInputs,
         ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
-            ThresholdSchnorrSigner::create_sig_share(self.crypto_component.as_ref(), inputs)
+            ThresholdSchnorrSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -2034,7 +2034,7 @@ pub fn ecdsa_sig_share_from_each_receiver(
         .filter_by_receivers(&inputs)
         .map(|receiver| {
             receiver.load_tecdsa_sig_transcripts(inputs);
-            let sig_share = ThresholdEcdsaSigner::sign_share(receiver, inputs)
+            let sig_share = ThresholdEcdsaSigner::create_sig_share(receiver, inputs)
                 .expect("failed to create sig share");
             (receiver.id(), sig_share)
         })

@@ -57,7 +57,7 @@ pub fn sign_share(
     let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytes();
     let key_times_lambda = q.key_times_lambda().transcript_to_bytes();
 
-    let internal_sig_share = vault.ecdsa_sign_share(
+    let internal_sig_share = vault.create_ecdsa_sig_share(
         inputs.derivation_path().clone(),
         inputs.hashed_message().to_vec(),
         *inputs.nonce(),
