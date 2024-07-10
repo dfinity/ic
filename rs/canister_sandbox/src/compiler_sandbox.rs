@@ -160,7 +160,7 @@ impl Drop for WasmCompilerProxy {
 pub fn compiler_sandbox_main() {
     let logger_config = ic_config::logger::Config {
         log_destination: ic_config::logger::LogDestination::Stderr,
-        level: slog::Level::Warning,
+        level: ic_config::logger::Level::Warning,
         ..Default::default()
     };
     let (log, _log_guard) = ic_logger::new_replica_logger_from_config(&logger_config);

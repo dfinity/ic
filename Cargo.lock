@@ -6160,7 +6160,6 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "serde",
- "slog",
  "tempfile",
 ]
 

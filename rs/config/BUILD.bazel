@@ -16,7 +16,6 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:json5",
         "@crate_index//:serde",
-        "@crate_index//:slog",
         "@crate_index//:tempfile",
     ],
 )

@@ -316,7 +316,7 @@ pub mod test {
             http_request_timeout_secs: 50,
             incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
-                level: slog::Level::Info,
+                level: ic_config::logger::Level::Info,
                 format: ic_config::logger::LogFormat::Json,
                 ..Default::default()
             },
