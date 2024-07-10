@@ -1005,7 +1005,7 @@ impl Validator {
                     every_n_seconds => LOG_EVERY_N_SECONDS,
                     self.log,
                     "Ignoring equivocating blockmaker's proposal: {:?}",
-                    proposal,
+                    proposal
                 );
                 continue;
             }
