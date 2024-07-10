@@ -425,5 +425,5 @@ send-rc-slack-alert-failure:
       if: steps.is-rc-branch.outputs.match == 'true'
       with:
         name: CI Main
-        conclusion: "failure"
+        conclusion: Failure
         branch: ${{ env.BRANCH_NAME }}
