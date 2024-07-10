@@ -424,7 +424,7 @@ jobs:
       - check-rc-branch
     if: ${{ needs.check-rc-branch.outputs.match == 'true' && failure() }}
     uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
-  with:
-    name: CI Main
-    conclusion: Failure
-    branch: ${{ env.BRANCH_NAME }}
+    with:
+      name: CI Main
+      conclusion: Failure
+      branch: ${{ env.BRANCH_NAME }}
