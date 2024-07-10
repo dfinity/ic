@@ -22,7 +22,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,
@@ -31,7 +31,6 @@ use ic_nns_common::{
 use ic_nns_constants::*;
 use ic_nns_governance::{
     governance::TimeWarp,
-    init::TEST_NEURON_1_ID,
     pb::v1::{Governance, NnsFunction, ProposalStatus},
 };
 use ic_nns_gtc::pb::v1::Gtc;

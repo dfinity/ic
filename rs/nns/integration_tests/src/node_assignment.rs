@@ -2,19 +2,16 @@ use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{
-        add_or_remove_node_provider::Change,
-        manage_neuron::{Command, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        proposal::Action,
-        AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
-        Proposal, ProposalStatus,
-    },
+use ic_nns_governance::pb::v1::{
+    add_or_remove_node_provider::Change,
+    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    proposal::Action,
+    AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
+    Proposal, ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

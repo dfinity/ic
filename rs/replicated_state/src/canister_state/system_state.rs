@@ -1066,16 +1066,15 @@ impl SystemState {
     ///
     /// On failure, returns the provided message along with a `StateError`:
     ///  * `QueueFull` if either the input queue or the matching output queue is
-    ///    full when pushing a `Request`; or when pushing a `Response` when none
-    ///    is expected.
+    ///    full when pushing a `Request`;
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
     ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
     ///    is larger than `subnet_available_memory`.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
-    ///  * `NonMatchingResponse` if the callback is not found or the respondent
-    ///    does not match.
+    ///  * `NonMatchingResponse` if no response is expected, the callback is not
+    ///    found or the respondent does not match.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,

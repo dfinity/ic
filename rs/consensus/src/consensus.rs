@@ -38,7 +38,7 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     dkg::DkgPool,
-    ecdsa::EcdsaPool,
+    ecdsa::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
@@ -53,8 +53,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageId, PriorityFn},
-    artifact_kind::ConsensusArtifact,
-    consensus::ConsensusMessageHashable,
+    consensus::{ConsensusMessage, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
@@ -147,7 +146,7 @@ impl ConsensusImpl {
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
-        ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+        idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -232,7 +231,7 @@ impl ConsensusImpl {
                 crypto.clone(),
                 payload_builder.clone(),
                 dkg_pool.clone(),
-                ecdsa_pool.clone(),
+                idkg_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -589,7 +588,7 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
+impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusMessage, Pool>
     for ConsensusGossipImpl
 {
     /// Return a priority function that matches the given consensus pool.
@@ -612,7 +611,7 @@ pub fn setup(
     canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
-    ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+    idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     message_routing: Arc<dyn MessageRouting>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -645,7 +644,7 @@ pub fn setup(
             canister_http_payload_builder,
             query_stats_payload_builder,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             dkg_key_manager,
             message_routing.clone(),
             state_manager,
@@ -702,7 +701,7 @@ mod tests {
             replica_config,
             state_manager,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             ..
         } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record)]);
         state_manager
@@ -731,7 +730,7 @@ mod tests {
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(
                 metrics_registry.clone(),
                 crypto,

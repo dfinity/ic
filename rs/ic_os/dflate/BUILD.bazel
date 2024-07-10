@@ -7,6 +7,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     crate_name = "dflate",
     deps = [
+        # Keep sorted.
         ":dflate_lib",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
@@ -23,6 +24,7 @@ rust_library(
     crate_name = "dflate",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:anyhow",
         "@crate_index//:libc",
         "@crate_index//:tar",

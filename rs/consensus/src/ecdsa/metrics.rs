@@ -231,14 +231,6 @@ impl EcdsaPayloadMetrics {
             "key_transcripts",
             payload.key_transcripts.len(),
         );
-        self.payload_metrics_set_without_key_id_label(
-            "key_transcripts_with_ecdsa_key_id",
-            payload
-                .key_transcripts
-                .values()
-                .filter(|k| k.deprecated_key_id.is_some())
-                .count(),
-        );
     }
 
     fn payload_metrics_set_without_key_id_label(&self, label: &str, value: usize) {
@@ -293,13 +285,13 @@ where
 }
 
 #[derive(Clone)]
-pub struct EcdsaComplaintMetrics {
+pub struct IDkgComplaintMetrics {
     pub on_state_change_duration: HistogramVec,
     pub complaint_metrics: IntCounterVec,
     pub complaint_errors: IntCounterVec,
 }
 
-impl EcdsaComplaintMetrics {
+impl IDkgComplaintMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(

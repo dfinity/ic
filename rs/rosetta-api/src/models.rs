@@ -24,48 +24,6 @@ pub struct ConstructionHashResponse {
     pub metadata: ObjectMap,
 }
 
-/// CallRequest is the input to the `/call`
-/// endpoint. It contains the method name the user wants to call and some parameters specific for the method call.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct CallRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "method_name")]
-    pub method_name: String,
-
-    #[serde(rename = "parameters")]
-    pub parameters: ObjectMap,
-}
-
-impl CallRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        method_name: String,
-        parameters: ObjectMap,
-    ) -> CallRequest {
-        CallRequest {
-            network_identifier,
-            method_name,
-            parameters,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct CallResponse {
-    #[serde(rename = "result")]
-    pub result: ObjectMap,
-}
-
-impl CallResponse {
-    pub fn new(result: ObjectMap) -> CallResponse {
-        CallResponse { result }
-    }
-}
-
 /// The type (encoded as CBOR) returned by /construction/combine, containing the
 /// IC calls to submit the transaction and to check the result.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

@@ -5,6 +5,7 @@ package(default_visibility = ["//rs/nervous_system:default_visibility"])
 DEPENDENCIES = []  # Nice.
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:maplit",
 ]
 

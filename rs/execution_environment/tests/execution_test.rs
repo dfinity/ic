@@ -7,8 +7,8 @@ use ic_config::{
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload, SignWithECDSAArgs,
-    UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -1541,7 +1541,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
             subnet_config,
             HypervisorConfig::default(),
         )))
-        .with_ecdsa_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let canister_id = env
         .install_canister_with_cycles(

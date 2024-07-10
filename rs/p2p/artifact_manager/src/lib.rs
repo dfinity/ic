@@ -9,7 +9,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::*, artifact_kind::*};
+use ic_types::{artifact::*, messages::SignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
     sync::{
@@ -23,6 +23,7 @@ use tokio::{
     sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
     time::timeout,
 };
+use tracing::instrument;
 
 type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
 
@@ -83,7 +84,7 @@ impl ArtifactProcessorMetrics {
 }
 
 /// An abstraction of processing changes for each artifact client.
-pub trait ArtifactProcessor<Artifact: ArtifactKind>: Send {
+pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
     /// Process changes to the client's state, which includes but not
     /// limited to:
     ///   - newly arrived artifacts (passed as input parameters)
@@ -100,8 +101,8 @@ pub trait ArtifactProcessor<Artifact: ArtifactKind>: Send {
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        new_artifact_events: Vec<UnvalidatedArtifactMutation<Artifact>>,
-    ) -> ChangeResult<Artifact>;
+        new_artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
+    ) -> ChangeResult<A>;
 }
 
 /// Manages the life cycle of the client specific artifact processor thread.
@@ -130,17 +131,13 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
-pub fn run_artifact_processor<Artifact: ArtifactKind + 'static>(
+pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
-    initial_artifacts: Vec<Artifact::Message>,
-) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>)
-where
-    <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
-    <Artifact as ic_types::artifact::ArtifactKind>::Id: Send,
-{
+    initial_artifacts: Vec<Artifact>,
+) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
     // Making this channel bounded can be problematic since we don't have true multiplexing
     // of P2P messages.
     // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
@@ -154,7 +151,7 @@ where
     // Spawn the processor thread
     let shutdown_cl = shutdown.clone();
     let handle = ThreadBuilder::new()
-        .name(format!("{}_Processor", Artifact::TAG))
+        .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
             for artifact in initial_artifacts {
                 let _ =
@@ -168,7 +165,7 @@ where
                 client,
                 send_advert,
                 receiver,
-                ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
+                ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string()),
                 shutdown_cl,
             );
         })
@@ -181,7 +178,7 @@ where
 }
 
 // The artifact processor thread loop
-fn process_messages<Artifact: ArtifactKind + 'static>(
+fn process_messages<Artifact: IdentifiableArtifact + 'static>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
@@ -247,21 +244,21 @@ fn process_messages<Artifact: ArtifactKind + 'static>(
 const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 pub fn create_ingress_handlers<
-    PoolIngress: MutablePool<IngressArtifact> + Send + Sync + ValidatedPoolReader<IngressArtifact> + 'static,
+    PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
-    send_advert: Sender<ArtifactProcessorEvent<IngressArtifact>>,
+    send_advert: Sender<ArtifactProcessorEvent<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
         dyn ChangeSetProducer<
                 PoolIngress,
-                ChangeSet = <PoolIngress as MutablePool<IngressArtifact>>::ChangeSet,
+                ChangeSet = <PoolIngress as MutablePool<SignedIngress>>::ChangeSet,
             > + Send
             + Sync,
     >,
     metrics_registry: MetricsRegistry,
 ) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Box<dyn JoinGuard>,
 ) {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
@@ -276,7 +273,7 @@ pub fn create_ingress_handlers<
 }
 
 pub fn create_artifact_handler<
-    Artifact: ArtifactKind + Send + Sync,
+    Artifact: IdentifiableArtifact + Send + Sync + 'static,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
     C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
 >(
@@ -301,14 +298,14 @@ pub fn create_artifact_handler<
     (sender, jh)
 }
 
-pub struct Processor<A: ArtifactKind + Send, P: MutablePool<A>, C> {
+pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
     pool: Arc<RwLock<P>>,
     change_set_producer: C,
     unused: std::marker::PhantomData<A>,
 }
 
 impl<
-        A: ArtifactKind + Send,
+        A: IdentifiableArtifact + Send,
         P: MutablePool<A>,
         C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
     > Processor<A, P, C>
@@ -323,11 +320,12 @@ impl<
 }
 
 impl<
-        A: ArtifactKind + Send,
+        A: IdentifiableArtifact + Send,
         P: MutablePool<A> + Send + Sync + 'static,
         C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
     > ArtifactProcessor<A> for Processor<A, P, C>
 {
+    #[instrument(skip_all)]
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
@@ -357,23 +355,23 @@ impl<
 }
 
 /// The ingress `OnStateChange` client.
-pub(crate) struct IngressProcessor<P: MutablePool<IngressArtifact>> {
+pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
     client: Arc<
-        dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<IngressArtifact>>::ChangeSet>
+        dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
             + Send
             + Sync,
     >,
 }
 
-impl<P: MutablePool<IngressArtifact>> IngressProcessor<P> {
+impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
     pub fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
-            dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<IngressArtifact>>::ChangeSet>
+            dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
                 + Send
                 + Sync,
         >,
@@ -385,15 +383,16 @@ impl<P: MutablePool<IngressArtifact>> IngressProcessor<P> {
     }
 }
 
-impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
+impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<SignedIngress>
     for IngressProcessor<P>
 {
     /// The method processes changes in the ingress pool.
+    #[instrument(skip_all)]
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactMutation<IngressArtifact>>,
-    ) -> ChangeResult<IngressArtifact> {
+        artifact_events: Vec<UnvalidatedArtifactMutation<SignedIngress>>,
+    ) -> ChangeResult<SignedIngress> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact_event in artifact_events {
@@ -424,30 +423,44 @@ mod tests {
 
     use ic_interfaces::time_source::SysTimeSource;
     use ic_metrics::MetricsRegistry;
-    use ic_types::artifact::{ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation};
+    use ic_types::artifact::UnvalidatedArtifactMutation;
 
     use crate::{run_artifact_processor, ArtifactProcessor};
 
     #[test]
     fn send_initial_artifacts() {
-        struct DummyArtifact;
-        impl ArtifactKind for DummyArtifact {
-            const TAG: ic_types::artifact::ArtifactTag = ArtifactTag::ConsensusArtifact;
-            type PbId = ();
-            type PbIdError = Infallible;
-            type Id = ();
-            type PbMessage = u64;
-            type PbMessageError = Infallible;
-            type Message = u64;
-            type PbAttribute = ();
-            type PbAttributeError = Infallible;
-            type Attribute = ();
-            fn message_to_advert(
-                _: &<Self as ArtifactKind>::Message,
-            ) -> ic_types::artifact::Advert<Self> {
-                todo!()
+        #[derive(Debug, PartialEq, Eq)]
+        struct DummyArtifact(u64);
+
+        impl From<u64> for DummyArtifact {
+            fn from(value: u64) -> Self {
+                Self(value)
             }
         }
+
+        impl From<DummyArtifact> for u64 {
+            fn from(value: DummyArtifact) -> Self {
+                value.0
+            }
+        }
+
+        impl IdentifiableArtifact for DummyArtifact {
+            const NAME: &'static str = "dummy";
+            type Id = ();
+            type Attribute = ();
+            fn id(&self) -> Self::Id {}
+            fn attribute(&self) -> Self::Attribute {}
+        }
+
+        impl PbArtifact for DummyArtifact {
+            type PbId = ();
+            type PbIdError = Infallible;
+            type PbMessage = u64;
+            type PbMessageError = Infallible;
+            type PbAttribute = ();
+            type PbAttributeError = Infallible;
+        }
+
         struct DummyProcessor;
         impl ArtifactProcessor<DummyArtifact> for DummyProcessor {
             fn process_changes(
@@ -470,13 +483,13 @@ mod tests {
             MetricsRegistry::default(),
             Box::new(DummyProcessor),
             send_tx,
-            (0..10).collect(),
+            (0..10).map(Into::into).collect(),
         );
 
         for i in 0..10 {
             match send_rx.blocking_recv().unwrap() {
                 ArtifactProcessorEvent::Artifact(a) => {
-                    assert_eq!(a.artifact, i);
+                    assert_eq!(a.artifact.0, i);
                 }
                 _ => panic!("initial events are not purge"),
             }

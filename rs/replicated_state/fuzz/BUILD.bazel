@@ -8,6 +8,7 @@ rust_fuzz_test_binary_afl(
         "fuzz_targets/write_overlays_and_verify_afl.rs",
     ],
     deps = [
+        # Keep sorted.
         "//rs/replicated_state",
         "@crate_index//:libfuzzer-sys",
     ],

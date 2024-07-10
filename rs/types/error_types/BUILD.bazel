@@ -9,6 +9,7 @@ rust_library(
     proc_macro_deps = ["@crate_index//:strum_macros"],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/utils",
         "@crate_index//:serde",

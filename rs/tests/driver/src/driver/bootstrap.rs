@@ -1,7 +1,7 @@
 use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-    farm::{Farm, FarmResult, FileId},
+    farm::{AttachImageSpec, Farm, FarmResult, FileId},
     ic::{InternetComputer, Node},
     nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
     node_software_version::NodeSoftwareVersion,
@@ -306,12 +306,16 @@ pub fn setup_and_start_vms(
                     block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {
-                    let image_id = upload_config_disk_image(&group_name, &node, &t_farm)?;
+                    let image_spec = AttachImageSpec::new(upload_config_disk_image(
+                        &group_name,
+                        &node,
+                        &t_farm,
+                    )?);
                     t_farm.attach_disk_images(
                         &group_name,
                         &vm_name,
                         "usb-storage",
-                        vec![image_id],
+                        vec![image_spec],
                     )?;
                     t_farm.start_vm(&group_name, &vm_name)?;
                 }
@@ -360,16 +364,16 @@ pub fn setup_and_start_nested_vms(
             let configured_image =
                 configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key)?;
 
-            let configured_image_id = t_farm.upload_file(
+            let configured_image_spec = AttachImageSpec::new(t_farm.upload_file(
                 &t_group_name,
                 configured_image,
                 NESTED_CONFIGURED_IMAGE_PATH,
-            )?;
+            )?);
             t_farm.attach_disk_images(
                 &t_group_name,
                 &t_vm_name,
                 "usb-storage",
-                vec![configured_image_id],
+                vec![configured_image_spec],
             )?;
             t_farm.start_vm(&t_group_name, &t_vm_name)?;
 

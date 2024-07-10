@@ -1,13 +1,13 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_registry_keys::make_hostos_version_key;
 use ic_registry_transport::{delete, insert};
+use prost::Message;
+use serde::Serialize;
 
 use std::collections::BTreeSet;
 
@@ -61,13 +61,14 @@ impl Registry {
             // Register the new version (that is, insert the new HostosVersionRecord)
             mutations.push(insert(
                 version_key,
-                encode_or_panic(&HostosVersionRecord {
+                HostosVersionRecord {
                     release_package_urls: payload.release_package_urls,
                     release_package_sha256_hex: payload.release_package_sha256_hex.unwrap_or_else(
                         || panic!("{LOG_PREFIX}Release package hash has to be provided"),
                     ),
                     hostos_version_id: version_id,
-                }),
+                }
+                .encode_to_vec(),
             ));
         }
 

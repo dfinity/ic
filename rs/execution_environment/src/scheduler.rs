@@ -1698,26 +1698,13 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching quadruples.
         {
-            // TODO(EXC-1645): temporarily take sign_with_ecdsa contexts to update inner data.
-            // Remove after full migration to `sign_with_threshold_contexts` field.
-            let mut sign_with_ecdsa_contexts = state
+            let contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .take_sign_with_ecdsa_contexts();
-
-            let contexts = sign_with_ecdsa_contexts
+                .sign_with_threshold_contexts
                 .values_mut()
-                .map(SignatureRequestContext::Ecdsa)
-                .chain(
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .sign_with_threshold_contexts
-                        .values_mut()
-                        .map(SignatureRequestContext::Generic),
-                )
                 .collect();
 
             update_signature_request_contexts(
@@ -1728,11 +1715,6 @@ impl Scheduler for SchedulerImpl {
                 registry_settings,
                 self.metrics.as_ref(),
             );
-
-            state
-                .metadata
-                .subnet_call_context_manager
-                .put_sign_with_ecdsa_contexts(sign_with_ecdsa_contexts);
         }
 
         // Finalization.
@@ -2289,21 +2271,6 @@ fn observe_replicated_state_metrics(
     metrics
         .stop_canister_calls_without_call_id
         .set(num_stop_canister_calls_without_call_id as i64);
-
-    // TODO(EXC-1645): temporary code to record the metrics during migration.
-    metrics.sign_with_ecdsa_contexts_len.set(
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts_len() as i64,
-    );
-    // TODO(EXC-1645): temporary code to record the metrics during migration.
-    metrics.sign_with_threshold_contexts_len.set(
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts_len() as i64,
-    );
 }
 
 fn join_consumed_cycles_by_use_case(
@@ -2389,7 +2356,6 @@ fn get_instructions_limits_for_subnet_message(
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
-            | ComputeInitialEcdsaDealings
             | ComputeInitialIDkgDealings
             | SchnorrPublicKey
             | SignWithSchnorr

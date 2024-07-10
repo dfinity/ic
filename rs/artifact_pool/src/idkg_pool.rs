@@ -1,14 +1,14 @@
-//! ECDSA artifact pool implementation.
+//! IDKG artifact pool implementation.
 //!
-//! 1. EcdsaPoolImpl implements the artifact pool. It is made of
-//! two EcdsaPoolSection, one each for the validated/unvalidated
+//! 1. IDkgPoolImpl implements the artifact pool. It is made of
+//! two IDkgPoolSection, one each for the validated/unvalidated
 //! sections.
-//! 2. InMemoryEcdsaPoolSection is the in memory implementation of
-//! EcdsaPoolSection. This is a collection of individual EcdsaObjectPools,
-//! one for every type of EcdsaMessage (dealing, dealing support, etc)
+//! 2. InMemoryIDkgPoolSection is the in memory implementation of
+//! IDkgPoolSection. This is a collection of individual IDkgObjectPools,
+//! one for every type of IDkgMessage (dealing, dealing support, etc)
 
 use crate::{
-    metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    metrics::{IDkgPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
     IntoInner,
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
@@ -17,44 +17,43 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_interfaces::{
     ecdsa::{
-        EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
-        EcdsaPoolSectionOps, MutableEcdsaPoolSection,
+        IDkgChangeAction, IDkgChangeSet, IDkgPool, IDkgPoolSection, IDkgPoolSectionOp,
+        IDkgPoolSectionOps, MutableIDkgPoolSection,
     },
     time_source::TimeSource,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
     idkg::{
-        EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
-        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, SchnorrSigShare,
+        EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
+        SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
     },
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-use ic_types::{artifact::EcdsaMessageId, consensus::idkg::SigShare};
+use ic_types::{artifact::IDkgMessageId, consensus::idkg::SigShare};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use strum::IntoEnumIterator;
 
-const POOL_ECDSA: &str = "ecdsa";
+const POOL_IDKG: &str = "idkg";
 
-/// Workaround for `EcdsaMessage` not implementing `CountBytes`.
+/// Workaround for `IDkgMessage` not implementing `CountBytes`.
 #[allow(dead_code)]
 const MESSAGE_SIZE_BYTES: usize = 0;
 
 /// The per-artifact type object pool
-struct EcdsaObjectPool {
-    objects: BTreeMap<EcdsaMessageId, EcdsaMessage>,
-    metrics: EcdsaPoolMetrics,
-    object_type: EcdsaMessageType,
+struct IDkgObjectPool {
+    objects: BTreeMap<IDkgMessageId, IDkgMessage>,
+    metrics: IDkgPoolMetrics,
+    object_type: IDkgMessageType,
 }
 
-impl EcdsaObjectPool {
-    fn new(object_type: EcdsaMessageType, metrics: EcdsaPoolMetrics) -> Self {
+impl IDkgObjectPool {
+    fn new(object_type: IDkgMessageType, metrics: IDkgPoolMetrics) -> Self {
         Self {
             objects: BTreeMap::new(),
             metrics,
@@ -62,19 +61,19 @@ impl EcdsaObjectPool {
         }
     }
 
-    fn insert_object(&mut self, message: EcdsaMessage) {
-        assert_eq!(EcdsaMessageType::from(&message), self.object_type);
-        let key = EcdsaArtifactId::from(&message);
+    fn insert_object(&mut self, message: IDkgMessage) {
+        assert_eq!(IDkgMessageType::from(&message), self.object_type);
+        let key = IDkgArtifactId::from(&message);
         if self.objects.insert(key, message).is_none() {
             self.metrics.observe_insert(self.object_type.as_str());
         }
     }
 
-    fn get_object(&self, key: &EcdsaMessageId) -> Option<EcdsaMessage> {
+    fn get_object(&self, key: &IDkgMessageId) -> Option<IDkgMessage> {
         self.objects.get(key).cloned()
     }
 
-    fn remove_object(&mut self, key: &EcdsaMessageId) -> bool {
+    fn remove_object(&mut self, key: &IDkgMessageId) -> bool {
         if self.objects.remove(key).is_some() {
             self.metrics.observe_remove(self.object_type.as_str());
             true
@@ -83,24 +82,24 @@ impl EcdsaObjectPool {
         }
     }
 
-    fn iter<T: TryFrom<EcdsaMessage>>(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, T)> + '_>
+    fn iter<T: TryFrom<IDkgMessage>>(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
-        <T as TryFrom<EcdsaMessage>>::Error: Debug,
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
         Box::new(self.objects.iter().map(|(key, object)| {
             let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
-                panic!("Failed to convert EcdsaMessage to inner type: {:?}", err)
+                panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
             });
             (key.clone(), inner)
         }))
     }
 
-    fn iter_by_prefix<T: TryFrom<EcdsaMessage>>(
+    fn iter_by_prefix<T: TryFrom<IDkgMessage>>(
         &self,
-        prefix: EcdsaPrefixOf<T>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, T)> + '_>
+        prefix: IDkgPrefixOf<T>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
-        <T as TryFrom<EcdsaMessage>>::Error: Debug,
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
         // TODO: currently uses a simple O(n) scheme: iterate to the first match for the prefix
         // and take the following matching items. This avoids any complex two level maps/trie style
@@ -121,7 +120,7 @@ impl EcdsaObjectPool {
                 .take_while(move |(key, _)| key.prefix() == prefix_cl)
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
-                        panic!("Failed to convert EcdsaMessage to inner type: {:?}", err)
+                        panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
                     });
                     (key.clone(), inner)
                 }),
@@ -129,29 +128,29 @@ impl EcdsaObjectPool {
     }
 }
 
-/// The InMemoryEcdsaPoolSection is just a collection of per-type
+/// The InMemoryIDkgPoolSection is just a collection of per-type
 /// object pools. The main role is to route the operations
 /// to the appropriate object pool.
-struct InMemoryEcdsaPoolSection {
+struct InMemoryIDkgPoolSection {
     // Per message type artifact map
-    object_pools: Vec<(EcdsaMessageType, EcdsaObjectPool)>,
+    object_pools: Vec<(IDkgMessageType, IDkgObjectPool)>,
 }
 
-impl InMemoryEcdsaPoolSection {
+impl InMemoryIDkgPoolSection {
     fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
-        let metrics = EcdsaPoolMetrics::new(metrics_registry, pool, pool_type);
+        let metrics = IDkgPoolMetrics::new(metrics_registry, pool, pool_type);
         // Set up the per message type object pools
         let mut object_pools = Vec::new();
-        for message_type in EcdsaMessageType::iter() {
+        for message_type in IDkgMessageType::iter() {
             object_pools.push((
                 message_type,
-                EcdsaObjectPool::new(message_type, metrics.clone()),
+                IDkgObjectPool::new(message_type, metrics.clone()),
             ));
         }
         Self { object_pools }
     }
 
-    fn get_pool(&self, message_type: EcdsaMessageType) -> &EcdsaObjectPool {
+    fn get_pool(&self, message_type: IDkgMessageType) -> &IDkgObjectPool {
         self.object_pools
             .iter()
             .find(|(pool_type, _)| *pool_type == message_type)
@@ -159,7 +158,7 @@ impl InMemoryEcdsaPoolSection {
             .unwrap()
     }
 
-    fn get_pool_mut(&mut self, message_type: EcdsaMessageType) -> &mut EcdsaObjectPool {
+    fn get_pool_mut(&mut self, message_type: IDkgMessageType) -> &mut IDkgObjectPool {
         self.object_pools
             .iter_mut()
             .find(|(pool_type, _)| *pool_type == message_type)
@@ -167,96 +166,94 @@ impl InMemoryEcdsaPoolSection {
             .unwrap()
     }
 
-    fn insert_object(&mut self, message: EcdsaMessage) {
-        let object_pool = self.get_pool_mut(EcdsaMessageType::from(&message));
+    fn insert_object(&mut self, message: IDkgMessage) {
+        let object_pool = self.get_pool_mut(IDkgMessageType::from(&message));
         object_pool.insert_object(message);
     }
 
-    fn get_object(&self, id: &EcdsaMessageId) -> Option<EcdsaMessage> {
-        let object_pool = self.get_pool(EcdsaMessageType::from(id));
+    fn get_object(&self, id: &IDkgMessageId) -> Option<IDkgMessage> {
+        let object_pool = self.get_pool(IDkgMessageType::from(id));
         object_pool.get_object(id)
     }
 
-    fn remove_object(&mut self, id: &EcdsaMessageId) -> bool {
-        let object_pool = self.get_pool_mut(EcdsaMessageType::from(id));
+    fn remove_object(&mut self, id: &IDkgMessageId) -> bool {
+        let object_pool = self.get_pool_mut(IDkgMessageType::from(id));
         object_pool.remove_object(id)
     }
 }
 
-impl EcdsaPoolSection for InMemoryEcdsaPoolSection {
-    fn contains(&self, msg_id: &EcdsaMessageId) -> bool {
+impl IDkgPoolSection for InMemoryIDkgPoolSection {
+    fn contains(&self, msg_id: &IDkgMessageId) -> bool {
         self.get_object(msg_id).is_some()
     }
 
-    fn get(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
+    fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
         self.get_object(msg_id)
     }
 
-    fn signed_dealings(
-        &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::Dealing);
+    fn signed_dealings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Dealing);
         object_pool.iter()
     }
 
     fn signed_dealings_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<SignedIDkgDealing>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::Dealing);
+        prefix: IDkgPrefixOf<SignedIDkgDealing>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Dealing);
         object_pool.iter_by_prefix(prefix)
     }
 
     fn dealing_support(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::DealingSupport);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
         object_pool.iter()
     }
 
     fn dealing_support_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<IDkgDealingSupport>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::DealingSupport);
+        prefix: IDkgPrefixOf<IDkgDealingSupport>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
         object_pool.iter_by_prefix(prefix)
     }
 
     fn ecdsa_signature_shares(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::EcdsaSigShare);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
         object_pool.iter()
     }
 
     fn ecdsa_signature_shares_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaSigShare>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::EcdsaSigShare);
+        prefix: IDkgPrefixOf<EcdsaSigShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
         object_pool.iter_by_prefix(prefix)
     }
 
     fn schnorr_signature_shares(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::SchnorrSigShare);
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
         object_pool.iter()
     }
 
     fn schnorr_signature_shares_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<SchnorrSigShare>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::SchnorrSigShare);
+        prefix: IDkgPrefixOf<SchnorrSigShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
         object_pool.iter_by_prefix(prefix)
     }
 
-    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, SigShare)> + '_> {
-        let ecdsa_pool = self.get_pool(EcdsaMessageType::EcdsaSigShare);
-        let schnorr_pool = self.get_pool(EcdsaMessageType::SchnorrSigShare);
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
+        let idkg_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
+        let schnorr_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
         Box::new(
-            ecdsa_pool
+            idkg_pool
                 .iter()
                 .map(|(id, share)| (id, SigShare::Ecdsa(share)))
                 .chain(
@@ -267,94 +264,94 @@ impl EcdsaPoolSection for InMemoryEcdsaPoolSection {
         )
     }
 
-    fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::Complaint);
+    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Complaint);
         object_pool.iter()
     }
 
     fn complaints_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaComplaint>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::Complaint);
+        prefix: IDkgPrefixOf<SignedIDkgComplaint>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Complaint);
         object_pool.iter_by_prefix(prefix)
     }
 
-    fn openings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::Opening);
+    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Opening);
         object_pool.iter()
     }
 
     fn openings_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaOpening>,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::Opening);
+        prefix: IDkgPrefixOf<SignedIDkgOpening>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Opening);
         object_pool.iter_by_prefix(prefix)
     }
 }
 
-impl MutableEcdsaPoolSection for InMemoryEcdsaPoolSection {
-    fn mutate(&mut self, ops: EcdsaPoolSectionOps) {
+impl MutableIDkgPoolSection for InMemoryIDkgPoolSection {
+    fn mutate(&mut self, ops: IDkgPoolSectionOps) {
         for op in ops.ops {
             match op {
-                EcdsaPoolSectionOp::Insert(message) => {
+                IDkgPoolSectionOp::Insert(message) => {
                     self.insert_object(message);
                 }
-                EcdsaPoolSectionOp::Remove(id) => {
+                IDkgPoolSectionOp::Remove(id) => {
                     self.remove_object(&id);
                 }
             }
         }
     }
 
-    fn as_pool_section(&self) -> &dyn EcdsaPoolSection {
+    fn as_pool_section(&self) -> &dyn IDkgPoolSection {
         self
     }
 }
 
 /// The artifact pool implementation.
-pub struct EcdsaPoolImpl {
-    validated: Box<dyn MutableEcdsaPoolSection>,
-    unvalidated: Box<dyn MutableEcdsaPoolSection>,
-    stats: Box<dyn EcdsaStats>,
+pub struct IDkgPoolImpl {
+    validated: Box<dyn MutableIDkgPoolSection>,
+    unvalidated: Box<dyn MutableIDkgPoolSection>,
+    stats: Box<dyn IDkgStats>,
     invalidated_artifacts: IntCounter,
     log: ReplicaLogger,
 }
 
-impl EcdsaPoolImpl {
+impl IDkgPoolImpl {
     pub fn new(
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-        stats: Box<dyn EcdsaStats>,
+        stats: Box<dyn IDkgStats>,
     ) -> Self {
         let validated = match config.persistent_pool_backend {
-            PersistentPoolBackend::Lmdb(lmdb_config) => Box::new(
-                crate::lmdb_pool::PersistentEcdsaPoolSection::new_ecdsa_pool(
+            PersistentPoolBackend::Lmdb(lmdb_config) => {
+                Box::new(crate::lmdb_pool::PersistentIDkgPoolSection::new_idkg_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
                     log.clone(),
                     metrics_registry.clone(),
-                    POOL_ECDSA,
+                    POOL_IDKG,
                     POOL_TYPE_VALIDATED,
-                ),
-            ) as Box<_>,
-            _ => Box::new(InMemoryEcdsaPoolSection::new(
+                )) as Box<_>
+            }
+            _ => Box::new(InMemoryIDkgPoolSection::new(
                 metrics_registry.clone(),
-                POOL_ECDSA,
+                POOL_IDKG,
                 POOL_TYPE_VALIDATED,
             )) as Box<_>,
         };
         Self {
             invalidated_artifacts: metrics_registry.int_counter(
-                "ecdsa_invalidated_artifacts",
-                "The number of invalidated ECDSA artifacts",
+                "idkg_invalidated_artifacts",
+                "The number of invalidated IDKG artifacts",
             ),
             validated,
-            unvalidated: Box::new(InMemoryEcdsaPoolSection::new(
+            unvalidated: Box::new(InMemoryIDkgPoolSection::new(
                 metrics_registry,
-                POOL_ECDSA,
+                POOL_IDKG,
                 POOL_TYPE_UNVALIDATED,
             )),
             stats,
@@ -394,7 +391,7 @@ impl EcdsaPoolImpl {
             );
 
             self.insert(UnvalidatedArtifact {
-                message: EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
+                message: IDkgMessage::Dealing(signed_dealing.clone()),
                 peer_id: signed_dealing.dealer_id(),
                 timestamp: time_source.get_relative_time(),
             })
@@ -402,75 +399,75 @@ impl EcdsaPoolImpl {
     }
 }
 
-impl EcdsaPool for EcdsaPoolImpl {
-    fn validated(&self) -> &dyn EcdsaPoolSection {
+impl IDkgPool for IDkgPoolImpl {
+    fn validated(&self) -> &dyn IDkgPoolSection {
         self.validated.as_pool_section()
     }
 
-    fn unvalidated(&self) -> &dyn EcdsaPoolSection {
+    fn unvalidated(&self) -> &dyn IDkgPoolSection {
         self.unvalidated.as_pool_section()
     }
 
-    fn stats(&self) -> &dyn EcdsaStats {
+    fn stats(&self) -> &dyn IDkgStats {
         self.stats.as_ref()
     }
 }
 
-impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
-    type ChangeSet = EcdsaChangeSet;
+impl MutablePool<IDkgMessage> for IDkgPoolImpl {
+    type ChangeSet = IDkgChangeSet;
 
-    fn insert(&mut self, artifact: UnvalidatedArtifact<EcdsaMessage>) {
-        let mut ops = EcdsaPoolSectionOps::new();
+    fn insert(&mut self, artifact: UnvalidatedArtifact<IDkgMessage>) {
+        let mut ops = IDkgPoolSectionOps::new();
         ops.insert(artifact.into_inner());
         self.unvalidated.mutate(ops);
     }
 
-    fn remove(&mut self, id: &EcdsaArtifactId) {
-        let mut ops = EcdsaPoolSectionOps::new();
+    fn remove(&mut self, id: &IDkgArtifactId) {
+        let mut ops = IDkgPoolSectionOps::new();
         ops.remove(id.clone());
         self.unvalidated.mutate(ops);
     }
 
-    fn apply_changes(&mut self, change_set: EcdsaChangeSet) -> ChangeResult<EcdsaArtifact> {
-        let mut unvalidated_ops = EcdsaPoolSectionOps::new();
-        let mut validated_ops = EcdsaPoolSectionOps::new();
+    fn apply_changes(&mut self, change_set: IDkgChangeSet) -> ChangeResult<IDkgMessage> {
+        let mut unvalidated_ops = IDkgPoolSectionOps::new();
+        let mut validated_ops = IDkgPoolSectionOps::new();
         let changed = !change_set.is_empty();
         let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
             match action {
-                EcdsaChangeAction::AddToValidated(message) => {
+                IDkgChangeAction::AddToValidated(message) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
                         artifact: message.clone(),
                         is_latency_sensitive: true,
                     });
                     validated_ops.insert(message);
                 }
-                EcdsaChangeAction::MoveToValidated(message) => {
+                IDkgChangeAction::MoveToValidated(message) => {
                     match &message {
-                        EcdsaMessage::EcdsaDealingSupport(_)
-                        | EcdsaMessage::EcdsaSigShare(_)
-                        | EcdsaMessage::SchnorrSigShare(_)
-                        | EcdsaMessage::EcdsaSignedDealing(_) => (),
+                        IDkgMessage::DealingSupport(_)
+                        | IDkgMessage::EcdsaSigShare(_)
+                        | IDkgMessage::SchnorrSigShare(_)
+                        | IDkgMessage::Dealing(_) => (),
                         _ => artifacts_with_opt.push(ArtifactWithOpt {
                             artifact: message.clone(),
                             // relayed
                             is_latency_sensitive: false,
                         }),
                     }
-                    unvalidated_ops.remove(EcdsaArtifactId::from(&message));
+                    unvalidated_ops.remove(IDkgArtifactId::from(&message));
                     validated_ops.insert(message);
                 }
-                EcdsaChangeAction::RemoveValidated(msg_id) => {
+                IDkgChangeAction::RemoveValidated(msg_id) => {
                     purged.push(msg_id.clone());
                     validated_ops.remove(msg_id);
                 }
-                EcdsaChangeAction::RemoveUnvalidated(msg_id) => {
+                IDkgChangeAction::RemoveUnvalidated(msg_id) => {
                     unvalidated_ops.remove(msg_id);
                 }
-                EcdsaChangeAction::HandleInvalid(msg_id, msg) => {
+                IDkgChangeAction::HandleInvalid(msg_id, msg) => {
                     self.invalidated_artifacts.inc();
-                    warn!(self.log, "Invalid ECDSA artifact ({:?}): {:?}", msg, msg_id);
+                    warn!(self.log, "Invalid IDKG artifact ({:?}): {:?}", msg, msg_id);
                     if self.unvalidated.as_pool_section().contains(&msg_id) {
                         unvalidated_ops.remove(msg_id);
                     } else if self.validated.as_pool_section().contains(&msg_id) {
@@ -496,12 +493,12 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
     }
 }
 
-impl ValidatedPoolReader<EcdsaArtifact> for EcdsaPoolImpl {
-    fn get(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
+impl ValidatedPoolReader<IDkgMessage> for IDkgPoolImpl {
+    fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = EcdsaMessage>> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = IDkgMessage>> {
         Box::new(std::iter::empty())
     }
 }
@@ -512,24 +509,24 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::{fake::*, EcdsaStatsNoOp};
+    use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{
         subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6,
     };
-    use ic_types::artifact::ArtifactKind;
-    use ic_types::consensus::idkg::{dealing_support_prefix, EcdsaObject};
+    use ic_types::artifact::IdentifiableArtifact;
+    use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::{signature::BasicSignature, time::UNIX_EPOCH, Height, NodeId};
     use std::collections::BTreeSet;
 
-    fn create_ecdsa_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> EcdsaPoolImpl {
-        EcdsaPoolImpl::new(
+    fn create_idkg_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> IDkgPoolImpl {
+        IDkgPoolImpl::new(
             config,
             log,
             MetricsRegistry::new(),
-            Box::new(EcdsaStatsNoOp {}),
+            Box::new(IDkgStatsNoOp {}),
         )
     }
 
@@ -548,9 +545,9 @@ mod tests {
 
     // Checks if the validated/unvalidated pool members are as expected
     fn check_state(
-        ecdsa_pool: &EcdsaPoolImpl,
-        unvalidated_expected: &[EcdsaMessageId],
-        validated_expected: &[EcdsaMessageId],
+        idkg_pool: &IDkgPoolImpl,
+        unvalidated_expected: &[IDkgMessageId],
+        validated_expected: &[IDkgMessageId],
     ) {
         let unvalidated_expected =
             unvalidated_expected
@@ -567,7 +564,7 @@ mod tests {
             });
 
         let unvalidated =
-            ecdsa_pool
+            idkg_pool
                 .unvalidated()
                 .signed_dealings()
                 .fold(BTreeSet::new(), |mut acc, (id, _)| {
@@ -575,7 +572,7 @@ mod tests {
                     acc
                 });
         let validated =
-            ecdsa_pool
+            idkg_pool
                 .validated()
                 .signed_dealings()
                 .fold(BTreeSet::new(), |mut acc, (id, _)| {
@@ -586,30 +583,30 @@ mod tests {
         assert_eq!(validated.len(), validated_expected.len());
         for id in &validated {
             assert!(validated_expected.contains(id));
-            assert!(ecdsa_pool.get(id).is_some());
+            assert!(idkg_pool.get(id).is_some());
 
-            assert!(ecdsa_pool.validated().contains(id));
-            assert!(ecdsa_pool.validated().get(id).is_some());
+            assert!(idkg_pool.validated().contains(id));
+            assert!(idkg_pool.validated().get(id).is_some());
 
-            assert!(!ecdsa_pool.unvalidated().contains(id));
-            assert!(ecdsa_pool.unvalidated().get(id).is_none());
+            assert!(!idkg_pool.unvalidated().contains(id));
+            assert!(idkg_pool.unvalidated().get(id).is_none());
         }
 
         assert_eq!(unvalidated.len(), unvalidated_expected.len());
         for id in &unvalidated {
             assert!(unvalidated_expected.contains(id));
-            assert!(ecdsa_pool.get(id).is_none());
+            assert!(idkg_pool.get(id).is_none());
 
-            assert!(ecdsa_pool.unvalidated().contains(id));
-            assert!(ecdsa_pool.unvalidated().get(id).is_some());
+            assert!(idkg_pool.unvalidated().contains(id));
+            assert!(idkg_pool.unvalidated().get(id).is_some());
 
-            assert!(!ecdsa_pool.validated().contains(id));
-            assert!(ecdsa_pool.validated().get(id).is_none());
+            assert!(!idkg_pool.validated().contains(id));
+            assert!(idkg_pool.validated().get(id).is_none());
         }
     }
 
     // Verifies the prefix based search
-    fn check_search_by_prefix(ecdsa_pool: &mut EcdsaPoolImpl, test_unvalidated: bool) {
+    fn check_search_by_prefix(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
         let transcript_10 = dummy_idkg_transcript_id_for_tests_with_height(10, 20);
         let transcript_100 = dummy_idkg_transcript_id_for_tests_with_height(100, 20);
         let transcript_1000 = dummy_idkg_transcript_id_for_tests_with_height(1000, 20);
@@ -643,19 +640,19 @@ mod tests {
                 sig_share: BasicSignature::fake(*signer_id),
             };
             if test_unvalidated {
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaDealingSupport(support),
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::DealingSupport(support),
                     peer_id: NODE_1,
                     timestamp: UNIX_EPOCH,
                 });
             } else {
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaDealingSupport(support.clone()),
+                let change_set = vec![IDkgChangeAction::AddToValidated(
+                    IDkgMessage::DealingSupport(support.clone()),
                 )];
-                let result = ecdsa_pool.apply_changes(change_set);
+                let result = idkg_pool.apply_changes(change_set);
                 assert!(result.purged.is_empty());
                 assert_eq!(
-                    EcdsaArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                    result.artifacts_with_opt[0].artifact.id(),
                     support.message_id()
                 );
                 assert!(result.poll_immediately);
@@ -663,9 +660,9 @@ mod tests {
         }
 
         let pool_section = if test_unvalidated {
-            ecdsa_pool.unvalidated()
+            idkg_pool.unvalidated()
         } else {
-            ecdsa_pool.validated()
+            idkg_pool.validated()
         };
 
         // Verify iteration produces artifacts in increasing order of
@@ -754,25 +751,25 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_object_pool() {
+    fn test_idkg_object_pool() {
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaPoolMetrics::new(metrics_registry, POOL_ECDSA, POOL_TYPE_VALIDATED);
-        let mut object_pool = EcdsaObjectPool::new(EcdsaMessageType::Dealing, metrics);
+        let metrics = IDkgPoolMetrics::new(metrics_registry, POOL_IDKG, POOL_TYPE_VALIDATED);
+        let mut object_pool = IDkgObjectPool::new(IDkgMessageType::Dealing, metrics);
 
         let key_1 = {
-            let ecdsa_dealing = EcdsaMessage::EcdsaSignedDealing(create_ecdsa_dealing(
+            let ecdsa_dealing = IDkgMessage::Dealing(create_ecdsa_dealing(
                 dummy_idkg_transcript_id_for_tests(100),
             ));
-            let key = EcdsaArtifactId::from(&ecdsa_dealing);
+            let key = IDkgArtifactId::from(&ecdsa_dealing);
             assert!(object_pool.get_object(&key).is_none());
             object_pool.insert_object(ecdsa_dealing);
             key
         };
         let key_2 = {
-            let ecdsa_dealing = EcdsaMessage::EcdsaSignedDealing(create_ecdsa_dealing(
+            let ecdsa_dealing = IDkgMessage::Dealing(create_ecdsa_dealing(
                 dummy_idkg_transcript_id_for_tests(200),
             ));
-            let key = EcdsaArtifactId::from(&ecdsa_dealing);
+            let key = IDkgArtifactId::from(&ecdsa_dealing);
             assert!(object_pool.get_object(&key).is_none());
             object_pool.insert_object(ecdsa_dealing);
             key
@@ -780,10 +777,10 @@ mod tests {
         assert!(object_pool.get_object(&key_1).is_some());
         assert!(object_pool.get_object(&key_2).is_some());
 
-        let iter_pool = |object_pool: &EcdsaObjectPool| {
-            let iter: Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)>> =
+        let iter_pool = |object_pool: &IDkgObjectPool| {
+            let iter: Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)>> =
                 object_pool.iter();
-            let mut items: Vec<EcdsaMessageId> = Vec::new();
+            let mut items: Vec<IDkgMessageId> = Vec::new();
             for item in iter {
                 items.push(item.0);
             }
@@ -813,29 +810,29 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_ecdsa_object_pool_panic_on_wrong_type() {
+    fn test_idkg_object_pool_panic_on_wrong_type() {
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaPoolMetrics::new(metrics_registry, POOL_ECDSA, POOL_TYPE_VALIDATED);
-        let mut object_pool = EcdsaObjectPool::new(EcdsaMessageType::DealingSupport, metrics);
+        let metrics = IDkgPoolMetrics::new(metrics_registry, POOL_IDKG, POOL_TYPE_VALIDATED);
+        let mut object_pool = IDkgObjectPool::new(IDkgMessageType::DealingSupport, metrics);
 
-        let ecdsa_dealing = EcdsaMessage::EcdsaSignedDealing(create_ecdsa_dealing(
+        let ecdsa_dealing = IDkgMessage::Dealing(create_ecdsa_dealing(
             dummy_idkg_transcript_id_for_tests(100),
         ));
         object_pool.insert_object(ecdsa_dealing);
     }
 
     #[test]
-    fn test_ecdsa_pool_insert_remove() {
+    fn test_idkg_pool_insert_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    ecdsa_pool.insert(UnvalidatedArtifact {
-                        message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
@@ -845,77 +842,77 @@ mod tests {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    ecdsa_pool.insert(UnvalidatedArtifact {
-                        message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
                     msg_id
                 };
 
-                check_state(&ecdsa_pool, &[msg_id_1.clone(), msg_id_2.clone()], &[]);
+                check_state(&idkg_pool, &[msg_id_1.clone(), msg_id_2.clone()], &[]);
 
-                ecdsa_pool.remove(&msg_id_1);
-                check_state(&ecdsa_pool, &[msg_id_2], &[]);
+                idkg_pool.remove(&msg_id_1);
+                check_state(&idkg_pool, &[msg_id_2], &[]);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_pool_add_validated() {
+    fn test_idkg_pool_add_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![EcdsaChangeAction::AddToValidated(
-                        EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
-                    ecdsa_pool.apply_changes(change_set);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
                     msg_id
                 };
                 let msg_id_2 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    ecdsa_pool.insert(UnvalidatedArtifact {
-                        message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
                     msg_id
                 };
 
-                check_state(&ecdsa_pool, &[msg_id_2], &[msg_id_1]);
+                check_state(&idkg_pool, &[msg_id_2], &[msg_id_1]);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_pool_move_validated() {
+    fn test_idkg_pool_move_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![EcdsaChangeAction::AddToValidated(
-                        EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
-                    ecdsa_pool.apply_changes(change_set);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
                     msg_id
                 };
                 let (msg_id_2, msg_2) = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    let msg = EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing);
-                    ecdsa_pool.insert(UnvalidatedArtifact {
+                    let msg = IDkgMessage::Dealing(ecdsa_dealing);
+                    idkg_pool.insert(UnvalidatedArtifact {
                         message: msg.clone(),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
@@ -929,189 +926,189 @@ mod tests {
                         dealing_hash: CryptoHashOf::new(CryptoHash(vec![1])),
                         sig_share: BasicSignature::fake(NODE_2),
                     };
-                    let msg = EcdsaMessage::EcdsaDealingSupport(support);
-                    ecdsa_pool.insert(UnvalidatedArtifact {
+                    let msg = IDkgMessage::DealingSupport(support);
+                    idkg_pool.insert(UnvalidatedArtifact {
                         message: msg.clone(),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
                     msg
                 };
-                check_state(&ecdsa_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
+                check_state(&idkg_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
 
-                let result = ecdsa_pool.apply_changes(vec![
-                    EcdsaChangeAction::MoveToValidated(msg_2),
-                    EcdsaChangeAction::MoveToValidated(msg_3),
+                let result = idkg_pool.apply_changes(vec![
+                    IDkgChangeAction::MoveToValidated(msg_2),
+                    IDkgChangeAction::MoveToValidated(msg_3),
                 ]);
                 assert!(result.purged.is_empty());
                 // No artifacts_with_opt are created for moved dealings and dealing support
                 assert!(result.artifacts_with_opt.is_empty());
                 assert!(result.poll_immediately);
-                check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
+                check_state(&idkg_pool, &[], &[msg_id_1, msg_id_2]);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_pool_remove_validated() {
+    fn test_idkg_pool_remove_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 let msg_id_1 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![EcdsaChangeAction::AddToValidated(
-                        EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
-                    ecdsa_pool.apply_changes(change_set);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
                     msg_id
                 };
                 let msg_id_2 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![EcdsaChangeAction::AddToValidated(
-                        EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
-                    ecdsa_pool.apply_changes(change_set);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
                     msg_id
                 };
                 let msg_id_3 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(300));
                     let msg_id = ecdsa_dealing.message_id();
-                    ecdsa_pool.insert(UnvalidatedArtifact {
-                        message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
                     msg_id
                 };
                 check_state(
-                    &ecdsa_pool,
+                    &idkg_pool,
                     &[msg_id_3.clone()],
                     &[msg_id_1.clone(), msg_id_2.clone()],
                 );
 
-                let result = ecdsa_pool
-                    .apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_1.clone())]);
+                let result = idkg_pool
+                    .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_1.clone())]);
                 assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged, vec![msg_id_1]);
                 assert!(result.poll_immediately);
-                check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
+                check_state(&idkg_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
-                let result = ecdsa_pool
-                    .apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_2.clone())]);
+                let result = idkg_pool
+                    .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
                 assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged, vec![msg_id_2]);
                 assert!(result.poll_immediately);
-                check_state(&ecdsa_pool, &[msg_id_3], &[]);
+                check_state(&idkg_pool, &[msg_id_3], &[]);
 
-                let result = ecdsa_pool.apply_changes(vec![]);
+                let result = idkg_pool.apply_changes(vec![]);
                 assert!(!result.poll_immediately);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_pool_remove_unvalidated() {
+    fn test_idkg_pool_remove_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 let msg_id = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    ecdsa_pool.insert(UnvalidatedArtifact {
-                        message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
                     msg_id
                 };
-                check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
+                check_state(&idkg_pool, &[msg_id.clone()], &[]);
 
                 let result =
-                    ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)]);
+                    idkg_pool.apply_changes(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
                 assert!(result.purged.is_empty());
                 assert!(result.artifacts_with_opt.is_empty());
                 assert!(result.poll_immediately);
-                check_state(&ecdsa_pool, &[], &[]);
+                check_state(&idkg_pool, &[], &[]);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_pool_handle_invalid_unvalidated() {
+    fn test_idkg_pool_handle_invalid_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 let msg_id = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
-                    ecdsa_pool.insert(UnvalidatedArtifact {
-                        message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(ecdsa_dealing),
                         peer_id: NODE_1,
                         timestamp: UNIX_EPOCH,
                     });
                     msg_id
                 };
-                check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
+                check_state(&idkg_pool, &[msg_id.clone()], &[]);
 
-                ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(
+                idkg_pool.apply_changes(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,
                     "test".to_string(),
                 )]);
-                check_state(&ecdsa_pool, &[], &[]);
+                check_state(&idkg_pool, &[], &[]);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_pool_handle_invalid_validated() {
+    fn test_idkg_pool_handle_invalid_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
                 let msg_id = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
                     let msg_id = ecdsa_dealing.message_id();
-                    let change_set = vec![EcdsaChangeAction::AddToValidated(
-                        EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
-                    )];
-                    ecdsa_pool.apply_changes(change_set);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        ecdsa_dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
                     msg_id
                 };
-                check_state(&ecdsa_pool, &[], &[msg_id.clone()]);
+                check_state(&idkg_pool, &[], &[msg_id.clone()]);
 
-                ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(
+                idkg_pool.apply_changes(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,
                     "test".to_string(),
                 )]);
-                check_state(&ecdsa_pool, &[], &[]);
+                check_state(&idkg_pool, &[], &[]);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_prefix_search_unvalidated() {
+    fn test_idkg_prefix_search_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
-                check_search_by_prefix(&mut ecdsa_pool, true);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
+                check_search_by_prefix(&mut idkg_pool, true);
             })
         })
     }
 
     #[test]
-    fn test_ecdsa_prefix_search_validated() {
+    fn test_idkg_prefix_search_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
-                check_search_by_prefix(&mut ecdsa_pool, false);
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
+                check_search_by_prefix(&mut idkg_pool, false);
             })
         })
     }

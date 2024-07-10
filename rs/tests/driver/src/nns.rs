@@ -6,9 +6,10 @@ use registry_canister::mutations::{
     do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
 };
 
-use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::driver::test_env_api::IcNodeSnapshot;
-use crate::util::{create_agent, runtime_from_url};
+use crate::{
+    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    util::{create_agent, runtime_from_url},
+};
 use candid::CandidType;
 use canister_test::{Canister, Runtime};
 use cycles_minting_canister::{
@@ -19,20 +20,17 @@ use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client::Sender;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{
-        manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-        ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
-    },
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
+    ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
-use ic_nns_test_utils::governance::get_proposal_info;
-use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
-use ic_nns_test_utils::governance::{submit_external_update_proposal, wait_for_final_state};
+use ic_nns_test_utils::governance::{
+    get_proposal_info, submit_external_update_proposal,
+    submit_external_update_proposal_allowing_error, wait_for_final_state,
+};
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
@@ -40,19 +38,17 @@ use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
-use registry_canister::mutations::do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload;
-use registry_canister::mutations::do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload;
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::CreateSubnetPayload,
+    do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+    do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
 };
-use slog::info;
-use slog::Logger;
-use std::convert::TryFrom;
-use std::time::Duration;
+use slog::{info, Logger};
+use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
 

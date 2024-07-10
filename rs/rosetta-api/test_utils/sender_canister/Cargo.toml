@@ -1,5 +1,5 @@
 [package]
-name = "ic-btc-types-internal"
+name = "ic-sender-canister"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,8 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-btc-interface = { workspace = true }
-ic-error-types = { path = "../../../types/error_types" }
-ic-protobuf = { path = "../../../protobuf" }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
