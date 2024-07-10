@@ -81,7 +81,6 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialEcdsaDealings, // TODO(EXC-1630): remove after ComputeInitialIDkgDealings is released.
     ComputeInitialIDkgDealings,
 
     // Schnorr interface.
@@ -2358,91 +2357,6 @@ impl Payload<'_> for ECDSAPublicKeyResponse {}
 const MAX_ALLOWED_NODES_COUNT: usize = 100;
 
 pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
-
-/// Argument of the compute_initial_ecdsa_dealings API.
-/// `(record {
-///     key_id: ecdsa_key_id;
-///     subnet_id: principal;
-///     nodes: vec principal;
-///     registry_version: nat64;
-/// })`
-#[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
-pub struct ComputeInitialEcdsaDealingsArgs {
-    pub key_id: EcdsaKeyId,
-    pub subnet_id: SubnetId,
-    nodes: BoundedNodes,
-    registry_version: u64,
-}
-
-impl ComputeInitialEcdsaDealingsArgs {
-    pub fn new(
-        key_id: EcdsaKeyId,
-        subnet_id: SubnetId,
-        nodes: BTreeSet<NodeId>,
-        registry_version: RegistryVersion,
-    ) -> Self {
-        Self {
-            key_id,
-            subnet_id,
-            nodes: BoundedNodes::new(nodes.iter().map(|id| id.get()).collect()),
-            registry_version: registry_version.get(),
-        }
-    }
-
-    pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
-        let mut set = BTreeSet::<NodeId>::new();
-        for node_id in self.nodes.get().iter() {
-            if !set.insert(NodeId::new(*node_id)) {
-                return Err(UserError::new(
-                    ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {} is repeated",
-                        node_id
-                    ),
-                ));
-            }
-        }
-        Ok(set)
-    }
-
-    pub fn get_registry_version(&self) -> RegistryVersion {
-        RegistryVersion::new(self.registry_version)
-    }
-}
-
-impl Payload<'_> for ComputeInitialEcdsaDealingsArgs {}
-
-/// Struct used to return the xnet initial dealings.
-#[derive(Debug)]
-pub struct ComputeInitialEcdsaDealingsResponse {
-    pub initial_dkg_dealings: InitialIDkgDealings,
-}
-
-impl ComputeInitialEcdsaDealingsResponse {
-    pub fn encode(&self) -> Vec<u8> {
-        let serde_encoded_transcript_records = self.encode_with_serde_cbor();
-        Encode!(&serde_encoded_transcript_records).unwrap()
-    }
-
-    fn encode_with_serde_cbor(&self) -> Vec<u8> {
-        let transcript_records = (&self.initial_dkg_dealings,);
-        serde_cbor::to_vec(&transcript_records).unwrap()
-    }
-
-    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
-        let serde_encoded_transcript_records =
-            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
-        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
-            Err(err) => Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
-            )),
-            Ok((initial_dkg_dealings,)) => Ok(Self {
-                initial_dkg_dealings,
-            }),
-        }
-    }
-}
 
 /// Argument of the compute_initial_idkg_dealings API.
 /// `(record {

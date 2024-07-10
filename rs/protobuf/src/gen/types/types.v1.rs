@@ -796,16 +796,40 @@ pub struct IDkgPrefix {
     pub group_tag: u64,
     #[prost(uint64, tag = "2")]
     pub meta_hash: u64,
-    #[prost(uint64, tag = "3")]
-    pub height: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PrefixHashPair {
-    #[prost(message, optional, tag = "1")]
-    pub prefix: ::core::option::Option<IDkgPrefix>,
+pub struct IDkgArtifactIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub subnet_id: ::core::option::Option<SubnetId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SigShareIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrefixPairIDkg {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<IDkgArtifactIdData>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrefixPairSigShare {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<SigShareIdData>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -819,17 +843,17 @@ pub mod i_dkg_artifact_id {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
         #[prost(message, tag = "1")]
-        Dealing(super::PrefixHashPair),
+        Dealing(super::PrefixPairIDkg),
         #[prost(message, tag = "2")]
-        DealingSupport(super::PrefixHashPair),
+        DealingSupport(super::PrefixPairIDkg),
         #[prost(message, tag = "3")]
-        EcdsaSigShare(super::PrefixHashPair),
+        EcdsaSigShare(super::PrefixPairSigShare),
         #[prost(message, tag = "4")]
-        Complaint(super::PrefixHashPair),
+        Complaint(super::PrefixPairIDkg),
         #[prost(message, tag = "5")]
-        Opening(super::PrefixHashPair),
+        Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
-        SchnorrSigShare(super::PrefixHashPair),
+        SchnorrSigShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

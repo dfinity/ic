@@ -33,15 +33,14 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialEcdsaDealingsArgs,
-    ComputeInitialIDkgDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
-    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SchnorrKeyId, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -50,9 +49,9 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, EcdsaDealingsContext, IDkgDealingsContext, InstallCodeCall,
-        InstallCodeCallId, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
-        StopCanisterCall, SubnetCallContext, ThresholdArguments,
+        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
+        SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
+        ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -1039,42 +1038,6 @@ impl ExecutionEnvironment {
                     }
                     CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::ECDSAPublicKey)
-                    }
-                }
-            }
-
-            Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
-                let cycles = msg.take_cycles();
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_public_key(
-                                idkg_subnet_public_keys,
-                                self.own_subnet_id,
-                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
-                            ) {
-                                Ok(_) => self
-                                    .compute_initial_ecdsa_dealings(&mut state, args, request)
-                                    .map_or_else(
-                                        |err| ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
-                                            refund: cycles,
-                                        },
-                                        |()| ExecuteSubnetMessageResult::Processing,
-                                    ),
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: cycles,
-                                },
-                            },
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: cycles,
-                            },
-                        }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialEcdsaDealings)
                     }
                 }
             }
@@ -2813,27 +2776,6 @@ impl ExecutionEnvironment {
                 nonce: None,
             }),
         );
-        Ok(())
-    }
-
-    fn compute_initial_ecdsa_dealings(
-        &self,
-        state: &mut ReplicatedState,
-        args: ComputeInitialEcdsaDealingsArgs,
-        request: &Request,
-    ) -> Result<(), UserError> {
-        let nodes = args.get_set_of_nodes()?;
-        let registry_version = args.get_registry_version();
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::EcdsaDealings(EcdsaDealingsContext {
-                request: request.clone(),
-                key_id: args.key_id,
-                nodes,
-                registry_version,
-                time: state.time(),
-            }));
         Ok(())
     }
 

@@ -45,7 +45,7 @@ use crate::{
         GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
         Governance as GovernanceProto, GovernanceError, KnownNeuron, ListKnownNeuronsResponse,
         ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics,
+        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics,
         Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
@@ -4167,7 +4167,7 @@ impl Governance {
         &mut self,
         rewards: Vec<RewardNodeProvider>,
     ) {
-        let most_recent_rewards = MostRecentMonthlyNodeProviderRewards {
+        let most_recent_rewards = MonthlyNodeProviderRewards {
             timestamp: self.env.now(),
             rewards,
         };

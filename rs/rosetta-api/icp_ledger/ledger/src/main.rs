@@ -56,6 +56,7 @@ use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
 use std::cell::RefCell;
+use std::io::{Read, Write};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
@@ -361,6 +362,8 @@ async fn icrc1_send(
 
 thread_local! {
     static NOTIFY_METHOD_CALLS: RefCell<u64> = const { RefCell::new(0) };
+    static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
+    static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
 
 /// You can notify a canister that you have made a payment to it. The
@@ -744,9 +747,10 @@ fn main() {
 }
 
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
+    let start = dfn_core::api::performance_counter(0);
+    let mut stable_reader = stable::StableReader::new();
     let mut ledger = LEDGER.write().unwrap();
-    *ledger = ciborium::de::from_reader(stable::StableReader::new())
-        .expect("Decoding stable memory failed");
+    *ledger = ciborium::de::from_reader(&mut stable_reader).expect("Decoding stable memory failed");
 
     if let Some(args) = args {
         match args {
@@ -765,6 +769,21 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             .map(|h| h.into_bytes())
             .unwrap_or([0u8; 32]),
     );
+    let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+    let pre_upgrade_instructions_consumed =
+        match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+            Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+            Err(_) => {
+                // If upgrading from a version that didn't write the instructions counter to stable memory
+                0u64
+            }
+        };
+    PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
+
+    let end = dfn_core::api::performance_counter(0);
+    let post_upgrade_instructions_consumed = end - start;
+    POST_UPGRADE_INSTRUCTIONS_CONSUMED
+        .with(|n| *n.borrow_mut() = post_upgrade_instructions_consumed);
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -774,6 +793,7 @@ fn post_upgrade_() {
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
+    let start = dfn_core::api::performance_counter(0);
     setup::START.call_once(|| {
         printer::hook();
     });
@@ -782,8 +802,15 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    ciborium::ser::into_writer(&*ledger, stable::StableWriter::new())
+    let mut stable_writer = stable::StableWriter::new();
+    ciborium::ser::into_writer(&*ledger, &mut stable_writer)
         .expect("failed to write ledger state to stable memory");
+    let end = dfn_core::api::performance_counter(0);
+    let instructions_consumed = end - start;
+    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+    stable_writer
+        .write_all(&counter_bytes)
+        .expect("failed to write instructions consumed to stable memory");
 }
 
 struct Access;
@@ -1352,6 +1379,23 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_num_approvals",
         ledger.approvals.get_num_approvals() as f64,
         "Total number of approvals.",
+    )?;
+    let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
+    let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
+    w.encode_gauge(
+        "ledger_pre_upgrade_instructions_consumed",
+        pre_upgrade_instructions as f64,
+        "Number of instructions consumed during the last pre-upgrade.",
+    )?;
+    w.encode_gauge(
+        "ledger_post_upgrade_instructions_consumed",
+        post_upgrade_instructions as f64,
+        "Number of instructions consumed during the last post-upgrade.",
+    )?;
+    w.encode_gauge(
+        "ledger_total_upgrade_instructions_consumed",
+        pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
+        "Total number of instructions consumed during the last upgrade.",
     )?;
     Ok(())
 }
