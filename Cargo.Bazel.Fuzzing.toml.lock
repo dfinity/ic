@@ -632,6 +632,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-socks5"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77f634add2445eb2c1f785642a67ca1073fedd71e73dc3ca69435ef9b9bdedc7"
+dependencies = [
+ "async-trait",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2969,6 +2980,7 @@ dependencies = [
  "hyper 1.4.0",
  "hyper-rustls 0.24.2",
  "hyper-rustls 0.27.1",
+ "hyper-socks2",
  "hyper-util",
  "hyperlocal-next",
  "ic-agent",
@@ -4651,6 +4663,23 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tower-service",
+]
+
+[[package]]
+name = "hyper-socks2"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
+dependencies = [
+ "async-socks5",
+ "futures",
+ "http 0.2.12",
+ "hyper 0.14.27",
+ "hyper-rustls 0.24.2",
+ "rustls 0.21.12",
+ "rustls-native-certs 0.6.3",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
