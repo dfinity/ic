@@ -12,7 +12,7 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
 use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
-use ic_icrc1::{Block, LedgerBalances, Transaction};
+use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 use ic_ledger_canister_core::archive::Archive;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::Runtime;
@@ -23,7 +23,7 @@ use ic_ledger_canister_core::{
     range_utils,
 };
 use ic_ledger_core::{
-    approvals::AllowanceTable,
+    approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
     block::{BlockIndex, BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
@@ -333,7 +333,7 @@ pub enum LedgerArgument {
 pub struct Ledger<Tokens: TokensType> {
     balances: LedgerBalances<Tokens>,
     #[serde(default)]
-    approvals: AllowanceTable<ApprovalKey, Account, Tokens>,
+    approvals: LedgerAllowances<Tokens>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
@@ -490,8 +490,8 @@ impl From<ApprovalKey> for (Account, Account) {
 
 impl<Tokens: TokensType> LedgerContext for Ledger<Tokens> {
     type AccountId = Account;
-    type Approvals = AllowanceTable<ApprovalKey, Account, Tokens>;
     type BalancesStore = BTreeMap<Self::AccountId, Tokens>;
+    type AllowancesData = HeapAllowancesData<Self::AccountId, Tokens>;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
@@ -502,11 +502,11 @@ impl<Tokens: TokensType> LedgerContext for Ledger<Tokens> {
         &mut self.balances
     }
 
-    fn approvals(&self) -> &Self::Approvals {
+    fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
         &self.approvals
     }
 
-    fn approvals_mut(&mut self) -> &mut Self::Approvals {
+    fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
         &mut self.approvals
     }
 

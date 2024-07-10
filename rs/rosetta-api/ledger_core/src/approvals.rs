@@ -1,9 +1,7 @@
 use crate::timestamp::TimeStamp;
-use crate::tokens::{TokensType, Zero};
+use crate::tokens::{CheckedSub, TokensType, Zero};
 use serde::{Deserialize, Serialize};
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::marker::PhantomData;
 
 #[cfg(test)]
 mod tests;
@@ -16,6 +14,185 @@ pub enum ApproveError<Tokens> {
     AllowanceChanged { current_allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
     SelfApproval,
+}
+
+pub trait AllowancesData {
+    type AccountId: Ord + Clone;
+    type Tokens: TokensType;
+
+    fn get_allowance(
+        &self,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    ) -> Option<Allowance<Self::Tokens>>;
+
+    fn set_allowance(
+        &mut self,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+        allowance: &Allowance<Self::Tokens>,
+    );
+
+    fn remove_allowance(&mut self, account_spender: (&Self::AccountId, &Self::AccountId));
+
+    fn insert_expiry(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    );
+
+    fn remove_expiry(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    );
+
+    fn insert_arrival(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    );
+
+    fn remove_arrival(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    );
+
+    fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
+
+    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
+
+    fn oldest_arrival(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
+
+    fn len_allowances(&self) -> usize;
+
+    fn len_expirations(&self) -> usize;
+
+    fn len_arrivals(&self) -> usize;
+
+    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct HeapAllowancesData<AccountId, Tokens>
+where
+    AccountId: Ord,
+{
+    allowances: BTreeMap<(AccountId, AccountId), Allowance<Tokens>>,
+    expiration_queue: BTreeSet<(TimeStamp, (AccountId, AccountId))>,
+    #[serde(default = "Default::default")]
+    arrival_queue: BTreeSet<(TimeStamp, (AccountId, AccountId))>,
+}
+impl<AccountId, Tokens> Default for HeapAllowancesData<AccountId, Tokens>
+where
+    AccountId: Ord,
+{
+    fn default() -> Self {
+        Self {
+            allowances: BTreeMap::new(),
+            expiration_queue: BTreeSet::new(),
+            arrival_queue: BTreeSet::new(),
+        }
+    }
+}
+
+impl<AccountId, Tokens> AllowancesData for HeapAllowancesData<AccountId, Tokens>
+where
+    AccountId: Ord + Clone,
+    Tokens: TokensType,
+{
+    type AccountId = AccountId;
+    type Tokens = Tokens;
+
+    fn get_allowance(
+        &self,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    ) -> Option<Allowance<Self::Tokens>> {
+        let asp = (account_spender.0.clone(), account_spender.1.clone());
+        self.allowances.get(&asp).cloned()
+    }
+
+    fn set_allowance(
+        &mut self,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+        allowance: &Allowance<Self::Tokens>,
+    ) {
+        let asp = (account_spender.0.clone(), account_spender.1.clone());
+        self.allowances.insert(asp, allowance.clone());
+    }
+
+    fn remove_allowance(&mut self, account_spender: (&Self::AccountId, &Self::AccountId)) {
+        let asp = (account_spender.0.clone(), account_spender.1.clone());
+        self.allowances.remove(&asp);
+    }
+
+    fn insert_expiry(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    ) {
+        let asp = (account_spender.0.clone(), account_spender.1.clone());
+        self.expiration_queue.insert((*timestamp, asp));
+    }
+
+    fn remove_expiry(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    ) {
+        let asp = (account_spender.0.clone(), account_spender.1.clone());
+        self.expiration_queue.remove(&(*timestamp, asp));
+    }
+
+    fn insert_arrival(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    ) {
+        let asp = (account_spender.0.clone(), account_spender.1.clone());
+        self.arrival_queue.insert((*timestamp, asp));
+    }
+
+    fn remove_arrival(
+        &mut self,
+        timestamp: &TimeStamp,
+        account_spender: (&Self::AccountId, &Self::AccountId),
+    ) {
+        let asp = (account_spender.0.clone(), account_spender.1.clone());
+        self.arrival_queue.remove(&(*timestamp, asp));
+    }
+
+    fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        self.expiration_queue.first().cloned()
+    }
+
+    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        let expiry = self.first_expiry();
+        if let Some((timestamp, (account, spender))) = expiry {
+            self.remove_expiry(&timestamp, (&account, &spender));
+            return Some((timestamp, (account, spender)));
+        }
+        None
+    }
+
+    fn oldest_arrival(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        self.arrival_queue.first().cloned()
+    }
+
+    fn len_allowances(&self) -> usize {
+        self.allowances.len()
+    }
+
+    fn len_expirations(&self) -> usize {
+        self.expiration_queue.len()
+    }
+
+    fn len_arrivals(&self) -> usize {
+        self.arrival_queue.len()
+    }
+
+    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
+        todo!()
+    }
 }
 
 pub trait Approvals {
@@ -86,50 +263,42 @@ impl<Tokens: Zero> Default for Allowance<Tokens> {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AllowanceTable<K, AccountId, Tokens>
-where
-    K: Ord,
-{
-    allowances: BTreeMap<K, Allowance<Tokens>>,
-    expiration_queue: BTreeSet<(TimeStamp, K)>,
-    #[serde(default = "Default::default")]
-    arrival_queue: BTreeSet<(TimeStamp, K)>,
-    #[serde(skip)]
-    #[serde(default)]
-    _marker: PhantomData<fn(&AccountId, &AccountId) -> K>,
+#[serde(transparent)]
+pub struct AllowanceTable<S: AllowancesData> {
+    allowances_data: S,
 }
 
-impl<K: Ord, AccountId, Tokens> Default for AllowanceTable<K, AccountId, Tokens> {
+impl<S> Default for AllowanceTable<S>
+where
+    S: Default + AllowancesData,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, AccountId, Tokens> AllowanceTable<K, AccountId, Tokens>
+impl<S> AllowanceTable<S>
 where
-    K: Ord,
+    S: Default + AllowancesData,
 {
     pub fn new() -> Self {
         Self {
-            allowances: BTreeMap::new(),
-            expiration_queue: BTreeSet::new(),
-            arrival_queue: BTreeSet::new(),
-            _marker: PhantomData,
+            allowances_data: Default::default(),
         }
     }
 
     fn check_postconditions(&self) {
         debug_assert!(
-            self.expiration_queue.len() <= self.allowances.len(),
+            self.allowances_data.len_expirations() <= self.allowances_data.len_allowances(),
             "expiration queue length ({}) larger than allowances length ({})",
-            self.expiration_queue.len(),
-            self.allowances.len()
+            self.allowances_data.len_expirations(),
+            self.allowances_data.len_allowances()
         );
         debug_assert!(
-            self.arrival_queue.len() == self.allowances.len(),
+            self.allowances_data.len_arrivals() == self.allowances_data.len_allowances(),
             "arrival_queue length ({}) should be equal to allowances length ({})",
-            self.arrival_queue.len(),
-            self.allowances.len()
+            self.allowances_data.len_arrivals(),
+            self.allowances_data.len_allowances()
         );
     }
 
@@ -138,26 +307,14 @@ where
         self.check_postconditions();
         r
     }
-}
 
-impl<K, AccountId, Tokens> Approvals for AllowanceTable<K, AccountId, Tokens>
-where
-    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
-    K: Into<(AccountId, AccountId)>,
-    AccountId: std::cmp::PartialEq,
-    Tokens: TokensType,
-{
-    type AccountId = AccountId;
-    type Tokens = Tokens;
-
-    fn allowance(
+    pub fn allowance(
         &self,
-        account: &AccountId,
-        spender: &AccountId,
+        account: &S::AccountId,
+        spender: &S::AccountId,
         now: TimeStamp,
-    ) -> Allowance<Tokens> {
-        let key = K::from((account, spender));
-        match self.allowances.get(&key) {
+    ) -> Allowance<S::Tokens> {
+        match self.allowances_data.get_allowance((account, spender)) {
             Some(allowance) if allowance.expires_at.unwrap_or_else(remote_future) > now => {
                 allowance.clone()
             }
@@ -165,15 +322,15 @@ where
         }
     }
 
-    fn approve(
+    pub fn approve(
         &mut self,
-        account: &AccountId,
-        spender: &AccountId,
-        amount: Tokens,
+        account: &S::AccountId,
+        spender: &S::AccountId,
+        amount: S::Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
-        expected_allowance: Option<Tokens>,
-    ) -> Result<Tokens, ApproveError<Tokens>> {
+        expected_allowance: Option<S::Tokens>,
+    ) -> Result<S::Tokens, ApproveError<S::Tokens>> {
         self.with_postconditions_check(|table| {
             if account == spender {
                 return Err(ApproveError::SelfApproval);
@@ -183,113 +340,128 @@ where
                 return Err(ApproveError::ExpiredApproval { now });
             }
 
-            let key = K::from((account, spender));
+            let key = (account, spender);
 
-            match table.allowances.entry(key.clone()) {
-                Entry::Vacant(e) => {
+            match table.allowances_data.get_allowance(key.clone()) {
+                None => {
                     if let Some(expected_allowance) = expected_allowance {
                         if !expected_allowance.is_zero() {
                             return Err(ApproveError::AllowanceChanged {
-                                current_allowance: Tokens::zero(),
+                                current_allowance: S::Tokens::zero(),
                             });
                         }
                     }
-                    if amount == Tokens::zero() {
+                    if amount == S::Tokens::zero() {
                         return Ok(amount);
                     }
                     if let Some(expires_at) = expires_at {
-                        table.expiration_queue.insert((expires_at, key.clone()));
+                        table
+                            .allowances_data
+                            .insert_expiry(&expires_at, key.clone());
                     }
-                    table.arrival_queue.insert((now, key));
-                    e.insert(Allowance {
-                        amount: amount.clone(),
-                        expires_at,
-                        arrived_at: now,
-                    });
+                    table.allowances_data.insert_arrival(&now, key.clone());
+                    table.allowances_data.set_allowance(
+                        key,
+                        &Allowance {
+                            amount: amount.clone(),
+                            expires_at,
+                            arrived_at: now,
+                        },
+                    );
                     Ok(amount)
                 }
-                Entry::Occupied(mut e) => {
-                    let allowance = e.get_mut();
+                Some(old_allowance) => {
                     if let Some(expected_allowance) = expected_allowance {
-                        let current_allowance = if let Some(expires_at) = allowance.expires_at {
+                        let current_allowance = if let Some(expires_at) = old_allowance.expires_at {
                             if expires_at <= now {
-                                Tokens::zero()
+                                S::Tokens::zero()
                             } else {
-                                allowance.amount.clone()
+                                old_allowance.amount.clone()
                             }
                         } else {
-                            allowance.amount.clone()
+                            old_allowance.amount.clone()
                         };
                         if expected_allowance != current_allowance {
                             return Err(ApproveError::AllowanceChanged { current_allowance });
                         }
                     }
                     table
-                        .arrival_queue
-                        .remove(&(allowance.arrived_at, key.clone()));
-                    if amount == Tokens::zero() {
-                        if let Some(expires_at) = e.get().expires_at {
-                            table.expiration_queue.remove(&(expires_at, key.clone()));
+                        .allowances_data
+                        .remove_arrival(&old_allowance.arrived_at, key.clone());
+                    if amount == S::Tokens::zero() {
+                        if let Some(expires_at) = old_allowance.expires_at {
+                            table
+                                .allowances_data
+                                .remove_expiry(&expires_at, key.clone());
                         }
-                        e.remove();
+                        table.allowances_data.remove_allowance(key);
                         return Ok(amount);
                     }
-                    table.arrival_queue.insert((now, key.clone()));
-                    allowance.amount = amount;
-                    allowance.arrived_at = now;
-                    let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
+                    table.allowances_data.insert_arrival(&now, key.clone());
+                    let new_allowance = Allowance {
+                        amount: amount.clone(),
+                        expires_at,
+                        arrived_at: now,
+                    };
 
-                    if expires_at != old_expiration {
-                        if let Some(old_expiration) = old_expiration {
+                    if expires_at != old_allowance.expires_at {
+                        if let Some(old_expiration) = old_allowance.expires_at {
                             table
-                                .expiration_queue
-                                .remove(&(old_expiration, key.clone()));
+                                .allowances_data
+                                .remove_expiry(&old_expiration, key.clone());
                         }
                         if let Some(expires_at) = expires_at {
-                            table.expiration_queue.insert((expires_at, key));
+                            table.allowances_data.insert_expiry(&expires_at, key);
                         }
                     }
-                    Ok(e.get().amount.clone())
+                    table.allowances_data.set_allowance(key, &new_allowance);
+                    Ok(amount)
                 }
             }
         })
     }
 
-    fn get_num_approvals(&self) -> usize {
-        self.allowances.len()
+    pub fn get_num_approvals(&self) -> usize {
+        self.allowances_data.len_allowances()
     }
 
-    fn use_allowance(
+    pub fn use_allowance(
         &mut self,
-        account: &AccountId,
-        spender: &AccountId,
-        amount: Tokens,
+        account: &S::AccountId,
+        spender: &S::AccountId,
+        amount: S::Tokens,
         now: TimeStamp,
-    ) -> Result<Tokens, InsufficientAllowance<Tokens>> {
+    ) -> Result<S::Tokens, InsufficientAllowance<S::Tokens>> {
         self.with_postconditions_check(|table| {
-            let key = K::from((account, spender));
+            let key = (account, spender);
 
-            match table.allowances.entry(key.clone()) {
-                Entry::Vacant(_) => Err(InsufficientAllowance(Tokens::zero())),
-                Entry::Occupied(mut e) => {
-                    if e.get().expires_at.unwrap_or_else(remote_future) <= now {
-                        Err(InsufficientAllowance(Tokens::zero()))
+            match table.allowances_data.get_allowance(key.clone()) {
+                None => Err(InsufficientAllowance(S::Tokens::zero())),
+                Some(old_allowance) => {
+                    if old_allowance.expires_at.unwrap_or_else(remote_future) <= now {
+                        Err(InsufficientAllowance(S::Tokens::zero()))
                     } else {
-                        let allowance = e.get_mut();
-                        if allowance.amount < amount {
-                            return Err(InsufficientAllowance(allowance.amount.clone()));
+                        if old_allowance.amount < amount {
+                            return Err(InsufficientAllowance(old_allowance.amount));
                         }
-                        allowance.amount = allowance
+                        let mut new_allowance = old_allowance.clone();
+                        new_allowance.amount = old_allowance
                             .amount
                             .checked_sub(&amount)
                             .expect("Underflow when using allowance");
-                        let rest = allowance.amount.clone();
+                        let rest = new_allowance.amount.clone();
                         if rest.is_zero() {
-                            if let Some(expires_at) = e.get().expires_at {
-                                table.expiration_queue.remove(&(expires_at, key.clone()));
+                            if let Some(expires_at) = old_allowance.expires_at {
+                                table
+                                    .allowances_data
+                                    .remove_expiry(&expires_at, key.clone());
                             }
-                            table.arrival_queue.remove(&(e.get().arrived_at, key));
-                            e.remove();
+                            table
+                                .allowances_data
+                                .remove_arrival(&old_allowance.arrived_at, key.clone());
+                            table.allowances_data.remove_allowance(key);
+                        } else {
+                            table.allowances_data.set_allowance(key, &new_allowance);
                         }
                         Ok(rest)
                     }
@@ -298,9 +470,9 @@ where
         })
     }
 
-    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
+    pub fn select_approvals_to_trim(&self, n: usize) -> Vec<(S::AccountId, S::AccountId)> {
         let mut result = vec![];
-        for (_expiration, key) in &self.arrival_queue {
+        for (_expiration, key) in &self.allowances_data.oldest_arrival() {
             if result.len() >= n {
                 break;
             }
@@ -308,19 +480,14 @@ where
         }
         result
     }
-}
 
-impl<K, AccountId, Tokens> PrunableApprovals for AllowanceTable<K, AccountId, Tokens>
-where
-    K: Ord + Clone,
-{
-    fn prune(&mut self, now: TimeStamp, limit: usize) -> usize {
+    pub fn prune(&mut self, now: TimeStamp, limit: usize) -> usize {
         self.with_postconditions_check(|table| {
             let mut pruned = 0;
             for _ in 0..limit {
-                match table.expiration_queue.first() {
+                match table.allowances_data.first_expiry() {
                     Some((ts, _key)) => {
-                        if *ts > now {
+                        if ts > now {
                             return pruned;
                         }
                     }
@@ -328,13 +495,14 @@ where
                         return pruned;
                     }
                 }
-                if let Some((_, key)) = table.expiration_queue.pop_first() {
-                    if let Some(allowance) = table.allowances.get(&key) {
+                if let Some((_, (account, spender))) = table.allowances_data.remove_first_expiry() {
+                    let key = (&account, &spender);
+                    if let Some(allowance) = table.allowances_data.get_allowance(key) {
                         if allowance.expires_at.unwrap_or_else(remote_future) <= now {
                             table
-                                .arrival_queue
-                                .remove(&(allowance.arrived_at, key.clone()));
-                            table.allowances.remove(&key);
+                                .allowances_data
+                                .remove_arrival(&allowance.arrived_at, key.clone());
+                            table.allowances_data.remove_allowance(key);
                             pruned += 1;
                         }
                     }
@@ -344,8 +512,8 @@ where
         })
     }
 
-    fn len(&self) -> usize {
-        self.allowances.len()
+    pub fn len(&self) -> usize {
+        self.allowances_data.len_allowances()
     }
 }
 

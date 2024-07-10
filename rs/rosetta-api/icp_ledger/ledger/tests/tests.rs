@@ -913,6 +913,8 @@ fn test_block_transformation() {
     transfer(&env, canister_id, p2.0, p1.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
+    let approve_args = default_approve_args(p2.0, 150_000);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");    
 
     // Fetch all blocks before the upgrade
     let resp_pre_upgrade = get_blocks_pb(&env, p1.0, canister_id, 0, 8).0.unwrap();
@@ -926,6 +928,9 @@ fn test_block_transformation() {
         Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
     )
     .unwrap();
+
+    let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
 
     // Fetch all blocks after the upgrade
     let resp_post_upgrade = get_blocks_pb(&env, p1.0, canister_id, 0, 8).0.unwrap();

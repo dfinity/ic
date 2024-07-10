@@ -6,13 +6,15 @@ use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
 use ic_ledger_core::{
-    approvals::AllowanceTable, balances::Balances, block::EncodedBlock, timestamp::TimeStamp,
+    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::Balances,
+    block::EncodedBlock, timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{
-    AccountIdentifier, ApprovalKey, Block, FeatureFlags, LedgerBalances, Memo, Operation,
-    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo,
+    Operation, PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs,
+    DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -64,7 +66,7 @@ fn unknown_token() -> String {
 pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]
-    pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>,
+    pub approvals: LedgerAllowances,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
     // A cap on the maximum number of accounts.
     pub maximum_number_of_accounts: usize,
@@ -109,8 +111,8 @@ pub struct Ledger {
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
-    type Approvals = AllowanceTable<ApprovalKey, Self::AccountId, Tokens>;
     type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
+    type AllowancesData = HeapAllowancesData<AccountIdentifier, Tokens>;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
@@ -121,11 +123,11 @@ impl LedgerContext for Ledger {
         &mut self.balances
     }
 
-    fn approvals(&self) -> &Self::Approvals {
+    fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
         &self.approvals
     }
 
-    fn approvals_mut(&mut self) -> &mut Self::Approvals {
+    fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
         &mut self.approvals
     }
 
