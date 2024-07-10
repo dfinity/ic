@@ -14,11 +14,23 @@ pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine 
         PrincipalId::from_str("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
             .unwrap(),
     );
-    new_state_machine_with_golden_state_or_panic(
-        fiduciary_subnet_id,
-        FIDUCIARY_STATE_SOURCE,
-        "fiduciary_state",
-    )
+    let setup_config = SetupConfig {
+        archive_state_dir_name: "fiduciary_state",
+        extra_canister_ranges: vec![
+            RangeInclusive::new(
+                CanisterId::from_u64(0x2100000),
+                CanisterId::from_u64(0x21FFFFE),
+            ),
+            RangeInclusive::new(
+                CanisterId::from_u64(0x2300000),
+                CanisterId::from_u64(0x23FFFFE),
+            ),
+        ],
+        scp_location: FIDUCIARY_STATE_SOURCE,
+        subnet_id: fiduciary_subnet_id,
+        subnet_type: SubnetType::Application,
+    };
+    new_state_machine_with_golden_state_or_panic(setup_config)
 }
 
 pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
@@ -26,7 +38,21 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
         PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap(),
     );
-    new_state_machine_with_golden_state_or_panic(nns_subnet_id, NNS_STATE_SOURCE, "nns_state")
+    let setup_config = SetupConfig {
+        archive_state_dir_name: "nns_state",
+        // using the canister ranges of both the NNS and II subnets. Note. The
+        // last canister ID in the canister range of the II subnet is omitted so
+        // that the canister range of the II subnet is not used for automatic
+        // generation of new canister IDs.
+        extra_canister_ranges: vec![RangeInclusive::new(
+            CanisterId::from_u64(0x2100000),
+            CanisterId::from_u64(0x21FFFFE),
+        )],
+        scp_location: NNS_STATE_SOURCE,
+        subnet_id: nns_subnet_id,
+        subnet_type: SubnetType::System,
+    };
+    new_state_machine_with_golden_state_or_panic(setup_config)
 }
 
 pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
@@ -34,35 +60,56 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
         PrincipalId::from_str("x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae")
             .unwrap(),
     );
-    new_state_machine_with_golden_state_or_panic(sns_subnet_id, SNS_STATE_SOURCE, "sns_state")
+    let setup_config = SetupConfig {
+        archive_state_dir_name: "sns_state",
+        extra_canister_ranges: vec![
+            RangeInclusive::new(
+                CanisterId::from_u64(0x2100000),
+                CanisterId::from_u64(0x21FFFFE),
+            ),
+            RangeInclusive::new(
+                CanisterId::from_u64(0x2300000),
+                CanisterId::from_u64(0x23FFFFE),
+            ),
+        ],
+        scp_location: SNS_STATE_SOURCE,
+        subnet_id: sns_subnet_id,
+        subnet_type: SubnetType::Application,
+    };
+    new_state_machine_with_golden_state_or_panic(setup_config)
 }
 
-fn new_state_machine_with_golden_state_or_panic(
-    subnet_id: SubnetId,
-    scp_location: ScpLocation,
-    archive_state_dir_name: &str,
-) -> StateMachine {
+fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> StateMachine {
+    let SetupConfig {
+        archive_state_dir_name,
+        extra_canister_ranges,
+        scp_location,
+        subnet_id,
+        subnet_type,
+    } = setup_config;
     // TODO, remove when this is the value set in the normal IC build This is to
     // uncover issues in testing that might affect performance in production.
     // Application subnets have this set to 2 billion.
     const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000);
 
-    let state_machine_builder = StateMachineBuilder::new()
-        .with_current_time()
-        // using the canister ranges of both the NNS and II subnets. Note. The
-        // last canister ID in the canister range of the II subnet is omitted so
-        // that the canister range of the II subnet is not used for automatic
-        // generation of new canister IDs.
-        .with_extra_canister_range(RangeInclusive::new(
-            CanisterId::from_u64(0x2100000),
-            CanisterId::from_u64(0x21FFFFE),
-        ))
-        .with_extra_canister_range(RangeInclusive::new(
-            CanisterId::from_u64(0x2300000),
-            CanisterId::from_u64(0x23FFFFE),
-        ));
+    let mut state_machine_builder = StateMachineBuilder::new().with_current_time();
+    for canister_range in extra_canister_ranges {
+        state_machine_builder = state_machine_builder.with_extra_canister_range(canister_range);
+    }
+    // using the canister ranges of both the NNS and II subnets. Note. The
+    // last canister ID in the canister range of the II subnet is omitted so
+    // that the canister range of the II subnet is not used for automatic
+    // generation of new canister IDs.
+    .with_extra_canister_range(RangeInclusive::new(
+        CanisterId::from_u64(0x2100000),
+        CanisterId::from_u64(0x21FFFFE),
+    ))
+    .with_extra_canister_range(RangeInclusive::new(
+        CanisterId::from_u64(0x2300000),
+        CanisterId::from_u64(0x23FFFFE),
+    ));
 
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
+    let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
     let state_machine_builder = state_machine_builder.with_config(Some(StateMachineConfig::new(
         subnet_config,
@@ -138,6 +185,14 @@ impl ScpLocation {
 
         format!("{}@{}:{}", user, host, path)
     }
+}
+
+struct SetupConfig {
+    archive_state_dir_name: &'static str,
+    extra_canister_ranges: Vec<RangeInclusive<CanisterId>>,
+    scp_location: ScpLocation,
+    subnet_id: SubnetId,
+    subnet_type: SubnetType,
 }
 
 fn download_golden_nns_state_or_panic(scp_location: ScpLocation, destination: &Path) {
