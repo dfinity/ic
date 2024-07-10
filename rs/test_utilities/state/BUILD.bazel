@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:strum",
 ]
 
 rust_library(

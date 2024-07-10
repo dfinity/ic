@@ -64,6 +64,9 @@ mod tests {
     use ic_canonical_state::CertificationVersion;
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
+    use ic_management_canister_types::{
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -94,7 +97,10 @@ mod tests {
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::{collections::BTreeSet, sync::Arc};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    };
     use strum::{EnumCount, IntoEnumIterator};
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -331,6 +337,16 @@ mod tests {
                 CyclesUseCase::RequestAndResponseTransmission,
                 NominalCycles::from(20_000_000_000),
             );
+            let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+                name: "schnorr_key_id".into(),
+            });
+            let ecdsa_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "ecdsa_key_id".into(),
+            });
+            subnet_metrics.threshold_signature_agreements =
+                BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
             state.metadata.subnet_metrics = subnet_metrics;
 
