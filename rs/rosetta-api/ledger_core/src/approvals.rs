@@ -59,8 +59,6 @@ pub trait AllowancesData {
 
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
-    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
-
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 
     fn len_allowances(&self) -> usize;
@@ -161,15 +159,6 @@ where
 
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         self.expiration_queue.first().cloned()
-    }
-
-    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        let expiry = self.first_expiry();
-        if let Some((timestamp, (account, spender))) = expiry {
-            self.remove_expiry(&timestamp, (&account, &spender));
-            return Some((timestamp, (account, spender)));
-        }
-        None
     }
 
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
@@ -489,7 +478,7 @@ where
                         return pruned;
                     }
                 }
-                if let Some((_, (account, spender))) = table.allowances_data.remove_first_expiry() {
+                if let Some((_, (account, spender))) = table.remove_first_expiry() {
                     let key = (&account, &spender);
                     if let Some(allowance) = table.allowances_data.get_allowance(key) {
                         if allowance.expires_at.unwrap_or_else(remote_future) <= now {
@@ -508,6 +497,16 @@ where
 
     pub fn len(&self) -> usize {
         self.allowances_data.len_allowances()
+    }
+
+    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (S::AccountId, S::AccountId))> {
+        let expiry = self.allowances_data.first_expiry();
+        if let Some((timestamp, (account, spender))) = expiry {
+            self.allowances_data
+                .remove_expiry(&timestamp, (&account, &spender));
+            return Some((timestamp, (account, spender)));
+        }
+        None
     }
 }
 
