@@ -8,7 +8,6 @@ use ic_canister_client_sender::Sender;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
     get_committee_signing_key, get_dkg_dealing_key, get_idkg_dealing_encryption_key,
     get_node_operator_record, get_node_record, get_node_signing_key, get_transport_tls_certificate,
@@ -35,6 +34,7 @@ use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_test_utilities_types::ids::{node_test_id, user_test_id};
 use ic_types::crypto::KeyPurpose;
 use ic_types::NodeId;
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
@@ -94,11 +94,11 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
         let mut mutations = vec![
             insert(
                 make_node_operator_record_key(user_test_id(NO_ID).get()).as_bytes(),
-                encode_or_panic(&node_operator),
+                node_operator.encode_to_vec(),
             ),
             insert(
                 make_node_operator_record_key(user_test_id(TEST_ID).get()).as_bytes(),
-                encode_or_panic(&node_operator2),
+                node_operator2.encode_to_vec(),
             ),
         ];
         mutations.append(&mut mutations_1);
@@ -220,22 +220,22 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
                     mutations: vec![
                         insert(
                             make_node_operator_record_key(user_test_id(NO_ID).get()).as_bytes(),
-                            encode_or_panic(&node_operator),
+                            node_operator.encode_to_vec(),
                         ),
                         insert(
                             make_node_operator_record_key(user_test_id(TEST_ID).get()).as_bytes(),
-                            encode_or_panic(&node_operator2),
+                            node_operator2.encode_to_vec(),
                         ),
                         insert(
                             make_node_record_key(node_test_id(NO_ID)).as_bytes(),
-                            encode_or_panic(&node),
+                            node.encode_to_vec(),
                         ),
                         insert(
                             make_crypto_node_key(
                                 node_test_id(NO_ID),
                                 KeyPurpose::DkgDealingEncryption,
                             ),
-                            encode_or_panic(&node_dkg_key),
+                            node_dkg_key.encode_to_vec(),
                         ),
                     ],
 
@@ -355,7 +355,7 @@ fn remove_nodes_removes_all_keys() {
         // Add node operator records
         mutations.push(insert(
             make_node_operator_record_key(user_test_id(NO_ID).get()).as_bytes(),
-            encode_or_panic(&node_operator),
+            node_operator.encode_to_vec(),
         ));
 
         let registry = set_up_registry_canister(
@@ -505,7 +505,7 @@ fn nodes_cannot_be_removed_if_any_in_subnet() {
 
         init_mutation.mutations.push(insert(
             make_node_operator_record_key(user_test_id(TEST_ID).get()).as_bytes(),
-            encode_or_panic(&node_operator),
+            node_operator.encode_to_vec(),
         ));
 
         // Prepare the registry with a single node and make it callable by anyone

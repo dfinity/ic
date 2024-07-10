@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_crypto_test_utils_canister_sigs",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/certification/test-utils",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",

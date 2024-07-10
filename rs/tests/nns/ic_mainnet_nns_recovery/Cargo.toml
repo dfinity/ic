@@ -22,6 +22,7 @@ ic-nns-governance = { path = "../../../nns/governance" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-sns-wasm = { path = "../../../nns/sns-wasm" }
+ic-system-test-driver = { path = "../../driver" }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 tests = { path = "../../" }
 ic-types = { path = "../../../types/types" }

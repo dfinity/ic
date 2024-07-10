@@ -5,6 +5,7 @@ pub mod sandbox_safe_system_state;
 mod stable_memory;
 
 use ic_base_types::PrincipalIdBlobParseError;
+use ic_config::embedders::StableMemoryPageLimit;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -1499,6 +1500,34 @@ impl SystemApiImpl {
             self.api_type,
             ApiType::Init { .. } | ApiType::PreUpgrade { .. }
         )
+    }
+
+    /// Based on the page limit object, returns the page limit for the current
+    /// system API type. Can be called with the limit for dirty pages or accessed pages.
+    pub fn get_page_limit(&self, page_limit: &StableMemoryPageLimit) -> NumOsPages {
+        match &self.api_type {
+            // Longer-running messages make use of a different, possibly higher limit.
+            ApiType::Init { .. } | ApiType::PreUpgrade { .. } => page_limit.upgrade,
+            // Queries have a separate limit.
+            ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => page_limit.query,
+            // Callbacks and cleanup for composite queries (non-replicated execution) need to be treated as queries,
+            // whereas in replicated mode they are treated as regular messages.
+            ApiType::ReplyCallback { execution_mode, .. }
+            | ApiType::RejectCallback { execution_mode, .. }
+            | ApiType::Cleanup { execution_mode, .. } => {
+                if *execution_mode == ExecutionMode::NonReplicated {
+                    page_limit.query
+                } else {
+                    page_limit.message
+                }
+            }
+            // All other API types get the replicated message limit.
+            ApiType::Update { .. } | ApiType::Start { .. } | ApiType::SystemTask { .. } => {
+                page_limit.message
+            }
+        }
     }
 }
 

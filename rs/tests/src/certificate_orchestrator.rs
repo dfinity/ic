@@ -13,16 +13,15 @@ Coverage:: The certificate orchestrator interface works as expected.
 
 end::catalog[] */
 
-use crate::{
+use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            retry_async, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    retry_with_msg_async,
     util::agent_observes_canister_module,
 };
 
@@ -109,7 +108,7 @@ pub fn access_control_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 app_node.get_public_url().to_string(),
@@ -265,7 +264,7 @@ pub fn registration_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 app_node.get_public_url().to_string(),
@@ -298,7 +297,7 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -324,7 +323,7 @@ pub fn registration_test(env: TestEnv) {
         .expect("failed to check the registration state");
 
         // Check the state of an inexistent registration
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -364,7 +363,7 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -395,7 +394,7 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -425,7 +424,7 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -455,7 +454,7 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -485,7 +484,7 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -531,7 +530,7 @@ pub fn registration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -625,7 +624,7 @@ pub fn expiration_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 app_node.get_public_url().to_string(),
@@ -667,7 +666,7 @@ pub fn expiration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -708,7 +707,7 @@ pub fn expiration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -748,7 +747,7 @@ pub fn expiration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -775,7 +774,7 @@ pub fn expiration_test(env: TestEnv) {
         .expect("failed to check the registration state");
 
         // Check that the "in-progress" registration request has been expired
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -805,7 +804,7 @@ pub fn expiration_test(env: TestEnv) {
         .expect("failed to check the registration state");
 
         // Check that the successful registration request is still available
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -879,7 +878,7 @@ pub fn renewal_expiration_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 app_node.get_public_url().to_string(),
@@ -921,7 +920,7 @@ pub fn renewal_expiration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -961,7 +960,7 @@ pub fn renewal_expiration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1001,7 +1000,7 @@ pub fn renewal_expiration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1028,7 +1027,7 @@ pub fn renewal_expiration_test(env: TestEnv) {
         .expect("failed to check the registration state");
 
         // Check that renewal registration has been expired
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1103,7 +1102,7 @@ pub fn task_queue_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 app_node.get_public_url().to_string(),
@@ -1161,7 +1160,7 @@ pub fn task_queue_test(env: TestEnv) {
 
         // Test the task queue
         // peek empty task queue
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "peek task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1182,7 +1181,7 @@ pub fn task_queue_test(env: TestEnv) {
         .expect("retry failed");
 
         // peek without authorisation
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "peek task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1249,7 +1248,7 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // check if new task appears
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "peek task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1270,7 +1269,7 @@ pub fn task_queue_test(env: TestEnv) {
         .expect("retry failed");
 
         // dispense task
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "dispense task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1291,7 +1290,7 @@ pub fn task_queue_test(env: TestEnv) {
         .expect("retry failed");
 
         // try to dispense a task from empty queue
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "dispense task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1309,7 +1308,7 @@ pub fn task_queue_test(env: TestEnv) {
         .expect("retry failed");
 
         // try to dispense a task without authorization
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "dispense task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1339,7 +1338,7 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // peek task queue with only future tasks
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "peek task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1355,7 +1354,7 @@ pub fn task_queue_test(env: TestEnv) {
         .expect("retry failed");
 
         // try to dispense a task from a queue with only future tasks
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "dispense task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1387,7 +1386,7 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // check if the task appears
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "peek task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1422,7 +1421,7 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // peek task queue with only future tasks - should be empty
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "peek task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1484,7 +1483,7 @@ pub fn retry_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 app_node.get_public_url().to_string(),
@@ -1526,7 +1525,7 @@ pub fn retry_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1570,7 +1569,7 @@ pub fn retry_test(env: TestEnv) {
         };
 
         // dispense task
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "dispense task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1591,7 +1590,7 @@ pub fn retry_test(env: TestEnv) {
         .expect("retry failed");
 
         // Check that the task gets rescheduled after some time
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "peek task".to_string(),
             &logger,
             CHECK_TIMEOUT,
@@ -1659,7 +1658,7 @@ pub fn certificate_export_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 app_node.get_public_url().to_string(),

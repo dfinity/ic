@@ -23,14 +23,6 @@ Success::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot,
-};
 use crate::message_routing::xnet_slo_test;
 use crate::orchestrator::utils::{
     rw_message::install_nns_and_check_progress,
@@ -39,8 +31,16 @@ use crate::orchestrator::utils::{
         UpdateImageType,
     },
 };
-use crate::util::{block_on, runtime_from_url, MetricsFetcher};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    IcNodeSnapshot,
+};
+use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
 use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;

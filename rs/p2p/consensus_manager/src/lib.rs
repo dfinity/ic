@@ -14,7 +14,7 @@ use ic_interfaces::p2p::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, SubnetTopology, Transport};
-use ic_types::artifact::{ArtifactKind, UnvalidatedArtifactMutation};
+use ic_types::artifact::{PbArtifact, UnvalidatedArtifactMutation};
 use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
@@ -60,8 +60,9 @@ impl ConsensusManagerBuilder {
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) where
         Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-        Artifact: ArtifactKind,
+        Artifact: PbArtifact,
     {
+        assert!(uri_prefix::<Artifact>().chars().all(char::is_alphabetic));
         let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone(), pool.clone());
 
         let log = self.log.clone();
@@ -122,7 +123,7 @@ fn start_consensus_manager<Artifact, Pool>(
     cancellation_token: CancellationToken,
 ) where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: ArtifactKind,
+    Artifact: PbArtifact,
 {
     let metrics = ConsensusManagerMetrics::new::<Artifact>(metrics_registry);
 
@@ -148,19 +149,19 @@ fn start_consensus_manager<Artifact, Pool>(
     );
 }
 
-pub(crate) struct SlotUpdate<Artifact: ArtifactKind> {
+pub(crate) struct SlotUpdate<Artifact: PbArtifact> {
     slot_number: SlotNumber,
     commit_id: CommitId,
     update: Update<Artifact>,
 }
 
-pub(crate) enum Update<Artifact: ArtifactKind> {
-    Artifact(Artifact::Message),
+pub(crate) enum Update<Artifact: PbArtifact> {
+    Artifact(Artifact),
     Advert((Artifact::Id, Artifact::Attribute)),
 }
 
-pub(crate) fn uri_prefix<Artifact: ArtifactKind>() -> String {
-    Artifact::TAG.to_string().to_lowercase()
+pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
+    Artifact::NAME.to_lowercase()
 }
 
 struct SlotNumberTag;
@@ -168,33 +169,3 @@ pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
 pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
-
-#[cfg(test)]
-mod tests {
-    use ic_types::artifact_kind::{
-        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
-        IngressArtifact,
-    };
-
-    use crate::uri_prefix;
-
-    #[test]
-    fn no_special_chars_in_uri() {
-        assert!(uri_prefix::<ConsensusArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<CertificationArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<DkgArtifact>().chars().all(char::is_alphabetic));
-        assert!(uri_prefix::<IngressArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<EcdsaArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<CanisterHttpArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-    }
-}

@@ -3,19 +3,20 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
-    "@crate_index//:tokio",
-    "@crate_index//:tokio-util",
     "@crate_index//:arc-swap",
-    "@crate_index//:url",
-    "@crate_index//:ic-agent",
     "@crate_index//:http",
-    "@crate_index//:thiserror",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:simple_moving_average",
+    "@crate_index//:ic-agent",
     "@crate_index//:rand",
     "@crate_index//:ring",
+    "@crate_index//:simple_moving_average",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:url",
 ]
 
 VERSION = "0.1.0"

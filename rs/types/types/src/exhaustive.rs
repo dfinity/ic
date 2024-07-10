@@ -4,11 +4,10 @@ use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
-    EcdsaUIDGenerator, HasMasterPublicKeyId, IDkgReshareRequest, KeyTranscriptCreation,
-    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
-    RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
-    UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
+    CompletedReshareRequest, CompletedSignature, EcdsaPayload, EcdsaUIDGenerator,
+    HasMasterPublicKeyId, IDkgReshareRequest, MaskedTranscript, MasterKeyTranscript, PreSigId,
+    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{BlockPayload, ConsensusMessageHashable};
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
@@ -29,7 +28,7 @@ use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
 use crate::xnet::CertifiedStreamSlice;
 use crate::{CryptoHashOfState, ReplicaVersion};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
     GetSuccessorsResponseComplete, SendTransactionResponse,
 };
@@ -728,28 +727,6 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedIDkgReshareRequest {
-    pub key_id: MasterPublicKeyId,
-    pub receiving_node_ids: Vec<NodeId>,
-    pub registry_version: RegistryVersion,
-}
-
-impl ExhaustiveSet for IDkgReshareRequest {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedIDkgReshareRequest::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| IDkgReshareRequest {
-                key_id: None,
-                master_key_id: r.key_id,
-                receiving_node_ids: r.receiving_node_ids,
-                registry_version: r.registry_version,
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedEcdsaPayload {
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
@@ -758,7 +735,7 @@ pub struct DerivedEcdsaPayload {
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
-    pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
+    pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
 }
 
 impl ExhaustiveSet for EcdsaPayload {
@@ -774,28 +751,6 @@ impl ExhaustiveSet for EcdsaPayload {
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedEcdsaKeyTranscript {
-    pub current: Option<UnmaskedTranscriptWithAttributes>,
-    pub next_in_creation: KeyTranscriptCreation,
-    pub master_key_id: MasterPublicKeyId,
-}
-
-impl ExhaustiveSet for EcdsaKeyTranscript {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedEcdsaKeyTranscript::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| EcdsaKeyTranscript {
-                deprecated_key_id: None,
-                master_key_id: r.master_key_id,
-                current: r.current,
-                next_in_creation: r.next_in_creation,
             })
             .collect()
     }
@@ -882,7 +837,7 @@ impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
 
-impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
+impl HasId<MasterPublicKeyId> for MasterKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
         Some(self.key_id())
     }

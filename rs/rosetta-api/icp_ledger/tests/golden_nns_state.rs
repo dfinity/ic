@@ -4,13 +4,16 @@ use ic_ledger_test_utils::{
     build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
     build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
 };
-use ic_nns_constants::LEDGER_CANISTER_INDEX_IN_NNS_SUBNET;
+use ic_nns_constants::{
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
+};
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{Archives, FeatureFlags, LedgerCanisterPayload, UpgradeArgs};
 
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
-const INDEX_CANISTER_ID: CanisterId = CanisterId::from_u64(11);
+const INDEX_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 
 /// Create a state machine with the golden NNS state, then upgrade and downgrade the ICP
 /// ledger canister suite.

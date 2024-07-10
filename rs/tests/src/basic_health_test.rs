@@ -33,14 +33,13 @@ end::catalog[] */
 
 use std::time::Duration;
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::*;
-use crate::retry_with_msg_async;
-use crate::util::*; // to use the universal canister
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::*;
+use ic_system_test_driver::util::*; // to use the universal canister
 use slog::info;
 
 pub fn config_single_host(env: TestEnv) {
@@ -162,7 +161,7 @@ pub fn test(env: TestEnv) {
         node.with_default_agent(move |agent| async move {
             let ucan = UniversalCanister::from_canister_id(&agent, ucan_id);
             // NOTE: retries are important here, 1/3 of the nodes might not observe changes immediately.
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "check if read message from canister {} is as expected",
                     ucan_id.to_string()

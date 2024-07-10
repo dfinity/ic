@@ -744,10 +744,6 @@ impl SandboxSafeSystemState {
         self.global_timer = timer;
     }
 
-    pub fn changes(self) -> SystemStateChanges {
-        self.system_state_changes
-    }
-
     pub fn take_changes(&mut self) -> SystemStateChanges {
         std::mem::take(&mut self.system_state_changes)
     }

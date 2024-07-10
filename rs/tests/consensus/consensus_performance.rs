@@ -45,9 +45,9 @@
 //
 // Happy testing!
 
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::consensus::consensus_performance_test::{custom_message_test, setup};
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 
 use anyhow::Result;
 use std::time::Duration;

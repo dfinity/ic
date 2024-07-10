@@ -10,6 +10,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
@@ -40,7 +41,6 @@ DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:futures",
     "@crate_index//:hex",
-    "@crate_index//:time",
     "@crate_index//:parking_lot",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -55,14 +55,17 @@ DEPENDENCIES = [
     "@crate_index//:tarpc",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
+    "@crate_index//:time",
     "@crate_index//:tokio",
     "@crate_index//:tokio-serde",
     "@crate_index//:tokio-util",
+    "@crate_index//:tracing",
     "@crate_index//:x509-parser",
     "@crate_index//:zeroize",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
     "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
@@ -71,8 +74,8 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/keys",
-    "//rs/crypto/test_utils/metrics",
     "//rs/crypto/test_utils/local_csp_vault",
+    "//rs/crypto/test_utils/metrics",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/utils/basic_sig",
     "//rs/test_utilities/in_memory_logger",
@@ -80,21 +83,22 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:lazy_static",
-    "@crate_index//:num_cpus",
     "@crate_index//:mockall",
+    "@crate_index//:num_cpus",
     "@crate_index//:proptest",
     "@crate_index//:rsa",
     "@crate_index//:slog-async",
-    "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
+    # Keep sorted.
     "@crate_index//:educe",
+    "@crate_index//:strum_macros",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest-derive",
 ]
 
@@ -149,6 +153,7 @@ generated_files_check(
     data = glob(["src/gen/**"]) + [":protos"],
     manifest_dir = "rs/crypto/internal/crypto_service_provider",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/crypto_service_provider/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

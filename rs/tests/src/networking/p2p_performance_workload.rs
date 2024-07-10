@@ -1,4 +1,4 @@
-use crate::{
+use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
@@ -6,12 +6,11 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsInstallationBuilder, SshSession, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
-    retry_with_msg_async,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
 
@@ -190,7 +189,7 @@ pub fn test(
     );
     block_on(async {
         for agent in app_agents.iter() {
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!("observing canister module {}", app_canister.to_string()),
                 &log,
                 READY_WAIT_TIMEOUT,

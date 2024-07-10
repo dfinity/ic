@@ -4,7 +4,7 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    assert_is_ok, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
+    assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::{
@@ -26,9 +26,10 @@ use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_swap::{
     pb::v1::{
         new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
-        settle_neurons_fund_participation_result, BuyerState, FinalizeSwapResponse, Lifecycle,
-        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersResponse,
-        SetModeCallResult, SettleNeuronsFundParticipationResult, SweepResult,
+        settle_neurons_fund_participation_result, BuyerState, FinalizeSwapResponse,
+        GetDerivedStateResponse, Lifecycle, RefreshBuyerTokensResponse,
+        SetDappControllersCallResult, SetDappControllersResponse, SetModeCallResult,
+        SettleNeuronsFundParticipationResult, SweepResult,
     },
     swap::principal_to_subaccount,
 };
@@ -116,8 +117,8 @@ struct DirectParticipantConfig {
 /// 4.2. Unused portions of Neurons' Fund maturity reserved at SNS creation time are refunded.
 ///
 /// 5. Control over the dapp:
-/// 5.1. `{ dapp_canister_status.controllers() == vec![developer] } FinalizeUnSuccessfully { dapp_canister_status.controllers() == vec![developer] }`
-/// 5.2. `{ dapp_canister_status.controllers() == vec![developer] } FinalizeSuccessfully   { dapp_canister_status.controllers() == vec![sns_governance] }`
+/// 5.1. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeUnSuccessfully { dapp_canister_status.controllers() == vec![fallback_controllers] }`
+/// 5.2. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeSuccessfully   { dapp_canister_status.controllers() == vec![sns_root] }`
 ///
 /// 6. SNS neuron creation:
 /// 6.1. `{ true } FinalizeUnSuccessfully { No additional SNS neurons are created. }`
@@ -168,6 +169,14 @@ fn test_sns_lifecycle(
         .unwrap()
         .e8s
         .unwrap();
+    let expect_swap_overcommitted = {
+        let minimum_participants = swap_parameters.minimum_participants.unwrap();
+        max_participant_icp_e8s as u128 * minimum_participants as u128
+            > max_direct_participation_icp_e8s as u128
+    };
+    let expect_neurons_fund_participation = swap_parameters
+        .neurons_fund_participation
+        .unwrap_or_default();
     let (developer_neuron_stake_sns_e8s, treasury_distribution_sns_e8s, swap_distribution_sns_e8s) = {
         let treasury_distribution_sns_e8s = initial_token_distribution
             .treasury_distribution
@@ -320,22 +329,25 @@ fn test_sns_lifecycle(
     }
 
     // Check who has control over the dapp before the swap.
-    for dapp_canister_id in dapp_canister_ids.clone() {
-        let controllers: BTreeSet<_> = pocket_ic
-            .canister_status(
-                Principal::from(dapp_canister_id),
-                Some(Principal::from(ROOT_CANISTER_ID.get())),
-            )
-            .unwrap()
-            .settings
-            .controllers
-            .into_iter()
-            .map(PrincipalId::from)
-            .collect();
-        assert_eq!(
-            controllers,
-            original_controllers.clone().into_iter().collect()
-        );
+    // This is very likely to succeed, because we just created the canisters a moment ago.
+    {
+        for dapp_canister_id in dapp_canister_ids.clone() {
+            let controllers: BTreeSet<_> = pocket_ic
+                .canister_status(
+                    Principal::from(dapp_canister_id),
+                    Some(Principal::from(ROOT_CANISTER_ID.get())),
+                )
+                .unwrap()
+                .settings
+                .controllers
+                .into_iter()
+                .map(PrincipalId::from)
+                .collect();
+            assert_eq!(
+                controllers,
+                original_controllers.clone().into_iter().collect()
+            );
+        }
     }
 
     // 2. Create an SNS instance
@@ -375,15 +387,13 @@ fn test_sns_lifecycle(
 
     let nervous_system_parameters =
         sns::governance::get_nervous_system_parameters(&pocket_ic, sns_governance_canister_id);
-    let sns_neurons_per_backet = {
-        let swap_init = sns::swap::get_init(&pocket_ic, swap_canister_id)
-            .init
-            .unwrap();
-        swap_init
-            .neuron_basket_construction_parameters
-            .unwrap()
-            .count
-    };
+    let swap_init = sns::swap::get_init(&pocket_ic, swap_canister_id)
+        .init
+        .unwrap();
+    let sns_neurons_per_backet = swap_init
+        .neuron_basket_construction_parameters
+        .unwrap()
+        .count;
 
     // This set is used to determine SNS neurons created as a result of the swap (by excluding those
     // which are in this collection).
@@ -452,6 +462,28 @@ fn test_sns_lifecycle(
         );
     }
 
+    // Check that the dapp canisters are now controlled by SNS Root and NNS Root.
+    {
+        let expected_new_controllers =
+            BTreeSet::from([sns_root_canister_id, ROOT_CANISTER_ID.get()]);
+        for dapp_canister_id in dapp_canister_ids.clone() {
+            let sender = expected_new_controllers // the sender must be a controller
+                .first()
+                .cloned()
+                .map(Principal::from);
+            let controllers: BTreeSet<_> = pocket_ic
+                .canister_status(Principal::from(dapp_canister_id), sender)
+                .unwrap()
+                .settings
+                .controllers
+                .into_iter()
+                .map(PrincipalId::from)
+                .collect();
+
+            assert_eq!(controllers, expected_new_controllers);
+        }
+    }
+
     // Currently, the neuron cannot start dissolving (an error is expected).
     {
         let start_dissolving_response = sns::governance::start_dissolving_neuron(
@@ -511,8 +543,18 @@ fn test_sns_lifecycle(
     // Check that the derived state correctly reflects the pre-state of the swap.
     {
         let derived_state = sns::swap::get_derived_state(&pocket_ic, swap_canister_id);
-        assert_eq!(derived_state.direct_participation_icp_e8s.unwrap(), 0);
-        assert_eq!(derived_state.neurons_fund_participation_icp_e8s.unwrap(), 0);
+        assert_eq!(
+            derived_state,
+            GetDerivedStateResponse {
+                buyer_total_icp_e8s: Some(0),
+                direct_participant_count: Some(0),
+                cf_participant_count: Some(0),
+                cf_neuron_count: Some(0),
+                sns_tokens_per_icp: Some(0.0),
+                direct_participation_icp_e8s: Some(0),
+                neurons_fund_participation_icp_e8s: Some(0),
+            }
+        );
     }
 
     // 3. Transfer ICP to our direct participants' SNSes subaccounts.
@@ -654,10 +696,24 @@ fn test_sns_lifecycle(
                 assert_eq!(icp.amount_e8s, expected_accepted_participation_amount_e8s);
             }
 
+            // Postcondition C: the ticket has been deleted.
+            {
+                let response =
+                    sns::swap::get_open_ticket(&pocket_ic, swap_canister_id, direct_participant)
+                        .expect("Swap.get_open_ticket response should be Ok.");
+                assert_eq!(response.ticket(), Ok(None));
+            }
+
             direct_sns_neuron_recipients.push(direct_participant);
         }
-        sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Committed)
-            .unwrap();
+
+        // In this runbook, all participants participate s.t. `max_participant_icp_e8s` is reached.
+        let expected_lifecycle = if expect_swap_overcommitted {
+            Lifecycle::Aborted
+        } else {
+            Lifecycle::Committed
+        };
+        sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, expected_lifecycle).unwrap();
         direct_sns_neuron_recipients
     };
 
@@ -667,11 +723,12 @@ fn test_sns_lifecycle(
     // It may take some time for the process to complete, so we should await (implemented via a busy
     // loop) rather than try just once.
     let swap_finalization_status = {
-        let expected_swap_finalization_status = if ensure_swap_timeout_is_reached {
-            SwapFinalizationStatus::Aborted
-        } else {
-            SwapFinalizationStatus::Committed
-        };
+        let expected_swap_finalization_status =
+            if ensure_swap_timeout_is_reached || expect_swap_overcommitted {
+                SwapFinalizationStatus::Aborted
+            } else {
+                SwapFinalizationStatus::Committed
+            };
         if let Err(err) = sns::swap::await_swap_finalization_status(
             &pocket_ic,
             swap_canister_id,
@@ -717,7 +774,18 @@ fn test_sns_lifecycle(
                 .expect("Error while calling Swap.error_refund_icp");
 
         use ic_sns_swap::pb::v1::error_refund_icp_response;
-        let expected_refund_e8s = if swap_finalization_status == SwapFinalizationStatus::Aborted {
+
+        // Notes to help understand this spec:
+        // 1. Currently, Swap.error_refund_icp returns an error from ICP Ledger if the amount
+        //    to reimburse is zero (or less than the transfer fee).
+        // 2. Currently, when `ensure_swap_timeout_is_reached` is true, none of the direct
+        //    participants call Swap.refresh_buyer_tokens before the timeout, so their ICP is still
+        //    to be refunded by calling Swap.error_refund_icp (case A).
+        // 3. Conversely, when `ensure_swap_timeout_is_reached` is false and
+        //    `expect_swap_overcommitted` is true, Swap.sweep_icp takes care of all the refunds,
+        //    so there's no more refunds that can happen in Swap.error_refund_icp, which thus
+        //    returns an error (case B).
+        let expected_refund_e8s = if ensure_swap_timeout_is_reached {
             // Case A: Expecting to get refunded with Transferred - (ICP Ledger transfer fee).
             assert_matches!(
                 error_refund_icp_result,
@@ -740,7 +808,11 @@ fn test_sns_lifecycle(
                 "the debit account doesn't have enough funds to complete the transaction"
             ));
 
-            0
+            if expect_swap_overcommitted {
+                attempted_participation_amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s()
+            } else {
+                0
+            }
         } else {
             // Case C: Expecting to get refunded with Transferred - Accepted - (ICP Ledger transfer fee).
             assert_matches!(
@@ -768,10 +840,7 @@ fn test_sns_lifecycle(
         let expected_neuron_count = if swap_finalization_status == SwapFinalizationStatus::Aborted {
             0
         } else {
-            let swap_participating_nns_neuron_count = if swap_parameters
-                .neurons_fund_participation
-                .unwrap_or_default()
-            {
+            let swap_participating_nns_neuron_count = if expect_neurons_fund_participation {
                 direct_participants.len() as u128 + neurons_fund_nns_neurons.len() as u128
             } else {
                 direct_participants.len() as u128
@@ -782,7 +851,7 @@ fn test_sns_lifecycle(
         let expected_sweep_icp_result = Some(SweepResult {
             success: 0,
             failure: 0,
-            skipped: if swap_finalization_status == SwapFinalizationStatus::Aborted {
+            skipped: if ensure_swap_timeout_is_reached {
                 0
             } else {
                 direct_participants.len() as u32
@@ -844,9 +913,7 @@ fn test_sns_lifecycle(
         let expected_settle_neurons_fund_participation_result = {
             let (neurons_fund_participation_icp_e8s, neurons_fund_neurons_count) =
                 if swap_finalization_status == SwapFinalizationStatus::Committed
-                    && swap_parameters
-                        .neurons_fund_participation
-                        .unwrap_or_default()
+                    && expect_neurons_fund_participation
                 {
                     (
                         Some(150_000 * E8),
@@ -891,15 +958,86 @@ fn test_sns_lifecycle(
     }
 
     // Inspect the final derived state
-    let derived_state = sns::swap::get_derived_state(&pocket_ic, swap_canister_id);
-    if swap_finalization_status == SwapFinalizationStatus::Aborted {
-        assert_eq!(derived_state.direct_participation_icp_e8s.unwrap(), 0);
-    } else {
-        assert_eq!(
-            derived_state.direct_participation_icp_e8s.unwrap(),
-            650_000 * E8
+    {
+        // Declare the expectations for all relevant fields.
+        let dpc = || direct_participants.len() as u64;
+        // For cf_participant_count.
+        let nfpc = || nns_controller_to_neurons_fund_neurons.keys().len() as u64;
+        // For cf_neuron_count.
+        let nfnc = || nns_controller_to_neurons_fund_neurons.values().len() as u64;
+        let (
+            direct_participant_count,
+            direct_participation_icp_e8s,
+            cf_participant_count,
+            cf_neuron_count,
+            neurons_fund_participation_icp_e8s,
+            buyer_total_icp_e8s,
+        ) = match (
+            ensure_swap_timeout_is_reached,
+            expect_swap_overcommitted,
+            expect_neurons_fund_participation,
+        ) {
+            (true, true, _) => {
+                // Only !(ensure_swap_timeout_is_reached ^ expect_swap_overcommitted) scenarios
+                // are currently supported.
+                unimplemented!();
+            }
+            (true, false, _) => (Some(0), Some(0), Some(0), Some(0), Some(0), Some(0)),
+            (false, true, true) => {
+                // The Neurons' Fund is orthogonal to the overpayment scenario.
+                unimplemented!();
+            }
+            (false, true, false) => (
+                Some(dpc()),
+                Some(650_000 * E8),
+                Some(0),
+                Some(0),
+                Some(0),
+                Some(650_000 * E8),
+            ),
+            (false, false, true) => (
+                Some(dpc()),
+                Some(650_000 * E8),
+                Some(nfpc()),
+                Some(nfnc()),
+                Some(150_000 * E8),
+                Some(800_000 * E8),
+            ),
+            (false, false, false) => (
+                Some(dpc()),
+                Some(650_000 * E8),
+                Some(0),
+                Some(0),
+                Some(0),
+                Some(650_000 * E8),
+            ),
+        };
+        let sns_tokens_per_icp = Some(
+            buyer_total_icp_e8s
+                .map(|buyer_total_icp_e8s| {
+                    let sns_token_e8s = swap_init.sns_token_e8s.unwrap();
+                    i2d(sns_token_e8s)
+                        .checked_div(i2d(buyer_total_icp_e8s))
+                        .and_then(|d| d.to_f32())
+                        .unwrap_or(0.0)
+                })
+                .unwrap_or(0.0) as f64,
         );
-    }
+
+        let observed_derived_state = sns::swap::get_derived_state(&pocket_ic, swap_canister_id);
+        assert_eq!(
+            observed_derived_state,
+            GetDerivedStateResponse {
+                direct_participant_count,
+                direct_participation_icp_e8s,
+                cf_participant_count,
+                cf_neuron_count,
+                neurons_fund_participation_icp_e8s,
+                buyer_total_icp_e8s,
+                sns_tokens_per_icp,
+            }
+        );
+    };
 
     // Assert that the mode of SNS Governance is correct
     if swap_finalization_status == SwapFinalizationStatus::Aborted {
@@ -916,6 +1054,23 @@ fn test_sns_lifecycle(
                 .unwrap(),
             sns_pb::governance::Mode::Normal as i32
         );
+    }
+
+    // Validate `get_sns_canisters_summary`.
+    {
+        let response = sns::root::get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
+        let observed_dapp_canister_ids = response
+            .dapps
+            .into_iter()
+            .map(|canister_summary| {
+                CanisterId::unchecked_from_principal(canister_summary.canister_id.unwrap())
+            })
+            .collect::<Vec<_>>();
+        if swap_finalization_status == SwapFinalizationStatus::Aborted {
+            assert_eq!(observed_dapp_canister_ids, vec![]);
+        } else {
+            assert_eq!(observed_dapp_canister_ids, dapp_canister_ids);
+        }
     }
 
     // Ensure that the proposal submission is possible if and only if the SNS governance has
@@ -1072,10 +1227,7 @@ fn test_sns_lifecycle(
     let neurons_fund_neuron_controllers_to_neuron_portions: BTreeMap<
         PrincipalId,
         NeuronsFundNeuronPortion,
-    > = if swap_parameters
-        .neurons_fund_participation
-        .unwrap_or_default()
-    {
+    > = if expect_neurons_fund_participation {
         let Some(get_neurons_fund_audit_info_response::Result::Ok(
             get_neurons_fund_audit_info_response::Ok {
                 neurons_fund_audit_info: Some(neurons_fund_audit_info),
@@ -1151,10 +1303,7 @@ fn test_sns_lifecycle(
                 // ```
                 expected_neuron_controller_principal_ids
                     .extend(neurons_fund_neuron_controller_principal_ids.iter());
-                if swap_parameters
-                    .neurons_fund_participation
-                    .unwrap_or_default()
-                {
+                if expect_neurons_fund_participation {
                     // NNS Governance is the expected controller of SNS neurons created for
                     // the Neurons' Fund participants.
                     expected_neuron_controller_principal_ids.insert(GOVERNANCE_CANISTER_ID.get());
@@ -1484,36 +1633,8 @@ fn test_sns_lifecycle(
         }
     }
 
-    if swap_parameters
-        .neurons_fund_participation
-        .unwrap_or_default()
-    {
-        if swap_finalization_status == SwapFinalizationStatus::Aborted {
-            assert_eq!(
-                derived_state.neurons_fund_participation_icp_e8s.unwrap(),
-                0,
-                "Neurons' Fund participation should not be provided to an aborted SNS swap.",
-            );
-        } else {
-            assert_eq!(
-                derived_state.neurons_fund_participation_icp_e8s.unwrap(),
-                150_000 * E8,
-                "Neurons' Fund participation is expected to be at 10% of its total maturity.",
-            );
-        }
-    } else {
-        assert_eq!(
-            derived_state.neurons_fund_participation_icp_e8s.unwrap(),
-            0,
-            "Neurons' Fund participation has not been requested, yet there is some.",
-        );
-    }
-
     // Check that the maturity of the Neurons' Fund neurons adds up.
-    if swap_parameters
-        .neurons_fund_participation
-        .unwrap_or_default()
-    {
+    if expect_neurons_fund_participation {
         let Some(get_neurons_fund_audit_info_response::Result::Ok(
             get_neurons_fund_audit_info_response::Ok {
                 neurons_fund_audit_info: Some(neurons_fund_audit_info),
@@ -1628,28 +1749,31 @@ fn test_sns_lifecycle(
     }
 
     // Check who has control over the dapp after the swap.
-    let expected_new_controllers = if swap_finalization_status == SwapFinalizationStatus::Aborted {
-        // The SNS swap has failed  ==>  control should be returned to the fallback controllers.
-        fallback_controllers.into_iter().collect::<BTreeSet<_>>()
-    } else {
-        // The SNS swap has succeeded  ==>  root should have sole control.
-        BTreeSet::from([sns_root_canister_id])
-    };
-    for dapp_canister_id in dapp_canister_ids {
-        let sender = expected_new_controllers // the sender must be a controller
-            .first()
-            .cloned()
-            .map(Principal::from);
-        let controllers: BTreeSet<_> = pocket_ic
-            .canister_status(Principal::from(dapp_canister_id), sender)
-            .unwrap()
-            .settings
-            .controllers
-            .into_iter()
-            .map(PrincipalId::from)
-            .collect();
+    {
+        let expected_new_controllers =
+            if swap_finalization_status == SwapFinalizationStatus::Aborted {
+                // The SNS swap has failed  ==>  control should be returned to the fallback controllers.
+                fallback_controllers.into_iter().collect::<BTreeSet<_>>()
+            } else {
+                // The SNS swap has succeeded  ==>  root should have sole control.
+                BTreeSet::from([sns_root_canister_id])
+            };
+        for dapp_canister_id in dapp_canister_ids {
+            let sender = expected_new_controllers // the sender must be a controller
+                .first()
+                .cloned()
+                .map(Principal::from);
+            let controllers: BTreeSet<_> = pocket_ic
+                .canister_status(Principal::from(dapp_canister_id), sender)
+                .unwrap()
+                .settings
+                .controllers
+                .into_iter()
+                .map(PrincipalId::from)
+                .collect();
 
-        assert_eq!(controllers, expected_new_controllers);
+            assert_eq!(controllers, expected_new_controllers);
+        }
     }
 }
 
@@ -1691,7 +1815,20 @@ fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
 }
 
 #[test]
-fn test_sns_lifecycle_happy_scenario_wih_dapp_canisters() {
+fn test_sns_lifecycle_overpayment_scenario() {
+    test_sns_lifecycle(
+        false,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(false)
+            .with_minimum_participants(2)
+            .with_dapp_canisters(vec![CanisterId::from_u64(100)])
+            .build(),
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+    );
+}
+
+#[test]
+fn test_sns_lifecycle_happy_scenario_with_dapp_canisters() {
     test_sns_lifecycle(
         false,
         CreateServiceNervousSystemBuilder::default()

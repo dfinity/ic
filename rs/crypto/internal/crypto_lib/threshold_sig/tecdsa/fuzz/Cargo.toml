@@ -13,7 +13,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 subtle = "2.4"
-num-bigint = "~0.4.3"
+num-bigint = { workspace = true }
 hex = { workspace = true }
 
 [dependencies.ic-crypto-internal-threshold-sig-ecdsa]

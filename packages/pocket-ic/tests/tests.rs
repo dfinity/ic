@@ -1,6 +1,7 @@
 use candid::{decode_one, encode_one, Principal};
 use ic_base_types::PrincipalId;
-use ic_cdk::api::management_canister::provisional::CanisterId;
+use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
+use ic_cdk::api::management_canister::main::{CanisterId, CanisterSettings};
 use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo, Name,
@@ -8,8 +9,9 @@ use icp_ledger::{
 };
 use pocket_ic::{
     common::rest::{BlobCompression, SubnetConfigSet, SubnetKind},
-    PocketIc, PocketIcBuilder, WasmResult,
+    update_candid, PocketIc, PocketIcBuilder, WasmResult,
 };
+use sha2::{Digest, Sha256};
 use std::{collections::HashMap, io::Read, time::SystemTime};
 
 // 2T cycles
@@ -933,6 +935,33 @@ fn test_uninstall_canister() {
 }
 
 #[test]
+fn test_update_canister_settings() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 200T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, 100 * INIT_CYCLES);
+
+    // The compute allocation of the canister should be zero.
+    let status = pic.canister_status(can_id, None).unwrap();
+    let zero: candid::Nat = 0_u64.into();
+    assert_eq!(status.settings.compute_allocation, zero);
+
+    // Set the compute allocation to 1.
+    let new_compute_allocation: candid::Nat = 1_u64.into();
+    let settings = CanisterSettings {
+        compute_allocation: Some(new_compute_allocation.clone()),
+        ..Default::default()
+    };
+    pic.update_canister_settings(can_id, None, settings)
+        .unwrap();
+
+    // Check that the compute allocation has been set.
+    let status = pic.canister_status(can_id, None).unwrap();
+    assert_eq!(status.settings.compute_allocation, new_compute_allocation);
+}
+
+#[test]
 fn test_xnet_call_and_create_canister_with_specified_id() {
     // We start with a PocketIC instance consisting of two application subnets.
     let pic = PocketIcBuilder::new()
@@ -970,6 +999,7 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
     let bitcoin_canister_id = Principal::from_text("ghsi2-tqaaa-aaaan-aaaca-cai").unwrap();
     assert!(pic.get_subnet(bitcoin_canister_id).is_none());
+    assert!(pic.topology().get_bitcoin().is_none());
 
     // We create a canister with that specified canister ID: this should succeed
     // and a new subnet should be created.
@@ -978,6 +1008,7 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
         .unwrap();
     assert_eq!(canister_4, bitcoin_canister_id);
     let subnet_id_4 = pic.get_subnet(bitcoin_canister_id).unwrap();
+    assert_eq!(pic.topology().get_bitcoin().unwrap(), subnet_id_4);
     assert_ne!(subnet_id_1, subnet_id_4);
     assert_ne!(subnet_id_2, subnet_id_4);
     assert_ne!(subnet_id_3, subnet_id_4);
@@ -997,4 +1028,144 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
             }
         }
     }
+}
+
+#[test]
+fn test_query_call_on_new_pocket_ic() {
+    let pic = PocketIc::new();
+
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+    let canister_id = Principal::from_slice(
+        &topology.0.get(&app_subnet).unwrap().canister_ranges[0]
+            .start
+            .canister_id,
+    );
+
+    pic.query_call(canister_id, Principal::anonymous(), "foo", vec![])
+        .unwrap_err();
+}
+
+fn test_canister_wasm() -> Vec<u8> {
+    let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
+    std::fs::read(wasm_path).unwrap()
+}
+
+#[test]
+fn test_ecdsa() {
+    use k256::ecdsa::signature::hazmat::PrehashVerifier;
+
+    // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_ii_subnet() // this subnet has ECDSA keys
+        .with_application_subnet()
+        .build();
+
+    // We retrieve the app subnet ID from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
+
+    // We top up the canister with cycles and install the test canister WASM to them.
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We define the message, derivation path, and ECDSA key ID to use in this test.
+    let message = "Hello, world!".to_string();
+    let mut hasher = Sha256::new();
+    hasher.update(message);
+    let message_hash: Vec<u8> = hasher.finalize().to_vec();
+    let derivation_path = vec!["my message".as_bytes().to_vec()];
+    let key_id = "dfx_test_key1".to_string();
+
+    // We get the ECDSA public key and signature via update calls to the test canister.
+    let ecsda_public_key = update_candid::<
+        (Option<Principal>, Vec<Vec<u8>>, String),
+        (Result<EcdsaPublicKeyResponse, String>,),
+    >(
+        &pic,
+        canister,
+        "ecdsa_public_key",
+        (None, derivation_path.clone(), key_id.clone()),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+    let ecdsa_signature =
+        update_candid::<(Vec<u8>, Vec<Vec<u8>>, String), (Result<Vec<u8>, String>,)>(
+            &pic,
+            canister,
+            "sign_with_ecdsa",
+            (message_hash.clone(), derivation_path, key_id),
+        )
+        .unwrap()
+        .0
+        .unwrap();
+
+    // We verify the ECDSA signature.
+    let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&ecsda_public_key.public_key).unwrap();
+    let sig = k256::ecdsa::Signature::try_from(ecdsa_signature.as_slice()).unwrap();
+    pk.verify_prehash(&message_hash, &sig).unwrap();
+}
+
+#[test]
+fn test_ecdsa_disabled() {
+    // We create a PocketIC instance consisting of the NNS and one application subnet.
+    // With no II subnet, there's no subnet with ECDSA keys.
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // We retrieve the app subnet ID from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
+
+    // We top up the canister with cycles and install the test canister WASM to them.
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We define the message, derivation path, and ECDSA key ID to use in this test.
+    let message = "Hello, world!".to_string();
+    let mut hasher = Sha256::new();
+    hasher.update(message);
+    let message_hash: Vec<u8> = hasher.finalize().to_vec();
+    let derivation_path = vec!["my message".as_bytes().to_vec()];
+    let key_id = "dfx_test_key1".to_string();
+
+    // We attempt to get the ECDSA public key and signature via update calls to the test canister.
+    let ecsda_public_key_error = update_candid::<
+        (Option<Principal>, Vec<Vec<u8>>, String),
+        (Result<EcdsaPublicKeyResponse, String>,),
+    >(
+        &pic,
+        canister,
+        "ecdsa_public_key",
+        (None, derivation_path.clone(), key_id.clone()),
+    )
+    .unwrap()
+    .0
+    .unwrap_err();
+    assert!(ecsda_public_key_error
+        .contains("Requested unknown iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys: []"));
+
+    let ecdsa_signature_err =
+        update_candid::<(Vec<u8>, Vec<Vec<u8>>, String), (Result<Vec<u8>, String>,)>(
+            &pic,
+            canister,
+            "sign_with_ecdsa",
+            (message_hash.clone(), derivation_path, key_id),
+        )
+        .unwrap()
+        .0
+        .unwrap_err();
+    assert!(ecdsa_signature_err.contains("Requested unknown iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
 }

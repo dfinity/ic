@@ -1,7 +1,6 @@
 use crate::{pb::v1::NodeProvidersMonthlyXdrRewards, registry::Registry};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
     dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
@@ -11,6 +10,7 @@ use ic_registry_keys::{
     make_data_center_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_types::PrincipalId;
+use prost::Message;
 use std::{collections::HashMap, convert::TryFrom, str::from_utf8};
 
 impl Registry {
@@ -28,8 +28,7 @@ impl Registry {
             .value
             .clone();
 
-        let rewards_table: NodeRewardsTable =
-            decode_or_panic::<NodeRewardsTable>(rewards_table_bytes);
+        let rewards_table = NodeRewardsTable::decode(rewards_table_bytes.as_slice()).unwrap();
 
         // The reward coefficients for the NP, at the moment used only for type3 nodes, as a measure for stimulating decentralization.
         // It is kept outside of the reward calculation loop in order to reduce node rewards for NPs with multiple DCs.
@@ -42,7 +41,7 @@ impl Registry {
                 if value.deletion_marker {
                     continue;
                 }
-                let node_operator = decode_or_panic::<NodeOperatorRecord>(value.value.clone());
+                let node_operator = NodeOperatorRecord::decode(value.value.as_slice()).unwrap();
                 let node_operator_id = PrincipalId::try_from(
                     &node_operator.node_operator_principal_id,
                 )
@@ -78,7 +77,7 @@ impl Registry {
                     })?
                     .value
                     .clone();
-                let dc = decode_or_panic::<DataCenterRecord>(dc_record_bytes);
+                let dc = DataCenterRecord::decode(dc_record_bytes.as_slice()).unwrap();
                 let region = &dc.region;
 
                 let np_rewards = rewards

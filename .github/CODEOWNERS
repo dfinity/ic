@@ -97,7 +97,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
 /rs/bitcoin/service/                                    @dfinity/networking
-/rs/bitcoin/types/                                      @dfinity/execution
+/rs/bitcoin/replica_types/                              @dfinity/execution
 /rs/boundary_node/                                      @dfinity/boundary-node
 /rs/canister_client/                                    @dfinity/networking
 /rs/canister_sandbox/                                   @dfinity/runtime
@@ -151,8 +151,10 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
 /rs/memory_tracker/                                     @dfinity/runtime
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
-/rs/monitoring/adapter_metrics/                         @dfinity/networking
-/rs/monitoring/backtrace/                               @dfinity/ic-message-routing-owners @dfinity/networking
+/rs/monitoring/                                         @dfinity/networking
+/rs/monitoring/backtrace/                               @dfinity/networking @dfinity/ic-message-routing-owners
+/rs/monitoring/metrics                                  @dfinity/networking @dfinity/ic-message-routing-owners
+/rs/monitoring/pprof/                                   @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/nervous_system/                                     @dfinity/nns-team
 /rs/nns/                                                @dfinity/nns-team
 /rs/orchestrator/                                       @dfinity/consensus

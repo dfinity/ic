@@ -427,6 +427,7 @@ type ICRC3DataCertificate = record {
 
 type icrc21_consent_message_metadata = record {
     language: text;
+    utc_offset_minutes: opt int16;
 };
 
 type icrc21_consent_message_spec = record {

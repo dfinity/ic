@@ -15,7 +15,7 @@ use crate::{
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_management_canister_types::MasterPublicKeyId;
@@ -195,7 +195,7 @@ impl<'a> OutputIterator<'a> {
         if !subnet_queues_iter.is_empty() {
             canister_iterators.push_front(subnet_queues_iter)
         }
-        let size = canister_iterators.iter().map(|q| q.size_hint().0).sum();
+        let size = canister_iterators.iter().map(|q| q.size()).sum();
 
         OutputIterator {
             canister_iterators,
@@ -207,7 +207,7 @@ impl<'a> OutputIterator<'a> {
     ///
     /// Time complexity: O(N).
     fn compute_size(queue_handles: &VecDeque<CanisterOutputQueuesIterator<'a>>) -> usize {
-        queue_handles.iter().map(|q| q.size_hint().0).sum()
+        queue_handles.iter().map(|q| q.size()).sum()
     }
 }
 
@@ -229,10 +229,12 @@ impl std::iter::Iterator for OutputIterator<'_> {
                 return Some(msg);
             }
         }
+
+        debug_assert_eq!(0, self.size);
         None
     }
 
-    /// Returns the exact number of messages left in the iterator.
+    /// Returns the bounds on the number of messages remaining in the iterator.
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.size, Some(self.size))
     }
@@ -671,28 +673,11 @@ impl ReplicatedState {
     }
 
     /// Returns all signature request contexts.
-    pub fn signature_request_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        // TODO(EXC-1645): currently ECDSA context can be stored either in `sign_with_ecdsa_contexts` or
-        // in `sign_with_threshold_contexts`. Therefore, we need to merge them.
-        // Update this code after full migration to `sign_with_threshold_contexts`.
-        self.sign_with_ecdsa_contexts()
-            .into_iter()
-            .chain(self.sign_with_schnorr_contexts())
-            .collect()
-    }
-
-    /// Returns all `sign_with_ecdsa` contexts.
-    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        self.metadata
+    pub fn signature_request_contexts(&self) -> &BTreeMap<CallbackId, SignWithThresholdContext> {
+        &self
+            .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts()
-    }
-
-    /// Returns all `sign_with_schnorr` contexts.
-    pub fn sign_with_schnorr_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        self.metadata
-            .subnet_call_context_manager
-            .sign_with_schnorr_contexts()
+            .sign_with_threshold_contexts
     }
 
     /// Returns all IDKG dealings contexts.

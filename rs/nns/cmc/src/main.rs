@@ -26,7 +26,9 @@ use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
@@ -1481,9 +1483,18 @@ fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
         return Ok(());
     }
 
+    // This is a hack to enable testing (related features) of nns-dapp. In
+    // tests, the nns-dapp backend canister happens to use ID of the production
+    // ICP ledger archive 1 canister. Ideally, the test nns-dapp backend
+    // canister would have the same ID as the production nns-dapp backend
+    // canister. This difference should probably be considered a bug. This hack
+    // can be removed after that bug is fixed.
+    const TEST_NNS_DAPP_BACKEND_CANISTER_ID: CanisterId = ICP_LEDGER_ARCHIVE_1_CANISTER_ID;
     lazy_static! {
-        static ref ALLOWED_CALLERS: [PrincipalId; 1] =
-            [PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID),];
+        static ref ALLOWED_CALLERS: [PrincipalId; 2] = [
+            PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID),
+            PrincipalId::from(TEST_NNS_DAPP_BACKEND_CANISTER_ID),
+        ];
     }
 
     if ALLOWED_CALLERS.contains(&caller) {
@@ -2443,6 +2454,7 @@ mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
+    use std::str::FromStr;
 
     pub(crate) fn init_test_state() {
         init(Some(CyclesCanisterInitPayload {
@@ -2542,6 +2554,15 @@ mod tests {
         }
 
         let caller_is_nns_dapp_result = authorize(PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID));
+        assert!(
+            caller_is_nns_dapp_result.is_ok(),
+            "{:#?}",
+            caller_is_nns_dapp_result,
+        );
+
+        // Also allow nns-dapp backend canister ID used in test.
+        let caller_is_nns_dapp_result =
+            authorize(PrincipalId::from_str("qsgjb-riaaa-aaaaa-aaaga-cai").unwrap());
         assert!(
             caller_is_nns_dapp_result.is_ok(),
             "{:#?}",
