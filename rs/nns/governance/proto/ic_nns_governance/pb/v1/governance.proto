@@ -2167,8 +2167,34 @@ message Governance {
     map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
+
+    // Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
     optional uint64 total_voting_power_non_self_authenticating_controller = 36;
     optional uint64 total_staked_e8s_non_self_authenticating_controller = 37;
+
+    // Statistics about some subset (not necessarily a proper subset) of
+    // neurons. So far, these are mostly totals.
+    message NeuronSubsetMetrics {
+      // The values in these fields can be derived from the value in the
+      // analogous fields (declared a little lower in this message). For
+      // example, count = count_buckets.values().sum().
+      optional uint64 count = 1;
+      optional uint64 total_staked_e8s = 2;
+      optional uint64 total_staked_maturity_e8s_equivalent = 3;
+      optional uint64 total_maturity_e8s_equivalent = 4;
+      optional uint64 total_voting_power = 5;
+
+      // These fields are keyed by floor(dissolve delay / 0.5 years). These are
+      // analogous to the (singular) fields above. Here, the usual definition of
+      // year for the IC is used: exactly 365.25 days.
+      map<uint64, uint64> count_buckets = 6;
+      map<uint64, uint64> staked_e8s_buckets = 7;
+      map<uint64, uint64> staked_maturity_e8s_equivalent_buckets = 8;
+      map<uint64, uint64> maturity_e8s_equivalent_buckets = 9;
+      map<uint64, uint64> voting_power_buckets = 10;
+    }
+
+    NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
   }
 
   GovernanceCachedMetrics metrics = 15;
