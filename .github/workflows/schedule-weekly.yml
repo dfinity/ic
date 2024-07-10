@@ -39,14 +39,10 @@ jobs:
           gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
 
   send-slack-alert-failure:
-    name: Send Slack Alert - Failure
-    runs-on: ubuntu-latest
     needs: [bazel-build-fuzzers-weekly]
     if: failure()
-    steps:
-      - name: Send Failure Slack Alert
-        uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
-        with:
-          name: Schedule Daily
-          conclusion: Failure
-          branch: ${{ env.BRANCH_NAME }}
+    uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
+    with:
+      name: Schedule Daily
+      conclusion: Failure
+      branch: ${{ env.BRANCH_NAME }}
