@@ -51,6 +51,14 @@ pub fn into_nat(quantity: Quantity) -> candid::Nat {
 #[serde(transparent)]
 pub struct Data(#[serde(with = "ic_ethereum_types::serde_data")] pub Vec<u8>);
 
+impl std::str::FromStr for Data {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s).map_err(|e| format!("failed to parse data from string: {}", e))
+    }
+}
+
 impl AsRef<[u8]> for Data {
     fn as_ref(&self) -> &[u8] {
         &self.0

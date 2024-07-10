@@ -71,18 +71,18 @@ pub mod candid {
         /// None if the block is pending.
         #[serde(rename = "blockNumber")]
         pub block_number: Option<Nat>,
-        // 32 Bytes - hash of the transactions from which this log was created.
-        // None when its pending log.
+        /// 32 Bytes - hash of the transactions from which this log was created.
+        /// None when its pending log.
         #[serde(rename = "transactionHash")]
         pub transaction_hash: Option<String>,
-        // Integer of the transactions position within the block the log was created from.
-        // None if the log is pending.
+        /// Integer of the transactions position within the block the log was created from.
+        /// None if the log is pending.
         #[serde(rename = "transactionIndex")]
         pub transaction_index: Option<Nat>,
         /// 32 Bytes - hash of the block in which this log appeared.
         /// None if the block is pending.
         #[serde(rename = "blockHash")]
-        pub block_hash: Option<Nat>,
+        pub block_hash: Option<String>,
         /// Integer of the log index position in the block.
         /// None if the log is pending.
         #[serde(rename = "logIndex")]

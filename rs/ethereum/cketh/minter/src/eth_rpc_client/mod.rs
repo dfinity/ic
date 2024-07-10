@@ -1,7 +1,8 @@
+use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::{
-    self, Block, BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, GetLogsParam, Hash,
-    HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult, LogEntry,
-    ResponseSizeEstimate, SendRawTransactionResult,
+    self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
+    GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult,
+    LogEntry, ResponseSizeEstimate, SendRawTransactionResult, Topic,
 };
 use crate::eth_rpc_client::providers::{
     EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
@@ -10,19 +11,22 @@ use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, TransactionCount, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
 use crate::state::State;
 use evm_rpc_client::{
     types::candid::{
-        Block as EvmBlock, BlockTag as EvmBlockTag, MultiRpcResult as EvmMultiRpcResult,
-        RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+        Block as EvmBlock, BlockTag as EvmBlockTag, GetLogsArgs as EvmGetLogsArgs,
+        LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, RpcError as EvmRpcError,
+        RpcResult as EvmRpcResult,
     },
     EvmRpcClient, IcRuntime,
 };
 use ic_canister_log::log;
+use ic_ethereum_types::Address;
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display};
+use std::str::FromStr;
 
 mod providers;
 pub mod requests;
@@ -152,6 +156,18 @@ impl EthRpcClient {
         &self,
         params: GetLogsParam,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
+        if let Some(evm_rpc_client) = &self.evm_rpc_client {
+            let result = evm_rpc_client
+                .eth_get_logs(EvmGetLogsArgs {
+                    from_block: Some(into_evm_block_tag(params.from_block)),
+                    to_block: Some(into_evm_block_tag(params.to_block)),
+                    addresses: params.address.into_iter().map(|a| a.to_string()).collect(),
+                    topics: Some(into_evm_topic(params.topics)),
+                })
+                .await;
+            return ReducedResult::from(result).into();
+        }
+
         // We expect most of the calls to contain zero events.
         let results: MultiCallResults<Vec<LogEntry>> = self
             .parallel_call("eth_getLogs", vec![params], ResponseSizeEstimate::new(100))
@@ -167,12 +183,7 @@ impl EthRpcClient {
 
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
             let result = evm_rpc_client
-                .eth_get_block_by_number(match block {
-                    BlockSpec::Number(n) => EvmBlockTag::Number(n.into()),
-                    BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
-                    BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
-                    BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
-                })
+                .eth_get_block_by_number(into_evm_block_tag(block))
                 .await;
             return ReducedResult::from(result).into();
         }
@@ -531,6 +542,42 @@ impl From<EvmMultiRpcResult<EvmBlock>> for ReducedResult<Block> {
     }
 }
 
+impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> {
+    fn from(value: EvmMultiRpcResult<Vec<EvmLogEntry>>) -> Self {
+        fn map_logs(logs: Vec<EvmLogEntry>) -> Result<Vec<LogEntry>, String> {
+            logs.into_iter().map(map_single_log).collect()
+        }
+
+        fn map_single_log(log: EvmLogEntry) -> Result<LogEntry, String> {
+            Ok::<LogEntry, String>(LogEntry {
+                address: Address::from_str(&log.address)?,
+                topics: log
+                    .topics
+                    .into_iter()
+                    .map(|t| FixedSizeData::from_str(&t))
+                    .collect::<Result<_, _>>()?,
+                data: Data::from_str(&log.data)?,
+                block_number: log.block_number.map(BlockNumber::try_from).transpose()?,
+                transaction_hash: log
+                    .transaction_hash
+                    .as_deref()
+                    .map(Hash::from_str)
+                    .transpose()?,
+                transaction_index: log
+                    .transaction_index
+                    .map(|i| CheckedAmountOf::<()>::try_from(i).map(|c| c.into_inner()))
+                    .transpose()?,
+                block_hash: log.block_hash.as_deref().map(Hash::from_str).transpose()?,
+                log_index: log.log_index.map(LogIndex::try_from).transpose()?,
+                removed: log.removed,
+            })
+        }
+
+        ReducedResult::from_internal(value)
+            .map_reduce(&map_logs, MultiCallResults::reduce_with_equality)
+    }
+}
+
 // TODO XC-131: add proptest to ensure HttpOutcallError are kept, so that the halving
 // of the log scrapping happens correctly
 
@@ -667,4 +714,26 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             }
         }
     }
+}
+
+fn into_evm_block_tag(block: BlockSpec) -> EvmBlockTag {
+    match block {
+        BlockSpec::Number(n) => EvmBlockTag::Number(n.into()),
+        BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
+        BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
+        BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
+    }
+}
+
+fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<String>> {
+    let mut result = Vec::with_capacity(topics.len());
+    for topic in topics {
+        result.push(match topic {
+            Topic::Single(single_topic) => vec![single_topic.to_string()],
+            Topic::Multiple(multiple_topic) => {
+                multiple_topic.into_iter().map(|t| t.to_string()).collect()
+            }
+        });
+    }
+    result
 }
