@@ -319,8 +319,13 @@ type Migrations = record {
   copy_inactive_neurons_to_stable_memory_migration : opt Migration;
 };
 type MonthlyNodeProviderRewards = record {
+  minimum_xdr_permyriad_per_icp : opt nat64;
+  registry_version : opt nat64;
+  node_providers : vec NodeProvider;
   timestamp : nat64;
   rewards : vec RewardNodeProvider;
+  xdr_conversion_rate : opt XdrConversionRate;
+  maximum_node_provider_rewards_e8s : opt nat64;
 };
 type Motion = record { motion_text : text };
 type NetworkEconomics = record {

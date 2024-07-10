@@ -2904,10 +2904,30 @@ pub mod claim_or_refresh_neuron_from_account_response {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MonthlyNodeProviderRewards {
+    /// The time when the rewards were calculated.
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
+    /// The Rewards calculated and rewarded.
     #[prost(message, repeated, tag = "2")]
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
+    /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+    /// This field snapshots the actual rate used by governance when the rewards were calculated.
+    #[prost(message, optional, tag = "3")]
+    pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
+    /// The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+    /// why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+    #[prost(uint64, optional, tag = "4")]
+    pub minimum_xdr_permyriad_per_icp: ::core::option::Option<u64>,
+    /// The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+    /// from the value in network economics.
+    #[prost(uint64, optional, tag = "5")]
+    pub maximum_node_provider_rewards_e8s: ::core::option::Option<u64>,
+    /// The registry version used to calculate these rewards at the time the rewards were calculated.
+    #[prost(uint64, optional, tag = "6")]
+    pub registry_version: ::core::option::Option<u64>,
+    /// The list of node_provieders at the time when the rewards were calculated.
+    #[prost(message, repeated, tag = "7")]
+    pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
 }
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
