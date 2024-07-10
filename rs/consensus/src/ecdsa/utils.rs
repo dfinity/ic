@@ -247,13 +247,11 @@ pub(crate) enum BuildSignatureInputsError {
 
 impl BuildSignatureInputsError {
     /// Fatal errors indicate a problem in the construction of payloads,
-    /// request contexts, or the match between both. They should only
-    /// appear in exceptional cases (i.e. subnet recoveries).
+    /// request contexts, or the match between both.
     pub(crate) fn is_fatal(&self) -> bool {
         matches!(
             self,
-            BuildSignatureInputsError::MissingPreSignature(_)
-                | BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
+            BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
         )
     }
 }

@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_sys",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "@crate_index//:hex",
@@ -35,6 +36,7 @@ rust_test(
     name = "sys_test",
     crate = ":sys",
     deps = [
+        # Keep sorted.
         "@crate_index//:assert_matches",
         "@crate_index//:tempfile",
     ],

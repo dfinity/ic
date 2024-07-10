@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
+use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types::{CanisterStatusType, LogVisibility};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -843,8 +843,8 @@ prop_compose! {
     pub fn arb_stream_with_config(
         min_size: usize,
         max_size: usize,
-        min_signal_count:
-        usize, max_signal_count: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
     )(
         msg_start in 0..10000u64,

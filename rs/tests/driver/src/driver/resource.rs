@@ -448,7 +448,7 @@ fn vm_spec_from_nested_node(
     }
 }
 
-fn build_empty_image(tmp_dir: &Path, out_file_name: &str) -> anyhow::Result<PathBuf> {
+pub fn build_empty_image(tmp_dir: &Path, out_file_name: &str) -> anyhow::Result<PathBuf> {
     // Truncate large empty file
     let img_name = "disk.img";
 

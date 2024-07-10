@@ -10,10 +10,12 @@ rust_library(
     ),
     crate_name = "ic_ledger_suite_orchestrator_test_utils",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:paste",
     ],
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/rust_canisters/http_types",

@@ -2173,7 +2173,7 @@ message Governance {
 
   GovernanceCachedMetrics metrics = 15;
 
-  MostRecentMonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
+  MonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
 
   // Cached value for the maturity modulation as calculated each day.
   optional int32 cached_daily_maturity_modulation_basis_points = 17;
@@ -2400,8 +2400,8 @@ message ClaimOrRefreshNeuronFromAccountResponse {
   }
 }
 
-// The most recent monthly Node Provider rewards
-message MostRecentMonthlyNodeProviderRewards {
+// The monthly Node Provider rewards as of a point in time.
+message MonthlyNodeProviderRewards {
   uint64 timestamp = 1;
   repeated RewardNodeProvider rewards = 2;
 }

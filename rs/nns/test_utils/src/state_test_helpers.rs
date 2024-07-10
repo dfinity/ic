@@ -50,7 +50,7 @@ use ic_nns_governance::pb::v1::{
     proposal::{self, Action},
     Empty, ExecuteNnsFunction, Governance, GovernanceError, ListNeurons, ListNeuronsResponse,
     ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
+    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
     RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
@@ -1396,7 +1396,7 @@ pub fn nns_get_monthly_node_provider_rewards(
 /// Return the most recent monthly Node Provider rewards
 pub fn nns_get_most_recent_monthly_node_provider_rewards(
     state_machine: &StateMachine,
-) -> Option<MostRecentMonthlyNodeProviderRewards> {
+) -> Option<MonthlyNodeProviderRewards> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
@@ -1415,7 +1415,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
         }
     };
 
-    Decode!(&result, Option<MostRecentMonthlyNodeProviderRewards>).unwrap()
+    Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap()
 }
 
 pub fn nns_get_network_economics_parameters(state_machine: &StateMachine) -> NetworkEconomics {

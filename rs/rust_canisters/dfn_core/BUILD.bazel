@@ -5,6 +5,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
 ]
@@ -12,6 +13,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_json",
 ]
@@ -67,6 +69,7 @@ rust_doc_test(
     name = "dfn_core_doc_test",
     crate = ":dfn_core",
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/dfn_json",
     ],
 )

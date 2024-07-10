@@ -4,9 +4,10 @@ load("//bazel:defs.bzl", "rust_ic_test_suite")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
+    "//rs/bitcoin/replica_types",
     "//rs/bitcoin/service",
-    "//rs/bitcoin/types/internal",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/execution_environment",
@@ -50,6 +51,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/rust_canisters/canister_test",
     "//rs/sys",

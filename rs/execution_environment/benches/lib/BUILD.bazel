@@ -3,10 +3,11 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 BENCH_DEPENDENCIES = [
-    "//rs/execution_environment",
+    # Keep sorted.
     "//rs/config",
     "//rs/constants",
     "//rs/cycles_account_manager",
+    "//rs/execution_environment",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

@@ -700,9 +700,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.7",
                 default_features = False,
             ),
-            "libsecp256k1": crate.spec(
-                version = "^0.7.0",
-            ),
             "libnss": crate.spec(
                 version = "^0.5.0",
             ),
@@ -927,9 +924,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "prost-build": crate.spec(
-                version = "^0.12",
-            ),
-            "prost-derive": crate.spec(
                 version = "^0.12",
             ),
             "protobuf": crate.spec(
@@ -1440,7 +1434,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^21.0.1",
+                version = "^22.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1450,7 +1444,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^21.0.1",
+                version = "^22.0.0",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",

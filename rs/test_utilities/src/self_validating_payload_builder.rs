@@ -1,4 +1,4 @@
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_interfaces::self_validating_payload::{
     SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError,
 };

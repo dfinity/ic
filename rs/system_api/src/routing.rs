@@ -1,5 +1,5 @@
+use std::collections::BTreeSet;
 use std::str::FromStr;
-use std::{collections::BTreeSet, fmt::Write};
 
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
@@ -15,6 +15,7 @@ use ic_management_canister_types::{
     UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
+use itertools::Itertools;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -296,16 +297,9 @@ fn route_idkg_message(
     requested_subnet: &Option<SubnetId>,
     idkg_subnet_kind: IDkgSubnetKind,
 ) -> Result<PrincipalId, ResolveDestinationError> {
-    fn format_keys<'a>(mut found_keys: impl Iterator<Item = &'a MasterPublicKeyId>) -> String {
-        let mut keys = "[".to_string();
-        if let Some(key) = found_keys.next() {
-            write!(keys, "{}", key).unwrap();
-        }
-        for key in found_keys {
-            write!(keys, ", {}", key).unwrap();
-        }
-        keys.push(']');
-        keys
+    /// Formats a list of keys and returns them in a sorted order.
+    fn format_keys<'a>(keys: impl Iterator<Item = &'a MasterPublicKeyId>) -> String {
+        format!("[{}]", keys.map(ToString::to_string).sorted().join(", "))
     }
 
     match requested_subnet {
