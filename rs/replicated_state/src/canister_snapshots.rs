@@ -215,7 +215,7 @@ impl CanisterSnapshot {
         }
     }
 
-    pub fn new_from(
+    pub fn from_canister(
         canister: &CanisterState,
         taken_at_timestamp: Time,
     ) -> Result<Self, CanisterSnapshotError> {
@@ -282,38 +282,6 @@ impl CanisterSnapshot {
         &self.certified_data
     }
 }
-
-// impl TryFrom<(&CanisterState, Time)> for CanisterSnapshot {
-//     type Error = CanisterSnapshotError;
-
-//     fn try_from(input: (&CanisterState, Time)) -> Result<Self, Self::Error> {
-//         let (canister, taken_at_timestamp) = input;
-//         let canister_id = canister.canister_id();
-
-//         let execution_state =
-//         canister
-//             .execution_state
-//             .as_ref()
-//             .ok_or(
-//                 CanisterSnapshotError::EmptyExecutionState(canister_id)
-//             )?;
-//         let execution_snapshot = ExecutionStateSnapshot {
-//             wasm_binary: execution_state.wasm_binary.binary.clone(),
-//             stable_memory: PageMemory::from(&execution_state.stable_memory),
-//             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
-//         };
-
-//         Ok(CanisterSnapshot {
-//             canister_id,
-//             taken_at_timestamp,
-//             canister_version: canister.system_state.canister_version,
-//             certified_data: canister.system_state.certified_data.clone(),
-//             chunk_store: canister.system_state.wasm_chunk_store.clone(),
-//             execution_snapshot,
-//             size: canister.snapshot_memory_usage(),
-//         })
-//     }
-// }
 
 /// Errors that can occur when trying to create a `CanisterSnapshot` from (&CanisterState, Time).
 #[derive(Debug)]
