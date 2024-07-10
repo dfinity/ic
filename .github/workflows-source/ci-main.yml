@@ -75,6 +75,7 @@ jobs:
     <<: *dind-large-setup
     runs-on:
       group: zh1
+      labels: dind-runner-large-p
     steps:
       - <<: *checkout
       - <<: *before-script
