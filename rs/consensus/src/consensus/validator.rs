@@ -966,6 +966,21 @@ impl Validator {
                     continue;
                 }
 
+                // If there exists an equivocation proof for the signer of the
+                // proposal at the same height, we ignore the block. The only
+                // way in which we would validate such a proposal is through
+                // the notarization fast-path.
+                if pool_reader
+                    .pool()
+                    .validated()
+                    .equivocation_proof()
+                    .get_by_height(proposal.height())
+                    .find(|proof| proof.signer == proposal.signature.signer)
+                    .is_some()
+                {
+                    continue;
+                }
+
                 match self.check_block_validity(pool_reader, &proposal) {
                     Ok(()) => {
                         self.metrics
@@ -3588,7 +3603,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_ignore_blockmakers_if_we_have_equivocations() {
+    fn test_ignore_blockmaker_if_equivocation_proof_exists() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
@@ -3613,11 +3628,74 @@ pub mod test {
                 .return_const(Height::from(0));
             pool.advance_round_normal_operation_n(3);
 
-            let block = pool.make_next_block();
-            pool.insert_unvalidated(block);
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            eprintln!("{:?}", changeset);
+            let mut block = pool.make_next_block();
+            block.signature.signer = get_block_maker_by_rank(
+                membership.borrow(),
+                &PoolReader::new(&pool),
+                block.height(),
+                &subnet_members,
+                Rank(0),
+            );
 
+            time_source
+                .set_time(block.content.as_mut().context.time)
+                .unwrap();
+            pool.insert_unvalidated(block.clone());
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(_)
+                )]
+            );
+            pool.remove_unvalidated(block.clone());
+
+            // Create and validate an equivocation proof. We don't need to
+            // create a full block. A second hash that was signed is sufficient.
+            let mut other_hash = block.content.get_hash().clone().get().0;
+            other_hash[0] = !other_hash[0];
+            let proof = EquivocationProof {
+                signer: block.signature.signer,
+                version: block.content.as_ref().version.clone(),
+                height: block.content.as_ref().height,
+                subnet_id: replica_config.subnet_id,
+                hash1: block.content.get_hash().clone(),
+                signature1: BasicSigOf::new(BasicSig(vec![])),
+                hash2: CryptoHashOf::new(CryptoHash(other_hash)),
+                signature2: BasicSigOf::new(BasicSig(vec![])),
+            };
+            pool.insert_unvalidated(proof);
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::EquivocationProof(_)
+                )]
+            );
+            pool.apply_changes(changeset);
+
+            // Now, because the equivocation proof was validated, the previous
+            // block should be ignored.
+            pool.insert_unvalidated(block.clone());
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(changeset[..], []);
+
+            // One way in which an equivocating block may still be validated
+            // is through a notarization.
+            let mut notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            notarization.signature.signers = subnet_members;
+            pool.insert_unvalidated(notarization);
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [
+                    ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(_)),
+                    ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
+                ]
+            );
         })
     }
 }
