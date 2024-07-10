@@ -397,3 +397,33 @@ jobs:
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               cargo build --release
+send-rc-slack-alert-failure:
+  name: Send RC Slack Alert Failure
+  runs-on: ubuntu-latest
+  needs:
+    - bazel-test-all
+    - bazel-build-all-config-check
+    - bazel-test-darwin-x86-64
+    - bazel-build-fuzzers
+    - bazel-build-fuzzers-afl
+    - python-ci-tests
+    - build-ic
+    - build-determinism
+    - cargo-clippy-linux
+    - cargo-build-release-linux
+  if: failure()
+  steps:
+    - id: is-rc-branch
+      run: |
+        if [[ "${{ env.BRANCH_NAME }}" =~ hotfix-.*-rc--.* || "${{ env.BRANCH_NAME }}" =~ rc--.* ]]; then
+          echo "match=true" >> $GITHUB_OUTPUT
+        else
+          echo "match=false" >> $GITHUB_OUTPUT
+        fi
+    - name: Send Failure Slack Alert
+      uses: dfinity/ic/.github/workflows/slack-workflow-run.yml@master
+      if: steps.is-rc-branch.outputs.match == 'true'
+      with:
+        name: CI Main
+        conclusion: "failure"
+        branch: ${{ env.BRANCH_NAME }}
