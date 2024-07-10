@@ -917,6 +917,10 @@ pub fn compute_manifest(
     debug_assert!(!files
         .iter()
         .any(|FileWithSize(p, _)| *p == checkpoint.unverified_checkpoint_marker()));
+    // Note the condition statement should be adjusted accordingly if in the future we allow computing manifest before removing the marker.
+    if !checkpoint.is_checkpoint_verified() {
+        metrics.manifest_computation_including_marker_critical.inc();
+    }
 
     #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
