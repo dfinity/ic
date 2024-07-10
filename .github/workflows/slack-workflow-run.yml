@@ -28,9 +28,7 @@ jobs:
 
           FULL_MESSAGE="nothing"
           if [[ "${{ inputs.conclusion }}" =~ ^(success)$ ]]; then
-            if [[ ${{ inputs.workflow-name }} == "Release Testing" ]]; then
-              FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
-            fi
+            FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
           elif [[ "${{ inputs.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
           fi
