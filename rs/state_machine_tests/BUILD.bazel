@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/constants",
     "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/ed25519",
     "//rs/crypto/extended_bip32",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils/ni-dkg",
@@ -50,12 +51,12 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/xnet/payload_builder",
     "@crate_index//:candid",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
+    "@crate_index//:sha2",
     "@crate_index//:slog",
     "@crate_index//:slog-term",
     "@crate_index//:tempfile",
@@ -77,23 +78,25 @@ rust_library(
 )
 
 BIN_DEPENDENCIES = [
+    # Keep sorted.
+    ":state_machine_tests",
     "//rs/config",
     "//rs/crypto/iccsa",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/registry/subnet_type",
-    "//rs/types/types",
     "//rs/types/management_canister_types",
-    ":state_machine_tests",
+    "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:clap_3_2_25",
+    "@crate_index//:hex",
     "@crate_index//:ic-test-state-machine-client",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:hex",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",
@@ -133,6 +136,7 @@ rust_ic_test(
         "STATE_MACHINE_BIN": "$(rootpath //rs/state_machine_tests:ic-test-state-machine)",
     },
     deps = [
+        # Keep sorted.
         "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:ciborium",
         "@crate_index//:serde",
@@ -144,6 +148,7 @@ rust_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
     deps = [
+        # Keep sorted.
         "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:proptest",
     ],

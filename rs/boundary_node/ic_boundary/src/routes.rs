@@ -123,7 +123,7 @@ pub enum RequestType {
 pub enum RateLimitCause {
     Normal,
     Bouncer,
-    Canister,
+    Generic,
 }
 
 // Categorized possible causes for request processing failures
@@ -736,7 +736,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
         response.headers_mut().insert(
             HEADER_IC_SUBNET_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.id.clone())).unwrap(),
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
         );
     }
 

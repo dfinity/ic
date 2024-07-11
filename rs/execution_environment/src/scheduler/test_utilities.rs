@@ -607,6 +607,12 @@ impl SchedulerTest {
             .ecdsa_signature_fee(self.registry_settings.subnet_size)
     }
 
+    pub fn schnorr_signature_fee(&self) -> Cycles {
+        self.scheduler
+            .cycles_account_manager
+            .schnorr_signature_fee(self.registry_settings.subnet_size)
+    }
+
     pub fn http_request_fee(
         &self,
         request_size: NumBytes,

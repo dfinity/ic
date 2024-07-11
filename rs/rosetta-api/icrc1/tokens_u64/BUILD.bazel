@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_icrc1_tokens_u64",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/rosetta-api/ledger_core",
         "@crate_index//:candid",
         "@crate_index//:ic-stable-structures",
@@ -20,6 +21,7 @@ rust_test(
     name = "test",
     srcs = ["tests/tests.rs"],
     deps = [
+        # Keep sorted.
         ":tokens_u64",
         "//rs/rosetta-api/ledger_core",
         "@crate_index//:ciborium",

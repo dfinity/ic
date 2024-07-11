@@ -158,7 +158,7 @@ type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   making_sns_proposal : opt MakingSnsProposal;
-  most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
+  most_recent_monthly_node_provider_rewards : opt MonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
   metrics : opt GovernanceCachedMetrics;
@@ -216,6 +216,7 @@ type GovernanceCachedMetrics = record {
   };
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
+  non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   total_staked_maturity_e8s_equivalent_seed : nat64;
@@ -317,9 +318,14 @@ type Migrations = record {
   neuron_indexes_migration : opt Migration;
   copy_inactive_neurons_to_stable_memory_migration : opt Migration;
 };
-type MostRecentMonthlyNodeProviderRewards = record {
+type MonthlyNodeProviderRewards = record {
+  minimum_xdr_permyriad_per_icp : opt nat64;
+  registry_version : opt nat64;
+  node_providers : vec NodeProvider;
   timestamp : nat64;
   rewards : vec RewardNodeProvider;
+  xdr_conversion_rate : opt XdrConversionRate;
+  maximum_node_provider_rewards_e8s : opt nat64;
 };
 type Motion = record { motion_text : text };
 type NetworkEconomics = record {
@@ -398,6 +404,18 @@ type NeuronStakeTransfer = record {
   from_subaccount : blob;
   transfer_timestamp : nat64;
   block_height : nat64;
+};
+type NeuronSubsetMetrics = record {
+  total_maturity_e8s_equivalent : opt nat64;
+  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+  voting_power_buckets : vec record { nat64; nat64 };
+  total_staked_e8s : opt nat64;
+  count : opt nat64;
+  total_staked_maturity_e8s_equivalent : opt nat64;
+  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+  staked_e8s_buckets : vec record { nat64; nat64 };
+  total_voting_power : opt nat64;
+  count_buckets : vec record { nat64; nat64 };
 };
 type NeuronsFundAuditInfo = record {
   final_neurons_fund_participation : opt NeuronsFundParticipation;
@@ -674,7 +692,7 @@ service : (Governance) -> {
   get_metrics : () -> (Result_3) query;
   get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (
-      opt MostRecentMonthlyNodeProviderRewards,
+      opt MonthlyNodeProviderRewards,
     ) query;
   get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;

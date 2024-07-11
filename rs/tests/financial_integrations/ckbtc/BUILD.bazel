@@ -4,9 +4,10 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 CKBTC_RUNTIME_DEPS = [
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    # Keep sorted.
     "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+    "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "@btc_canister//file",
 ]
 

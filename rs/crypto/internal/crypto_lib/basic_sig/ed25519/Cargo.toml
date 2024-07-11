@@ -28,7 +28,7 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 assert_matches = { workspace = true }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-num-bigint = "0.4.3"
+num-bigint = { workspace = true }
 proptest = "1.0"
 proptest-derive = "0.3.0"
 serde_cbor = { workspace = true }

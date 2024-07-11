@@ -8,9 +8,11 @@ rust_library(
         ["src/**/*.rs"],
     ),
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:async-trait",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
@@ -23,6 +25,7 @@ rust_test(
     name = "unit_tests",
     crate = ":evm-rpc-client",
     deps = [
+        # Keep sorted.
         ":evm-rpc-client",
         "@crate_index//:mockall",
         "@crate_index//:tokio",

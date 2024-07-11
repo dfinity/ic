@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/ed25519",
@@ -26,6 +27,7 @@ ALIASES = {
 }
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest",
 ]
 

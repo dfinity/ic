@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/consensus/utils",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -21,10 +22,11 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
-    "//rs/registry/subnet_type",
     "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
@@ -45,6 +47,7 @@ rust_library(
     }),
     crate_name = "ic_https_outcalls_consensus",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",

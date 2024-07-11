@@ -220,7 +220,6 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::HttpRequest
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
-                    | ic00::Method::ComputeInitialEcdsaDealings
                     | ic00::Method::ComputeInitialIDkgDealings
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),

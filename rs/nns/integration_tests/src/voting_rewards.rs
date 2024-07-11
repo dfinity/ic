@@ -1,11 +1,10 @@
 use canister_test::Runtime;
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::{
     governance::REWARD_DISTRIBUTION_PERIOD_SECONDS,
-    init::TEST_NEURON_1_ID,
     pb::v1::{
         Ballot, Governance as GovernanceProto, GovernanceError, NetworkEconomics, Neuron,
         ProposalData, RewardEvent, Vote,

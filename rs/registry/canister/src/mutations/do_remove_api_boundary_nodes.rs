@@ -46,10 +46,11 @@ mod tests {
     use ic_registry_keys::make_api_boundary_node_record_key;
     use ic_registry_transport::insert;
     use ic_types::ReplicaVersion;
+    use prost::Message;
 
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
-        mutations::common::{encode_or_panic, test::TEST_NODE_ID},
+        mutations::common::test::TEST_NODE_ID,
     };
 
     use super::RemoveApiBoundaryNodesPayload;
@@ -93,9 +94,10 @@ mod tests {
             // Mutation to insert ApiBoundaryNodeRecord
             insert(
                 make_api_boundary_node_record_key(node_id), // key
-                encode_or_panic(&ApiBoundaryNodeRecord {
+                ApiBoundaryNodeRecord {
                     version: ReplicaVersion::default().to_string(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 

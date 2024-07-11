@@ -211,7 +211,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // ===================================
     // Configuration of the logging setup for the orchestrator.
@@ -237,7 +237,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // ===================================
     // Configuration of the logging setup for the CSP vault.
@@ -263,7 +263,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // =================================
     // Configuration of Message Routing.

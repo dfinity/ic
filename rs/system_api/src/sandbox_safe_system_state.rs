@@ -241,7 +241,6 @@ impl SystemStateChanges {
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
-            | Ok(Ic00Method::ComputeInitialEcdsaDealings)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -742,10 +741,6 @@ impl SandboxSafeSystemState {
         // Update both sandbox global timer and the changes.
         self.system_state_changes.new_global_timer = Some(timer);
         self.global_timer = timer;
-    }
-
-    pub fn changes(self) -> SystemStateChanges {
-        self.system_state_changes
     }
 
     pub fn take_changes(&mut self) -> SystemStateChanges {

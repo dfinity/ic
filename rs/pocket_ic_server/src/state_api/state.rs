@@ -163,7 +163,7 @@ pub enum OpOut {
     StableMemBytes(Vec<u8>),
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
-    ApiV2Response((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
+    RawResponse((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
@@ -237,7 +237,7 @@ impl std::fmt::Debug for OpOut {
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
-            OpOut::ApiV2Response((status, headers, bytes)) => {
+            OpOut::RawResponse((status, headers, bytes)) => {
                 write!(
                     f,
                     "ApiV2Resp({}:{:?}:{})",
@@ -502,11 +502,11 @@ impl ApiState {
             agent.fetch_root_key().await.unwrap();
             let replica_uri = Uri::from_str(&replica_url).unwrap();
             let replicas = vec![(agent, replica_uri)];
-            let gateway_domain = http_gateway_config
-                .domain
-                .unwrap_or("localhost".to_string());
+            let gateway_domains = http_gateway_config
+                .domains
+                .unwrap_or(vec!["localhost".to_string()]);
             let aliases: Vec<String> = vec![];
-            let suffixes: Vec<String> = vec![gateway_domain];
+            let suffixes: Vec<String> = gateway_domains;
             let resolver = ResolverState {
                 dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
             };

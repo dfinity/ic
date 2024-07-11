@@ -24,7 +24,6 @@ use ic_registry_client_helpers::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
@@ -48,7 +47,7 @@ pub struct IngressValidatorBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidatorBuilder {
@@ -59,7 +58,7 @@ impl IngressValidatorBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
             log: None,
@@ -173,7 +172,7 @@ pub struct IngressValidator {
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidator {
@@ -282,7 +281,7 @@ impl IngressValidator {
 }
 
 pub struct IngressMessageSubmitter {
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     node_id: NodeId,
     message: SignedIngress,
 }

@@ -649,11 +649,20 @@ impl StreamHandlerImpl {
             Err((err, RequestOrResponse::Request(request))) => {
                 // TODO(MR-249): Replace generating reject responses with pushing reject signals.
                 // Unable to induct a request, generate reject response and push it into `stream`.
-                *available_guaranteed_response_memory -= stream.push(generate_reject_response(
-                    &request,
-                    (&err).into(),
-                    err.to_string(),
-                )) as i64;
+                let code = match err {
+                    StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
+                    StateError::CanisterStopped(_) => RejectCode::CanisterError,
+                    StateError::CanisterStopping(_) => RejectCode::CanisterError,
+                    StateError::CanisterMigrating { .. } => RejectCode::SysTransient,
+                    StateError::QueueFull { .. } => RejectCode::SysTransient,
+                    StateError::OutOfMemory { .. } => RejectCode::CanisterError,
+                    StateError::NonMatchingResponse { .. }
+                    | StateError::BitcoinNonMatchingResponse { .. } => {
+                        unreachable!("Not a user error: {}", err);
+                    }
+                };
+                *available_guaranteed_response_memory -=
+                    stream.push(generate_reject_response(&request, code, err.to_string())) as i64;
                 stream.push_accept_signal()
             }
             Err((_, RequestOrResponse::Response(_))) => {

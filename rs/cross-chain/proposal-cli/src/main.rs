@@ -133,6 +133,9 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     proposal: P,
     ic_repo: &GitRepository,
 ) {
+    const GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
+
+    let mut errors = vec![];
     let proposal = proposal.into();
     if output_dir.exists() {
         fs::remove_dir_all(&output_dir)
@@ -163,6 +166,13 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     println!("Artifact written to '{}'", artifact.display());
 
     let proposal = proposal.render();
+    if proposal.len() > GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX {
+        errors.push(format!(
+            "Proposal summary is too long and will fail validation from the governance canister when submitted: {} bytes (max {})",
+            proposal.len(),
+            GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX
+        ));
+    }
     let proposal_summary = output_dir.join("summary.md");
     let mut summary_file = fs::File::create(&proposal_summary)
         .unwrap_or_else(|_| panic!("failed to create {:?}", proposal_summary));
@@ -171,6 +181,14 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
         "Proposal summary written to '{}'",
         proposal_summary.display()
     );
+
+    if !errors.is_empty() {
+        println!("Proposal was generated, but some errors were detected:");
+        for error in errors {
+            println!("  * {}", error);
+        }
+        panic!("errors detected");
+    }
 }
 
 fn check_dir_has_required_permissions(output_dir: &Path) -> Result<(), String> {

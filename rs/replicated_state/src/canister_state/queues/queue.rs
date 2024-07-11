@@ -341,7 +341,7 @@ impl TryFrom<(InputQueue, &mut MessagePool)> for CanisterQueue {
     type Error = ProxyDecodeError;
 
     fn try_from((iq, pool): (InputQueue, &mut MessagePool)) -> Result<Self, Self::Error> {
-        let mut queue = VecDeque::with_capacity(iq.num_messages());
+        let mut queue = VecDeque::with_capacity(iq.len());
         for msg in iq.queue.queue.into_iter() {
             let id = pool.insert_inbound(msg);
             queue.push_back(CanisterQueueItem::Reference(id));
@@ -654,8 +654,12 @@ impl<T: QueueItem<T> + std::clone::Clone> QueueWithReservation<T> {
             Ok(())
         } else {
             Err((
-                StateError::QueueFull {
-                    capacity: self.capacity,
+                StateError::NonMatchingResponse {
+                    err_str: "No reserved response slot".to_string(),
+                    originator: response.originator,
+                    callback_id: response.originator_reply_callback,
+                    respondent: response.respondent,
+                    deadline: response.deadline,
                 },
                 response,
             ))
@@ -867,7 +871,7 @@ impl InputQueue {
     }
 
     /// Returns the number of messages in the queue.
-    pub(super) fn num_messages(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.queue.queue.len()
     }
 
@@ -1190,8 +1194,8 @@ impl OutputQueue {
     /// Returns an iterator over the underlying messages.
     ///
     /// For testing purposes only.
-    pub(super) fn iter_for_testing(&self) -> impl Iterator<Item = &Option<RequestOrResponse>> {
-        self.queue.queue.iter()
+    pub(super) fn iter_for_testing(&self) -> impl Iterator<Item = RequestOrResponse> + '_ {
+        self.queue.queue.iter().filter_map(|item| item.clone())
     }
 }
 

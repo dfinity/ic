@@ -1,9 +1,9 @@
 use crate::ecdsa::complaints::{
-    EcdsaComplaintHandlerImpl, EcdsaTranscriptLoader, TranscriptLoadStatus,
+    EcdsaTranscriptLoader, IDkgComplaintHandlerImpl, TranscriptLoadStatus,
 };
 use crate::ecdsa::pre_signer::{EcdsaPreSignerImpl, EcdsaTranscriptBuilder};
 use crate::ecdsa::signer::{EcdsaSignatureBuilder, EcdsaSignerImpl};
-use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
+use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_mocks::{dependencies, Dependencies};
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -14,7 +14,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
+use ic_interfaces::ecdsa::{IDkgChangeAction, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
@@ -26,7 +26,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
-use ic_test_utilities_consensus::{fake::*, EcdsaStatsNoOp};
+use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -37,11 +37,11 @@ use ic_types::consensus::idkg::{
     common::{CombinedSignature, PreSignatureRef, ThresholdSigInputsRef},
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
-    EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
-    EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare, IDkgMessage,
-    IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
-    IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId,
-    ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
+    EcdsaBlockReader, EcdsaPayload, EcdsaSigShare, IDkgArtifactId, IDkgComplaintContent,
+    IDkgMessage, IDkgOpeningContent, IDkgReshareRequest, IDkgTranscriptAttributes,
+    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
+    MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams, SignedIDkgComplaint,
+    SignedIDkgOpening, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
     UnmaskedTranscript,
 };
 use ic_types::consensus::idkg::{HasMasterPublicKeyId, SchnorrSigShare};
@@ -530,7 +530,7 @@ pub(crate) enum TestTranscriptLoadStatus {
 
 pub(crate) struct TestEcdsaTranscriptLoader {
     load_transcript_result: TestTranscriptLoadStatus,
-    returned_complaints: Mutex<Vec<EcdsaComplaint>>,
+    returned_complaints: Mutex<Vec<SignedIDkgComplaint>>,
 }
 
 impl TestEcdsaTranscriptLoader {
@@ -541,7 +541,7 @@ impl TestEcdsaTranscriptLoader {
         }
     }
 
-    pub(crate) fn returned_complaints(&self) -> Vec<EcdsaComplaint> {
+    pub(crate) fn returned_complaints(&self) -> Vec<SignedIDkgComplaint> {
         let complaints = self.returned_complaints.lock().unwrap();
         let mut ret = Vec::new();
         for complaint in complaints.iter() {
@@ -554,7 +554,7 @@ impl TestEcdsaTranscriptLoader {
 impl EcdsaTranscriptLoader for TestEcdsaTranscriptLoader {
     fn load_transcript(
         &self,
-        _ecdsa_pool: &dyn EcdsaPool,
+        _idkg_pool: &dyn IDkgPool,
         transcript: &IDkgTranscript,
     ) -> TranscriptLoadStatus {
         match self.load_transcript_result {
@@ -691,12 +691,12 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
     }
 }
 
-pub(crate) fn create_ecdsa_pool(
+pub(crate) fn create_idkg_pool(
     config: ArtifactPoolConfig,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
-) -> EcdsaPoolImpl {
-    EcdsaPoolImpl::new(config, log, metrics_registry, Box::new(EcdsaStatsNoOp {}))
+) -> IDkgPoolImpl {
+    IDkgPoolImpl::new(config, log, metrics_registry, Box::new(IDkgStatsNoOp {}))
 }
 
 // Sets up the dependencies and creates the pre signer
@@ -704,7 +704,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
-) -> (EcdsaPoolImpl, EcdsaPreSignerImpl) {
+) -> (IDkgPoolImpl, EcdsaPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
@@ -716,16 +716,16 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
+    let idkg_pool = create_idkg_pool(pool_config, logger, metrics_registry);
 
-    (ecdsa_pool, pre_signer)
+    (idkg_pool, pre_signer)
 }
 
 // Sets up the dependencies and creates the pre signer
 pub(crate) fn create_pre_signer_dependencies_and_pool(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (EcdsaPoolImpl, EcdsaPreSignerImpl, TestConsensusPool) {
+) -> (IDkgPoolImpl, EcdsaPreSignerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
@@ -736,16 +736,16 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
+    let idkg_pool = create_idkg_pool(pool_config, logger, metrics_registry);
 
-    (ecdsa_pool, pre_signer, pool)
+    (idkg_pool, pre_signer, pool)
 }
 
 // Sets up the dependencies and creates the pre signer
 pub(crate) fn create_pre_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (EcdsaPoolImpl, EcdsaPreSignerImpl) {
+) -> (IDkgPoolImpl, EcdsaPreSignerImpl) {
     create_pre_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
@@ -754,7 +754,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
-) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
+) -> (IDkgPoolImpl, EcdsaSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         pool,
@@ -771,23 +771,23 @@ pub(crate) fn create_signer_dependencies_with_crypto(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
+    let idkg_pool = create_idkg_pool(pool_config, logger, metrics_registry);
 
-    (ecdsa_pool, signer)
+    (idkg_pool, signer)
 }
 
 // Sets up the dependencies and creates the signer
 pub(crate) fn create_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
+) -> (IDkgPoolImpl, EcdsaSignerImpl) {
     create_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
 pub(crate) fn create_signer_dependencies_and_state_manager(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (EcdsaPoolImpl, EcdsaSignerImpl, Arc<RefMockStateManager>) {
+) -> (IDkgPoolImpl, EcdsaSignerImpl, Arc<RefMockStateManager>) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         pool,
@@ -804,9 +804,9 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
+    let idkg_pool = create_idkg_pool(pool_config, logger, metrics_registry);
 
-    (ecdsa_pool, signer, state_manager)
+    (idkg_pool, signer, state_manager)
 }
 
 // Sets up the dependencies and creates the complaint handler
@@ -815,46 +815,46 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
     node_id: NodeId,
-) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
-    let complaint_handler = EcdsaComplaintHandlerImpl::new(
+    let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
+    let idkg_pool = create_idkg_pool(pool_config, logger, metrics_registry);
 
-    (ecdsa_pool, complaint_handler)
+    (idkg_pool, complaint_handler)
 }
 
 // Sets up the dependencies and creates the complaint handler
 pub(crate) fn create_complaint_dependencies_and_pool(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl, TestConsensusPool) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
-    let complaint_handler = EcdsaComplaintHandlerImpl::new(
+    let complaint_handler = IDkgComplaintHandlerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         crypto,
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
+    let idkg_pool = create_idkg_pool(pool_config, logger, metrics_registry);
 
-    (ecdsa_pool, complaint_handler, pool)
+    (idkg_pool, complaint_handler, pool)
 }
 
 pub(crate) fn create_complaint_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     create_complaint_dependencies_with_crypto(pool_config, logger, None)
 }
 
@@ -862,7 +862,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     crypto: Option<Arc<dyn ConsensusCrypto>>,
-) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
+) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     create_complaint_dependencies_with_crypto_and_node_id(pool_config, logger, crypto, NODE_1)
 }
 
@@ -1376,15 +1376,15 @@ pub(crate) fn create_complaint_with_nonce(
     dealer_id: NodeId,
     complainer_id: NodeId,
     nonce: u8,
-) -> EcdsaComplaint {
-    let content = EcdsaComplaintContent {
+) -> SignedIDkgComplaint {
+    let content = IDkgComplaintContent {
         idkg_complaint: IDkgComplaint {
             transcript_id,
             dealer_id,
             internal_complaint_raw: vec![nonce],
         },
     };
-    EcdsaComplaint {
+    SignedIDkgComplaint {
         content,
         signature: BasicSignature::fake(complainer_id),
     }
@@ -1395,7 +1395,7 @@ pub(crate) fn create_complaint(
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     complainer_id: NodeId,
-) -> EcdsaComplaint {
+) -> SignedIDkgComplaint {
     create_complaint_with_nonce(transcript_id, dealer_id, complainer_id, 0)
 }
 
@@ -1406,15 +1406,15 @@ pub(crate) fn create_opening_with_nonce(
     _complainer_id: NodeId,
     opener_id: NodeId,
     nonce: u8,
-) -> EcdsaOpening {
-    let content = EcdsaOpeningContent {
+) -> SignedIDkgOpening {
+    let content = IDkgOpeningContent {
         idkg_opening: IDkgOpening {
             transcript_id,
             dealer_id,
             internal_opening_raw: vec![nonce],
         },
     };
-    EcdsaOpening {
+    SignedIDkgOpening {
         content,
         signature: BasicSignature::fake(opener_id),
     }
@@ -1426,19 +1426,17 @@ pub(crate) fn create_opening(
     dealer_id: NodeId,
     complainer_id: NodeId,
     opener_id: NodeId,
-) -> EcdsaOpening {
+) -> SignedIDkgOpening {
     create_opening_with_nonce(transcript_id, dealer_id, complainer_id, opener_id, 0)
 }
 // Checks that the dealing with the given id is being added to the validated
 // pool
 pub(crate) fn is_dealing_added_to_validated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSignedDealing(signed_dealing)) =
-            action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(signed_dealing)) = action {
             let dealing = signed_dealing.idkg_dealing();
             if dealing.transcript_id == *transcript_id && signed_dealing.dealer_id() == NODE_1 {
                 return true;
@@ -1451,13 +1449,12 @@ pub(crate) fn is_dealing_added_to_validated(
 // Checks that the dealing support for the given dealing is being added to the
 // validated pool
 pub(crate) fn is_dealing_support_added_to_validated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaDealingSupport(support)) = action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action {
             if support.transcript_id == *transcript_id
                 && support.dealer_id == *dealer_id
                 && support.sig_share.signer == NODE_1
@@ -1471,15 +1468,13 @@ pub(crate) fn is_dealing_support_added_to_validated(
 
 // Checks that the complaint is being added to the validated pool
 pub(crate) fn is_complaint_added_to_validated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
     complainer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaComplaint(signed_complaint)) =
-            action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(signed_complaint)) = action {
             let complaint = signed_complaint.get();
             if complaint.idkg_complaint.transcript_id == *transcript_id
                 && complaint.idkg_complaint.dealer_id == *dealer_id
@@ -1494,14 +1489,13 @@ pub(crate) fn is_complaint_added_to_validated(
 
 // Checks that the opening is being added to the validated pool
 pub(crate) fn is_opening_added_to_validated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
     opener_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaOpening(signed_opening)) = action
-        {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::Opening(signed_opening)) = action {
             let opening = signed_opening.get();
             if opening.idkg_opening.transcript_id == *transcript_id
                 && opening.idkg_opening.dealer_id == *dealer_id
@@ -1517,12 +1511,12 @@ pub(crate) fn is_opening_added_to_validated(
 // Checks that the signature share with the given request is being added to the
 // validated pool
 pub(crate) fn is_signature_share_added_to_validated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     request_id: &RequestId,
     requested_height: Height,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share)) = action {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share)) = action {
             if share.request_id.height == requested_height
                 && share.request_id == *request_id
                 && share.signer_id == NODE_1
@@ -1530,7 +1524,7 @@ pub(crate) fn is_signature_share_added_to_validated(
                 return true;
             }
         }
-        if let EcdsaChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share)) = action {
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share)) = action {
             if share.request_id.height == requested_height
                 && share.request_id == *request_id
                 && share.signer_id == NODE_1
@@ -1544,12 +1538,12 @@ pub(crate) fn is_signature_share_added_to_validated(
 
 // Checks that artifact is being moved from unvalidated to validated pool
 pub(crate) fn is_moved_to_validated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::MoveToValidated(msg) = action {
-            if EcdsaArtifactId::from(msg) == *msg_id {
+        if let IDkgChangeAction::MoveToValidated(msg) = action {
+            if IDkgArtifactId::from(msg) == *msg_id {
                 return true;
             }
         }
@@ -1559,11 +1553,11 @@ pub(crate) fn is_moved_to_validated(
 
 // Checks that artifact is being removed from validated pool
 pub(crate) fn is_removed_from_validated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::RemoveValidated(id) = action {
+        if let IDkgChangeAction::RemoveValidated(id) = action {
             if *id == *msg_id {
                 return true;
             }
@@ -1574,11 +1568,11 @@ pub(crate) fn is_removed_from_validated(
 
 // Checks that artifact is being removed from unvalidated pool
 pub(crate) fn is_removed_from_unvalidated(
-    change_set: &[EcdsaChangeAction],
+    change_set: &[IDkgChangeAction],
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::RemoveUnvalidated(id) = action {
+        if let IDkgChangeAction::RemoveUnvalidated(id) = action {
             if *id == *msg_id {
                 return true;
             }
@@ -1588,9 +1582,9 @@ pub(crate) fn is_removed_from_unvalidated(
 }
 
 // Checks that artifact is being dropped as invalid
-pub(crate) fn is_handle_invalid(change_set: &[EcdsaChangeAction], msg_id: &IDkgMessageId) -> bool {
+pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
-        if let EcdsaChangeAction::HandleInvalid(id, _) = action {
+        if let IDkgChangeAction::HandleInvalid(id, _) = action {
             if *id == *msg_id {
                 return true;
             }
@@ -1612,11 +1606,10 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
         subnet_id,
         key_ids
             .into_iter()
-            .map(|key_id| EcdsaKeyTranscript {
+            .map(|key_id| MasterKeyTranscript {
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                deprecated_key_id: None,
             })
             .collect(),
     )
@@ -1679,7 +1672,6 @@ pub(crate) fn create_reshare_request(
     registry_version: u64,
 ) -> IDkgReshareRequest {
     IDkgReshareRequest {
-        key_id: None,
         master_key_id: key_id,
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
@@ -1829,12 +1821,12 @@ pub(crate) trait EcdsaPayloadTestHelper {
     /// Retrieves the only key transcript in the ecdsa payload.
     ///
     /// Panics if there are multiple or no keys.
-    fn single_key_transcript(&self) -> &EcdsaKeyTranscript;
+    fn single_key_transcript(&self) -> &MasterKeyTranscript;
 
     /// Retrieves the only key transcript in the ecdsa payload.
     ///
     /// Panics if there are multiple or no keys.
-    fn single_key_transcript_mut(&mut self) -> &mut EcdsaKeyTranscript;
+    fn single_key_transcript_mut(&mut self) -> &mut MasterKeyTranscript;
 }
 
 impl EcdsaPayloadTestHelper for EcdsaPayload {
@@ -1846,7 +1838,7 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         self.uid_generator.clone().next_pre_signature_id()
     }
 
-    fn single_key_transcript(&self) -> &EcdsaKeyTranscript {
+    fn single_key_transcript(&self) -> &MasterKeyTranscript {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values().next().unwrap(),
@@ -1854,7 +1846,7 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         }
     }
 
-    fn single_key_transcript_mut(&mut self) -> &mut EcdsaKeyTranscript {
+    fn single_key_transcript_mut(&mut self) -> &mut MasterKeyTranscript {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values_mut().next().unwrap(),

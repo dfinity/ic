@@ -6,16 +6,17 @@ package(default_visibility = ["//visibility:private"])
 MACRO_DEPENDENCIES = []
 
 WASMTIME_FUZZER_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/embedders",
     "//rs/replicated_state",
     "//rs/test_utilities",
     "//rs/test_utilities/embedders",
     "//rs/types/types",
-    "@crate_index//:libfuzzer-sys",
     "@crate_index//:arbitrary",
-    "@crate_index//:wasm-smith",
+    "@crate_index//:libfuzzer-sys",
     "@crate_index//:wasm-encoder",
+    "@crate_index//:wasm-smith",
     "@crate_index//:wasmparser",
 ]
 
@@ -56,26 +57,27 @@ rust_fuzz_test_binary_afl(
 )
 
 WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/embedders",
+    "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/embedders",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/interfaces",
-    "//rs/registry/subnet_type",
-    "//rs/system_api",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "@crate_index//:arbitrary",
-    "@crate_index//:wasm-smith",
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:wasm-encoder",
+    "@crate_index//:wasm-smith",
     "@crate_index//:wasmparser",
 ]
 
@@ -102,6 +104,7 @@ rust_fuzz_test_binary_afl(
 )
 
 EMBEDDERS_FUZZER_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/embedders",
     "//rs/monitoring/logger",
@@ -128,6 +131,7 @@ rust_binary(
     proc_macro_deps = [],
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/config",
         "//rs/embedders",
         "//rs/monitoring/logger",

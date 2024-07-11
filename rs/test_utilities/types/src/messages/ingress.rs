@@ -173,9 +173,9 @@ impl SignedIngressBuilder {
 
     /// Create keypair, set sender and signature accordingly
     pub fn sign_for_randomly_generated_sender(mut self) -> Self {
-        let signing_key = ed25519_consensus::SigningKey::new(thread_rng());
+        let private_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut thread_rng());
         let sender_pubkey =
-            ed25519_public_key_to_der(signing_key.verification_key().to_bytes().to_vec());
+            ed25519_public_key_to_der(private_key.public_key().serialize_raw().to_vec());
         self.sender_pubkey = Some(sender_pubkey.clone());
         self.update.sender = Blob(
             UserId::from(PrincipalId::new_self_authenticating(&sender_pubkey))
@@ -189,7 +189,7 @@ impl SignedIngressBuilder {
             buf.extend_from_slice(message_id.as_bytes());
             buf
         };
-        self.sender_sig = Some(signing_key.sign(&bytes_to_sign).to_bytes().to_vec());
+        self.sender_sig = Some(private_key.sign_message(&bytes_to_sign).to_vec());
         self
     }
 
