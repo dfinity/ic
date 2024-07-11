@@ -56,9 +56,9 @@ FROM image-${BUILD_TYPE}
 
 USER root:root
 
-COPY --from=download /tmp/ic-gateway_0.1.32_amd64.deb /tmp/ic-gateway_0.1.32_amd64.deb
-RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.32_amd64.deb && \
-    rm /tmp/ic-gateway_0.1.32_amd64.deb
+COPY --from=download /tmp/ic-gateway_0.1.33_amd64.deb /tmp/ic-gateway_0.1.33_amd64.deb
+RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.33_amd64.deb && \
+    rm /tmp/ic-gateway_0.1.33_amd64.deb
 
 RUN mkdir -p /boot/config \
              /boot/efi \
