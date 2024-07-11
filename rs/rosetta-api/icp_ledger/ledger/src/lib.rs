@@ -12,9 +12,8 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{
-    AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo,
-    Operation, PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs,
-    DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
+    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
