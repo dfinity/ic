@@ -82,7 +82,6 @@ pub const RECEIVED_ETH_EVENT_TOPIC: &str =
 pub const RECEIVED_ERC20_EVENT_TOPIC: &str =
     "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b";
 pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
-pub const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
 
 pub struct CkEthSetup {
     pub env: Arc<StateMachine>,
@@ -580,6 +579,14 @@ impl CkEthSetup {
             self.env.advance_time(Duration::from_nanos(1));
         }
         self
+    }
+
+    pub fn max_logs_block_range(&self) -> u64 {
+        if self.evm_rpc_id.is_none() {
+            799
+        } else {
+            500
+        }
     }
 }
 

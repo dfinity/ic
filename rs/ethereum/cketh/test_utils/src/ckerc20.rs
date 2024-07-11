@@ -9,8 +9,8 @@ use crate::{
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE,
-    MAX_TICKS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -526,8 +526,9 @@ impl CkErc20DepositFlow {
     }
 
     pub fn handle_log_scraping(&self) {
+        let max_eth_logs_block_range = self.as_ref().max_logs_block_range();
         let latest_finalized_block =
-            LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + MAX_ETH_LOGS_BLOCK_RANGE;
+            LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
         self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
             .respond_for_all_with(block_response(latest_finalized_block))
@@ -537,7 +538,7 @@ impl CkErc20DepositFlow {
 
         let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
         let first_to_block = first_from_block
-            .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+            .checked_add(BlockNumber::from(max_eth_logs_block_range))
             .unwrap();
 
         let eth_logs = match self.params.cketh_amount {

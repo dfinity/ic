@@ -28,8 +28,7 @@ use ic_cketh_test_utils::{
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
     EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
-    RECEIVED_ETH_EVENT_TOPIC,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -642,6 +641,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
 #[test]
 fn should_not_overlap_when_scrapping_logs() {
     let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -651,7 +651,7 @@ fn should_not_overlap_when_scrapping_logs() {
 
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -668,7 +668,7 @@ fn should_not_overlap_when_scrapping_logs() {
         .checked_add(BlockNumber::from(1_u64))
         .unwrap();
     let second_to_block = second_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -691,6 +691,7 @@ fn should_not_overlap_when_scrapping_logs() {
 #[test]
 fn should_retry_from_same_block_when_scrapping_fails() {
     let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
     let prev_events_len = cketh.get_all_events().len();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
@@ -700,7 +701,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .expect_rpc_calls(&cketh);
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let to_block = from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -869,6 +870,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
 #[test]
 fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
     let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
     let deposit = DepositParams::default().eth_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
@@ -877,10 +879,10 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let to_block = from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     let half_to_block = from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE / 2))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range / 2))
         .unwrap();
 
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -1012,6 +1014,7 @@ fn should_skip_single_block_containing_too_many_events() {
 #[test]
 fn should_retrieve_minter_info() {
     let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
@@ -1044,7 +1047,7 @@ fn should_retrieve_minter_info() {
     let cketh = cketh.deposit(DepositParams::default()).expect_mint();
     let info_after_deposit = cketh.get_minter_info();
     let new_eth_scraped_block_number =
-        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE + 1;
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range + 1;
     assert_eq!(
         info_after_deposit,
         MinterInfo {
