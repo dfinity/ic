@@ -6,4 +6,5 @@ can then make proposals and vote on them. Proposals can do things like
 
   2. Add nodes to a subnet of the IC.
 
-  3. Create a Service Nervous System (SNS).
+  3. Create a Service Nervous System (SNS). In short, an SNS is to a dapp as the NNS is to the IC as
+     a whole. See the rs/sns directory in this repository for more information about SNS.
