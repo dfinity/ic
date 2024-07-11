@@ -109,7 +109,6 @@ go_deps.bzl               @dfinity/idx
 /rs/config/src/embedders.rs                             @dfinity/runtime
 /rs/config/src/execution_environment.rs                 @dfinity/execution @dfinity/runtime
 /rs/config/src/subnet_config.rs                         @dfinity/execution @dfinity/runtime
-/rs/config/src/http_handler.rs                          @dfinity/networking
 /rs/consensus/                                          @dfinity/consensus
 /rs/constants/                                          @dfinity/ic-interface-owners
 /rs/criterion_time/                                     @dfinity/ic-interface-owners
@@ -149,7 +148,6 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/p2p.rs                               @dfinity/networking
 /rs/interfaces/src/p2p/                                 @dfinity/networking
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
-/rs/local-bin/                                          @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/runtime
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
 /rs/monitoring/                                         @dfinity/networking

@@ -109,7 +109,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/config/src/embedders.rs                             @dfinity-lab/teams/runtime-owners
 /rs/config/src/execution_environment.rs                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/config/src/subnet_config.rs                         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
-/rs/config/src/http_handler.rs                          @dfinity-lab/teams/networking-team
 /rs/consensus/                                          @dfinity-lab/teams/consensus-owners
 /rs/constants/                                          @dfinity-lab/teams/interface-owners
 /rs/criterion_time/                                     @dfinity-lab/teams/interface-owners
@@ -149,7 +148,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/interfaces/src/p2p.rs                               @dfinity-lab/teams/networking-team
 /rs/interfaces/src/p2p/                                 @dfinity-lab/teams/networking-team
 /rs/interfaces/state_manager/                           @dfinity-lab/teams/message-routing-owners
-/rs/local-bin/                                          @dfinity-lab/teams/interface-owners
 /rs/memory_tracker/                                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                                          @dfinity-lab/teams/message-routing-owners
 /rs/monitoring/                                         @dfinity-lab/teams/networking-team
