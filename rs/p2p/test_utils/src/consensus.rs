@@ -20,11 +20,9 @@ pub struct U64Artifact(Vec<u8>);
 impl IdentifiableArtifact for U64Artifact {
     const NAME: &'static str = "artifact";
     type Id = u64;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         u64::from_le_bytes(self.0[..8].try_into().unwrap())
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl From<U64Artifact> for Vec<u8> {
@@ -292,7 +290,6 @@ impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensu
         _pool: &TestConsensus<U64Artifact>,
     ) -> ic_interfaces::p2p::consensus::PriorityFn<
         <U64Artifact as IdentifiableArtifact>::Id,
-        <U64Artifact as IdentifiableArtifact>::Attribute,
     > {
         Box::new(|_, _| Priority::FetchNow)
     }

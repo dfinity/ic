@@ -157,7 +157,7 @@ pub(crate) struct SlotUpdate<Artifact: PbArtifact> {
 
 pub(crate) enum Update<Artifact: PbArtifact> {
     Artifact(Artifact),
-    Advert((Artifact::Id, Artifact::Attribute)),
+    Advert((Artifact::Id)),
 }
 
 pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {

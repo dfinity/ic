@@ -106,10 +106,6 @@ async fn update_handler<Artifact: PbArtifact>(
                 let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
                     .map(|pb_id| pb_id.try_into().map_err(|_| StatusCode::BAD_REQUEST))
                     .map_err(|_| StatusCode::BAD_REQUEST)??;
-                let attr: Artifact::Attribute =
-                    Artifact::PbAttribute::decode(advert.attribute.as_slice())
-                        .map(|pb_attr| pb_attr.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                        .map_err(|_| StatusCode::BAD_REQUEST)??;
                 Update::Advert((id, attr))
             }
             Some(pb::slot_update::Update::Artifact(artifact)) => {
@@ -193,7 +189,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: PbArtifact, Pool, ReceivedA
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
-    current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+    current_priority_fn: watch::Sender<PriorityFn<Artifact::Id>>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
@@ -203,7 +199,6 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: PbArtifact, Pool, ReceivedA
     artifact_processor_tasks: JoinSet<(
         watch::Receiver<PeerCounter>,
         Artifact::Id,
-        Artifact::Attribute,
     )>,
 
     topology_watcher: watch::Receiver<SubnetTopology>,
@@ -317,7 +312,6 @@ where
         &mut self,
         peer_rx: watch::Receiver<PeerCounter>,
         id: Artifact::Id,
-        attr: Artifact::Attribute,
     ) {
         self.metrics.download_task_finished_total.inc();
         // Invariant: Peer sender should only be dropped in this task..
@@ -463,12 +457,11 @@ where
     #[instrument(skip_all)]
     async fn wait_fetch(
         id: &Artifact::Id,
-        attr: &Artifact::Attribute,
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &ConsensusManagerMetrics,
         mut peer_rx: &mut watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: &mut watch::Receiver<
-            PriorityFn<Artifact::Id, Artifact::Attribute>,
+            PriorityFn<Artifact::Id>,
         >,
     ) -> Result<(), DownloadStopped> {
         let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
@@ -516,11 +509,10 @@ where
     async fn download_artifact(
         log: ReplicaLogger,
         id: &Artifact::Id,
-        attr: &Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
         mut peer_rx: &mut watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
     ) -> Result<(Artifact, NodeId), DownloadStopped> {
@@ -622,24 +614,21 @@ where
     async fn process_advert(
         log: ReplicaLogger,
         id: Artifact::Id,
-        attr: Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
     ) -> (
         watch::Receiver<PeerCounter>,
         Artifact::Id,
-        Artifact::Attribute,
     ) {
         let _timer = metrics.download_task_duration.start_timer();
         let download_result = Self::download_artifact(
             log,
             &id,
-            &attr,
             artifact,
             &mut peer_rx,
             priority_fn_watcher,
@@ -1806,9 +1795,7 @@ mod tests {
         impl IdentifiableArtifact for BigArtifact {
             const NAME: &'static str = "big";
             type Id = ();
-            type Attribute = ();
             fn id(&self) -> Self::Id {}
-            fn attribute(&self) -> Self::Attribute {}
         }
         impl From<BigArtifact> for Vec<u8> {
             fn from(value: BigArtifact) -> Self {

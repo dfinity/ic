@@ -74,6 +74,6 @@ mock! {
     pub PriorityFnFactory<A: IdentifiableArtifact> {}
 
     impl<A: IdentifiableArtifact + Sync> PriorityFnFactory<A, MockValidatedPoolReader<A>> for PriorityFnFactory<A> {
-        fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
+        fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id>;
     }
 }

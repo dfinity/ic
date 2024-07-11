@@ -266,7 +266,7 @@ impl fmt::Display for ConsensusInstance<'_> {
 pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
 
 pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
-    priority_fn: PriorityFn<Artifact::Id, Artifact::Attribute>,
+    priority_fn: PriorityFn<Artifact::Id>,
     pub last_updated: Time,
 }
 

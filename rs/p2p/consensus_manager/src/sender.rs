@@ -180,7 +180,6 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
                 used_slot.slot_number(),
                 new_artifact,
                 id,
-                attribute,
                 child_token_clone,
             );
 
@@ -204,7 +203,6 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
             is_latency_sensitive,
         }: ArtifactWithOpt<Artifact>,
         id: Artifact::Id,
-        attribute: Artifact::Attribute,
         cancellation_token: CancellationToken,
     ) {
         let pb_slot_update = pb::SlotUpdate {
@@ -219,7 +217,6 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
                 } else {
                     pb::slot_update::Update::Advert(pb::Advert {
                         id: Artifact::PbId::proxy_encode(id),
-                        attribute: Artifact::PbAttribute::proxy_encode(attribute),
                     })
                 }
             }),

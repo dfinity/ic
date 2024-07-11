@@ -24,10 +24,10 @@ use ic_protobuf::{
 };
 use prost::bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, str::FromStr};
 use std::{
     convert::{From, TryFrom, TryInto},
     mem::size_of,
+    str::FromStr,
 };
 
 /// The contents of a signed ingress message.
@@ -163,11 +163,9 @@ pub struct SignedIngress {
 impl IdentifiableArtifact for SignedIngress {
     const NAME: &'static str = "ingress";
     type Id = IngressMessageId;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         self.into()
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for SignedIngress {
@@ -175,8 +173,6 @@ impl PbArtifact for SignedIngress {
     type PbIdError = ProxyDecodeError;
     type PbMessage = Bytes;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ();
-    type PbAttributeError = Infallible;
 }
 
 impl PartialEq for SignedIngress {
