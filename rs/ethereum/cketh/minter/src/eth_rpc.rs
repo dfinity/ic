@@ -21,6 +21,7 @@ use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
 use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 
@@ -55,7 +56,8 @@ impl std::str::FromStr for Data {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(|e| format!("failed to parse data from string: {}", e))
+        serde_json::from_value(Value::String(s.to_string()))
+            .map_err(|e| format!("failed to parse data from string: {}", e))
     }
 }
 
