@@ -21,8 +21,8 @@ use ic_ledger_canister_core::ledger::{
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
-use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,

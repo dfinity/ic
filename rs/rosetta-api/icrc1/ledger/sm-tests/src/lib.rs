@@ -2296,6 +2296,12 @@ pub fn icrc1_test_block_transformation<T>(
     transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
 
+    let mut approve_args = default_approve_args(p2.0, 150_000);
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+    approve_args.expires_at = Some(expiration);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+
     // Fetch all blocks before the upgrade.
     let resp_pre_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
 
@@ -2306,6 +2312,10 @@ pub fn icrc1_test_block_transformation<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
+
+    let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    assert_eq!(allowance.expires_at, Some(expiration));
 
     // Default archive threshold is 10 blocks so all blocks should be on the ledger directly
     // Fetch all blocks after the upgrade.
