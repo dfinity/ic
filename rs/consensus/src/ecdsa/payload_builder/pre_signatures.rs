@@ -1,4 +1,4 @@
-use super::EcdsaPayloadError;
+use super::IDkgPayloadError;
 
 use crate::ecdsa::{pre_signer::EcdsaTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{debug, error, ReplicaLogger};
@@ -27,11 +27,11 @@ use std::collections::{BTreeMap, BTreeSet};
 /// - moving completed pre-signatures from "in creation" to "available".
 /// Returns the newly created transcripts.
 pub(super) fn update_pre_signatures_in_creation(
-    payload: &mut idkg::EcdsaPayload,
+    payload: &mut idkg::IDkgPayload,
     transcript_cache: &dyn EcdsaTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
-) -> Result<Vec<IDkgTranscript>, EcdsaPayloadError> {
+) -> Result<Vec<IDkgTranscript>, IDkgPayloadError> {
     let mut newly_available = BTreeMap::new();
     let mut new_transcripts = Vec::new();
     for (pre_signature_id, pre_signature) in payload.pre_signatures_in_creation.iter_mut() {
@@ -130,7 +130,7 @@ fn update_ecdsa_quadruple_in_creation(
     uid_generator: &mut EcdsaUIDGenerator,
     height: Height,
     log: &ReplicaLogger,
-) -> Result<(bool, Vec<IDkgTranscript>), EcdsaPayloadError> {
+) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     let registry_version = key_transcript.registry_version();
     let receivers = key_transcript.receivers().clone();
@@ -260,7 +260,7 @@ fn update_schnorr_transcript_in_creation(
     transcript_cache: &dyn EcdsaTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
-) -> Result<(bool, Vec<IDkgTranscript>), EcdsaPayloadError> {
+) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     // Update pre_signature with completed transcripts
     if pre_signature.blinder_unmasked.is_none() {
@@ -283,7 +283,7 @@ fn update_schnorr_transcript_in_creation(
 /// Purge all available but unmatched pre-signatures that are referencing a different key transcript
 /// than the one currently used.
 pub(super) fn purge_old_key_pre_signatures(
-    ecdsa_payload: &mut idkg::EcdsaPayload,
+    idkg_payload: &mut idkg::IDkgPayload,
     all_signing_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
 ) {
     let matched_pre_signatures = all_signing_requests
@@ -292,19 +292,17 @@ pub(super) fn purge_old_key_pre_signatures(
         .map(|(pre_sig_id, _)| pre_sig_id)
         .collect::<BTreeSet<_>>();
 
-    ecdsa_payload
-        .available_pre_signatures
-        .retain(|id, pre_sig| {
-            matched_pre_signatures.contains(id)
-                || ecdsa_payload
-                    .key_transcripts
-                    .get(&pre_sig.key_id())
-                    .and_then(|key_transcript| key_transcript.current.as_ref())
-                    .is_some_and(|current_key_transcript| {
-                        pre_sig.key_unmasked().as_ref().transcript_id
-                            == current_key_transcript.transcript_id()
-                    })
-        });
+    idkg_payload.available_pre_signatures.retain(|id, pre_sig| {
+        matched_pre_signatures.contains(id)
+            || idkg_payload
+                .key_transcripts
+                .get(&pre_sig.key_id())
+                .and_then(|key_transcript| key_transcript.current.as_ref())
+                .is_some_and(|current_key_transcript| {
+                    pre_sig.key_unmasked().as_ref().transcript_id
+                        == current_key_transcript.transcript_id()
+                })
+    });
 }
 
 /// Creating new pre-signatures if necessary by updating pre_signatures_in_creation,
@@ -312,10 +310,10 @@ pub(super) fn purge_old_key_pre_signatures(
 /// ecdsa configs.
 pub(super) fn make_new_pre_signatures_if_needed(
     chain_key_config: &ChainKeyConfig,
-    ecdsa_payload: &mut idkg::EcdsaPayload,
+    idkg_payload: &mut idkg::IDkgPayload,
     matched_pre_signatures_per_key_id: &BTreeMap<MasterPublicKeyId, usize>,
 ) {
-    for (key_id, key_transcript) in &ecdsa_payload.key_transcripts {
+    for (key_id, key_transcript) in &idkg_payload.key_transcripts {
         let Some(key_transcript) = key_transcript.current.as_ref() else {
             continue;
         };
@@ -325,7 +323,7 @@ pub(super) fn make_new_pre_signatures_if_needed(
             .copied()
             .unwrap_or_default();
 
-        let unassigned_pre_signatures = ecdsa_payload
+        let unassigned_pre_signatures = idkg_payload
             .iter_pre_signature_ids(key_id)
             .count()
             .saturating_sub(matched_pre_signature);
@@ -336,11 +334,11 @@ pub(super) fn make_new_pre_signatures_if_needed(
             key_transcript.registry_version(),
             chain_key_config,
             key_id,
-            &mut ecdsa_payload.uid_generator,
+            &mut idkg_payload.uid_generator,
             unassigned_pre_signatures,
         );
 
-        ecdsa_payload
+        idkg_payload
             .pre_signatures_in_creation
             .extend(new_pre_signatures);
     }
@@ -449,7 +447,7 @@ pub fn new_random_unmasked_config(
 
 #[cfg(test)]
 pub(super) mod test_utils {
-    use crate::ecdsa::test_utils::EcdsaPayloadTestHelper;
+    use crate::ecdsa::test_utils::IDkgPayloadTestHelper;
 
     use super::*;
 
@@ -505,7 +503,7 @@ pub(super) mod test_utils {
     }
 
     /// Return a sorted list of IDs of all transcripts in creation
-    pub fn config_ids(payload: &idkg::EcdsaPayload) -> Vec<u64> {
+    pub fn config_ids(payload: &idkg::IDkgPayload) -> Vec<u64> {
         let mut arr = payload
             .iter_transcript_configs_in_creation()
             .map(|x| x.transcript_id.id())
@@ -516,7 +514,7 @@ pub(super) mod test_utils {
 
     /// Return a sorted list of IDs of all completed transcripts,
     /// excluding the key transcript
-    pub fn transcript_ids(payload: &idkg::EcdsaPayload) -> Vec<u64> {
+    pub fn transcript_ids(payload: &idkg::IDkgPayload) -> Vec<u64> {
         let key_transcript = payload.single_key_transcript().current.as_ref().unwrap();
         let mut arr = payload
             .active_transcripts()
@@ -538,7 +536,7 @@ pub(super) mod tests {
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_schnorr_key_id, fake_schnorr_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+        fake_signature_request_context_with_pre_sig, set_up_idkg_payload, IDkgPayloadTestHelper,
         TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
     };
     use assert_matches::assert_matches;
@@ -551,7 +549,7 @@ pub(super) mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::idkg::{common::PreSignatureRef, EcdsaPayload, UnmaskedTranscript},
+        consensus::idkg::{common::PreSignatureRef, IDkgPayload, UnmaskedTranscript},
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
         SubnetId,
     };
@@ -564,20 +562,20 @@ pub(super) mod tests {
         key_ids: Vec<MasterPublicKeyId>,
         height: Height,
     ) -> (
-        EcdsaPayload,
+        IDkgPayload,
         CanisterThresholdSigTestEnvironment,
         TestEcdsaBlockReader,
     ) {
-        let (mut ecdsa_payload, env, block_reader) = set_up_ecdsa_payload(
+        let (mut idkg_payload, env, block_reader) = set_up_idkg_payload(
             rng, subnet_id, /*nodes_count=*/ 4, key_ids,
             /*should_create_key_transcript=*/ true,
         );
-        ecdsa_payload
+        idkg_payload
             .uid_generator
             .update_height(height)
             .expect("Should successfully update the height");
 
-        (ecdsa_payload, env, block_reader)
+        (idkg_payload, env, block_reader)
     }
 
     #[test]
@@ -650,7 +648,7 @@ pub(super) mod tests {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
-        let (mut ecdsa_payload, _env, _block_reader) =
+        let (mut idkg_payload, _env, _block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], height);
 
         // 4 pre-signatures should be created in advance (in creation + unmatched available = 4)
@@ -666,7 +664,7 @@ pub(super) mod tests {
 
         // Add 3 available pre-signatures
         for i in 0..3 {
-            create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), i);
+            create_available_pre_signature(&mut idkg_payload, key_id.clone(), i);
         }
 
         // 2 available pre-signatures are already matched
@@ -674,24 +672,24 @@ pub(super) mod tests {
 
         // We expect 3 pre-signatures in creation to be added
         let expected_pre_signatures_in_creation = pre_signatures_to_create_in_advance as usize
-            - (ecdsa_payload.available_pre_signatures.len() - pre_signature_already_matched);
+            - (idkg_payload.available_pre_signatures.len() - pre_signature_already_matched);
         assert_eq!(expected_pre_signatures_in_creation, 3);
 
         make_new_pre_signatures_if_needed(
             &chain_key_config,
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             &BTreeMap::from([(key_id.clone(), pre_signature_already_matched)]),
         );
 
         assert_eq!(
-            ecdsa_payload.pre_signatures_in_creation.len()
-                + ecdsa_payload.available_pre_signatures.len()
+            idkg_payload.pre_signatures_in_creation.len()
+                + idkg_payload.available_pre_signatures.len()
                 - pre_signature_already_matched,
             pre_signatures_to_create_in_advance as usize
         );
         // Verify the generated transcript ids.
         let mut transcript_ids = BTreeSet::new();
-        for pre_signature in ecdsa_payload.pre_signatures_in_creation.values() {
+        for pre_signature in idkg_payload.pre_signatures_in_creation.values() {
             match pre_signature {
                 PreSignatureInCreation::Ecdsa(pre_sig) => {
                     assert_matches!(key_id, MasterPublicKeyId::Ecdsa(_));
@@ -712,7 +710,7 @@ pub(super) mod tests {
         };
         assert_eq!(transcript_ids.len(), expected_transcript_ids);
         assert_eq!(
-            ecdsa_payload.peek_next_transcript_id().id() as usize,
+            idkg_payload.peek_next_transcript_id().id() as usize,
             expected_transcript_ids,
         );
     }
@@ -1042,7 +1040,7 @@ pub(super) mod tests {
         );
     }
 
-    fn get_current_unmasked_key_transcript(payload: &EcdsaPayload) -> UnmaskedTranscript {
+    fn get_current_unmasked_key_transcript(payload: &IDkgPayload) -> UnmaskedTranscript {
         let transcript = payload.single_key_transcript().current.clone();
         transcript.unwrap().unmasked_transcript()
     }

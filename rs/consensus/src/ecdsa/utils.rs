@@ -1,7 +1,7 @@
 //! Common utils for the ECDSA implementation.
 
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
-use crate::ecdsa::metrics::EcdsaPayloadMetrics;
+use crate::ecdsa::metrics::IDkgPayloadMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
@@ -73,8 +73,8 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .payload
             .as_ref()
             .as_ecdsa()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                Box::new(ecdsa_payload.iter_transcript_configs_in_creation())
+            .map_or(Box::new(std::iter::empty()), |idkg_payload| {
+                Box::new(idkg_payload.iter_transcript_configs_in_creation())
             })
     }
 
@@ -83,9 +83,9 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_> {
         self.chain.tip().payload.as_ref().as_ecdsa().map_or(
             Box::new(std::iter::empty()),
-            |ecdsa_payload| {
+            |idkg_payload| {
                 Box::new(
-                    ecdsa_payload
+                    idkg_payload
                         .pre_signatures_in_creation
                         .iter()
                         .map(|(id, pre_sig)| (*id, pre_sig.key_id())),
@@ -100,7 +100,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .payload
             .as_ref()
             .as_ecdsa()
-            .and_then(|ecdsa_payload| ecdsa_payload.available_pre_signatures.get(id))
+            .and_then(|idkg_payload| idkg_payload.available_pre_signatures.get(id))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
@@ -120,8 +120,8 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .payload
             .as_ref()
             .as_ecdsa()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                Box::new(ecdsa_payload.iter_xnet_transcripts_source_subnet())
+            .map_or(Box::new(std::iter::empty()), |idkg_payload| {
+                Box::new(idkg_payload.iter_xnet_transcripts_source_subnet())
             })
     }
 
@@ -133,8 +133,8 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .payload
             .as_ref()
             .as_ecdsa()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                Box::new(ecdsa_payload.iter_xnet_transcripts_target_subnet())
+            .map_or(Box::new(std::iter::empty()), |idkg_payload| {
+                Box::new(idkg_payload.iter_xnet_transcripts_target_subnet())
             })
     }
 
@@ -142,13 +142,13 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
         transcript_ref: &TranscriptRef,
     ) -> Result<IDkgTranscript, TranscriptLookupError> {
-        let ecdsa_payload = match self.chain.get_block_by_height(transcript_ref.height) {
+        let idkg_payload = match self.chain.get_block_by_height(transcript_ref.height) {
             Ok(block) => {
-                if let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() {
-                    ecdsa_payload
+                if let Some(idkg_payload) = block.payload.as_ref().as_ecdsa() {
+                    idkg_payload
                 } else {
                     return Err(format!(
-                        "transcript(): chain look up failed {:?}: EcdsaPayload not found",
+                        "transcript(): chain look up failed {:?}: IDkgPayload not found",
                         transcript_ref
                     ));
                 }
@@ -161,7 +161,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             }
         };
 
-        ecdsa_payload
+        idkg_payload
             .idkg_transcripts
             .get(&transcript_ref.transcript_id)
             .ok_or(format!(
@@ -176,7 +176,7 @@ pub(super) fn block_chain_reader(
     pool_reader: &PoolReader<'_>,
     summary_block: &Block,
     parent_block: &Block,
-    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<EcdsaBlockReaderImpl, InvalidChainCacheError> {
     // Resolve the transcript refs pointing into the parent chain,
@@ -188,7 +188,7 @@ pub(super) fn block_chain_reader(
                 log,
                 "block_chain_reader(): failed to build chain cache: {}", err
             );
-            if let Some(metrics) = ecdsa_payload_metrics {
+            if let Some(metrics) = idkg_payload_metrics {
                 metrics.payload_errors_inc("summary_invalid_chain_cache");
             };
             err
@@ -382,7 +382,7 @@ pub(crate) fn inspect_chain_key_initializations(
             .try_into()
             .map_err(|err| {
                 format!(
-                    "Error reading ECDSA key_id: {:?}. Setting ecdsa_summary to None.",
+                    "Error reading ECDSA key_id: {:?}. Setting idkg_summary to None.",
                     err
                 )
             })?;
@@ -394,7 +394,7 @@ pub(crate) fn inspect_chain_key_initializations(
             .try_into()
             .map_err(|err| {
                 format!(
-                    "Error reading ECDSA dealings: {:?}. Setting ecdsa_summary to None.",
+                    "Error reading ECDSA dealings: {:?}. Setting idkg_summary to None.",
                     err
                 )
             })?;
@@ -411,7 +411,7 @@ pub(crate) fn inspect_chain_key_initializations(
             .try_into()
             .map_err(|err| {
                 format!(
-                    "Error reading Master public key_id: {:?}. Setting ecdsa_summary to None.",
+                    "Error reading Master public key_id: {:?}. Setting idkg_summary to None.",
                     err
                 )
             })?;
@@ -423,7 +423,7 @@ pub(crate) fn inspect_chain_key_initializations(
             .try_into()
             .map_err(|err| {
                 format!(
-                    "Error reading initial IDkg dealings: {:?}. Setting ecdsa_summary to None.",
+                    "Error reading initial IDkg dealings: {:?}. Setting idkg_summary to None.",
                     err
                 )
             })?;
@@ -515,7 +515,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
 ) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
-    let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() else {
+    let Some(idkg_payload) = block.payload.as_ref().as_ecdsa() else {
         return Ok(BTreeMap::new());
     };
 
@@ -530,7 +530,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
 
     let mut public_keys = BTreeMap::new();
 
-    for (key_id, key_transcript) in &ecdsa_payload.key_transcripts {
+    for (key_id, key_transcript) in &idkg_payload.key_transcripts {
         let Some(transcript_ref) = key_transcript
             .current
             .as_ref()
@@ -589,7 +589,7 @@ mod tests {
     use crate::ecdsa::test_utils::{
         create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
         fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+        set_up_idkg_payload, IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -608,7 +608,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            idkg::{EcdsaPayload, UnmaskedTranscript},
+            idkg::{IDkgPayload, UnmaskedTranscript},
             BlockPayload, Payload, SummaryPayload,
         },
         crypto::CryptoHashOf,
@@ -853,14 +853,14 @@ mod tests {
     }
 
     fn add_available_pre_signatures_with_key_transcript(
-        ecdsa_payload: &mut EcdsaPayload,
+        idkg_payload: &mut IDkgPayload,
         key_transcript: UnmaskedTranscript,
         key_id: &MasterPublicKeyId,
     ) -> Vec<PreSigId> {
         let mut pre_sig_ids = vec![];
         for i in 0..10 {
             let id = create_available_pre_signature_with_key_transcript(
-                ecdsa_payload,
+                idkg_payload,
                 i,
                 key_id.clone(),
                 Some(key_transcript),
@@ -870,14 +870,14 @@ mod tests {
         pre_sig_ids
     }
 
-    fn make_block(ecdsa_payload: Option<EcdsaPayload>) -> Block {
+    fn make_block(idkg_payload: Option<IDkgPayload>) -> Block {
         Block::new(
             CryptoHashOf::from(ic_types::crypto::CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
                     dkg: ic_types::consensus::dkg::Summary::fake(),
-                    ecdsa: ecdsa_payload,
+                    ecdsa: idkg_payload,
                 }),
             ),
             Height::from(123),
@@ -900,21 +900,21 @@ mod tests {
 
     fn test_get_pre_signature_ids_to_deliver(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
+        let (mut idkg_payload, env, _) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
             vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
         );
-        let current_key_transcript = ecdsa_payload
+        let current_key_transcript = idkg_payload
             .single_key_transcript()
             .current
             .clone()
             .unwrap();
 
         let pre_signature_ids_to_be_delivered = add_available_pre_signatures_with_key_transcript(
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             current_key_transcript.unmasked_transcript(),
             &key_id,
         );
@@ -935,12 +935,12 @@ mod tests {
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         let pre_signature_ids_not_to_be_delivered =
             add_available_pre_signatures_with_key_transcript(
-                &mut ecdsa_payload,
+                &mut idkg_payload,
                 old_key_transcript,
                 &key_id,
             );
 
-        let block = make_block(Some(ecdsa_payload));
+        let block = make_block(Some(idkg_payload));
         let mut delivered_map = get_pre_signature_ids_to_deliver(&block);
         assert_eq!(delivered_map.len(), 1);
         let delivered_ids = delivered_map.remove(&key_id).unwrap();
@@ -972,7 +972,7 @@ mod tests {
 
     fn test_block_without_key_should_not_deliver_pre_signatures(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
+        let (mut idkg_payload, env, _) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
@@ -994,12 +994,12 @@ mod tests {
         let key_transcript_ref =
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         add_available_pre_signatures_with_key_transcript(
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             key_transcript_ref,
             &key_id,
         );
 
-        let block = make_block(Some(ecdsa_payload));
+        let block = make_block(Some(idkg_payload));
         let delivered_ids = get_pre_signature_ids_to_deliver(&block);
 
         assert_eq!(delivered_ids.get(&key_id), Some(&BTreeSet::default()));

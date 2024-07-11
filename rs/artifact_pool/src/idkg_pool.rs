@@ -370,8 +370,8 @@ impl IDkgPoolImpl {
         let mut initial_dealings = Vec::new();
         if block.payload.is_summary() {
             let block_payload = block.payload.as_ref();
-            if let Some(ecdsa_summary) = &block_payload.as_summary().ecdsa {
-                initial_dealings = ecdsa_summary.initial_dkg_dealings().collect();
+            if let Some(idkg_summary) = &block_payload.as_summary().ecdsa {
+                initial_dealings = idkg_summary.initial_dkg_dealings().collect();
             }
         }
 
