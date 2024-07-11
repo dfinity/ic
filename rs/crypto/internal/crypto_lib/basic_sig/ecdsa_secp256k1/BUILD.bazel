@@ -8,6 +8,7 @@ package(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
@@ -23,6 +24,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",

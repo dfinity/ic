@@ -13,6 +13,7 @@ rust_library(
     crate_name = "ic_messaging",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/constants",
@@ -49,6 +50,7 @@ rust_test(
     name = "messaging_test",
     crate = ":messaging",
     deps = [
+        # Keep sorted.
         "//rs/crypto/test_utils/ni-dkg",
         "//rs/interfaces/state_manager/mocks",
         "//rs/registry/fake",
@@ -89,6 +91,7 @@ rust_ic_test_suite(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     deps = [
+        # Keep sorted.
         ":messaging",
         "//rs/interfaces/certified_stream_store",
         "//rs/registry/routing_table",

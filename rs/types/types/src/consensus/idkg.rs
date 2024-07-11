@@ -27,6 +27,7 @@ use crate::{
     node_id_into_protobuf, node_id_try_from_option, Height, NodeId, RegistryVersion, SubnetId,
 };
 use common::SignatureScheme;
+use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf};
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -67,7 +68,7 @@ pub enum CompletedSignature {
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaPayload {
+pub struct IDkgPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
 
@@ -93,7 +94,7 @@ pub struct EcdsaPayload {
     pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
 }
 
-impl EcdsaPayload {
+impl IDkgPayload {
     /// Creates an empty ECDSA payload.
     pub fn empty(
         height: Height,
@@ -823,13 +824,13 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
     }
 }
 
-/// IDkgArtifactId is the unique identifier for the artifacts. It is made of a prefix + crypto
-/// hash of the message itself:
-/// IDkgArtifactId = `<IDkgPrefix, CryptoHash<Message>>`
+/// IDkgArtifactId is the unique identifier for the artifacts. It is made of a prefix + additional
+/// data of the message itself:
+/// IDkgArtifactId = `<IDkgPrefix, IdData<Message>>`
 /// IDkgPrefix     = <8 byte group tag, 8 byte meta info hash>
 ///
 /// Two kinds of look up are possible with this:
-/// 1. Look up by full key of <prefix + crypto hash>, which would return the matching
+/// 1. Look up by full key of <prefix + id data>, which would return the matching
 /// artifact if present.
 /// 2. Look up by prefix match. This can return 0 or more entries, as several artifacts may share
 /// the same prefix. The caller is expected to filter the returned entries as needed. The look up
@@ -861,23 +862,21 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
 pub struct IDkgPrefix {
     group_tag: u64,
     meta_hash: u64,
-    height: Height,
 }
 
 impl IDkgPrefix {
-    pub fn new(group_tag: u64, hash: [u8; 32], height: Height) -> Self {
+    pub fn new(group_tag: u64, hash: [u8; 32]) -> Self {
         let w1 = u64::from_be_bytes((&hash[0..8]).try_into().unwrap());
         let w2 = u64::from_be_bytes((&hash[8..16]).try_into().unwrap());
         let w3 = u64::from_be_bytes((&hash[16..24]).try_into().unwrap());
         let w4 = u64::from_be_bytes((&hash[24..]).try_into().unwrap());
-        Self::new_with_meta_hash(group_tag, w1 ^ w2 ^ w3 ^ w4, height)
+        Self::new_with_meta_hash(group_tag, w1 ^ w2 ^ w3 ^ w4)
     }
 
-    pub fn new_with_meta_hash(group_tag: u64, meta_hash: u64, height: Height) -> Self {
+    pub fn new_with_meta_hash(group_tag: u64, meta_hash: u64) -> Self {
         Self {
             group_tag,
             meta_hash,
-            height,
         }
     }
 
@@ -888,10 +887,6 @@ impl IDkgPrefix {
     pub fn meta_hash(&self) -> u64 {
         self.meta_hash
     }
-
-    pub fn height(&self) -> Height {
-        self.height
-    }
 }
 
 impl From<&IDkgPrefix> for pb::IDkgPrefix {
@@ -899,7 +894,6 @@ impl From<&IDkgPrefix> for pb::IDkgPrefix {
         Self {
             group_tag: value.group_tag,
             meta_hash: value.meta_hash,
-            height: value.height.get(),
         }
     }
 }
@@ -909,7 +903,6 @@ impl From<&pb::IDkgPrefix> for IDkgPrefix {
         Self {
             group_tag: value.group_tag,
             meta_hash: value.meta_hash,
-            height: Height::from(value.height),
         }
     }
 }
@@ -924,11 +917,7 @@ pub fn dealing_prefix(
     let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
 
-    IDkgPrefixOf::new(IDkgPrefix::new(
-        transcript_id.id(),
-        hasher.finish(),
-        transcript_id.source_height(),
-    ))
+    IDkgPrefixOf::new(IDkgPrefix::new(transcript_id.id(), hasher.finish()))
 }
 
 pub fn dealing_support_prefix(
@@ -941,11 +930,7 @@ pub fn dealing_support_prefix(
     dealer_id.hash(&mut hasher);
     support_node_id.hash(&mut hasher);
 
-    IDkgPrefixOf::new(IDkgPrefix::new(
-        transcript_id.id(),
-        hasher.finish(),
-        transcript_id.source_height(),
-    ))
+    IDkgPrefixOf::new(IDkgPrefix::new(transcript_id.id(), hasher.finish()))
 }
 
 pub fn ecdsa_sig_share_prefix(
@@ -959,7 +944,6 @@ pub fn ecdsa_sig_share_prefix(
     IDkgPrefixOf::new(IDkgPrefix::new(
         request_id.pre_signature_id.id(),
         hasher.finish(),
-        request_id.height,
     ))
 }
 
@@ -974,7 +958,6 @@ pub fn schnorr_sig_share_prefix(
     IDkgPrefixOf::new(IDkgPrefix::new(
         request_id.pre_signature_id.id(),
         hasher.finish(),
-        request_id.height,
     ))
 }
 
@@ -988,11 +971,7 @@ pub fn complaint_prefix(
     dealer_id.hash(&mut hasher);
     complainer_id.hash(&mut hasher);
 
-    IDkgPrefixOf::new(IDkgPrefix::new(
-        transcript_id.id(),
-        hasher.finish(),
-        transcript_id.source_height(),
-    ))
+    IDkgPrefixOf::new(IDkgPrefix::new(transcript_id.id(), hasher.finish()))
 }
 
 pub fn opening_prefix(
@@ -1005,33 +984,99 @@ pub fn opening_prefix(
     dealer_id.hash(&mut hasher);
     opener_id.hash(&mut hasher);
 
-    IDkgPrefixOf::new(IDkgPrefix::new(
-        transcript_id.id(),
-        hasher.finish(),
-        transcript_id.source_height(),
-    ))
+    IDkgPrefixOf::new(IDkgPrefix::new(transcript_id.id(), hasher.finish()))
 }
 
-/// The identifier for artifacts/messages.
+pub type IDkgArtifactIdDataOf<T> = Id<T, IDkgArtifactIdData>;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub struct IDkgArtifactIdData {
+    /// The height at which this IDkg instance was requested.
+    pub height: Height,
+    /// The cryptographic hash of the message.
+    pub hash: CryptoHash,
+    /// The subnet on which this IDkg instance was requested. This is required to
+    /// identify artifacts for key resharings via cross-net.
+    pub subnet_id: SubnetId,
+}
+
+impl From<IDkgArtifactIdData> for pb::IDkgArtifactIdData {
+    fn from(value: IDkgArtifactIdData) -> Self {
+        Self {
+            height: value.height.get(),
+            hash: value.hash.0,
+            subnet_id: Some(subnet_id_into_protobuf(value.subnet_id)),
+        }
+    }
+}
+
+impl TryFrom<pb::IDkgArtifactIdData> for IDkgArtifactIdData {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::IDkgArtifactIdData) -> Result<Self, Self::Error> {
+        Ok(Self {
+            height: Height::from(value.height),
+            subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
+                value.subnet_id,
+                "IDkgArtifactIdData::subnet_id",
+            )?)?,
+            hash: CryptoHash(value.hash),
+        })
+    }
+}
+
+pub type SigShareIdDataOf<T> = Id<T, SigShareIdData>;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub struct SigShareIdData {
+    /// The height at which the signature request was paired with a pre-signature
+    pub height: Height,
+    /// The cryptographic hash of the message.
+    pub hash: CryptoHash,
+}
+
+impl From<SigShareIdData> for pb::SigShareIdData {
+    fn from(value: SigShareIdData) -> Self {
+        Self {
+            height: value.height.get(),
+            hash: value.hash.0,
+        }
+    }
+}
+
+impl TryFrom<pb::SigShareIdData> for SigShareIdData {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::SigShareIdData) -> Result<Self, Self::Error> {
+        Ok(Self {
+            height: Height::from(value.height),
+            hash: CryptoHash(value.hash),
+        })
+    }
+}
+
+/// The identifier for artifacts/messages consists of a prefix and additional Id data.
+/// The prefix may be used for sorting and range queries in tree-like structures.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub enum IDkgArtifactId {
     Dealing(
         IDkgPrefixOf<SignedIDkgDealing>,
-        CryptoHashOf<SignedIDkgDealing>,
+        IDkgArtifactIdDataOf<SignedIDkgDealing>,
     ),
     DealingSupport(
         IDkgPrefixOf<IDkgDealingSupport>,
-        CryptoHashOf<IDkgDealingSupport>,
+        IDkgArtifactIdDataOf<IDkgDealingSupport>,
     ),
-    EcdsaSigShare(IDkgPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
-    SchnorrSigShare(IDkgPrefixOf<SchnorrSigShare>, CryptoHashOf<SchnorrSigShare>),
+    EcdsaSigShare(IDkgPrefixOf<EcdsaSigShare>, SigShareIdDataOf<EcdsaSigShare>),
+    SchnorrSigShare(
+        IDkgPrefixOf<SchnorrSigShare>,
+        SigShareIdDataOf<SchnorrSigShare>,
+    ),
     Complaint(
         IDkgPrefixOf<SignedIDkgComplaint>,
-        CryptoHashOf<SignedIDkgComplaint>,
+        IDkgArtifactIdDataOf<SignedIDkgComplaint>,
     ),
     Opening(
         IDkgPrefixOf<SignedIDkgOpening>,
-        CryptoHashOf<SignedIDkgOpening>,
+        IDkgArtifactIdDataOf<SignedIDkgOpening>,
     ),
 }
 
@@ -1049,53 +1094,30 @@ impl IDkgArtifactId {
 
     pub fn hash(&self) -> CryptoHash {
         match self {
-            IDkgArtifactId::Dealing(_, hash) => hash.as_ref().clone(),
-            IDkgArtifactId::DealingSupport(_, hash) => hash.as_ref().clone(),
-            IDkgArtifactId::EcdsaSigShare(_, hash) => hash.as_ref().clone(),
-            IDkgArtifactId::SchnorrSigShare(_, hash) => hash.as_ref().clone(),
-            IDkgArtifactId::Complaint(_, hash) => hash.as_ref().clone(),
-            IDkgArtifactId::Opening(_, hash) => hash.as_ref().clone(),
+            IDkgArtifactId::Dealing(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::DealingSupport(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::EcdsaSigShare(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::Complaint(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::Opening(_, data) => data.as_ref().hash.clone(),
         }
     }
 
     pub fn height(&self) -> Height {
-        self.prefix().height()
+        match self {
+            IDkgArtifactId::Dealing(_, data) => data.as_ref().height,
+            IDkgArtifactId::DealingSupport(_, data) => data.as_ref().height,
+            IDkgArtifactId::EcdsaSigShare(_, data) => data.as_ref().height,
+            IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().height,
+            IDkgArtifactId::Complaint(_, data) => data.as_ref().height,
+            IDkgArtifactId::Opening(_, data) => data.as_ref().height,
+        }
     }
 
     pub fn dealing_hash(&self) -> Option<CryptoHashOf<SignedIDkgDealing>> {
         match self {
-            Self::Dealing(_, hash) => Some(hash.clone()),
+            Self::Dealing(_, data) => Some(CryptoHashOf::new(data.as_ref().hash.clone())),
             _ => None,
-        }
-    }
-}
-
-impl From<(IDkgMessageType, IDkgPrefix, CryptoHash)> for IDkgArtifactId {
-    fn from(
-        (message_type, prefix, crypto_hash): (IDkgMessageType, IDkgPrefix, CryptoHash),
-    ) -> IDkgArtifactId {
-        match message_type {
-            IDkgMessageType::Dealing => {
-                IDkgArtifactId::Dealing(IDkgPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
-            }
-            IDkgMessageType::DealingSupport => IDkgArtifactId::DealingSupport(
-                IDkgPrefixOf::new(prefix),
-                CryptoHashOf::new(crypto_hash),
-            ),
-            IDkgMessageType::EcdsaSigShare => IDkgArtifactId::EcdsaSigShare(
-                IDkgPrefixOf::new(prefix),
-                CryptoHashOf::new(crypto_hash),
-            ),
-            IDkgMessageType::SchnorrSigShare => IDkgArtifactId::SchnorrSigShare(
-                IDkgPrefixOf::new(prefix),
-                CryptoHashOf::new(crypto_hash),
-            ),
-            IDkgMessageType::Complaint => {
-                IDkgArtifactId::Complaint(IDkgPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
-            }
-            IDkgMessageType::Opening => {
-                IDkgArtifactId::Opening(IDkgPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
-            }
         }
     }
 }
@@ -1104,29 +1126,31 @@ impl From<IDkgArtifactId> for pb::IDkgArtifactId {
     fn from(value: IDkgArtifactId) -> Self {
         use pb::i_dkg_artifact_id::Kind;
         let kind = match value.clone() {
-            IDkgArtifactId::Dealing(p, h) => Kind::Dealing(pb::PrefixHashPair {
+            IDkgArtifactId::Dealing(p, d) => Kind::Dealing(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
-                hash: h.get().0,
+                id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
             }),
-            IDkgArtifactId::DealingSupport(p, h) => Kind::DealingSupport(pb::PrefixHashPair {
+            IDkgArtifactId::DealingSupport(p, d) => Kind::DealingSupport(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
-                hash: h.get().0,
+                id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
             }),
-            IDkgArtifactId::EcdsaSigShare(p, h) => Kind::EcdsaSigShare(pb::PrefixHashPair {
+            IDkgArtifactId::EcdsaSigShare(p, d) => Kind::EcdsaSigShare(pb::PrefixPairSigShare {
                 prefix: Some((&p.get()).into()),
-                hash: h.get().0,
+                id_data: Some(pb::SigShareIdData::from(d.get())),
             }),
-            IDkgArtifactId::SchnorrSigShare(p, h) => Kind::SchnorrSigShare(pb::PrefixHashPair {
+            IDkgArtifactId::SchnorrSigShare(p, d) => {
+                Kind::SchnorrSigShare(pb::PrefixPairSigShare {
+                    prefix: Some((&p.get()).into()),
+                    id_data: Some(pb::SigShareIdData::from(d.get())),
+                })
+            }
+            IDkgArtifactId::Complaint(p, d) => Kind::Complaint(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
-                hash: h.get().0,
+                id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
             }),
-            IDkgArtifactId::Complaint(p, h) => Kind::Complaint(pb::PrefixHashPair {
+            IDkgArtifactId::Opening(p, d) => Kind::Opening(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
-                hash: h.get().0,
-            }),
-            IDkgArtifactId::Opening(p, h) => Kind::Opening(pb::PrefixHashPair {
-                prefix: Some((&p.get()).into()),
-                hash: h.get().0,
+                id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
             }),
         };
         Self { kind: Some(kind) }
@@ -1145,39 +1169,45 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
         Ok(match kind {
             Kind::Dealing(p) => Self::Dealing(
                 IDkgPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Dealing::prefix")?),
-                CryptoHashOf::new(CryptoHash(p.hash)),
+                IDkgArtifactIdDataOf::new(try_from_option_field(p.id_data, "Dealing::id_data")?),
             ),
             Kind::DealingSupport(p) => Self::DealingSupport(
                 IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "DealingSupport::prefix",
                 )?),
-                CryptoHashOf::new(CryptoHash(p.hash)),
+                IDkgArtifactIdDataOf::new(try_from_option_field(
+                    p.id_data,
+                    "DealingSupport::id_data",
+                )?),
             ),
             Kind::EcdsaSigShare(p) => Self::EcdsaSigShare(
                 IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "EcdsaSigShare::prefix",
                 )?),
-                CryptoHashOf::new(CryptoHash(p.hash)),
+                SigShareIdDataOf::new(try_from_option_field(p.id_data, "EcdsaSigShare::id_data")?),
             ),
             Kind::SchnorrSigShare(p) => Self::SchnorrSigShare(
                 IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "SchnorrSigShare::prefix",
                 )?),
-                CryptoHashOf::new(CryptoHash(p.hash)),
+                SigShareIdDataOf::new(try_from_option_field(
+                    p.id_data,
+                    "SchnorrSigShare::id_data",
+                )?),
             ),
             Kind::Complaint(p) => Self::Complaint(
                 IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "Complaint::prefix",
                 )?),
-                CryptoHashOf::new(CryptoHash(p.hash)),
+                IDkgArtifactIdDataOf::new(try_from_option_field(p.id_data, "Complaint::id_data")?),
             ),
             Kind::Opening(p) => Self::Opening(
                 IDkgPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Opening::prefix")?),
-                CryptoHashOf::new(CryptoHash(p.hash)),
+                IDkgArtifactIdDataOf::new(try_from_option_field(p.id_data, "Opening::id_data")?),
             ),
         })
     }
@@ -1674,12 +1704,12 @@ impl TryFrom<IDkgMessage> for SignedIDkgOpening {
     }
 }
 
-pub type Summary = Option<EcdsaPayload>;
+pub type Summary = Option<IDkgPayload>;
 
-pub type Payload = Option<EcdsaPayload>;
+pub type Payload = Option<IDkgPayload>;
 
-impl From<&EcdsaPayload> for pb::EcdsaPayload {
-    fn from(payload: &EcdsaPayload) -> Self {
+impl From<&IDkgPayload> for pb::IDkgPayload {
+    fn from(payload: &IDkgPayload) -> Self {
         // signature_agreements
         let mut signature_agreements = Vec::new();
         for (pseudo_random_id, completed) in &payload.signature_agreements {
@@ -1766,18 +1796,18 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
     }
 }
 
-impl TryFrom<(&pb::EcdsaPayload, Height)> for EcdsaPayload {
+impl TryFrom<(&pb::IDkgPayload, Height)> for IDkgPayload {
     type Error = ProxyDecodeError;
-    fn try_from((payload, height): (&pb::EcdsaPayload, Height)) -> Result<Self, Self::Error> {
-        let mut ret = EcdsaPayload::try_from(payload)?;
+    fn try_from((payload, height): (&pb::IDkgPayload, Height)) -> Result<Self, Self::Error> {
+        let mut ret = IDkgPayload::try_from(payload)?;
         ret.update_refs(height);
         Ok(ret)
     }
 }
 
-impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
+impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
     type Error = ProxyDecodeError;
-    fn try_from(payload: &pb::EcdsaPayload) -> Result<Self, Self::Error> {
+    fn try_from(payload: &pb::IDkgPayload) -> Result<Self, Self::Error> {
         let mut key_transcripts = BTreeMap::new();
 
         for key_transcript_proto in &payload.key_transcripts {
@@ -1816,7 +1846,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             let pre_signature_id = PreSigId(available_pre_signature.pre_signature_id);
             let pre_signature: PreSignatureRef = try_from_option_field(
                 available_pre_signature.pre_signature.as_ref(),
-                "EcdsaPayload::available_pre_signature::pre_signature",
+                "IDkgPayload::available_pre_signature::pre_signature",
             )?;
             available_pre_signatures.insert(pre_signature_id, pre_signature);
         }
@@ -1827,14 +1857,14 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             let pre_signature_id = PreSigId(pre_signature_in_creation.pre_signature_id);
             let pre_signature: PreSignatureInCreation = try_from_option_field(
                 pre_signature_in_creation.pre_signature.as_ref(),
-                "EcdsaPayload::pre_signature_in_creation::pre_signature",
+                "IDkgPayload::pre_signature_in_creation::pre_signature",
             )?;
             pre_signatures_in_creation.insert(pre_signature_id, pre_signature);
         }
 
         let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
             payload.next_unused_transcript_id.as_ref(),
-            "EcdsaPayload::next_unused_transcript_id",
+            "IDkgPayload::next_unused_transcript_id",
         )?;
 
         let uid_generator = EcdsaUIDGenerator {
@@ -1847,7 +1877,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         for proto in &payload.idkg_transcripts {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
                 ProxyDecodeError::Other(format!(
-                    "EcdsaPayload:: Failed to convert transcript: {:?}",
+                    "IDkgPayload:: Failed to convert transcript: {:?}",
                     err
                 ))
             })?;
@@ -1859,11 +1889,11 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         let mut ongoing_xnet_reshares = BTreeMap::new();
         for reshare in &payload.ongoing_xnet_reshares {
             let request: IDkgReshareRequest =
-                try_from_option_field(reshare.request.as_ref(), "EcdsaPayload::reshare::request")?;
+                try_from_option_field(reshare.request.as_ref(), "IDkgPayload::reshare::request")?;
 
             let transcript: ReshareOfUnmaskedParams = try_from_option_field(
                 reshare.transcript.as_ref(),
-                "EcdsaPayload::reshare::transcript",
+                "IDkgPayload::reshare::transcript",
             )?;
             ongoing_xnet_reshares.insert(request, transcript);
         }
@@ -1873,14 +1903,14 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         for agreement in &payload.xnet_reshare_agreements {
             let request: IDkgReshareRequest = try_from_option_field(
                 agreement.request.as_ref(),
-                "EcdsaPayload::agreement::request",
+                "IDkgPayload::agreement::request",
             )?;
 
             let completed = match &agreement.initial_dealings {
                 Some(response) => {
                     let unreported = response.clone().try_into().map_err(|err| {
                         ProxyDecodeError::Other(format!(
-                            "EcdsaPayload:: failed to convert initial dealing: {:?}",
+                            "IDkgPayload:: failed to convert initial dealing: {:?}",
                             err
                         ))
                     })?;
@@ -1967,7 +1997,13 @@ impl IDkgObject for SignedIDkgDealing {
     }
 
     fn message_id(&self) -> IDkgArtifactId {
-        IDkgArtifactId::Dealing(self.message_prefix(), crypto_hash(self))
+        let dealing = self.idkg_dealing();
+        let id_data = IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
+            height: dealing.transcript_id.source_height(),
+            hash: crypto_hash(self).get(),
+            subnet_id: *dealing.transcript_id.source_subnet(),
+        });
+        IDkgArtifactId::Dealing(self.message_prefix(), id_data)
     }
 }
 
@@ -1977,7 +2013,12 @@ impl IDkgObject for IDkgDealingSupport {
     }
 
     fn message_id(&self) -> IDkgArtifactId {
-        IDkgArtifactId::DealingSupport(self.message_prefix(), crypto_hash(self))
+        let id_data = IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
+            height: self.transcript_id.source_height(),
+            hash: crypto_hash(self).get(),
+            subnet_id: *self.transcript_id.source_subnet(),
+        });
+        IDkgArtifactId::DealingSupport(self.message_prefix(), id_data)
     }
 }
 
@@ -1987,7 +2028,11 @@ impl IDkgObject for EcdsaSigShare {
     }
 
     fn message_id(&self) -> IDkgArtifactId {
-        IDkgArtifactId::EcdsaSigShare(self.message_prefix(), crypto_hash(self))
+        let id_data = SigShareIdDataOf::new(SigShareIdData {
+            height: self.request_id.height,
+            hash: crypto_hash(self).get(),
+        });
+        IDkgArtifactId::EcdsaSigShare(self.message_prefix(), id_data)
     }
 }
 
@@ -1997,7 +2042,11 @@ impl IDkgObject for SchnorrSigShare {
     }
 
     fn message_id(&self) -> IDkgArtifactId {
-        IDkgArtifactId::SchnorrSigShare(self.message_prefix(), crypto_hash(self))
+        let id_data = SigShareIdDataOf::new(SigShareIdData {
+            height: self.request_id.height,
+            hash: crypto_hash(self).get(),
+        });
+        IDkgArtifactId::SchnorrSigShare(self.message_prefix(), id_data)
     }
 }
 
@@ -2011,7 +2060,13 @@ impl IDkgObject for SignedIDkgComplaint {
     }
 
     fn message_id(&self) -> IDkgArtifactId {
-        IDkgArtifactId::Complaint(self.message_prefix(), crypto_hash(self))
+        let transcript_id = self.content.idkg_complaint.transcript_id;
+        let id_data = IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
+            height: transcript_id.source_height(),
+            hash: crypto_hash(self).get(),
+            subnet_id: *transcript_id.source_subnet(),
+        });
+        IDkgArtifactId::Complaint(self.message_prefix(), id_data)
     }
 }
 
@@ -2025,7 +2080,13 @@ impl IDkgObject for SignedIDkgOpening {
     }
 
     fn message_id(&self) -> IDkgArtifactId {
-        IDkgArtifactId::Opening(self.message_prefix(), crypto_hash(self))
+        let transcript_id = self.content.idkg_opening.transcript_id;
+        let id_data = IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
+            height: transcript_id.source_height(),
+            hash: crypto_hash(self).get(),
+            subnet_id: *transcript_id.source_subnet(),
+        });
+        IDkgArtifactId::Opening(self.message_prefix(), id_data)
     }
 }
 

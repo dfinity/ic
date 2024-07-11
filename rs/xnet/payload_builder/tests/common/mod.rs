@@ -86,7 +86,7 @@ impl StateManagerFixture {
 
         height.inc_assign();
         self.state_manager
-            .commit_and_certify(state, height, CertificationScope::Metadata);
+            .commit_and_certify(state, height, CertificationScope::Metadata, None);
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 

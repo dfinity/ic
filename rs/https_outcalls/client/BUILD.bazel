@@ -7,6 +7,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
@@ -19,9 +20,9 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "@crate_index//:prometheus",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:tokio",
     "@crate_index//:tonic",
@@ -30,6 +31,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "@crate_index//:tower-test",

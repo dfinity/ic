@@ -16,7 +16,7 @@ use ic_interfaces::{
     ecdsa::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -34,7 +34,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
 use ic_types::{
-    artifact::{IdentifiableArtifact, Priority, PriorityFn},
+    artifact::IdentifiableArtifact,
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
         CatchUpPackage, ConsensusMessage,
@@ -271,7 +271,7 @@ pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
 }
 
 impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
-    pub fn new<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+    pub fn new<Pool, Producer: PriorityFnFactory<Artifact, Pool>>(
         producer: &Producer,
         pool: &Pool,
     ) -> RefCell<Self> {
@@ -286,7 +286,7 @@ impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
     }
 
     /// Compute a new priority function
-    pub fn refresh<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+    pub fn refresh<Pool, Producer: PriorityFnFactory<Artifact, Pool>>(
         &mut self,
         producer: &Producer,
         pool: &Pool,

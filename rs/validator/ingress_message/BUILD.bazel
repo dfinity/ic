@@ -4,6 +4,7 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/utils/threshold_sig_der",
@@ -15,6 +16,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/certification/test-utils",
     "//rs/constants",

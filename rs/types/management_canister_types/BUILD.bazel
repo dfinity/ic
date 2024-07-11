@@ -12,6 +12,7 @@ rust_library(
     }),
     crate_name = "ic_management_canister_types",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     rustc_flags = select({
@@ -20,6 +21,7 @@ rust_library(
     }),
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/bitcoin/replica_types",
         "//rs/protobuf",
         "//rs/types/base_types",

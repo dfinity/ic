@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha3",
     "@crate_index//:hex",
     "@crate_index//:minicbor",
@@ -10,8 +11,9 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "@crate_index//:proptest",
+    # Keep sorted.
     "@crate_index//:assert_matches",
+    "@crate_index//:proptest",
     "@crate_index//:serde_json",
 ]
 

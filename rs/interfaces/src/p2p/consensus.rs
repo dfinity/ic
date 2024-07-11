@@ -1,9 +1,6 @@
 //! The artifact pool public interface that defines the Consensus-P2P API.
 //! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
-use ic_types::{
-    artifact::{IdentifiableArtifact, PriorityFn},
-    NodeId, Time,
-};
+use ic_types::{artifact::IdentifiableArtifact, NodeId, Time};
 
 /// Produces mutations to be applied on the artifact pool.
 pub trait ChangeSetProducer<Pool>: Send {
@@ -60,7 +57,23 @@ pub trait MutablePool<T: IdentifiableArtifact> {
     fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<T>;
 }
 
-pub trait PriorityFnAndFilterProducer<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
+/// Priority of artifact.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Priority {
+    /// Drop the advert, the local replica doesn't need the corresponding artifact for
+    /// making progress.
+    Drop,
+    /// Stash the advert. It may be requested at a later point in time.
+    Stash,
+    /// High priority adverts, fetch the artifact immediately.
+    FetchNow,
+}
+
+/// Priority function used by `ArtifactClient`.
+pub type PriorityFn<Id, Attribute> =
+    Box<dyn Fn(&Id, &Attribute) -> Priority + Send + Sync + 'static>;
+
+pub trait PriorityFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
     fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
 }

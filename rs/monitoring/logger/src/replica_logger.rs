@@ -20,7 +20,7 @@ const MAX_LOG_MESSAGE_LEN_BYTES: usize = 16 * 1024;
 pub fn no_op_logger() -> ReplicaLogger {
     LogEntryLogger::new(
         slog::Logger::root(slog::Discard, slog::o!()),
-        slog::Level::Critical,
+        ic_config::logger::Level::Critical,
     )
     .into()
 }
@@ -40,10 +40,18 @@ pub struct LogEntryLogger {
 }
 
 impl LogEntryLogger {
-    pub fn new(root: slog::Logger, level: slog::Level) -> Self {
+    pub fn new(root: slog::Logger, level: ic_config::logger::Level) -> Self {
+        let slog_level = match level {
+            ic_config::logger::Level::Critical => slog::Level::Critical,
+            ic_config::logger::Level::Error => slog::Level::Error,
+            ic_config::logger::Level::Warning => slog::Level::Warning,
+            ic_config::logger::Level::Info => slog::Level::Info,
+            ic_config::logger::Level::Debug => slog::Level::Debug,
+            ic_config::logger::Level::Trace => slog::Level::Trace,
+        };
         Self {
             root,
-            level,
+            level: slog_level,
             last_log: Mutex::new(HashMap::new()),
         }
     }
@@ -52,9 +60,9 @@ impl LogEntryLogger {
 impl From<slog::Logger> for LogEntryLogger {
     fn from(root: slog::Logger) -> Self {
         let level = if cfg!(debug_assertions) {
-            slog::Level::Trace
+            ic_config::logger::Level::Trace
         } else {
-            slog::Level::Info
+            ic_config::logger::Level::Info
         };
 
         Self::new(root, level)
@@ -155,7 +163,7 @@ mod tests {
     fn test_is_seconds() {
         let logger = LogEntryLogger::new(
             slog::Logger::root(slog::Discard, slog::o!()),
-            slog::Level::Critical,
+            ic_config::logger::Level::Critical,
         );
 
         for i in 1u32..10u32 {

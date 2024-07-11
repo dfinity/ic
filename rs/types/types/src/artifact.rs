@@ -26,22 +26,6 @@ use std::{
     hash::Hash,
 };
 
-/// Priority of artifact.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Priority {
-    /// Drop the advert, the local replica doesn't need the corresponding artifact for
-    /// making progress.
-    Drop,
-    /// Stash the advert. It may be requested at a later point in time.
-    Stash,
-    /// High priority adverts, fetch the artifact immediately.
-    FetchNow,
-}
-
-/// Priority function used by `ArtifactClient`.
-pub type PriorityFn<Id, Attribute> =
-    Box<dyn Fn(&Id, &Attribute) -> Priority + Send + Sync + 'static>;
-
 pub trait IdentifiableArtifact: Send + 'static {
     const NAME: &'static str;
     type Id: Hash + Clone + PartialEq + Eq + Send + Sync + 'static;

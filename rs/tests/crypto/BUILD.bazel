@@ -4,6 +4,7 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 II_DEV_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "@ii_dev_canister//file",
 ]
 

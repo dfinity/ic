@@ -11,16 +11,17 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
-    "//rs/nervous_system/clients",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
+    "//rs/sns/swap",  # TODO[NNS1-2282]
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
-    "//rs/sns/swap",  # TODO[NNS1-2282]
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:comparable",
@@ -32,12 +33,14 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
@@ -98,6 +101,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/sns/root",
     deps = [
+        # Keep sorted.
         "//rs/sns/root/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
@@ -105,6 +109,7 @@ generated_files_check(
 )
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/sns/root/protobuf_generator:lib",
     "@crate_index//:maplit",
     "@crate_index//:tokio",

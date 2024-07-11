@@ -3,16 +3,19 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//rs/sns/governance:__pkg__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/sns/governance/token_valuation",
     "@crate_index//:num-traits",
     "@crate_index//:rust_decimal",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:rust_decimal_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types",
     "//rs/nervous_system/common",
     "//rs/types/base_types",

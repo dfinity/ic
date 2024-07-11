@@ -502,6 +502,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "hyper-socks2": crate.spec(
+                version = "^0.8.0",
+                default_features = False,
+                features = [
+                    "rustls",
+                ],
+            ),
             "hyper-util": crate.spec(
                 version = "^0.1.3",
                 features = [
@@ -699,9 +706,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "libfuzzer-sys": crate.spec(
                 version = "^0.4.7",
                 default_features = False,
-            ),
-            "libsecp256k1": crate.spec(
-                version = "^0.7.0",
             ),
             "libnss": crate.spec(
                 version = "^0.5.0",
@@ -929,9 +933,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "prost-build": crate.spec(
                 version = "^0.12",
             ),
-            "prost-derive": crate.spec(
-                version = "^0.12",
-            ),
             "protobuf": crate.spec(
                 version = "^2.28.0",
             ),
@@ -1013,7 +1014,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "rustls-tls",
                     "rustls-tls-native-roots",
                     "stream",
-                    "socks",
                 ],
             ),
             "ring": crate.spec(

@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_btc_replica_types",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/types/error_types",
         "@crate_index//:candid",

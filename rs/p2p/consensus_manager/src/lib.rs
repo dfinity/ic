@@ -9,7 +9,7 @@ use axum::Router;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent,
-    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    consensus::{PriorityFnFactory, ValidatedPoolReader},
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -56,7 +56,7 @@ impl ConsensusManagerBuilder {
         &mut self,
         outbound_artifacts_rx: Receiver<ArtifactProcessorEvent<Artifact>>,
         pool: Arc<RwLock<Pool>>,
-        priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+        priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) where
         Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
@@ -116,7 +116,7 @@ fn start_consensus_manager<Artifact, Pool>(
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
     raw_pool: Arc<RwLock<Pool>>,
-    priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+    priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,

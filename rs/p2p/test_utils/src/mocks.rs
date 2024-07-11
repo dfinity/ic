@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
-    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    consensus::{PriorityFn, PriorityFnFactory, ValidatedPoolReader},
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{IdentifiableArtifact, PriorityFn};
+use ic_types::artifact::IdentifiableArtifact;
 use ic_types::NodeId;
 use mockall::mock;
 
@@ -71,9 +71,9 @@ mock! {
 }
 
 mock! {
-    pub PriorityFnAndFilterProducer<A: IdentifiableArtifact> {}
+    pub PriorityFnFactory<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact + Sync> PriorityFnAndFilterProducer<A, MockValidatedPoolReader<A>> for PriorityFnAndFilterProducer<A> {
+    impl<A: IdentifiableArtifact + Sync> PriorityFnFactory<A, MockValidatedPoolReader<A>> for PriorityFnFactory<A> {
         fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
     }
 }
