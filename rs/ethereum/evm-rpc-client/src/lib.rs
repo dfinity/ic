@@ -35,8 +35,15 @@ pub struct EvmRpcClient<R: Runtime, L: Sink> {
     logger: L,
     providers: RpcServices,
     evm_canister_id: Principal,
+    override_rpc_config: OverrideRpcConfig,
     min_attached_cycles: u128,
     max_num_retries: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct OverrideRpcConfig {
+    pub eth_get_block_by_number: Option<RpcConfig>,
+    pub eth_get_logs: Option<RpcConfig>,
 }
 
 impl<L: Sink> EvmRpcClient<IcRuntime, L> {
@@ -51,14 +58,29 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
     }
 
     pub async fn eth_get_block_by_number(&self, block: BlockTag) -> MultiRpcResult<Block> {
-        self.call_internal("eth_getBlockByNumber", block).await
+        self.call_internal(
+            "eth_getBlockByNumber",
+            self.override_rpc_config.eth_get_block_by_number.clone(),
+            block,
+        )
+        .await
     }
 
     pub async fn eth_get_logs(&self, args: GetLogsArgs) -> MultiRpcResult<Vec<LogEntry>> {
-        self.call_internal("eth_getLogs", args).await
+        self.call_internal(
+            "eth_getLogs",
+            self.override_rpc_config.eth_get_logs.clone(),
+            args,
+        )
+        .await
     }
 
-    async fn call_internal<In, Out>(&self, method: &str, args: In) -> MultiRpcResult<Out>
+    async fn call_internal<In, Out>(
+        &self,
+        method: &str,
+        config: Option<RpcConfig>,
+        args: In,
+    ) -> MultiRpcResult<Out>
     where
         In: CandidType + Send + Clone + Debug + 'static,
         Out: CandidType + DeserializeOwned + Debug + 'static,
@@ -81,7 +103,7 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
                 .call(
                     self.evm_canister_id,
                     method,
-                    (self.providers.clone(), None::<RpcConfig>, args.clone()),
+                    (self.providers.clone(), config.clone(), args.clone()),
                     attached_cycles,
                 )
                 .await
@@ -133,6 +155,7 @@ pub struct EvmRpcClientBuilder<R: Runtime, L: Sink> {
     logger: L,
     providers: RpcServices,
     evm_canister_id: Principal,
+    override_rpc_config: OverrideRpcConfig,
     min_attached_cycles: u128,
     max_num_retries: u32,
 }
@@ -155,6 +178,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
             logger,
             providers: DEFAULT_PROVIDERS,
             evm_canister_id: EVM_RPC_CANISTER_ID_FIDUCIARY,
+            override_rpc_config: Default::default(),
             min_attached_cycles: DEFAULT_MIN_ATTACHED_CYCLES,
             max_num_retries: DEFAULT_MAX_NUM_RETRIES,
         }
@@ -169,6 +193,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
             logger: self.logger,
             providers: self.providers,
             evm_canister_id: self.evm_canister_id,
+            override_rpc_config: self.override_rpc_config,
             min_attached_cycles: self.min_attached_cycles,
             max_num_retries: self.max_num_retries,
         }
@@ -181,6 +206,11 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
 
     pub fn with_evm_canister_id(mut self, evm_canister_id: Principal) -> Self {
         self.evm_canister_id = evm_canister_id;
+        self
+    }
+
+    pub fn with_override_rpc_config(mut self, override_rpc_config: OverrideRpcConfig) -> Self {
+        self.override_rpc_config = override_rpc_config;
         self
     }
 
@@ -200,6 +230,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
             logger: self.logger,
             providers: self.providers,
             evm_canister_id: self.evm_canister_id,
+            override_rpc_config: self.override_rpc_config,
             min_attached_cycles: self.min_attached_cycles,
             max_num_retries: self.max_num_retries,
         }

@@ -33,7 +33,7 @@ mod tests;
 // the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
 // fit in the constant defined below, and if there is spike, then the payload size adjustment
 // should take care of that.
-const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
 // This constant comes from the IC specification:
 // > If provided, the value must not exceed 2MB

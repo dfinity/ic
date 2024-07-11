@@ -2,7 +2,7 @@ use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::{
     self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
     GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult,
-    LogEntry, ResponseSizeEstimate, SendRawTransactionResult, Topic,
+    LogEntry, ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::providers::{
     EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
@@ -13,13 +13,14 @@ use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
 use crate::state::State;
+use evm_rpc_client::types::candid::RpcConfig;
 use evm_rpc_client::{
     types::candid::{
         Block as EvmBlock, BlockTag as EvmBlockTag, GetLogsArgs as EvmGetLogsArgs,
         LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, RpcError as EvmRpcError,
         RpcResult as EvmRpcResult,
     },
-    EvmRpcClient, IcRuntime,
+    EvmRpcClient, IcRuntime, OverrideRpcConfig,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -60,6 +61,12 @@ impl EthRpcClient {
                 EvmRpcClient::builder_for_ic(TRACE_HTTP)
                     .with_providers(providers)
                     .with_evm_canister_id(evm_rpc_id)
+                    .with_override_rpc_config(OverrideRpcConfig {
+                        eth_get_logs: Some(RpcConfig {
+                            response_size_estimate: Some(100 + HEADER_SIZE_LIMIT),
+                        }),
+                        ..Default::default()
+                    })
                     .build(),
             );
         }
