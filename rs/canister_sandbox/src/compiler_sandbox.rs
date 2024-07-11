@@ -55,6 +55,7 @@ impl crate::transport::MuxInto<WireMessage<PlainWasm, CompiledWasm>> for Compile
 
 pub struct WasmCompilerProxy {
     socket_a: Arc<UnixStream>,
+    read_worker_handle: Option<std::thread::JoinHandle<()>>,
     rpc: crate::rpc::Channel<PlainWasm, CompiledWasm>,
     log: ReplicaLogger,
 }
@@ -86,43 +87,36 @@ impl WasmCompilerProxy {
         let reply_collector = Arc::new(crate::rpc::ReplyManager::<CompiledWasm>::new());
         let channel = crate::rpc::Channel::new(tx, reply_collector.clone());
 
-        let _read_worker_handle = {
+        let read_worker_handle = Some({
             let log = log.clone();
             let socket_a = socket_a.clone();
-            std::thread::Builder::new()
-                .name("CompilerProxySocketReader".to_string())
-                .spawn(move || {
-                    let reply_collector_clone = reply_collector.clone();
-                    transport::socket_read_messages::<_, _>(
-                        move |message: WireMessage<PlainWasm, CompiledWasm>| match message.msg {
-                            Message::Request(_) => {
-                                error!(
+            std::thread::spawn(move || {
+                let reply_collector_clone = reply_collector.clone();
+                transport::socket_read_messages::<_, _>(
+                    move |message: WireMessage<PlainWasm, CompiledWasm>| match message.msg {
+                        Message::Request(_) => {
+                            error!(
                                 log,
                                 "Compiler proxy received a request. This is unexpected. Cookie: {}",
                                 message.cookie
                             );
-                            }
-                            Message::Reply(w) => {
-                                use rpc::MessageSink;
-                                reply_collector.handle(message.cookie, w);
-                            }
-                        },
-                        socket_a,
-                        crate::SocketReaderConfig::default(),
-                    );
-                    send_worker.stop();
-                    reply_collector_clone.flush_with_errors(); // We are shutting down. No more replies will come
-                })
-                .map_err(|e| {
-                    unexpected(&format!(
-                        "Compiler proxy failed to spawn socket reader thread: {}",
-                        e
-                    ))
-                })?
-        };
+                        }
+                        Message::Reply(w) => {
+                            use rpc::MessageSink;
+                            reply_collector.handle(message.cookie, w);
+                        }
+                    },
+                    socket_a,
+                    crate::SocketReaderConfig::default(),
+                );
+                send_worker.stop();
+                reply_collector_clone.flush_with_errors(); // We are shutting down. No more replies will come
+            })
+        });
 
         Ok(Self {
             socket_a,
+            read_worker_handle,
             rpc: channel,
             log,
         })
@@ -154,6 +148,9 @@ impl WasmCompilerProxy {
 impl Drop for WasmCompilerProxy {
     fn drop(&mut self) {
         self.initiate_stop();
+        if let Some(h) = self.read_worker_handle.take() {
+            h.join().ok();
+        }
     }
 }
 
