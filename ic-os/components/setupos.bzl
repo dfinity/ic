@@ -26,6 +26,7 @@ component_files = {
 
     # misc
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
+    Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/serial-getty@/setupos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",

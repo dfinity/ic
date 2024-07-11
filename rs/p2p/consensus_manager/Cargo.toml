@@ -18,6 +18,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
+prost = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

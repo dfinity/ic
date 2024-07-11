@@ -1,9 +1,9 @@
 #[rustfmt::skip]
 
 use anyhow::Result;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::consensus::liveness_with_equivocation_test;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

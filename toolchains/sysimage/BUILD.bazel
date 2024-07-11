@@ -37,6 +37,5 @@ py_binary(
     ],
     deps = [
         requirement("invoke"),
-        requirement("configargparse"),
     ],
 )

@@ -1,10 +1,13 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
+use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
+use ic_consensus::dkg::make_registry_cup;
+use ic_consensus_utils::crypto::SignVerify;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
@@ -16,8 +19,11 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
+use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
+    batch_payload::IntoMessages,
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
     consensus::PayloadBuilder as ConsensusPayloadBuilder,
     consensus_pool::ConsensusTime,
@@ -25,22 +31,24 @@ use ic_interfaces::{
     ingress_pool::{
         IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
+    p2p::consensus::MutablePool,
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
-use ic_logger::ReplicaLogger;
+use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
-    CanisterStatusType, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod,
-    SignWithECDSAReply, UpdateSettingsArgs,
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
+    SignWithSchnorrReply, UpdateSettingsArgs,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto},
@@ -74,13 +82,14 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{system_state::CyclesUseCase, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
-    metadata_state::subnet_call_context_manager::SignWithEcdsaContext,
+    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
-use ic_state_layout::{CheckpointLayout, RwPolicy};
+use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
+use ic_test_utilities_consensus::FakeConsensusPoolCache;
 use ic_test_utilities_metrics::{
     fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
     fetch_int_gauge_vec, Labels,
@@ -95,9 +104,11 @@ use ic_types::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
         QueryStatsPayload, TotalQueryStats, ValidationContext, XNetPayload,
     },
+    canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
+        CatchUpPackage,
     },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
@@ -116,10 +127,15 @@ use ic_types::{
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
 };
 pub use ic_types::{
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
+    canister_http::{
+        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
+        CanisterHttpResponseMetadata,
+    },
     crypto::threshold_sig::ThresholdSigPublicKey,
+    crypto::{CryptoHash, CryptoHashOf},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, HttpRequestError, MessageId},
+    signature::BasicSignature,
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
@@ -134,13 +150,14 @@ pub use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 pub use slog::Level;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     fmt,
     io::{self, stderr},
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
     sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
@@ -218,15 +235,20 @@ pub fn finalize_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    ecdsa_keys: &[EcdsaKeyId],
+    idkg_keys: &[MasterPublicKeyId],
     features: SubnetFeatures,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
     is_root_subnet: bool,
     public_key: ThresholdSigPublicKey,
     ni_dkg_transcript: NiDkgTranscript,
-) -> Arc<FakeRegistryClient> {
-    let registry_version = INITIAL_REGISTRY_VERSION;
+) -> FakeRegistryClient {
+    let registry_version = if registry_data_provider.is_empty() {
+        INITIAL_REGISTRY_VERSION
+    } else {
+        let latest_registry_version = registry_data_provider.latest_version();
+        RegistryVersion::from(latest_registry_version.get() + 1)
+    };
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
     let subnet_id_proto = SubnetIdProto {
@@ -234,10 +256,10 @@ fn make_nodes_registry(
             raw: subnet_id.get_ref().to_vec(),
         }),
     };
-    for key_id in ecdsa_keys {
+    for key_id in idkg_keys {
         registry_data_provider
             .add(
-                &make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(key_id.clone())),
+                &make_chain_key_signing_subnet_list_key(key_id),
                 registry_version,
                 Some(ChainKeySigningSubnetList {
                     subnets: vec![subnet_id_proto.clone()],
@@ -295,11 +317,12 @@ fn make_nodes_registry(
         .with_max_ingress_bytes_per_message(max_ingress_bytes_per_message)
         .with_max_ingress_messages_per_block(max_ingress_messages_per_block)
         .with_max_block_payload_size(max_block_payload_size)
+        .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: ecdsa_keys
+            key_configs: idkg_keys
                 .iter()
-                .map(|ecdsa_key| KeyConfig {
-                    key_id: MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                .map(|key_id| KeyConfig {
+                    key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
@@ -319,7 +342,7 @@ fn make_nodes_registry(
     registry_data_provider
         .add(
             &make_catch_up_package_contents_key(subnet_id),
-            INITIAL_REGISTRY_VERSION,
+            registry_version,
             Some(cup_contents),
         )
         .expect("Failed to add subnet record.");
@@ -337,9 +360,7 @@ fn make_nodes_registry(
         public_key,
     );
 
-    let registry_client = Arc::new(FakeRegistryClient::new(
-        Arc::clone(&registry_data_provider) as _
-    ));
+    let registry_client = FakeRegistryClient::new(Arc::clone(&registry_data_provider) as _);
     registry_client.update_to_latest_version();
     registry_client
 }
@@ -520,7 +541,17 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
         );
         Ok(certified_stream
             .map(|certified_stream| {
-                let num_bytes = certified_slice_count_bytes(&certified_stream).unwrap();
+                let mut num_bytes = certified_slice_count_bytes(&certified_stream).unwrap();
+                // Because `StateMachine::generate_certified_stream_slice` only uses a size estimate
+                // when constructing a slice (this estimate can be off by at most a few KB),
+                // we fake the reported slice size if it exceeds the specified size limit to make sure the payload builder will accept the slice as valid and include it into the block.
+                // This is fine since we don't actually validate the payload in the context of Pocket IC, and so blocks containing
+                // a XNet slice exceeding the byte limit won't be rejected as invalid.
+                if let Some(byte_limit) = byte_limit {
+                    if num_bytes > byte_limit {
+                        num_bytes = byte_limit;
+                    }
+                }
                 (certified_stream, num_bytes)
             })
             .ok())
@@ -542,24 +573,24 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
 pub struct StateMachineNode {
     pub node_id: NodeId,
     pub node_pk_proto: PublicKeyProto,
-    pub signing_key: ed25519_consensus::SigningKey,
+    pub signing_key: ic_crypto_ed25519::PrivateKey,
 }
 
 impl From<u64> for StateMachineNode {
     fn from(i: u64) -> Self {
         let mut bytes = [0; 32];
         bytes[..8].copy_from_slice(&i.to_le_bytes());
-        let signing_key: ed25519_consensus::SigningKey = bytes.into();
+        let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
         let node_pk_proto = PublicKeyProto {
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: signing_key.verification_key().to_bytes().to_vec(),
+            key_value: signing_key.public_key().serialize_raw().to_vec(),
             version: 0,
             proof_data: None,
             timestamp: None,
         };
         Self {
             node_id: PrincipalId::new_self_authenticating(
-                &signing_key.verification_key().to_bytes(),
+                &signing_key.public_key().serialize_raw(),
             )
             .into(),
             node_pk_proto,
@@ -575,7 +606,8 @@ pub struct StateMachine {
     public_key: ThresholdSigPublicKey,
     public_key_der: Vec<u8>,
     secret_key: SecretKeyBytes,
-    ecdsa_secret_key: PrivateKey,
+    is_ecdsa_signing_enabled: bool,
+    is_schnorr_signing_enabled: bool,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
@@ -591,15 +623,21 @@ pub struct StateMachine {
     pub query_handler:
         tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     runtime: Arc<Runtime>,
-    pub state_dir: TempDir,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
     time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, PrivateKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
+    time_source: Arc<FastForwardTimeSource>,
+    canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
+    canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
+    // This field must be the last one so that the temporary directory is deleted at the very end.
+    state_dir: Box<dyn StateMachineStateDir>,
+    // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
 }
 
 impl Default for StateMachine {
@@ -617,8 +655,34 @@ impl fmt::Debug for StateMachine {
     }
 }
 
+/// A state directory for a `StateMachine` in which
+/// the `StateMachine` maintains its state.
+pub trait StateMachineStateDir: Send + Sync {
+    fn path(&self) -> PathBuf;
+}
+
+/// A state directory based on a `TempDir` which
+/// gets deleted once the `StateMachine` is dropped.
+impl StateMachineStateDir for TempDir {
+    fn path(&self) -> PathBuf {
+        self.path().to_path_buf()
+    }
+}
+
+/// A state directory based on a `PathBuf` which
+/// is persisted once the `StateMachine` is dropped.
+/// To reuse the state in another `StateMachine`,
+/// you need to run `state_machine.checkpointed_tick()`
+/// followed by `state_machine.await_state_hash()`
+/// before dropping the `StateMachine`.
+impl StateMachineStateDir for PathBuf {
+    fn path(&self) -> PathBuf {
+        self.clone()
+    }
+}
+
 pub struct StateMachineBuilder {
-    state_dir: TempDir,
+    state_dir: Box<dyn StateMachineStateDir>,
     nonce: u64,
     time: Time,
     config: Option<StateMachineConfig>,
@@ -631,13 +695,17 @@ pub struct StateMachineBuilder {
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
     enable_canister_snapshots: bool,
-    ecdsa_keys: Vec<EcdsaKeyId>,
+    idkg_keys: Vec<MasterPublicKeyId>,
+    ecdsa_signature_fee: Option<Cycles>,
+    schnorr_signature_fee: Option<Cycles>,
+    is_ecdsa_signing_enabled: bool,
+    is_schnorr_signing_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     lsmt_override: Option<LsmtConfig>,
     is_root_subnet: bool,
-    seq_no: u8,
+    seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
 }
@@ -645,7 +713,7 @@ pub struct StateMachineBuilder {
 impl StateMachineBuilder {
     pub fn new() -> Self {
         Self {
-            state_dir: TempDir::new().expect("failed to create a temporary directory"),
+            state_dir: Box::new(TempDir::new().expect("failed to create a temporary directory")),
             nonce: 0,
             time: GENESIS,
             config: None,
@@ -657,10 +725,11 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            ecdsa_keys: vec![EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "master_ecdsa_public_key".to_string(),
-            }],
+            idkg_keys: Default::default(),
+            ecdsa_signature_fee: None,
+            schnorr_signature_fee: None,
+            is_ecdsa_signing_enabled: true,
+            is_schnorr_signing_enabled: true,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -669,7 +738,7 @@ impl StateMachineBuilder {
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
             lsmt_override: None,
             is_root_subnet: false,
-            seq_no: 0,
+            seed: [42; 32],
             with_extra_canister_range: None,
             dts: true,
         }
@@ -682,7 +751,7 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_state_dir(self, state_dir: TempDir) -> Self {
+    pub fn with_state_machine_state_dir(self, state_dir: Box<dyn StateMachineStateDir>) -> Self {
         Self { state_dir, ..self }
     }
 
@@ -778,18 +847,28 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
-        let mut ecdsa_keys = self.ecdsa_keys;
-        ecdsa_keys.push(key);
-        Self { ecdsa_keys, ..self }
+    pub fn with_master_ecdsa_public_key(self) -> Self {
+        self.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "master_ecdsa_public_key".to_string(),
+        }))
     }
 
-    pub fn with_multisubnet_ecdsa_key(self) -> Self {
+    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys.push(key_id);
+        self
+    }
+
+    pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: u128) -> Self {
         Self {
-            ecdsa_keys: vec![EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: format!("master_ecdsa_public_key_{}", self.seq_no),
-            }],
+            ecdsa_signature_fee: Some(Cycles::new(ecdsa_signing_fee)),
+            ..self
+        }
+    }
+
+    pub fn with_schnorr_signature_fee(self, schnorr_signature_fee: u128) -> Self {
+        Self {
+            schnorr_signature_fee: Some(Cycles::new(schnorr_signature_fee)),
             ..self
         }
     }
@@ -815,13 +894,27 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_subnet_seq_no(self, seq_no: u8) -> Self {
-        Self { seq_no, ..self }
+    pub fn with_subnet_seed(self, seed: [u8; 32]) -> Self {
+        Self { seed, ..self }
     }
 
     pub fn with_root_subnet_config(self) -> Self {
         Self {
             is_root_subnet: true,
+            ..self
+        }
+    }
+
+    pub fn with_ecdsa_signing_enabled(self, is_ecdsa_signing_enabled: bool) -> Self {
+        Self {
+            is_ecdsa_signing_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_schnorr_signing_enabled(self, is_schnorr_signing_enabled: bool) -> Self {
+        Self {
+            is_schnorr_signing_enabled,
             ..self
         }
     }
@@ -843,7 +936,11 @@ impl StateMachineBuilder {
             self.subnet_id,
             self.use_cost_scaling_flag,
             self.enable_canister_snapshots,
-            self.ecdsa_keys,
+            self.idkg_keys,
+            self.ecdsa_signature_fee,
+            self.schnorr_signature_fee,
+            self.is_ecdsa_signing_enabled,
+            self.is_schnorr_signing_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -854,7 +951,7 @@ impl StateMachineBuilder {
             self.registry_data_provider,
             self.lsmt_override,
             self.is_root_subnet,
-            self.seq_no,
+            self.seed,
             self.dts,
         )
     }
@@ -936,6 +1033,7 @@ impl StateMachineBuilder {
             sm.registry_client.clone(),
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),
+            sm.canister_http_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1013,16 +1111,40 @@ impl StateMachine {
         let ingress_messages = (0..ingress.message_count())
             .map(|i| ingress.get(i).unwrap().1)
             .collect();
+        let (http_responses, _) =
+            CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
+        let inducted: Vec<_> = http_responses
+            .clone()
+            .into_iter()
+            .map(|r| r.callback)
+            .collect();
+        let changeset = self
+            .canister_http_pool
+            .read()
+            .unwrap()
+            .get_validated_shares()
+            .filter_map(|share| {
+                if inducted.contains(&share.content.id) {
+                    Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.canister_http_pool
+            .write()
+            .unwrap()
+            .apply_changes(changeset);
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
-            .with_xnet_payload(xnet_payload);
+            .with_xnet_payload(xnet_payload)
+            .with_consensus_responses(http_responses);
 
         // Push responses to ECDSA management canister calls into `PayloadBuilder`.
         let sign_with_ecdsa_contexts = state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .clone();
+            .sign_with_ecdsa_contexts();
         for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
             // The chain code is an additional input used during the key derivation process
             // to ensure deterministic generation of child keys from the master key.
@@ -1033,9 +1155,13 @@ impl StateMachine {
                     .map(DerivationIndex)
                     .collect::<Vec<_>>(),
             );
+            let ecdsa_secret_key = self
+                .idkg_subnet_secret_keys
+                .get(&ecdsa_context.key_id())
+                .unwrap();
             let signature = sign_prehashed_message_with_derived_key(
-                &self.ecdsa_secret_key,
-                &ecdsa_context.message_hash,
+                ecdsa_secret_key,
+                &ecdsa_context.ecdsa_args().message_hash,
                 derivation_path,
             );
 
@@ -1062,7 +1188,7 @@ impl StateMachine {
     /// directory for storing states.
     #[allow(clippy::too_many_arguments)]
     fn setup_from_dir(
-        state_dir: TempDir,
+        state_dir: Box<dyn StateMachineStateDir>,
         nonce: u64,
         time: Time,
         config: Option<StateMachineConfig>,
@@ -1072,13 +1198,17 @@ impl StateMachine {
         subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
         enable_canister_snapshots: bool,
-        ecdsa_keys: Vec<EcdsaKeyId>,
+        idkg_keys: Vec<MasterPublicKeyId>,
+        ecdsa_signature_fee: Option<Cycles>,
+        schnorr_signature_fee: Option<Cycles>,
+        is_ecdsa_signing_enabled: bool,
+        is_schnorr_signing_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
-        seq_no: u8,
+        seed: [u8; 32],
         dts: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
@@ -1089,17 +1219,27 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (subnet_config, mut hypervisor_config) = match config {
+        let (mut subnet_config, mut hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
+        if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
+            subnet_config
+                .cycles_account_manager_config
+                .ecdsa_signature_fee = ecdsa_signature_fee;
+        }
+        if let Some(schnorr_signature_fee) = schnorr_signature_fee {
+            subnet_config
+                .cycles_account_manager_config
+                .schnorr_signature_fee = schnorr_signature_fee;
+        }
 
-        let node_offset: u64 = StdRng::seed_from_u64(seq_no.into()).gen();
+        let node_offset: u64 = StdRng::from_seed(seed).gen();
         let nodes: Vec<StateMachineNode> = (0..subnet_size as u64)
             .map(|i| (node_offset + i).into())
             .collect();
         let (ni_dkg_transcript, secret_key) =
-            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(seq_no.into()));
+            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
         let public_key = (&ni_dkg_transcript).try_into().unwrap();
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
         let subnet_id =
@@ -1107,7 +1247,7 @@ impl StateMachine {
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            &ecdsa_keys,
+            &idkg_keys,
             features,
             registry_data_provider.clone(),
             &nodes,
@@ -1153,6 +1293,30 @@ impl StateMachine {
             &sm_config,
             None,
             malicious_flags.clone(),
+        ));
+
+        // get the CUP from the registry
+        let cup: CatchUpPackage =
+            make_registry_cup(&registry_client, subnet_id, &replica_logger).unwrap();
+        let cup_proto: pb::CatchUpPackage = cup.into();
+        // now we can wrap the registry client into an Arc
+        let registry_client = Arc::new(registry_client);
+
+        let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
+            metrics_registry.clone(),
+            replica_logger.clone(),
+        )));
+        let consensus_pool_cache = FakeConsensusPoolCache::new(cup_proto);
+        let crypto = CryptoReturningOk::default();
+        let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
+            canister_http_pool.clone(),
+            Arc::new(consensus_pool_cache),
+            Arc::new(crypto),
+            state_manager.clone(),
+            subnet_id,
+            registry_client.clone(),
+            &metrics_registry,
+            replica_logger.clone(),
         ));
 
         // NOTE: constructing execution services requires tokio context.
@@ -1207,29 +1371,47 @@ impl StateMachine {
         let ecdsa_secret_key: PrivateKey =
             PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
+        let master_ecdsa_public_key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "master_ecdsa_public_key".to_string(),
+        });
+
         let mut idkg_subnet_public_keys = BTreeMap::new();
+        let mut idkg_subnet_secret_keys = BTreeMap::new();
 
-        //TODO: support schnorr keys
-        for ecdsa_key in ecdsa_keys {
-            idkg_subnet_public_keys.insert(
-                MasterPublicKeyId::Ecdsa(ecdsa_key),
-                MasterPublicKey {
-                    algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                    public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
-                },
-            );
+        for key_id in idkg_keys {
+            let private_key: PrivateKey = if key_id == master_ecdsa_public_key {
+                // ckETH tests rely on using the hard-coded ecdsa_secret_key
+                ecdsa_secret_key.clone()
+            } else {
+                let mut hasher = Sha256::new();
+                hasher.update(seed);
+                hasher.update(format!("{:?}", key_id).as_bytes());
+                PrivateKey::generate_using_rng(&mut StdRng::from_seed(hasher.finalize().into()))
+            };
+            idkg_subnet_secret_keys.insert(key_id.clone(), private_key.clone());
+            match key_id {
+                MasterPublicKeyId::Ecdsa(_) => {
+                    idkg_subnet_public_keys.insert(
+                        key_id.clone(),
+                        MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        },
+                    );
+                }
+                MasterPublicKeyId::Schnorr(_) => {
+                    idkg_subnet_public_keys.insert(
+                        key_id.clone(),
+                        MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
+                            // TODO(EXC-1658): generate a valid Schnorr public key.
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        },
+                    );
+                }
+            };
         }
-
-        idkg_subnet_public_keys.insert(
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "master_ecdsa_public_key".to_string(),
-            }),
-            MasterPublicKey {
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
-            },
-        );
 
         let time_source = FastForwardTimeSource::new();
         time_source.set_time(time).unwrap();
@@ -1239,7 +1421,7 @@ impl StateMachine {
         // and thus use `CryptoReturningOk`.
         let ingress_verifier = Arc::new(CryptoReturningOk::default());
         let ingress_manager = Arc::new(IngressManager::new(
-            time_source,
+            time_source.clone(),
             consensus_time.clone(),
             Box::new(IngressHistoryReaderImpl::new(state_manager.clone())),
             ingress_pool.clone(),
@@ -1259,7 +1441,8 @@ impl StateMachine {
             secret_key,
             public_key,
             public_key_der,
-            ecdsa_secret_key,
+            is_ecdsa_signing_enabled,
+            is_schnorr_signing_enabled,
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
@@ -1271,7 +1454,7 @@ impl StateMachine {
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
-            metrics_registry,
+            metrics_registry: metrics_registry.clone(),
             query_handler: runtime.block_on(async {
                 TowerBuffer::new(execution_services.query_execution_service, 1)
             }),
@@ -1283,24 +1466,23 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             idkg_subnet_public_keys,
-            replica_logger,
+            idkg_subnet_secret_keys,
+            replica_logger: replica_logger.clone(),
             nodes,
             batch_summary: None,
+            time_source,
+            canister_http_pool,
+            canister_http_payload_builder,
         }
     }
 
-    fn into_components(self) -> (TempDir, u64, Time, u64) {
+    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         (
             self.state_dir,
             self.nonce.into_inner(),
             Time::from_nanos_since_unix_epoch(self.time.into_inner()),
             self.checkpoint_interval_length.load(Ordering::Relaxed),
         )
-    }
-
-    pub fn into_state_dir(self) -> TempDir {
-        let (path, _, _, _) = self.into_components();
-        path
     }
 
     /// Emulates a node restart, including checkpoint recovery.
@@ -1310,7 +1492,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
@@ -1324,7 +1506,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
@@ -1340,7 +1522,7 @@ impl StateMachine {
         let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
-            .with_state_dir(state_dir)
+            .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_config(Some(config))
@@ -1545,40 +1727,128 @@ impl StateMachine {
             .push(msg, self.get_time());
     }
 
+    pub fn mock_canister_http_response(
+        &self,
+        request_id: u64,
+        timeout: Time,
+        canister_id: CanisterId,
+        content: CanisterHttpResponseContent,
+    ) {
+        for node in &self.nodes {
+            let registry_version = self.registry_client.get_latest_version();
+            let response = CanisterHttpResponse {
+                id: CanisterHttpRequestId::from(request_id),
+                timeout,
+                canister_id,
+                content: content.clone(),
+            };
+            let response_metadata = CanisterHttpResponseMetadata {
+                id: CallbackId::from(request_id),
+                timeout,
+                registry_version,
+                content_hash: ic_types::crypto::crypto_hash(&response),
+            };
+            let signature = CryptoReturningOk::default()
+                .sign(&response_metadata, node.node_id, registry_version)
+                .unwrap();
+            let share = Signed {
+                content: response_metadata,
+                signature,
+            };
+            self.canister_http_pool.write().unwrap().apply_changes(vec![
+                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+            ]);
+        }
+    }
+
+    /// Handles all the HTTP requests with provided closure,
+    /// adds responses to the consensus responses queue and executes that payload.
+    pub fn handle_http_call(
+        &self,
+        name: &str,
+        mut f: impl FnMut(&CanisterHttpRequestContext) -> CanisterHttpResponsePayload,
+    ) {
+        let mut payload = PayloadBuilder::new();
+        let contexts = self.canister_http_request_contexts();
+        assert!(!contexts.is_empty(), "expected '{}' HTTP request", name);
+        for (id, context) in &contexts {
+            let response = f(context);
+            payload = payload.http_response(*id, &response);
+        }
+        self.execute_payload(payload);
+    }
+
+    fn build_sign_with_ecdsa_reply(
+        &self,
+        context: &SignWithThresholdContext,
+    ) -> SignWithECDSAReply {
+        assert!(context.is_ecdsa());
+        let derivation_path = DerivationPath::new(
+            std::iter::once(context.request.sender.get().as_slice().to_vec())
+                .chain(context.derivation_path.clone())
+                .map(DerivationIndex)
+                .collect::<Vec<_>>(),
+        );
+        let ecdsa_secret_key = self.idkg_subnet_secret_keys.get(&context.key_id()).unwrap();
+        let signature = sign_prehashed_message_with_derived_key(
+            ecdsa_secret_key,
+            &context.ecdsa_args().message_hash,
+            derivation_path,
+        );
+
+        SignWithECDSAReply { signature }
+    }
+
+    fn build_sign_with_schnorr_reply(
+        &self,
+        context: &SignWithThresholdContext,
+    ) -> SignWithSchnorrReply {
+        assert!(context.is_schnorr());
+        let signature = vec![1, 2, 3]; // TODO(EXC-1658): generate a valid Schnorr signature.
+        SignWithSchnorrReply { signature }
+    }
+
+    /// If set to true, the state machine will handle sign_with_ecdsa calls during `tick()`.
+    pub fn set_ecdsa_signing_enabled(&mut self, value: bool) {
+        self.is_ecdsa_signing_enabled = value;
+    }
+
+    /// If set to true, the state machine will handle sign_with_schnorr calls during `tick()`.
+    pub fn set_schnorr_signing_enabled(&mut self, value: bool) {
+        self.is_schnorr_signing_enabled = value;
+    }
+
     /// Triggers a single round of execution without any new inputs.  The state
     /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
         let mut payload = PayloadBuilder::default();
         let state = self.state_manager.get_latest_state().take();
-        let sign_with_ecdsa_contexts = state
+
+        // Process threshold signing requests.
+        for (id, context) in &state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .clone();
-        for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
-            // The chain code is an additional input used during the key derivation process
-            // to ensure deterministic generation of child keys from the master key.
-            // We are using an array with 32 zeros by default.
-
-            let derivation_path = DerivationPath::new(
-                std::iter::once(ecdsa_context.request.sender.get().as_slice().to_vec())
-                    .chain(ecdsa_context.derivation_path.clone().into_iter())
-                    .map(DerivationIndex)
-                    .collect::<Vec<_>>(),
-            );
-            let signature = sign_prehashed_message_with_derived_key(
-                &self.ecdsa_secret_key,
-                &ecdsa_context.message_hash,
-                derivation_path,
-            );
-
-            let reply = SignWithECDSAReply { signature };
-
-            payload.consensus_responses.push(ConsensusResponse::new(
-                callback,
-                MsgPayload::Data(reply.encode()),
-            ));
+            .sign_with_threshold_contexts
+        {
+            match context.args {
+                ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
+                    let response = self.build_sign_with_ecdsa_reply(context);
+                    payload.consensus_responses.push(ConsensusResponse::new(
+                        *id,
+                        MsgPayload::Data(response.encode()),
+                    ));
+                }
+                ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
+                    let response = self.build_sign_with_schnorr_reply(context);
+                    payload.consensus_responses.push(ConsensusResponse::new(
+                        *id,
+                        MsgPayload::Data(response.encode()),
+                    ));
+                }
+                _ => {}
+            }
         }
+
         self.execute_payload(payload);
     }
 
@@ -1741,6 +2011,16 @@ impl StateMachine {
         fetch_int_gauge(&self.metrics_registry, "canister_memory_usage_bytes").unwrap_or(0)
     }
 
+    /// Get the time stored in the latest state. This is useful when starting
+    /// the `StateMachine` on an already existing state since time
+    /// must be monotone and thus the time of the `StateMachine`
+    /// which is used when executing rounds must be set to be
+    /// no smaller than the time stored in the latest state.
+    pub fn get_state_time(&self) -> Time {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        replicated_state.metadata.batch_time
+    }
+
     /// Sets the time that the state machine will use for executing next
     /// messages.
     pub fn set_time(&self, time: SystemTime) {
@@ -1748,9 +2028,12 @@ impl StateMachine {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        self.consensus_time
-            .set(Time::from_nanos_since_unix_epoch(t));
+        let time = Time::from_nanos_since_unix_epoch(t);
+        self.consensus_time.set(time);
         self.time.store(t, Ordering::Relaxed);
+        self.time_source
+            .set_time(time)
+            .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
     }
 
     /// Returns the current state machine time.
@@ -1887,14 +2170,16 @@ impl StateMachine {
             canister_directory.display()
         );
 
-        let tip: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
+        let tip: CheckpointLayout<ReadOnly> = CheckpointLayout::new_untracked(
             self.state_manager.state_layout().raw_path().join("tip"),
             ic_types::Height::new(0),
         )
         .expect("failed to obtain tip");
         let tip_canister_layout = tip
             .canister(&canister_id)
-            .expect("failed to obtain writeable canister layout");
+            .expect("failed to obtain canister layout");
+        std::fs::create_dir_all(tip_canister_layout.raw_path())
+            .expect("Failed to create checkpoint dir");
 
         fn copy_as_writeable(src: &Path, dst: &Path) {
             assert!(
@@ -1948,8 +2233,20 @@ impl StateMachine {
 
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(canister_state);
-        self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Metadata);
+        self.state_manager.commit_and_certify(
+            state,
+            h.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+    }
+
+    // Enable checkpoints and make a tick to write a checkpoint.
+    pub fn checkpointed_tick(&self) {
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        self.set_checkpoints_enabled(true);
+        self.tick();
+        self.set_checkpoint_interval_length(checkpoint_interval_length);
     }
 
     /// Replaces the canister state in this state machine with the canister
@@ -1961,10 +2258,11 @@ impl StateMachine {
         source_state: Arc<ReplicatedState>,
         canister_id: CanisterId,
     ) {
+        self.checkpointed_tick();
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Full);
+            .commit_and_certify(state, h.increment(), CertificationScope::Full, None);
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -1984,11 +2282,7 @@ impl StateMachine {
         other_env: &StateMachine,
         canister_id: CanisterId,
     ) -> Result<(), String> {
-        // Enable checkpoints and make a tick to write a checkpoint.
-        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
-        self.set_checkpoints_enabled(true);
-        self.tick();
-        self.set_checkpoint_interval_length(checkpoint_interval_length);
+        self.checkpointed_tick();
 
         let (height, mut state) = self.state_manager.take_tip();
         if state.take_canister_state(&canister_id).is_some() {
@@ -1996,6 +2290,7 @@ impl StateMachine {
                 state,
                 height.increment(),
                 CertificationScope::Full,
+                None,
             );
 
             other_env.import_canister_state(
@@ -2655,6 +2950,7 @@ impl StateMachine {
             replicated_state,
             height.increment(),
             CertificationScope::Metadata,
+            None,
         );
     }
 
@@ -2686,8 +2982,12 @@ impl StateMachine {
             .scheduler_state
             .total_query_stats = total_query_stats;
 
-        self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Metadata);
+        self.state_manager.commit_and_certify(
+            state,
+            h.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -2723,30 +3023,49 @@ impl StateMachine {
             state,
             height.increment(),
             CertificationScope::Metadata,
+            None,
         );
         balance
     }
 
-    /// Returns sign with ECDSA contexts from internal subnet call context manager.
-    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithEcdsaContext> {
+    /// Returns `sign_with_ecdsa` contexts from internal subnet call context manager.
+    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
         let state = self.state_manager.get_latest_state().take();
         state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .clone()
+            .sign_with_ecdsa_contexts()
+    }
+
+    /// Returns `sign_with_schnorr` contexts from internal subnet call context manager.
+    pub fn sign_with_schnorr_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_schnorr_contexts()
     }
 
     /// Returns canister HTTP request contexts from internal subnet call context manager.
     pub fn canister_http_request_contexts(
         &self,
     ) -> BTreeMap<CallbackId, CanisterHttpRequestContext> {
+        let request_ids_already_made: BTreeSet<_> = self
+            .canister_http_pool
+            .read()
+            .unwrap()
+            .get_validated_shares()
+            .map(|share| share.content.id)
+            .collect();
         let state = self.state_manager.get_latest_state().take();
         state
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts
             .clone()
+            .into_iter()
+            .filter(|(id, _)| !request_ids_already_made.contains(id))
+            .collect()
     }
 
     /// Returns the size estimate of canisters heap delta in bytes.
@@ -2900,6 +3219,12 @@ impl PayloadBuilder {
     pub fn with_xnet_payload(self, xnet_payload: XNetPayload) -> Self {
         Self {
             xnet_payload,
+            ..self
+        }
+    }
+    pub fn with_consensus_responses(self, consensus_responses: Vec<ConsensusResponse>) -> Self {
+        Self {
+            consensus_responses,
             ..self
         }
     }

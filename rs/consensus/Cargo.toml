@@ -40,7 +40,7 @@ tokio = { workspace = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
 ic-consensus-mocks = { path = "./mocks" }
 ic-constants = { path = "../constants" }

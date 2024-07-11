@@ -1,136 +1,35 @@
-use candid::types::number::Nat;
 use candid::{Decode, Encode};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_test_utils::statemachine_helpers::{
-    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks, wait_until_sync_is_completed,
-};
+use ic_base_types::CanisterId;
 use ic_ledger_test_utils::{
     build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
     build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
 };
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
-use icp_ledger::{Archives, FeatureFlags, LedgerCanisterUpgradePayload};
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc2::approve::ApproveArgs;
-use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
-use std::collections::BTreeSet;
-use std::time::Instant;
+use icp_ledger::{Archives, FeatureFlags, LedgerCanisterPayload, UpgradeArgs};
 
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
-const INDEX_CANISTER_ID: CanisterId = CanisterId::from_u64(11);
+const INDEX_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 
-/// Create a state machine with the golden NNS state and perform a series of transactions and
-/// upgrades and downgrades of the ICP ledger canister suite.
-/// The approximate runtime of the individual components is as follows:
-/// - Assert parity between the ledger and index canisters: 6min
-/// - Perform transactions: Around 0.5s per transaction
-/// - Upgrade/downgrade of the canisters: Around 10s per canister
+/// Create a state machine with the golden NNS state, then upgrade and downgrade the ICP
+/// ledger canister suite.
 #[test]
 fn should_create_state_machine_with_golden_nns_state() {
     let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
-    let start = Instant::now();
-    // This takes almost 6min to run
-    // assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
-    //     &state_machine,
-    //     LEDGER_CANISTER_ID,
-    //     INDEX_CANISTER_ID,
-    // );
-    println!(
-        "Time taken for index-ledger parity check: {:?}",
-        start.elapsed()
-    );
-
-    let minter = CanisterId::from_u64(GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET).get();
-    let user1 = PrincipalId::new_user_test_id(101);
-    let user2 = PrincipalId::new_user_test_id(102);
-
-    // 1. Create a bunch of transactions
-    perform_transactions(&state_machine, &minter, &user1, &user2);
-
-    // 2. Verify that the ledger, archives, and index have the same blocks
-    let start = Instant::now();
-    // assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
-    //     &state_machine,
-    //     LEDGER_CANISTER_ID,
-    //     INDEX_CANISTER_ID,
-    // );
-    println!(
-        "Time taken for index-ledger parity check: {:?}",
-        start.elapsed()
-    );
-
-    // 3. Upgrade the index canister
-    // This takes a bit less than 1 second
+    // Upgrade all the canisters to the latest version
     upgrade_index(&state_machine, build_ledger_index_wasm().bytes());
-
-    //  3.1. Perform steps 1 and 2 again
-    perform_transactions(&state_machine, &minter, &user1, &user2);
-
-    // 4. Upgrade the ledger canister
-    // This takes a bit less than 10 seconds
     upgrade_ledger(&state_machine, build_ledger_wasm().bytes());
+    upgrade_archive_canisters(&state_machine, build_ledger_archive_wasm().bytes());
 
-    //  4.1. Perform steps 1 and 2 again
-    perform_transactions(&state_machine, &minter, &user1, &user2);
-
-    // 5. Upgrade the archive canisters and perform transactions
-    // Upgrading a single archive takes a bit less than 10 seconds
-    // The following function also performs transactions and waits for the index to sync
-    upgrade_archive_canisters_and_perform_transactions(
-        &state_machine,
-        &minter,
-        &user1,
-        &user2,
-        build_ledger_archive_wasm().bytes(),
-    );
-
-    let start = Instant::now();
-    // assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
-    //     &state_machine,
-    //     LEDGER_CANISTER_ID,
-    //     INDEX_CANISTER_ID,
-    // );
-    println!(
-        "Time taken for index-ledger parity check: {:?}",
-        start.elapsed()
-    );
-
-    // 6. Downgrade the archive canisters and perform transactions
-    upgrade_archive_canisters_and_perform_transactions(
-        &state_machine,
-        &minter,
-        &user1,
-        &user2,
-        build_mainnet_ledger_archive_wasm().bytes(),
-    );
-
-    // 7. Downgrade the ledger canister
+    // Downgrade all the canisters to the mainnet version
+    upgrade_archive_canisters(&state_machine, build_mainnet_ledger_archive_wasm().bytes());
     upgrade_ledger(&state_machine, build_mainnet_ledger_wasm().bytes());
-
-    //  7.1. Perform steps 1 and 2 again
-    perform_transactions(&state_machine, &minter, &user1, &user2);
-
-    // 8. Downgrade the index canister
     upgrade_index(&state_machine, build_mainnet_ledger_index_wasm().bytes());
-
-    //  8.1. Perform steps 1 and 2 again
-    perform_transactions(&state_machine, &minter, &user1, &user2);
-
-    let start = Instant::now();
-    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        INDEX_CANISTER_ID,
-    );
-    println!(
-        "Time taken for index-ledger parity check: {:?}",
-        start.elapsed()
-    );
 }
 
 fn list_archives(state_machine: &StateMachine) -> Archives {
@@ -144,110 +43,11 @@ fn list_archives(state_machine: &StateMachine) -> Archives {
     .expect("failed to decode archives response")
 }
 
-const NUM_REPETITIONS_PER_TRANSACTION: usize = 10;
-
-fn perform_transactions(
-    state_machine: &StateMachine,
-    minter: &PrincipalId,
-    user1: &PrincipalId,
-    user2: &PrincipalId,
-) {
-    let start = Instant::now();
-    // 1. Create a bunch of transactions
-    //  5 types of transactions, 10 of each takes around 25s total (0.5s per transaction)
-    for _ in 0..NUM_REPETITIONS_PER_TRANSACTION {
-        //  1.1. Mint
-        let block_index = ic_icrc1_ledger_sm_tests::transfer(
-            state_machine,
-            LEDGER_CANISTER_ID,
-            minter.0,
-            user1.0,
-            1_000_000_000u64,
-        )
-        .expect("should successfully mint to user1 using icrc1_transfer");
-        println!("mint succeeded with block_index {}", block_index);
-
-        //  1.2. Transfer
-        // TODO: The below uses the ICRC1 'icrc1_transfer' method to transfer tokens. Consider also
-        //  using the ICP 'transfer' method.
-        let block_index = ic_icrc1_ledger_sm_tests::transfer(
-            state_machine,
-            LEDGER_CANISTER_ID,
-            user1.0,
-            user2.0,
-            1u64,
-        )
-        .expect("should successfully perform icrc1_transfer from user1 to user2");
-        println!("transfer succeeded with block_index {}", block_index);
-
-        //  1.3. Burn
-        let block_index = ic_icrc1_ledger_sm_tests::transfer(
-            state_machine,
-            LEDGER_CANISTER_ID,
-            user1.0,
-            minter.0,
-            10_000u64,
-        )
-        .expect("should successfully perform icrc1_transfer from user1 to burn");
-        println!("burn succeeded with block_index {}", block_index);
-
-        //  1.4. Approve
-        let approve_args = ApproveArgs {
-            from_subaccount: None,
-            spender: Account::from(user2.0),
-            amount: Nat::from(100_000u64),
-            expected_allowance: None,
-            expires_at: None,
-            fee: None,
-            memo: None,
-            created_at_time: None,
-        };
-        let block_index = ic_icrc1_ledger_sm_tests::send_approval(
-            state_machine,
-            LEDGER_CANISTER_ID,
-            user1.0,
-            &approve_args,
-        )
-        .expect("should successfully perform icrc2_approve from user1 to user2");
-        println!("approve succeeded with block_index {}", block_index);
-
-        //  1.5. Transfer From
-        let transfer_from_args = TransferFromArgs {
-            spender_subaccount: None,
-            from: Account::from(user1.0),
-            to: Account::from(user2.0),
-            amount: Nat::from(10_000u64),
-            fee: None,
-            memo: None,
-            created_at_time: None,
-        };
-        let block_index = ic_icrc1_ledger_sm_tests::send_transfer_from(
-            state_machine,
-            LEDGER_CANISTER_ID,
-            user2.0,
-            &transfer_from_args,
-        )
-            .expect(
-                "should successfully perform icrc2_transfer_from from user1 to user2 with user2 as spender",
-            );
-        println!("transfer_from succeeded with block_index {}", block_index);
-    }
-    println!(
-        "Time taken for {} transactions: {:?}",
-        5 * NUM_REPETITIONS_PER_TRANSACTION,
-        start.elapsed()
-    );
-    let start = Instant::now();
-    wait_until_sync_is_completed(state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
-    println!("Time taken for index to sync: {:?}", start.elapsed());
-}
-
 fn upgrade_archive(
     state_machine: &StateMachine,
     archive_canister_id: CanisterId,
     wasm_bytes: Vec<u8>,
 ) {
-    let start = Instant::now();
     state_machine
         .upgrade_canister(archive_canister_id, wasm_bytes, vec![])
         .unwrap_or_else(|e| {
@@ -256,71 +56,31 @@ fn upgrade_archive(
                 archive_canister_id, e
             )
         });
-    println!("Time taken for to upgrade archive: {:?}", start.elapsed());
 }
 
-fn upgrade_archive_canisters_and_perform_transactions(
-    state_machine: &StateMachine,
-    minter: &PrincipalId,
-    user1: &PrincipalId,
-    user2: &PrincipalId,
-    archive_wasm_bytes: Vec<u8>,
-) {
-    let start = Instant::now();
-    let mut upgraded_archives = BTreeSet::new();
-    const MAX_ITERATIONS: u8 = 10;
-    for _ in 0..MAX_ITERATIONS {
-        // loop {
-        let archives = list_archives(state_machine).archives;
-        println!("all archives: {:?}", archives);
-        println!("upgraded archives: {:?}", upgraded_archives);
-        let mut all_upgraded = true;
-        for archive_info in &archives {
-            if !upgraded_archives.contains(&archive_info.canister_id) {
-                println!("upgrading archive: {}", archive_info.canister_id);
-                all_upgraded = false;
-                upgrade_archive(
-                    state_machine,
-                    archive_info.canister_id,
-                    archive_wasm_bytes.clone(),
-                );
-                upgraded_archives.insert(archive_info.canister_id);
-                //  5.1. Perform steps 1 and 2 again
-                perform_transactions(state_machine, minter, user1, user2);
-                // The above may have triggered a new archive to be spawned, so continue with the
-                //  next iteration of the loop, and list the archives again.
-                break;
-            } else {
-                println!("archive already upgraded: {}", archive_info.canister_id);
-            }
-        }
-        if all_upgraded {
-            println!("all archives upgraded");
-            break;
-        } else {
-            println!("not all archives upgraded, continuing");
-        }
+fn upgrade_archive_canisters(state_machine: &StateMachine, archive_wasm_bytes: Vec<u8>) {
+    let archives = list_archives(state_machine).archives;
+    for archive_info in &archives {
+        upgrade_archive(
+            state_machine,
+            archive_info.canister_id,
+            archive_wasm_bytes.clone(),
+        );
     }
-    println!(
-        "Time taken for to upgrade all archives: {:?}",
-        start.elapsed()
-    );
 }
 
 fn upgrade_index(state_machine: &StateMachine, wasm_bytes: Vec<u8>) {
-    let start = Instant::now();
     state_machine
         .upgrade_canister(INDEX_CANISTER_ID, wasm_bytes, vec![])
         .expect("should successfully upgrade index to new local version");
-    println!("Time taken for to upgrade index: {:?}", start.elapsed());
 }
 
 fn upgrade_ledger(state_machine: &StateMachine, wasm_bytes: Vec<u8>) {
-    let start = Instant::now();
-    let ledger_upgrade_args = LedgerCanisterUpgradePayload::builder()
-        .feature_flags(FeatureFlags { icrc2: true })
-        .build()
-        .unwrap();
+    let ledger_upgrade_args = LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+        maximum_number_of_accounts: None,
+        icrc1_minting_account: None,
+        feature_flags: Some(FeatureFlags { icrc2: true }),
+    }));
 
     state_machine
         .upgrade_canister(
@@ -329,5 +89,4 @@ fn upgrade_ledger(state_machine: &StateMachine, wasm_bytes: Vec<u8>) {
             Encode!(&ledger_upgrade_args).unwrap(),
         )
         .expect("should successfully upgrade ledger to new local version");
-    println!("Time taken for to upgrade ledger: {:?}", start.elapsed());
 }

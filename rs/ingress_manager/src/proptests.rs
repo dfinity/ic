@@ -80,7 +80,6 @@ proptest! {
                         ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
-                            m.count_bytes(),
                         ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());

@@ -28,7 +28,7 @@ use super::utils::{
     block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
     EcdsaBlockReaderImpl, InvalidChainCacheError,
 };
-use crate::consensus::metrics::timed_call;
+use crate::ecdsa::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
 use crate::ecdsa::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -506,9 +506,9 @@ fn validate_reshare_dealings(
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if !curr_payload.ongoing_xnet_reshares.contains_key(request) {
             if let Some(response) = new_reshare_agreement.get(request) {
-                use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
+                use ic_management_canister_types::ComputeInitialIDkgDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
-                    let dealings_response = ComputeInitialEcdsaDealingsResponse::decode(data)
+                    let dealings_response = ComputeInitialIDkgDealingsResponse::decode(data)
                         .map_err(|err| {
                             InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
                         })?;

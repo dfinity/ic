@@ -1,16 +1,14 @@
-use crate::{
+use ic_system_test_driver::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    retry_with_msg_async,
     util::block_on,
 };
 use std::{convert::TryFrom, str::FromStr};
@@ -76,7 +74,7 @@ pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig,
     }
     info!(log, "Polling registry ...");
     let registry = RegistryCanister::new(nns_node_urls);
-    let (latest, routes) = block_on(retry_with_msg_async!(
+    let (latest, routes) = block_on(ic_system_test_driver::retry_with_msg_async!(
         "polling registry",
         &log,
         READY_WAIT_TIMEOUT,

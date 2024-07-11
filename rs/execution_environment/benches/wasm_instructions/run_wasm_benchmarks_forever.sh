@@ -6,6 +6,11 @@
 #
 # Usage: run_wasm_benchmarks_forever.sh
 
+if ! which bazel pee rg >/dev/null; then
+    echo "Error checking dependencies: please ensure 'bazel', 'pee' and 'rg' are installed"
+    exit 1
+fi
+
 # The file with final results.
 #
 # Example file content in Markdown format:

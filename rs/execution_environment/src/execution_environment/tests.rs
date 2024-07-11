@@ -169,13 +169,6 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialEcdsaDealings => ic00::ComputeInitialEcdsaDealingsArgs::new(
-            into_inner_ecdsa(key_id),
-            subnet_id,
-            nodes,
-            registry_version,
-        )
-        .encode(),
         Method::ComputeInitialIDkgDealings => {
             ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
                 .encode()
@@ -750,7 +743,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let memory_allocation = NumBytes::from(150);
+    let memory_allocation = NumBytes::from(158);
     test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
         .unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
@@ -2162,10 +2155,6 @@ fn into_inner_schnorr(key_id: MasterPublicKeyId) -> SchnorrKeyId {
 fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
     vec![
         (
-            Method::ComputeInitialEcdsaDealings,
-            make_ecdsa_key("some_key"),
-        ),
-        (
             Method::ComputeInitialIDkgDealings,
             make_ecdsa_key("some_key"),
         ),
@@ -2314,38 +2303,23 @@ fn test_sign_with_threshold_key_fee_charged() {
             }
         );
 
-        match method {
-            Method::SignWithECDSA => {
-                let (_, context) = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
-                assert_eq!(context.request.payment.get(), payment - fee);
-
-                assert_eq!(
-                    test.state()
-                        .metadata
-                        .subnet_metrics
-                        .consumed_cycles_ecdsa_outcalls,
-                    NominalCycles::from(fee)
-                );
-            }
-            Method::SignWithSchnorr => {
-                let (_, context) = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_threshold_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
-                assert_eq!(context.request.payment.get(), payment - fee);
-            }
+        let subnet_call_context_manager = &test.state().metadata.subnet_call_context_manager;
+        let contexts = match method {
+            Method::SignWithECDSA => subnet_call_context_manager.sign_with_ecdsa_contexts(),
+            Method::SignWithSchnorr => subnet_call_context_manager.sign_with_schnorr_contexts(),
             _ => panic!("Unexpected method"),
+        };
+        let (_, context) = contexts.iter().next().unwrap();
+        assert_eq!(context.request.payment.get(), payment - fee);
+
+        if let Method::SignWithECDSA = method {
+            assert_eq!(
+                test.state()
+                    .metadata
+                    .subnet_metrics
+                    .consumed_cycles_ecdsa_outcalls,
+                NominalCycles::from(fee)
+            );
         }
 
         assert_eq!(
@@ -2619,40 +2593,25 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
                 state: IngressState::Processing,
             }
         );
-        match method {
-            Method::SignWithECDSA => {
-                let (_, context) = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
-                assert_eq!(context.request.payment, Cycles::zero());
 
-                assert_eq!(
-                    test.state()
-                        .metadata
-                        .subnet_metrics
-                        .consumed_cycles_ecdsa_outcalls,
-                    NominalCycles::from(0)
-                );
-            }
-            Method::SignWithSchnorr => {
-                let (_, context) = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_threshold_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
-                assert_eq!(context.request.payment, Cycles::zero());
-            }
+        let subnet_call_context_manager = &test.state().metadata.subnet_call_context_manager;
+        let contexts = match method {
+            Method::SignWithECDSA => subnet_call_context_manager.sign_with_ecdsa_contexts(),
+            Method::SignWithSchnorr => subnet_call_context_manager.sign_with_schnorr_contexts(),
             _ => panic!("Unexpected method"),
-        }
+        };
+        let (_, context) = contexts.iter().next().unwrap();
+        assert_eq!(context.request.payment, Cycles::zero());
 
+        if let Method::SignWithECDSA = method {
+            assert_eq!(
+                test.state()
+                    .metadata
+                    .subnet_metrics
+                    .consumed_cycles_ecdsa_outcalls,
+                NominalCycles::from(0)
+            );
+        }
         assert_eq!(
             test.state()
                 .metadata
@@ -2698,20 +2657,13 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             test.ingress_raw(canister_id, "update", run.clone());
         }
         let result = test.ingress(canister_id, "update", run).unwrap();
-
-        // TODO(EXC-1645): fix error message to follow the same pattern for all `sign_with_*` methods.
-        let message = match method {
-            Method::SignWithECDSA => format!(
-                "{} request failed: the ECDSA signature queue is full.",
-                method,
-            ),
-            Method::SignWithSchnorr => format!(
+        assert_eq!(
+            result,
+            WasmResult::Reject(format!(
                 "{} request failed: signature queue for key {} is full.",
                 method, key_id,
-            ),
-            _ => panic!("Unexpected method"),
-        };
-        assert_eq!(result, WasmResult::Reject(message));
+            ))
+        );
     }
 }
 
@@ -2747,12 +2699,15 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
         let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
         if i > DEFAULT_QUEUE_CAPACITY {
-            assert_eq!(
-                test.ingress_state(&message_id),
-                IngressState::Failed(UserError::new(
-                    ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
-                ))
+            let IngressState::Failed(ingress_state) = test.ingress_state(&message_id) else {
+                panic!("Unexpected state {:?}", test.ingress_state(&message_id));
+            };
+            ingress_state.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                &format!(
+                    "Error from Canister {uc}: Canister called `ic0.trap` \
+                    with message: call_perform failed"
+                ),
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
@@ -2795,12 +2750,15 @@ fn send_messages_to_bitcoin_canister_until_capacity(
         let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
         if i > DEFAULT_QUEUE_CAPACITY {
-            assert_eq!(
-                test.ingress_state(&message_id),
-                IngressState::Failed(UserError::new(
-                    ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
-                ))
+            let IngressState::Failed(ingress_state) = test.ingress_state(&message_id) else {
+                panic!("Unexpected state {:?}", test.ingress_state(&message_id));
+            };
+            ingress_state.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                &format!(
+                    "Error from Canister {uc}: Canister called `ic0.trap` \
+                    with message: call_perform failed"
+                ),
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);

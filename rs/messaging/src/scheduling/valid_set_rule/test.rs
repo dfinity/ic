@@ -602,7 +602,7 @@ fn ingress_to_stopping_canister_is_rejected() {
                 .into(),
             SMALL_APP_SUBNET_MAX_SIZE
         ),
-        Err(StateError::CanisterStopping(canister_test_id(0)))
+        Err(IngressInductionError::CanisterStopping(canister_test_id(0)))
     );
 }
 
@@ -636,7 +636,7 @@ fn ingress_to_stopped_canister_is_rejected() {
                 .into(),
             SMALL_APP_SUBNET_MAX_SIZE
         ),
-        Err(StateError::CanisterStopped(canister_test_id(0)))
+        Err(IngressInductionError::CanisterStopped(canister_test_id(0)))
     );
 }
 
@@ -747,7 +747,9 @@ fn management_message_with_unknown_method_is_not_inducted() {
         .into();
     assert_eq!(
         valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
-        Err(StateError::UnknownSubnetMethod(String::from("test")))
+        Err(IngressInductionError::CanisterMethodNotFound(String::from(
+            "test"
+        )))
     );
 }
 
@@ -777,7 +779,7 @@ fn management_message_with_invalid_payload_is_not_inducted() {
         .into();
     assert_eq!(
         valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
-        Err(StateError::InvalidSubnetPayload)
+        Err(IngressInductionError::InvalidManagementPayload)
     );
 }
 

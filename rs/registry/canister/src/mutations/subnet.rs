@@ -1,12 +1,7 @@
 use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
-    mutations::{
-        common::{
-            decode_registry_value, encode_or_panic, get_subnet_ids_from_subnet_list, has_duplicates,
-        },
-        do_create_subnet::EcdsaInitialConfig,
-    },
+    mutations::common::{get_subnet_ids_from_subnet_list, has_duplicates},
     registry::{Registry, Version},
 };
 use candid::Encode;
@@ -15,20 +10,15 @@ use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_management_canister_types::{
-    ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse,
-    ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, EcdsaKeyId,
-    MasterPublicKeyId,
+    ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, MasterPublicKeyId,
 };
 use ic_protobuf::registry::{
-    crypto::v1::{ChainKeySigningSubnetList, EcdsaSigningSubnetList},
-    subnet::v1::{
-        CatchUpPackageContents, ChainKeyInitialization, EcdsaInitialization, SubnetListRecord,
-        SubnetRecord,
-    },
+    crypto::v1::ChainKeySigningSubnetList,
+    subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
-    make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_transport::{
@@ -82,7 +72,7 @@ impl Registry {
                 value,
                 version: _,
                 deletion_marker: _,
-            }) => decode_registry_value::<SubnetListRecord>(value.clone()),
+            }) => SubnetListRecord::decode(value.as_slice()).unwrap(),
             None => panic!(
                 "{}set_subnet_membership_mutation: subnet list record not found in the registry.",
                 LOG_PREFIX,
@@ -149,9 +139,7 @@ impl Registry {
             &cup_contents_key.into_bytes(),
             version.unwrap_or_else(|| self.latest_version()),
         ) {
-            Some(cup) => Ok(decode_registry_value::<CatchUpPackageContents>(
-                cup.value.clone(),
-            )),
+            Some(cup) => Ok(CatchUpPackageContents::decode(cup.value.as_slice()).unwrap()),
             None => Err(format!(
                 "{}CatchUpPackage not found for subnet: {}",
                 LOG_PREFIX, subnet_id
@@ -269,96 +257,6 @@ impl Registry {
         }
     }
 
-    /// Get the initial ECDSA dealings via a call to IC00 for a given EcdsaInitialConfig and a set of
-    /// nodes to receive them.
-    pub async fn get_all_initial_ecdsa_dealings_from_ic00(
-        &self,
-        ecdsa_initial_config: &Option<EcdsaInitialConfig>,
-        receiver_nodes: Vec<NodeId>,
-    ) -> Vec<EcdsaInitialization> {
-        let initial_ecdsa_dealings_futures = ecdsa_initial_config
-            .as_ref()
-            .map(|config| {
-                self.get_compute_ecdsa_args_from_initial_config(config, receiver_nodes)
-                    .into_iter()
-                    .map(|request| self.get_ecdsa_initializations_from_ic00(request))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        futures::future::join_all(initial_ecdsa_dealings_futures).await
-    }
-
-    /// Helper function to build the request objects to send to IC00 for
-    /// `compute_initial_ecdsa_dealings`
-    fn get_compute_ecdsa_args_from_initial_config(
-        &self,
-        ecdsa_initial_config: &EcdsaInitialConfig,
-        receiver_nodes: Vec<NodeId>,
-    ) -> Vec<ComputeInitialEcdsaDealingsArgs> {
-        let latest_version = self.latest_version();
-        ecdsa_initial_config
-            .keys
-            .iter()
-            .map(|key_request| {
-                // create requests outside of async move context to avoid ownership problems
-                let key_id = key_request.key_id.clone();
-                let target_subnet = key_request
-                    .subnet_id
-                    .map(SubnetId::new)
-                    .expect("subnet_id is required for EcdsaKeyRequests");
-                ComputeInitialEcdsaDealingsArgs::new(
-                    key_id,
-                    target_subnet,
-                    receiver_nodes.iter().copied().collect(),
-                    RegistryVersion::new(latest_version),
-                )
-            })
-            .collect()
-    }
-
-    /// Helper function to make the request and decode the response for
-    /// `compute_initial_ecdsa_dealings`.
-    async fn get_ecdsa_initializations_from_ic00(
-        &self,
-        dealing_request: ComputeInitialEcdsaDealingsArgs,
-    ) -> EcdsaInitialization {
-        let response_bytes = call(
-            CanisterId::ic_00(),
-            "compute_initial_ecdsa_dealings",
-            bytes,
-            Encode!(&dealing_request).unwrap(),
-        )
-        .await
-        .unwrap();
-
-        let response = ComputeInitialEcdsaDealingsResponse::decode(&response_bytes).unwrap();
-        println!(
-            "{}response from compute_initial_ecdsa_dealings successfully received",
-            LOG_PREFIX
-        );
-
-        EcdsaInitialization {
-            key_id: Some((&dealing_request.key_id).into()),
-            dealings: Some(response.initial_dkg_dealings),
-        }
-    }
-
-    /// Get the list of subnets that can sign for a given EcdsaKeyId.
-    pub fn get_ecdsa_signing_subnet_list(
-        &self,
-        key_id: &EcdsaKeyId,
-    ) -> Option<EcdsaSigningSubnetList> {
-        let ecdsa_signing_subnet_list_key_id = make_ecdsa_signing_subnet_list_key(key_id);
-        self.get(
-            ecdsa_signing_subnet_list_key_id.as_bytes(),
-            self.latest_version(),
-        )
-        .map(|registry_value| {
-            decode_registry_value::<EcdsaSigningSubnetList>(registry_value.value.to_vec())
-        })
-    }
-
     /// Get the list of subnets that can sign for a given MasterPublicKeyId.
     pub fn get_chain_key_signing_subnet_list(
         &self,
@@ -370,7 +268,7 @@ impl Registry {
             self.latest_version(),
         )
         .map(|registry_value| {
-            decode_registry_value::<ChainKeySigningSubnetList>(registry_value.value.to_vec())
+            ChainKeySigningSubnetList::decode(registry_value.value.as_slice()).unwrap()
         })
     }
 
@@ -403,7 +301,7 @@ impl Registry {
 
             mutations.push(upsert(
                 make_chain_key_signing_subnet_list_key(chain_key_id),
-                encode_or_panic(&chain_key_signing_list_for_key),
+                chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }
         mutations
@@ -452,74 +350,6 @@ impl Registry {
         let current_keys = vec_to_set(self.get_master_public_keys_held_by_subnet(subnet_id));
         let requested_keys = vec_to_set(updated_key_list);
         requested_keys.difference(&current_keys).cloned().collect()
-    }
-
-    /// Validates EcdsaInitialConfig.  If own_subnet_id is supplied, this also validates that all
-    /// requested keys are available on a different subnet (for the case of recovering a subnet)
-    pub fn validate_ecdsa_initial_config(
-        &self,
-        ecdsa_initial_config: &EcdsaInitialConfig,
-        own_subnet_id: Option<PrincipalId>,
-    ) -> Result<(), String> {
-        let keys_to_subnets = self.get_master_public_keys_to_subnets_map();
-
-        for key_request in &ecdsa_initial_config.keys {
-            // Requested key must be a known key.
-            let key_id = MasterPublicKeyId::Ecdsa(key_request.key_id.clone());
-            if !keys_to_subnets.contains_key(&key_id) {
-                return Err(format!(
-                    "The requested ECDSA key '{}' was not found in any subnet.",
-                    key_id
-                ));
-            }
-
-            let subnets_for_key = keys_to_subnets.get(&key_id).unwrap();
-
-            // Require that a subnet is targeted.
-            let subnet_id_principal = match key_request.subnet_id.as_ref() {
-                None => {
-                    return Err(format!(
-                        "EcdsaKeyRequest for key '{}' did not specify subnet_id.",
-                        key_id
-                    ))
-                }
-                Some(id) => id,
-            };
-
-            // Ensure the subnet being targeted is not the same as the subnet being recovered.
-            if let Some(own_subnet_principal) = own_subnet_id {
-                if subnet_id_principal == &own_subnet_principal {
-                    return Err(format!(
-                        "Attempted to recover ECDSA key '{}' by requesting it from itself. \
-                         Subnets cannot recover ECDSA keys from themselves.",
-                        key_id,
-                    ));
-                }
-            }
-
-            // Ensure that the targeted subnet actually holds the key.
-            let subnet_id = SubnetId::new(*subnet_id_principal);
-            if !subnets_for_key.contains(&subnet_id) {
-                return Err(format!(
-                    "The requested ECDSA key '{}' is not available in targeted subnet '{}'.",
-                    key_id, subnet_id_principal
-                ));
-            }
-        }
-
-        let ecdsa_key_ids: Vec<_> = ecdsa_initial_config
-            .keys
-            .iter()
-            .map(|key| key.key_id.clone())
-            .collect();
-        if has_duplicates(&ecdsa_key_ids) {
-            return Err(format!(
-                "The requested ECDSA key ids {:?} have duplicates",
-                ecdsa_key_ids
-            ));
-        }
-
-        Ok(())
     }
 
     /// Validates InitialChainKeyConfig.  If own_subnet_id is supplied, this also validates that all

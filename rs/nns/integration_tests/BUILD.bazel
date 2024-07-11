@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
@@ -22,8 +23,8 @@ BASE_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:bytes",
     "@crate_index//:candid",
-    "@crate_index//:futures",
     "@crate_index//:fs_extra",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
@@ -103,6 +104,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 })
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ] + select({
@@ -114,6 +116,8 @@ MACRO_DEPENDENCIES = [
 })
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/common/test_utils",
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
 ]

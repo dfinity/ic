@@ -1,6 +1,7 @@
-use crate::consensus::MINIMUM_CHAIN_LENGTH;
-
-use super::{verifier::VerifierImpl, CertificationCrypto};
+use crate::{
+    certification::{CertificationCrypto, VerifierImpl},
+    consensus::MINIMUM_CHAIN_LENGTH,
+};
 use ic_consensus_utils::{
     active_high_threshold_transcript, aggregate, membership::Membership, registry_version_at_height,
 };
@@ -10,25 +11,25 @@ use ic_interfaces::{
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     validation::ValidationError,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::{Committee, HasCommittee, HasHeight};
 use ic_types::{
     artifact::{CertificationMessageId, Priority, PriorityFn},
-    artifact_kind::CertificationArtifact,
-    consensus::certification::{
-        Certification, CertificationContent, CertificationMessage, CertificationShare,
+    consensus::{
+        certification::{
+            Certification, CertificationContent, CertificationMessage, CertificationShare,
+        },
+        Committee, HasCommittee, HasHeight,
     },
     crypto::Signed,
     replica_config::ReplicaConfig,
     CryptoHashOfPartialState, Height,
 };
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::cell::RefCell;
-use std::sync::Arc;
-use std::time::Instant;
+use std::{cell::RefCell, sync::Arc, time::Instant};
 use tokio::sync::watch;
 
 /// The Certification component, processing the changes on the certification
@@ -59,7 +60,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact, Pool>
+impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationMessage, Pool>
     for CertifierGossipImpl
 {
     // The priority function requires just the height of the artifact to decide if
@@ -89,7 +90,7 @@ impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact,
 /// Return both Certifier and CertifierGossip components.
 pub fn setup(
     replica_config: ReplicaConfig,
-    membership: Arc<Membership>,
+    registry_client: Arc<dyn RegistryClient>,
     crypto: Arc<dyn CertificationCrypto>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
@@ -100,7 +101,7 @@ pub fn setup(
     (
         CertifierImpl::new(
             replica_config,
-            membership,
+            registry_client,
             crypto,
             state_manager,
             consensus_pool_cache.clone(),
@@ -275,7 +276,7 @@ impl CertifierImpl {
     /// Construct a new CertifierImpl.
     pub fn new(
         replica_config: ReplicaConfig,
-        membership: Arc<Membership>,
+        registry_client: Arc<dyn RegistryClient>,
         crypto: Arc<dyn CertificationCrypto>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
@@ -283,6 +284,12 @@ impl CertifierImpl {
         log: ReplicaLogger,
         max_certified_height_tx: watch::Sender<Height>,
     ) -> Self {
+        let membership = Arc::new(Membership::new(
+            consensus_pool_cache.clone(),
+            registry_client.clone(),
+            replica_config.subnet_id,
+        ));
+
         Self {
             replica_config,
             membership,
@@ -610,17 +617,18 @@ mod tests {
     use super::*;
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_interfaces::certification::CertificationPool;
-    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::{
+        certification::CertificationPool,
+        p2p::consensus::{MutablePool, UnvalidatedArtifact},
+    };
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::artifact::CertificationMessageId;
-    use ic_types::consensus::certification::CertificationMessageHash;
     use ic_types::{
-        artifact::Priority,
+        artifact::{CertificationMessageId, Priority},
         consensus::certification::{
-            Certification, CertificationContent, CertificationMessage, CertificationShare,
+            Certification, CertificationContent, CertificationMessage, CertificationMessageHash,
+            CertificationShare,
         },
         crypto::{
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -709,7 +717,7 @@ mod tests {
                 let Dependencies {
                     mut pool,
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager,
                     ..
@@ -727,7 +735,7 @@ mod tests {
 
                 let (certifier, certifier_gossip) = setup(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),
@@ -775,7 +783,7 @@ mod tests {
                 let Dependencies {
                     mut pool,
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager,
                     ..
@@ -793,7 +801,7 @@ mod tests {
                 );
                 let certifier = CertifierImpl::new(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),
@@ -909,7 +917,7 @@ mod tests {
             let Dependencies {
                 pool,
                 replica_config,
-                membership,
+                registry,
                 crypto,
                 state_manager,
                 ..
@@ -928,7 +936,7 @@ mod tests {
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),
@@ -987,7 +995,7 @@ mod tests {
             let Dependencies {
                 mut pool,
                 replica_config,
-                membership,
+                registry,
                 crypto,
                 state_manager,
                 ..
@@ -1007,7 +1015,7 @@ mod tests {
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),
@@ -1058,7 +1066,7 @@ mod tests {
             let Dependencies {
                 mut pool,
                 replica_config,
-                membership,
+                registry,
                 crypto,
                 state_manager,
                 ..
@@ -1078,7 +1086,7 @@ mod tests {
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager,
                     pool.get_cache(),
@@ -1131,7 +1139,7 @@ mod tests {
                 let Dependencies {
                     mut pool,
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager,
                     ..
@@ -1144,7 +1152,7 @@ mod tests {
 
                 let certifier = CertifierImpl::new(
                     replica_config.clone(),
-                    membership,
+                    registry,
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),
@@ -1200,7 +1208,7 @@ mod tests {
                 let Dependencies {
                     pool,
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager,
                     ..
@@ -1210,7 +1218,7 @@ mod tests {
 
                 let certifier = CertifierImpl::new(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager,
                     pool.get_cache(),
@@ -1252,7 +1260,7 @@ mod tests {
             let Dependencies {
                 pool,
                 replica_config,
-                membership,
+                registry,
                 crypto,
                 state_manager,
                 ..
@@ -1271,7 +1279,7 @@ mod tests {
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),
@@ -1351,7 +1359,7 @@ mod tests {
                 let Dependencies {
                     pool,
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager,
                     ..
@@ -1381,7 +1389,7 @@ mod tests {
 
                 let certifier = CertifierImpl::new(
                     replica_config,
-                    membership,
+                    registry,
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),

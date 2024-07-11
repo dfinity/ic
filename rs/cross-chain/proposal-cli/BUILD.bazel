@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:askama",
     "@crate_index//:candid",
     "@crate_index//:candid_parser",
@@ -12,10 +13,12 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:assert_matches",
 ]
 
@@ -40,6 +43,9 @@ rust_test(
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter.did",
         "//rs/ethereum/cketh/minter:cketh_minter.did",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator.did",
+        "//rs/rosetta-api/icp_ledger:ledger.did",
+        "//rs/rosetta-api/icp_ledger:ledger_archive.did",
+        "//rs/rosetta-api/icp_ledger/index:index.did",
         "//rs/rosetta-api/icrc1/archive:archive.did",
         "//rs/rosetta-api/icrc1/index-ng:index-ng.did",
         "//rs/rosetta-api/icrc1/ledger:ledger.did",

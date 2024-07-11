@@ -16,6 +16,7 @@ use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
+use ic_ledger_canister_blocks_synchronizer::rosetta_block::RosettaBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use rosetta_core::objects::ObjectMap;
@@ -177,23 +178,26 @@ impl RosettaRequestHandler {
                     .proposal_info(get_proposal_info_object.proposal_id)
                     .await?;
                 let proposal_info_response = ProposalInfoResponse::from(proposal_info);
-                Ok(CallResponse::new(ObjectMap::try_from(
-                    proposal_info_response,
-                )?))
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(proposal_info_response)?,
+                    true,
+                ))
             }
             "get_pending_proposals" => {
                 let pending_proposals = self.ledger.pending_proposals().await?;
                 let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
-                Ok(CallResponse::new(ObjectMap::try_from(
-                    pending_proposals_response,
-                )?))
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(pending_proposals_response)?,
+                    false,
+                ))
             }
             "list_known_neurons" => {
                 let known_neurons = self.ledger.list_known_neurons().await?;
                 let list_known_neurons_response = ListKnownNeuronsResponse { known_neurons };
-                Ok(CallResponse::new(ObjectMap::try_from(
-                    list_known_neurons_response,
-                )?))
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(list_known_neurons_response)?,
+                    false,
+                ))
             }
             _ => Err(ApiError::InvalidRequest(
                 false,
@@ -241,7 +245,7 @@ impl RosettaRequestHandler {
                 hash: Some(hash),
             }) => {
                 if self.is_a_rosetta_block_index(index).await {
-                    todo!("Fetching Rosetta Blocks by index and hash is not supported yet")
+                    self.get_rosetta_block_by_index_and_hash(index, &hash).await
                 } else {
                     self.get_verified_block_by_index_and_hash(index, &hash)
                         .await
@@ -252,7 +256,7 @@ impl RosettaRequestHandler {
                 hash: None,
             }) => {
                 if self.is_a_rosetta_block_index(index).await {
-                    todo!("Fetching Rosetta Blocks by index is not supported yet")
+                    self.get_rosetta_block_by_index(index).await
                 } else {
                     self.get_verified_block_by_index(index).await
                 }
@@ -289,18 +293,20 @@ impl RosettaRequestHandler {
         &self,
         block_index: BlockIndex,
     ) -> Result<BlockIdentifier, ApiError> {
+        // For the first block, we return the block itself as its parent
+        let parent_block_index = block_index.saturating_sub(1);
         let blocks = self.ledger.read_blocks().await;
-        if self.is_a_rosetta_block_index(block_index).await {
-            todo!("Rosetta Block index parent id not supported yet")
+        if self.is_a_rosetta_block_index(parent_block_index).await {
+            let parent_block = blocks.get_rosetta_block(parent_block_index)?;
+            Ok(BlockIdentifier {
+                index: parent_block_index,
+                hash: hex::encode(parent_block.hash()),
+            })
+        } else if blocks.is_verified_by_idx(&parent_block_index)? {
+            let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
+            convert::block_id(parent_block)
         } else {
-            // For the first block, we return the block itself as its parent
-            let parent_block_index = block_index.saturating_sub(1);
-            if blocks.is_verified_by_idx(&parent_block_index)? {
-                let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
-                convert::block_id(parent_block)
-            } else {
-                Err(ApiError::InvalidBlockId(true, Default::default()))
-            }
+            Err(ApiError::InvalidBlockId(true, Default::default()))
         }
     }
 
@@ -365,6 +371,31 @@ impl RosettaRequestHandler {
         self.hashed_block_to_rosetta_core_block(block).await
     }
 
+    async fn get_rosetta_block_by_index(
+        &self,
+        block_index: BlockIndex,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let rosetta_block = {
+            let blocks = self.ledger.read_blocks().await;
+            blocks.get_rosetta_block(block_index)
+        }?;
+        let parent_block_id = self.create_parent_block_id(block_index).await?;
+        let token_symbol = self.ledger.token_symbol();
+        rosetta_block_to_rosetta_core_block(rosetta_block, parent_block_id, token_symbol)
+    }
+
+    async fn get_rosetta_block_by_index_and_hash(
+        &self,
+        block_index: BlockIndex,
+        block_hash: &str,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let rosetta_block = self.get_rosetta_block_by_index(block_index).await?;
+        if rosetta_block.block_identifier.hash != block_hash {
+            return Err(ApiError::InvalidBlockId(false, Default::default()));
+        }
+        Ok(rosetta_block)
+    }
+
     /// Get a Block Transfer
     pub async fn block_transaction(
         &self,
@@ -376,6 +407,7 @@ impl RosettaRequestHandler {
             hash: Some(msg.block_identifier.hash),
         });
         let mut block = self.get_block(block_id).await?;
+        // TODO: for Rosetta blocks fetch the right transactions
         let transaction = match self.rosetta_blocks_mode().await {
             RosettaBlocksMode::Disabled => block.transactions.remove(0),
             RosettaBlocksMode::Enabled { .. } => {
@@ -822,6 +854,37 @@ fn hashed_block_to_rosetta_core_block(
         models::timestamp::from_system_time(block.timestamp.into())?
             .0
             .try_into()?,
+        transactions,
+    ))
+}
+
+fn rosetta_block_to_rosetta_core_block(
+    rosetta_block: RosettaBlock,
+    parent_id: BlockIdentifier,
+    token_symbol: &str,
+) -> Result<rosetta_core::objects::Block, ApiError> {
+    let block_id = rosetta_core::identifiers::BlockIdentifier {
+        index: rosetta_block.index,
+        hash: hex::encode(rosetta_block.hash()),
+    };
+    let timestamp = models::timestamp::from_system_time(rosetta_block.timestamp.into())?
+        .0
+        .try_into()?;
+    let mut transactions = vec![];
+    for (index, transaction) in rosetta_block.transactions {
+        let transaction = convert::to_rosetta_core_transaction(
+            index,
+            transaction,
+            rosetta_block.timestamp,
+            token_symbol,
+        )?;
+        transactions.push(transaction);
+    }
+
+    Ok(models::Block::new(
+        block_id,
+        parent_id,
+        timestamp,
         transactions,
     ))
 }

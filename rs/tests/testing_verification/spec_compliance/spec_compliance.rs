@@ -2,16 +2,15 @@ use canister_http::get_universal_vm_address;
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
-use ic_tests::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::driver::test_env_api::{
+use ic_system_test_driver::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
+use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
     IcNodeContainer, NnsCanisterWasmStrategy, NnsInstallationBuilder, SubnetSnapshot,
     TopologySnapshot,
 };
-use ic_tests::driver::universal_vm::UniversalVm;
-use ic_tests::retry_with_msg;
+use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_types::SubnetId;
 use slog::{info, Logger};
 use std::path::PathBuf;
@@ -37,8 +36,8 @@ const EXCLUDED: &[&str] = &[
 pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
     use hyper::Client;
     use hyper_rustls::HttpsConnectorBuilder;
-    use ic_tests::driver::test_env_api::{retry, secs};
-    use ic_tests::util::block_on;
+    use ic_system_test_driver::driver::test_env_api::secs;
+    use ic_system_test_driver::util::block_on;
     use std::env;
 
     let vm_resources = VmResources {
@@ -113,7 +112,7 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             .expect("failed to set up universal VM");
         canister_http::start_httpbin_on_uvm(&env);
         let log = env.logger();
-        retry_with_msg!(
+        ic_system_test_driver::retry_with_msg!(
             "check if httpbin is responding to requests",
             log.clone(),
             secs(300),
@@ -183,6 +182,11 @@ pub fn test_subnet(
         peer_subnet_type,
         vec![test_subnet.subnet_id],
     );
+    let httpbin_proto = if http_requests {
+        Some("https://".to_string())
+    } else {
+        None
+    };
     let httpbin = if http_requests {
         let webserver_ipv6 = get_universal_vm_address(&env);
         Some(format!("[{webserver_ipv6}]:20443"))
@@ -201,6 +205,7 @@ pub fn test_subnet(
         test_subnet,
         peer_subnet,
         use_bn,
+        httpbin_proto,
         httpbin,
         ic_ref_test_path,
         log,
@@ -242,6 +247,7 @@ fn subnet_config(subnet: &SubnetSnapshot) -> String {
 }
 
 pub fn run_ic_ref_test(
+    httpbin_proto: Option<String>,
     httpbin: Option<String>,
     ic_ref_test_path: String,
     ic_test_data_path: PathBuf,
@@ -265,6 +271,9 @@ pub fn run_ic_ref_test(
         .arg(peer_subnet_config)
         .arg("--allow-self-signed-certs")
         .arg("True");
+    if let Some(httpbin_proto) = httpbin_proto {
+        cmd.arg("--httpbin-proto").arg(&httpbin_proto);
+    }
     if let Some(httpbin) = httpbin {
         cmd.arg("--httpbin").arg(&httpbin);
     }
@@ -281,6 +290,7 @@ pub fn with_endpoint(
     test_subnet: SubnetSnapshot,
     peer_subnet: SubnetSnapshot,
     use_bn: bool,
+    httpbin_proto: Option<String>,
     httpbin: Option<String>,
     ic_ref_test_path: String,
     log: Logger,
@@ -307,6 +317,7 @@ pub fn with_endpoint(
     info!(log, "test-subnet-config: {}", test_subnet_config);
     info!(log, "peer-subnet-config: {}", peer_subnet_config);
     run_ic_ref_test(
+        httpbin_proto,
         httpbin,
         ic_ref_test_path,
         env.get_dependency_path("rs/tests/ic-hs/test-data"),

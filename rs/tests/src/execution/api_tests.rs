@@ -1,15 +1,15 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
-use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::driver::test_env_api::IcNodeSnapshot;
-use crate::util::*;
 use candid::Principal;
-use canister_test::PrincipalId;
 use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_base_types::PrincipalId;
 use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
+use ic_system_test_driver::util::*;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 

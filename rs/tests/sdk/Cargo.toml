@@ -11,10 +11,11 @@ anyhow = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+tests = { path = "../" }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-tests = { path = ".." }
 
 [[bin]]
 name = "dfx_check_old_wallet_version_test"

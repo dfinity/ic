@@ -587,6 +587,19 @@ impl<'a> PoolReader<'a> {
             registry_version,
         )
     }
+
+    /// Returns the height of the next CUP.
+    pub fn get_next_cup_height(&self) -> Height {
+        self.get_highest_catch_up_package()
+            .content
+            .block
+            .as_ref()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .get_next_start_height()
+    }
 }
 
 /// Take a slice returned by [`PoolReader::get_payloads_from_height`]

@@ -1,12 +1,12 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::lib::{make_user_ed25519, NeuronDetails};
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use ic_ledger_core::Tokens;
 use ic_nns_governance::pb::v1::KnownNeuronData;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::models::CallResponse;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use std::collections::HashMap;
 
 const PORT: u32 = 8107;

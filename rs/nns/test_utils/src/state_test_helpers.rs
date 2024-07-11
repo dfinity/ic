@@ -43,14 +43,14 @@ use ic_nns_governance::pb::v1::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, JoinCommunityFund,
-        LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
+        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     proposal::{self, Action},
     Empty, ExecuteNnsFunction, Governance, GovernanceError, ListNeurons, ListNeuronsResponse,
     ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
+    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
     RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
@@ -272,6 +272,8 @@ pub fn query_with_sender(
     query_impl(machine, canister, method_name, payload, Some(sender))
 }
 
+/// Once you have a Scrape, pass it to a function like get_gauge, get_counter,
+/// et. al., which are provided by nervous_system/common/test_utils.
 pub fn scrape_metrics(
     state_machine: &StateMachine,
     canister_id: CanisterId,
@@ -297,29 +299,6 @@ pub fn scrape_metrics(
         .into_iter();
 
     prometheus_parse::Scrape::parse(body).unwrap()
-}
-
-pub fn get_counter(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Counter(value) => value,
-        value => panic!("Metric found, but not a counter: {:?}", value),
-    }
-}
-
-pub fn get_gauge(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Gauge(value) => value,
-        value => panic!("Metric found, but not a gauge: {:?}", value),
-    }
-}
-
-pub fn get_sample(scrape: &prometheus_parse::Scrape, name: &str) -> prometheus_parse::Sample {
-    for sample in &scrape.samples {
-        if sample.metric == name {
-            return sample.clone();
-        }
-    }
-    panic!("Metric not found: {}", name);
 }
 
 pub fn make_http_request(
@@ -1003,6 +982,24 @@ pub fn nns_claim_or_refresh_neuron(
     *neuron_id
 }
 
+pub fn nns_disburse_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    amount_e8s: u64,
+    to_account: Option<AccountIdentifier>,
+) -> ManageNeuronResponse {
+    manage_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        manage_neuron::Command::Disburse(Disburse {
+            amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
+            to_account: to_account.map(|account| account.into()),
+        }),
+    )
+}
+
 pub fn nns_increase_dissolve_delay(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1378,7 +1375,7 @@ pub fn nns_get_monthly_node_provider_rewards(
 /// Return the most recent monthly Node Provider rewards
 pub fn nns_get_most_recent_monthly_node_provider_rewards(
     state_machine: &StateMachine,
-) -> Option<MostRecentMonthlyNodeProviderRewards> {
+) -> Option<MonthlyNodeProviderRewards> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
@@ -1397,7 +1394,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
         }
     };
 
-    Decode!(&result, Option<MostRecentMonthlyNodeProviderRewards>).unwrap()
+    Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap()
 }
 
 pub fn nns_get_network_economics_parameters(state_machine: &StateMachine) -> NetworkEconomics {
@@ -1436,17 +1433,17 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
 }
 
-pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNeuronsResponse {
+pub fn list_neurons(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: ListNeurons,
+) -> ListNeuronsResponse {
     let result = state_machine
         .execute_ingress_as(
             sender,
             GOVERNANCE_CANISTER_ID,
             "list_neurons",
-            Encode!(&ListNeurons {
-                neuron_ids: vec![],
-                include_neurons_readable_by_caller: true,
-            })
-            .unwrap(),
+            Encode!(&request).unwrap(),
         )
         .unwrap();
 
@@ -1456,6 +1453,21 @@ pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNe
     };
 
     Decode!(&result, ListNeuronsResponse).unwrap()
+}
+
+pub fn list_neurons_by_principal(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+) -> ListNeuronsResponse {
+    list_neurons(
+        state_machine,
+        sender,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: None,
+        },
+    )
 }
 
 /// Returns when the proposal has been executed. A proposal is considered to be

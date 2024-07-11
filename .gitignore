@@ -118,6 +118,7 @@ scalability/results/
 
 # Bazel outdir dirs
 /bazel-*
+bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
 bazel-timestamp.txt

@@ -1224,7 +1224,11 @@ fn load_canister_snapshot_succeeds() {
     let last_canister_change: &CanisterChange = history_after.last().unwrap();
     assert_eq!(
         *last_canister_change.details(),
-        CanisterChangeDetails::load_snapshot(canister_version_after, snapshot_taken_at_timestamp)
+        CanisterChangeDetails::load_snapshot(
+            canister_version_after,
+            snapshot_id.to_vec(),
+            snapshot_taken_at_timestamp
+        )
     );
     let unflushed_changes = test.state_mut().canister_snapshots.take_unflushed_changes();
     assert_eq!(unflushed_changes.len(), 2);

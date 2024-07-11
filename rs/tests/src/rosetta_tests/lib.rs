@@ -1,10 +1,10 @@
 use super::governance_client::GovernanceClient;
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::convert::neuron_account_from_public_key;
 use crate::rosetta_tests::lib::convert::neuron_subaccount_bytes_from_public_key;
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use candid::Principal;
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
@@ -37,6 +37,7 @@ use ic_rosetta_api::request_types::{
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, DEFAULT_TOKEN_SYMBOL};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_types::{time, PrincipalId};
 use icp_ledger::{AccountIdentifier, Operation};
 use rand::rngs::StdRng;
@@ -56,7 +57,7 @@ pub(crate) fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, 
 }
 
 pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
-    let kp = EdKeypair::generate_from_u64(seed);
+    let kp = EdKeypair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
@@ -66,7 +67,7 @@ pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey,
 pub fn make_user_ecdsa_secp256k1(
     seed: u64,
 ) -> (AccountIdentifier, Secp256k1KeyPair, PublicKey, PrincipalId) {
-    let kp = Secp256k1KeyPair::generate_from_u64(seed);
+    let kp = Secp256k1KeyPair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);

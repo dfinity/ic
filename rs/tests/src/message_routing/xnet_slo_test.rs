@@ -11,8 +11,9 @@ Runbook::
 4. Stop sending messages for all canisters (via update `stop` call).
 5. Collect metrics from all canisters (via query `metrics` call).
 6. Aggregate metrics for each subnet (over its canisters).
-7. Assert error_ratio < 5%, no seq_errors, send_rate >= 0.3, responses_received > threshold (calculated dynamically).
-8. Stop/delete all canisters and assert operations' success.
+7. Stop/delete all canisters and assert operations' success.
+8. Assert error_ratio < 5%, no seq_errors, send_rate >= 0.3, responses_received > threshold (calculated dynamically).
+
 
 Success::
 1. Xnet canisters are successfully installed and started on each subnet.
@@ -24,17 +25,17 @@ If the NNS canisters are not deployed, the subnets will stop making progress aft
 end::catalog[] */
 
 use super::common::{install_canisters, parallel_async, start_all_canisters};
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
-};
-use crate::util::{block_on, runtime_from_url};
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
@@ -67,6 +68,26 @@ pub struct Config {
 
 impl Config {
     pub fn new(subnets: usize, nodes_per_subnet: usize, runtime: Duration, rate: usize) -> Config {
+        Self::new_with_custom_thresholds(
+            subnets,
+            nodes_per_subnet,
+            runtime,
+            rate,
+            SEND_RATE_THRESHOLD,
+            ERROR_PERCENTAGE_THRESHOLD,
+            TARGETED_LATENCY_SECONDS,
+        )
+    }
+
+    pub fn new_with_custom_thresholds(
+        subnets: usize,
+        nodes_per_subnet: usize,
+        runtime: Duration,
+        rate: usize,
+        send_rate_threshold: f64,
+        error_percentage_threshold: f64,
+        targeted_latency_seconds: u64,
+    ) -> Config {
         // Subnet-to-subnet request rate: ceil(rate / subnet_connections).
         let subnet_to_subnet_rate = (rate - 1) / (subnets - 1) + 1;
         // Minimum number of subnet-to-subnet queues needed to stay under
@@ -84,9 +105,9 @@ impl Config {
             nodes_per_subnet,
             runtime,
             payload_size_bytes: PAYLOAD_SIZE_BYTES,
-            send_rate_threshold: SEND_RATE_THRESHOLD,
-            error_percentage_threshold: ERROR_PERCENTAGE_THRESHOLD,
-            targeted_latency_seconds: TARGETED_LATENCY_SECONDS,
+            send_rate_threshold,
+            error_percentage_threshold,
+            targeted_latency_seconds,
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
@@ -141,40 +162,36 @@ pub async fn test_async(env: TestEnv, config: Config) {
 
     test_async_impl(
         env,
-        topology.subnets().map(|s| s.nodes().next().unwrap()),
+        topology
+            .subnets()
+            .map(|s| s.nodes().next().unwrap())
+            .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id())),
         config,
         &logger,
     )
     .await;
 }
 
-/// Takes as input a testing environment, a list of nodes s.t. each node is on
-/// one of the subnets to deploy XNet test canisters to, and a configuration,
-/// and runs an instance of the XNet SLO test. It assumes the IC instance under
-/// test is already set up and ignores all `config` parameters related to the
-/// IC topology (e.g., `nodes_per_subnet`).
+/// Deploys the XNet test canister to each subnet and calls the `start` function on
+/// the canister with the given `config` parameters.Takes as input a testing environment,
+/// a list of endpoint runtimes s.t. each runtime corresponds to a node on one of the
+/// subnets to deploy XNet test canisters to, a configuration, and a logger. Returns
+/// vector of vectors with handles to the deployed canisters per subnet.
 ///
 ///
 /// # Panics
-/// - If the nodes provided in `nodes` are incompatible with `config`.
-/// - On test failure.
-pub(crate) async fn test_async_impl(
+/// - If the endpoints provided in `endpoint_runtimes` are incompatible with `config`.
+/// - On failure of one of the operations.
+pub(crate) async fn deploy_and_start<'a, 'b>(
     env: TestEnv,
-    nodes: impl Iterator<Item = IcNodeSnapshot>,
-    config: Config,
-    logger: &slog::Logger,
-) {
-    // Installing canisters on a subnet requires an Agent (or a Runtime wrapper around Agent).
-    // We need only one agent (runtime) per subnet for canister installation.
-    let endpoints_runtime: Vec<Runtime> = nodes
-        .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()))
-        .collect();
-    assert_eq!(endpoints_runtime.len(), config.subnets);
-    // Step 1: Install Xnet canisters on each subnet.
+    endpoints_runtimes: &'a [Runtime],
+    config: &'b Config,
+    logger: &'b slog::Logger,
+) -> Vec<Vec<Canister<'a>>> {
     info!(logger, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(
         env.clone(),
-        &endpoints_runtime,
+        endpoints_runtimes,
         config.subnets,
         config.canisters_per_subnet,
     )
@@ -188,8 +205,7 @@ pub(crate) async fn test_async_impl(
         logger,
         "All {} canisters installed successfully.", canisters_count
     );
-    // Step 2: Start all canisters (via update `start` call).
-    info!(logger, "Calling start() on all canisters...");
+
     start_all_canisters(
         &canisters,
         config.payload_size_bytes,
@@ -205,22 +221,26 @@ pub(crate) async fn test_async_impl(
         config.payload_size_bytes,
         msgs_per_round * config.payload_size_bytes as usize
     );
-    // Step 3: Wait for canisters to exchange messages.
-    info!(
-        logger,
-        "Sending messages for {} secs...",
-        config.runtime.as_secs()
-    );
 
-    tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
+    canisters
+}
 
-    // Step 4: Stop all canisters (via update `stop` call).
-    info!(logger, "Stopping all canisters...");
-    stop_all_canister(&canisters).await;
-    // Step 5: Collect metrics from all canisters (via query `metrics` call).
+/// Attempts to stop and delete the canisters. Takes as input a list of canisters
+/// and a logger. It calls the `stop` endpoint on all canisters and obtains the
+/// metrics from the `metrics` endpoint of all canisters.
+///
+///
+/// # Panics
+/// - On failure of one of the operations.
+pub(crate) async fn tear_down(
+    canisters: &[Vec<Canister<'_>>],
+    logger: &slog::Logger,
+) -> Vec<Metrics> {
+    stop_all_canister(canisters).await;
+    // Collect metrics from all canisters (via query `metrics` call).
     info!(logger, "Collecting metrics from all canisters...");
-    let metrics = collect_metrics(&canisters).await;
-    // Step 6: Aggregate metrics for each subnet (over its canisters).
+    let metrics = collect_metrics(canisters).await;
+    // Aggregate metrics for each subnet (over its canisters).
     info!(logger, "Aggregating metrics for each subnet...");
     let mut aggregated_metrics = Vec::<Metrics>::new();
     for (subnet_idx, subnet_metrics) in metrics.iter().enumerate() {
@@ -243,7 +263,48 @@ pub(crate) async fn test_async_impl(
             aggregated_metrics.last()
         );
     }
-    // Step 7. Assert metric are within limits.
+
+    info!(logger, "Stop/delete all canisters...");
+    // Stop all canisters.
+    let _: Vec<_> = parallel_async(
+        canisters.iter().flatten(),
+        |canister| {
+            info!(logger, "Stopping canister {} ...", canister.canister_id());
+            canister.stop()
+        },
+        |_, res| {
+            res.expect("Stopping canister failed.");
+        },
+    )
+    .await;
+
+    // Delete all canisters.
+    let _: Vec<_> = parallel_async(
+        canisters.iter().flatten(),
+        |canister| {
+            info!(logger, "Deleting canister {} ...", canister.canister_id());
+            canister.delete()
+        },
+        |_, res| {
+            res.expect("Deleting canister failed.");
+        },
+    )
+    .await;
+
+    aggregated_metrics
+}
+
+/// Checks whether the metrics (by themselves and/or relative to `config`)
+/// indicate a successful run: error ratio and latency below threshold, send
+/// rate and received responses aoove threshold, no sequence errors. Logs the
+/// outcome of each check.
+///
+/// Returns `true` on success, `false` otherwise.
+pub(crate) fn check_success(
+    aggregated_metrics: Vec<Metrics>,
+    config: &Config,
+    logger: &slog::Logger,
+) -> bool {
     info!(logger, "Asserting metrics are within limits...");
     let mut success = true;
     let mut expect =
@@ -346,34 +407,55 @@ pub(crate) async fn test_async_impl(
             );
         }
     }
-    info!(logger, "Stop/delete all canisters...");
-    // Step 8: Stop all canisters.
-    let _: Vec<_> = parallel_async(
-        canisters.iter().flatten(),
-        |canister| {
-            info!(logger, "Stopping canister {} ...", canister.canister_id());
-            canister.stop()
-        },
-        |_, res| {
-            res.expect("Stopping canister failed.");
-        },
-    )
-    .await;
 
-    // Step 9: Delete all canisters.
-    let _: Vec<_> = parallel_async(
-        canisters.iter().flatten(),
-        |canister| {
-            info!(logger, "Deleting canister {} ...", canister.canister_id());
-            canister.delete()
-        },
-        |_, res| {
-            res.expect("Deleting canister failed.");
-        },
-    )
-    .await;
+    success
+}
 
-    assert!(success, "Test failed.");
+/// Takes as input a testing environment, a list of nodes s.t. each node is on
+/// one of the subnets to deploy XNet test canisters to, and a configuration,
+/// and runs an instance of the XNet SLO test. It assumes the IC instance under
+/// test is already set up and ignores all `config` parameters related to the
+/// IC topology (e.g., `nodes_per_subnet`).
+///
+///
+/// # Panics
+/// - If the nodes provided in `nodes` are incompatible with `config`.
+/// - On test failure.
+pub(crate) async fn test_async_impl(
+    env: TestEnv,
+    endpoints_runtimes: impl Iterator<Item = Runtime>,
+    config: Config,
+    logger: &slog::Logger,
+) {
+    // Installing canisters on a subnet requires an Agent (or a Runtime wrapper around Agent).
+    // We need only one agent (runtime) per subnet for canister installation.
+    let endpoints_runtimes = endpoints_runtimes.collect::<Vec<_>>();
+    assert_eq!(endpoints_runtimes.len(), config.subnets);
+
+    // Step 1: Install Xnet canisters on each subnet.
+    // Step 2: Start all canisters (via update `start` call).
+    let canisters = deploy_and_start(env, &endpoints_runtimes, &config, logger).await;
+
+    // Step 3: Wait for canisters to exchange messages.
+    info!(
+        logger,
+        "Sending messages for {} secs...",
+        config.runtime.as_secs()
+    );
+    tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
+
+    // Step 4: Stop all canisters (via update `stop` call).
+    // Step 5: Collect metrics from all canisters (via query `metrics` call).
+    // Step 6: Aggregate metrics for each subnet (over its canisters).
+    // Step 7: Stop/delete all canisters and assert operations' success.
+    info!(logger, "Stopping all canisters...");
+    let aggregated_metrics = tear_down(&canisters, logger).await;
+
+    // Step 8. Assert metric are within limits.
+    assert!(
+        check_success(aggregated_metrics, &config, logger),
+        "Test failed."
+    );
 }
 
 pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {

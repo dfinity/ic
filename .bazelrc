@@ -83,6 +83,7 @@ test --test_env=RUST_BACKTRACE=full
 test:precommit --build_tests_only --test_tag_filters="smoke"
 
 build:systest --build_tag_filters= --s3_endpoint=https://s3-upload.idx.dfinity.network
+run:systest --remote_upload_local_results=true
 test:systest --remote_upload_local_results=true --test_output=streamed --test_tag_filters=
 
 build:testnet --build_tag_filters= --s3_endpoint=https://s3-upload.idx.dfinity.network --ic_version_rc_only=
@@ -133,13 +134,13 @@ build:fuzzing --build_tag_filters=fuzz_test
 build:fuzzing --//bazel:enable_fuzzing_code=True
 
 # AFL configuration
-build:afl --action_env="AR=llvm-ar-17"
-build:afl --action_env="AS=llvm-as-17"
+build:afl --action_env="AR=llvm-ar-18"
+build:afl --action_env="AS=llvm-as-18"
 build:afl --action_env="CC=afl-clang-lto"
 build:afl --action_env="CXX=afl-clang-lto++"
 build:afl --action_env="LD=afl-clang-lto++"
-build:afl --action_env="LLVM_CONFIG=llvm-config-17"
-build:afl --action_env="RANLIB=llvm-ranlib-17"
+build:afl --action_env="LLVM_CONFIG=llvm-config-18"
+build:afl --action_env="RANLIB=llvm-ranlib-18"
 build:afl --config=fuzzing
 build:afl --build_tag_filters=afl
 build:afl --run_under="/ic/bin/afl_wrapper.sh"

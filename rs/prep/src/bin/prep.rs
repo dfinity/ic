@@ -208,7 +208,6 @@ fn main() -> Result<()> {
             /*max_instructions_per_round=*/ None,
             /*max_instructions_per_install_code=*/ None,
             /*features=*/ None,
-            /*ecdsa_config=*/ None,
             /*chain_key_config=*/ None,
             /*max_number_of_canisters=*/ None,
             valid_args.ssh_readonly_access.clone(),

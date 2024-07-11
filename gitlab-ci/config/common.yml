@@ -22,7 +22,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:f9d8505c07589b765e3897eafb7b48902ee7e2bb088fc8ac329544081bede1bf"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:f3527253faea5555085c508e10e98ed276988b1b3cd6e63c249e03318cecb596"
   tags:
     - dfinity-ic
 

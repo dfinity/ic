@@ -54,9 +54,9 @@ COPY --chmod=644 etc/hosts /etc/hosts
 COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
 
-# TODO: [NODE-1348] We overwrite all /etc files with 644 except for the specified.
-# This may unintentionally drop the execute bit on some files.
 # Update POSIX permissions in /etc/
+# TODO: We overwrite all /etc files with 644 except for the specified.
+# See [NODE-1348] for context.
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
     chmod 0755 /etc/systemd/system-generators/* && \
@@ -101,8 +101,6 @@ RUN systemctl disable \
     apt-daily.timer \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
-    logrotate.service \
-    logrotate.timer \
     motd-news.service \
     motd-news.timer
 

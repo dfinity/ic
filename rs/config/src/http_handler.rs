@@ -39,11 +39,6 @@ pub struct Config {
     /// will be rejected. For valid IC delegation certificates this is never the case since the size is always constant.
     pub max_delegation_certificate_size_bytes: u64,
 
-    /// If the request body is not received/parsed within
-    /// `max_request_receive_seconds`, then the request will be rejected and
-    /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
-    pub max_request_receive_seconds: u64,
-
     /// Serving at most `max_read_state_concurrent_requests` requests concurrently for endpoint `/api/v2/read_state`.
     pub max_read_state_concurrent_requests: usize,
 
@@ -85,7 +80,6 @@ impl Default for Config {
             http_max_concurrent_streams: 256,
             max_request_size_bytes: 5 * 1024 * 1024, // 5MB
             max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
-            max_request_receive_seconds: 300,        // 5 min
             max_read_state_concurrent_requests: 100,
             max_catch_up_package_concurrent_requests: 100,
             max_dashboard_concurrent_requests: 100,

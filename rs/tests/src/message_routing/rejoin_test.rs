@@ -16,14 +16,14 @@ Success::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
 };
-use crate::util::{block_on, MetricsFetcher, UniversalCanister};
-use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::{block_on, MetricsFetcher, UniversalCanister};
 use ic_types::Height;
 use slog::info;
 use std::collections::BTreeMap;

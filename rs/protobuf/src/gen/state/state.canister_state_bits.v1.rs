@@ -461,6 +461,8 @@ pub struct CanisterLoadSnapshot {
     pub canister_version: u64,
     #[prost(uint64, tag = "2")]
     pub taken_at_timestamp: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -161,7 +161,7 @@ fn proposer_neuron_cannot_vote_explicitly() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::PreconditionFailed);
+    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 
@@ -196,7 +196,7 @@ fn neuron_cannot_vote_twice() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response_2, Command::Error(ref err) if err.error_type() == ErrorType::PreconditionFailed);
+    assert_matches!(response_2, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
     assert_matches!(response_2, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 

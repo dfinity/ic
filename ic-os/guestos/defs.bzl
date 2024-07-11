@@ -22,6 +22,7 @@ def image_deps(mode, malicious = False):
 
     deps = {
         "base_dockerfile": "//ic-os/guestos/context:Dockerfile.base",
+        "dockerfile": "//ic-os/guestos/context:Dockerfile",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
@@ -70,28 +71,35 @@ def image_deps(mode, malicious = False):
         "boot_args_template": Label("//ic-os/guestos/context:extra_boot_args.template"),
     }
 
-    # Add extra files depending on image variant
-    extra_deps = {
+    dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
+    prod_build_args = ["BUILD_TYPE=prod"]
+    dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
+    prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
+
+    image_variants = {
         "dev": {
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-dev": {
-            # Use the non-local-base file
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "dev-malicious": {
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-malicious:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-prod": {
-            # Use the non-local-base file
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
         "prod": {
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
     }
 
-    deps.update(extra_deps[mode])
+    deps.update(image_variants[mode])
 
     # Add extra files depending on image variant
     extra_rootfs_deps = {

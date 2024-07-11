@@ -19,17 +19,21 @@ Success::
 end::catalog[] */
 
 use super::rejoin_test::fetch_metrics;
-use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources};
-use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use crate::driver::prometheus_vm::PrometheusVm;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
+};
+use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+};
 use std::collections::BTreeMap;
 
 use crate::message_routing::rejoin_test::rejoin_test;
 use crate::message_routing::rejoin_test_large_state::rejoin_test_large_state;
-use crate::util::block_on;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::block_on;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;

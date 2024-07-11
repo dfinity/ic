@@ -136,7 +136,6 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
-                None,
                 chain_key_config,
                 None,
                 vec![],
@@ -274,10 +273,6 @@ struct CliArgs {
                 possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
                 ignore_case = true)]
     log_level: Option<String>,
-
-    /// Debug overrides to show debug logs for certain components.
-    #[clap(long = "debug-overrides", multiple_values(true))]
-    debug_overrides: Vec<String>,
 
     /// Metrics port. Default is None, i.e. periodically dump metrics on stdout.
     #[clap(long = "metrics-port")]
@@ -471,12 +466,12 @@ impl CliArgs {
             Some(log_level) => match log_level.to_lowercase().as_str() {
                 // According to the principle of least surprise, accept also a
                 // few alternative log level names
-                "critical" => slog::Level::Critical,
-                "error" => slog::Level::Error,
-                "warning" => slog::Level::Warning,
-                "info" => slog::Level::Info,
-                "debug" => slog::Level::Debug,
-                "trace" => slog::Level::Trace,
+                "critical" => ic_config::logger::Level::Critical,
+                "error" => ic_config::logger::Level::Error,
+                "warning" => ic_config::logger::Level::Warning,
+                "info" => ic_config::logger::Level::Info,
+                "debug" => ic_config::logger::Level::Debug,
+                "trace" => ic_config::logger::Level::Trace,
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -484,7 +479,7 @@ impl CliArgs {
                     ))
                 }
             },
-            None => slog::Level::Warning,
+            None => ic_config::logger::Level::Warning,
         };
 
         let artifact_pool_dir = node_dir.join("ic_consensus_pool");
@@ -549,7 +544,6 @@ impl CliArgs {
             replica_path,
             replica_version,
             log_level,
-            debug_overrides: self.debug_overrides.clone(),
             cargo_bin,
             cargo_opts,
             state_dir,
@@ -590,8 +584,7 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
 struct ValidatedConfig {
     replica_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
-    log_level: slog::Level,
-    debug_overrides: Vec<String>,
+    log_level: ic_config::logger::Level,
     cargo_bin: String,
     cargo_opts: String,
     state_dir: PathBuf,
@@ -644,9 +637,7 @@ impl ValidatedConfig {
             local_store: self.registry_local_store_path.clone(),
         });
         let logger_config = LoggerConfig {
-            node_id: NODE_INDEX,
             level: self.log_level,
-            debug_overrides: self.debug_overrides.clone(),
             ..LoggerConfig::default()
         };
         let logger = Some(logger_config);

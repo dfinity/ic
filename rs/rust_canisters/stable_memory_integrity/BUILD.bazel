@@ -12,6 +12,7 @@ rust_library(
     proc_macro_deps = [],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
@@ -24,6 +25,7 @@ rust_canister(
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":stable_memory_integrity.did",
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/stable_memory_integrity",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
@@ -43,6 +45,7 @@ rust_ic_test(
     },
     proc_macro_deps = [],
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/stable_memory_integrity",
         "//rs/state_machine_tests",

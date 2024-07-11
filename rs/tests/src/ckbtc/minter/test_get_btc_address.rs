@@ -1,16 +1,16 @@
-use crate::{
-    ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-        install_ledger, install_minter, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
-    },
+use crate::ckbtc::lib::{
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
+};
+use candid::{Decode, Encode, Principal};
+use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
+use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     util::{assert_create_agent, block_on, delay, runtime_from_url},
 };
-use candid::{Decode, Encode, Principal};
-use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use slog::info;
 
 pub fn test_get_btc_address(env: TestEnv) {

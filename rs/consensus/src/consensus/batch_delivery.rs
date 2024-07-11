@@ -24,14 +24,16 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
-use ic_types::{batch::BatchSummary, crypto::threshold_sig::ThresholdSigPublicKey};
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse},
+    batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
         idkg::{self, CompletedSignature},
         Block,
     },
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    crypto::threshold_sig::{
+        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        ThresholdSigPublicKey,
+    },
     messages::{CallbackId, Payload, RejectContext},
     Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
 };
@@ -443,7 +445,7 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
     consensus_responses
 }
 
-/// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
+/// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
     ecdsa_payload: &idkg::EcdsaPayload,

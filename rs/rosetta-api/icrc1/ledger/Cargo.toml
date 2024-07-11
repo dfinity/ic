@@ -12,6 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+assert_matches = { workspace = true, optional = true }
+canbench-rs = { version = "0.1.4", optional = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
@@ -47,3 +49,4 @@ proptest = "1.0"
 default = []
 get-blocks-disabled = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+canbench-rs = ["dep:canbench-rs", "dep:assert_matches"]

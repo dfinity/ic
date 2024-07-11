@@ -1,7 +1,7 @@
 //! The artifact pool public interface that defines the Consensus-P2P API.
 //! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
 use ic_types::{
-    artifact::{Advert, ArtifactKind, PriorityFn},
+    artifact::{IdentifiableArtifact, PriorityFn},
     NodeId, Time,
 };
 
@@ -32,36 +32,35 @@ pub trait ChangeSetProducer<Pool>: Send {
 /// of artifacts that were validated during the pool mutation. As some changes (i.e.
 /// to the unvalidated section) might not generate adverts or purged IDs, `changed`
 /// indicates if the mutation changed the pool's state at all.
-pub struct ChangeResult<Artifact: ArtifactKind> {
-    pub purged: Vec<Artifact::Id>,
-    pub artifacts_with_opt: Vec<ArtifactWithOpt<Artifact>>,
+pub struct ChangeResult<T: IdentifiableArtifact> {
+    pub purged: Vec<T::Id>,
+    pub artifacts_with_opt: Vec<ArtifactWithOpt<T>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
     /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
     pub poll_immediately: bool,
 }
-
-pub struct ArtifactWithOpt<Artifact: ArtifactKind> {
-    pub advert: Advert<Artifact>,
+pub struct ArtifactWithOpt<T> {
+    pub artifact: T,
     pub is_latency_sensitive: bool,
 }
 
 /// Defines the canonical way for mutating an artifact pool.
 /// Mutations should happen from a single place/component.
-pub trait MutablePool<Artifact: ArtifactKind> {
+pub trait MutablePool<T: IdentifiableArtifact> {
     type ChangeSet;
 
     /// Inserts a message into the unvalidated part of the pool.
-    fn insert(&mut self, msg: UnvalidatedArtifact<Artifact::Message>);
+    fn insert(&mut self, msg: UnvalidatedArtifact<T>);
 
     /// Removes a message from the unvalidated part of the pool.
-    fn remove(&mut self, id: &Artifact::Id);
+    fn remove(&mut self, id: &T::Id);
 
     /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<Artifact>;
+    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<T>;
 }
 
-pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync {
+pub trait PriorityFnAndFilterProducer<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
     fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
 }
@@ -69,19 +68,19 @@ pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
 /// with the validated portion of an artifact pool without resulting in any mutations.
 /// Every pool needs to implement this trait.
-pub trait ValidatedPoolReader<T: ArtifactKind> {
+pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// Get a validated artifact by its identifier
     ///
     /// #Returns:
     /// - 'Some`: Artifact from the validated pool.
     /// - `None`: Artifact does not exist in the validated pool.
-    fn get(&self, id: &T::Id) -> Option<T::Message>;
+    fn get(&self, id: &T::Id) -> Option<T>;
 
     /// Get all validated artifacts.
     ///
     /// #Returns:
     /// A iterator over all the validated artifacts.
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = T::Message> + '_>;
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = T> + '_>;
 }
 
 /// Unvalidated artifact

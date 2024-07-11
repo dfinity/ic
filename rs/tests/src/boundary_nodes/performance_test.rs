@@ -2,28 +2,6 @@ use std::net::{Ipv6Addr, SocketAddrV6};
 use std::time::{Duration, Instant};
 
 use crate::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
-use crate::canister_agent::CanisterAgent;
-use crate::driver::farm::HostFeature;
-use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
-use crate::generic_workload_engine::engine::Engine;
-use crate::generic_workload_engine::metrics::LoadTestMetrics;
-use crate::generic_workload_engine::metrics::RequestOutcome;
-use crate::util::{block_on, create_agent_mapping};
-use crate::{
-    canister_api::{CallMode, GenericRequest},
-    driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
-        ic::{InternetComputer, Subnet},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
-        test_env::TestEnv,
-        test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-        },
-    },
-    retry_with_msg_async,
-    util::spawn_round_robin_workload_engine,
-};
 use anyhow::anyhow;
 use anyhow::Context;
 use candid::Principal;
@@ -32,6 +10,27 @@ use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::canister_agent::CanisterAgent;
+use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
+use ic_system_test_driver::generic_workload_engine::engine::Engine;
+use ic_system_test_driver::generic_workload_engine::metrics::LoadTestMetrics;
+use ic_system_test_driver::generic_workload_engine::metrics::RequestOutcome;
+use ic_system_test_driver::util::{block_on, create_agent_mapping};
+use ic_system_test_driver::{
+    canister_api::{CallMode, GenericRequest},
+    driver::{
+        boundary_node::{BoundaryNode, BoundaryNodeVm},
+        ic::{InternetComputer, Subnet},
+        prometheus_vm::{HasPrometheus, PrometheusVm},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        },
+    },
+    util::spawn_round_robin_workload_engine,
+};
 use prost::Message;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -105,7 +104,7 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     }
     info!(&logger, "Polling registry");
     let registry = RegistryCanister::new(bn.nns_node_urls);
-    let (latest, routes) = block_on(retry_with_msg_async!(
+    let (latest, routes) = block_on(ic_system_test_driver::retry_with_msg_async!(
         "polling registry",
         &logger,
         READY_WAIT_TIMEOUT,

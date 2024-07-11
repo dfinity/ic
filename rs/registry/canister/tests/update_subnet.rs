@@ -5,7 +5,6 @@ use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -25,6 +24,7 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::ReplicaVersion;
+use prost::Message;
 use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_update_subnet::UpdateSubnetPayload,
@@ -72,15 +72,6 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
@@ -98,6 +89,16 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         // The anonymous end-user tries to update a subnet's configuration, bypassing
@@ -186,7 +187,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&initial_subnet_record),
+                        initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -204,15 +205,6 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: true,
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
@@ -230,6 +222,16 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         // The attacker canister tries to update the subnet's configuration, pretending
@@ -276,7 +278,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&SubnetRecord {
+                        SubnetRecord {
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
@@ -299,7 +301,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             ssh_backup_access: vec![],
                             ecdsa_config: None,
                             chain_key_config: None,
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -326,15 +329,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             initial_notary_delay_millis: None,
             dkg_interval_length: Some(2),
             dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: Some(SubnetType::Application),
             is_halted: Some(true),
@@ -352,6 +346,16 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         // Attempt to update the subnet's configuration. Since the update happens from
@@ -408,18 +412,20 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
 #[test]
 fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
     const ENABLE_BEFORE_ADDING_REJECT_MSG: &str = "Canister rejected with \
-    message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
-    called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
-    signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' on Subnet \
-    'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
-    subnet does not hold the given key. A proposal to add that key to the subnet \
-    must first be separately submitted.'";
+        message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
+        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
+        signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' on Subnet \
+        'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
+        subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted.'";
 
-    const NO_CHAIN_KEY_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
-    IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-    `ic0.trap` with message: Panicked at '[Registry]  invariant check failed with \
-    message: The subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae \
-    does not have a ChainKeyConfig'";
+    const NO_CHAIN_KEY_CONFIG_REJECT_MSG: &str = "Canister rejected with \
+        message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
+        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
+        signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' \
+        on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
+        but the subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted.'";
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
@@ -464,7 +470,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&subnet_record),
+                        subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -540,7 +546,12 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
 
         let err_text = assert_matches!(response, Err(err_text) => err_text);
 
-        assert!(err_text.contains(NO_CHAIN_KEY_CONFIG_REJECT_MSG));
+        assert!(
+            err_text.contains(NO_CHAIN_KEY_CONFIG_REJECT_MSG),
+            "Error `{}` does not contain expected substring\n{}",
+            err_text,
+            NO_CHAIN_KEY_CONFIG_REJECT_MSG,
+        );
 
         let new_subnet_record = get_value_or_panic::<SubnetRecord>(
             &registry,
@@ -587,7 +598,6 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
 
         // This update should enable signing on our subnet for the given key.
         payload = UpdateSubnetPayload {
-            ecdsa_config: ecdsa_config.clone(),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
         };
@@ -658,11 +668,16 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         key_id
     );
 
-    const NO_CHAIN_KEY_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
+    let no_chain_key_config_reject_msg = format!(
+        "Canister rejected with message: \
         IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-        `ic0.trap` with message: Panicked at '[Registry]  invariant check failed with \
-        message: The subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae \
-        does not have a ChainKeyConfig'";
+        `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable signing \
+        for chain key '{}' \
+        on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
+        but the subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted.'",
+        key_id
+    );
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
@@ -707,7 +722,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&initial_subnet_record),
+                        initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -785,7 +800,12 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         let err_text = assert_matches!(response, Err(err_text) => err_text);
 
-        assert!(err_text.contains(NO_CHAIN_KEY_CONFIG_REJECT_MSG));
+        assert!(
+            err_text.contains(&no_chain_key_config_reject_msg),
+            "Error `{}` does not contain expected substring\n{}",
+            err_text,
+            no_chain_key_config_reject_msg,
+        );
 
         let subnet_record = get_value_or_panic::<SubnetRecord>(
             &registry,
@@ -894,15 +914,6 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
@@ -920,5 +931,15 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }

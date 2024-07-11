@@ -38,7 +38,7 @@ use ic_state_manager::{
         },
         StateSync,
     },
-    DirtyPageMap, PageMapType, StateManagerImpl,
+    DirtyPageMap, PageMapType, StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
@@ -52,7 +52,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::batch::{
-    CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
+    BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::{
     crypto::CryptoHash,
@@ -467,7 +467,12 @@ fn rejoining_node_doesnt_accumulate_states() {
             for i in 1..=3 {
                 let mut state = src_state_manager.take_tip().1;
                 insert_dummy_canister(&mut state, canister_test_id(100 + i));
-                src_state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
+                src_state_manager.commit_and_certify(
+                    state,
+                    height(i),
+                    CertificationScope::Full,
+                    None,
+                );
 
                 let hash = wait_for_checkpoint(&*src_state_manager, height(i));
                 let id = StateSyncArtifactId {
@@ -544,7 +549,7 @@ fn checkpoint_marked_ro_at_restart() {
         let canister_id: CanisterId = canister_test_id(100);
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_id);
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let canister_100_layout = state_manager
             .state_layout()
             .checkpoint(height(1))
@@ -595,7 +600,7 @@ fn tip_can_be_recovered_if_no_checkpoint_exists() {
 fn tip_can_be_recovered_from_empty_checkpoint() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -603,7 +608,7 @@ fn tip_can_be_recovered_from_empty_checkpoint() {
         let canister_id: CanisterId = canister_test_id(100);
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_id);
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
     });
 }
 
@@ -613,7 +618,7 @@ fn tip_can_be_recovered_from_metadata_checkpoint() {
         let canister_id: CanisterId = canister_test_id(100);
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_id);
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -628,7 +633,7 @@ fn tip_can_be_recovered_from_valid_checkpoint() {
         let canister_id: CanisterId = canister_test_id(100);
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_id);
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -644,11 +649,11 @@ fn tip_can_be_recovered_from_latest_checkpoint() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -663,11 +668,11 @@ fn tip_can_be_recovered_from_earlier_checkpoint() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let state_manager = restart_fn(state_manager, Some(height(1)));
 
@@ -682,14 +687,14 @@ fn starting_height_independent_of_remove_states_below() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(300));
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(2));
@@ -745,7 +750,7 @@ fn query_stats_are_persisted() {
             stats,
         };
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let state_manager = restart_fn(state_manager, None);
 
         let (_height, recovered_tip) = state_manager.take_tip();
@@ -785,7 +790,7 @@ fn stable_memory_is_persisted() {
             .unwrap()
             .stable_memory
             .page_map = PageMap::from(&[1; 100][..]);
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_height, state) = state_manager.take_tip();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
@@ -843,7 +848,7 @@ fn missing_stable_memory_file_is_handled() {
         insert_dummy_canister(&mut state, canister_test_id(100));
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         canister_state.execution_state = None;
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         // Since the canister has no execution state, there should be no stable memory
         // file.
@@ -880,7 +885,7 @@ fn missing_wasm_chunk_store_is_handled() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         // Make sure Tip Thread isn't doing anything while we hack into the Checkpoint files.
         state_manager.flush_tip_channel();
 
@@ -915,7 +920,7 @@ fn missing_wasm_chunk_store_is_handled() {
         assert_eq!(height(1), recovered_height);
 
         assert!(!canister_wasm_chunk_store.exists());
-        state_manager.commit_and_certify(recovered, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(recovered, height(2), CertificationScope::Full, None);
     });
 }
 
@@ -971,7 +976,7 @@ fn commit_remembers_state() {
         assert!(state_manager.get_state_at(HEIGHT).is_err());
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, HEIGHT, CertificationScope::Full);
+        state_manager.commit_and_certify(state, HEIGHT, CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, HEIGHT);
 
         assert!(state_manager.get_state_at(HEIGHT).is_ok());
@@ -999,11 +1004,11 @@ fn latest_state_height_updated_on_commit() {
         let (_, tip) = state_manager.take_tip();
         assert_eq!(height(0), state_manager.latest_state_height());
 
-        state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata, None);
         assert_eq!(height(1), state_manager.latest_state_height());
 
         let (_, tip) = state_manager.take_tip();
-        state_manager.commit_and_certify(tip, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(tip, height(2), CertificationScope::Full, None);
         assert_eq!(height(2), state_manager.latest_state_height());
     })
 }
@@ -1012,10 +1017,10 @@ fn latest_state_height_updated_on_commit() {
 fn populates_prev_state_hash() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let (_height, state_1) = state_manager.take_tip();
-        state_manager.commit_and_certify(state_1, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state_1, height(2), CertificationScope::Metadata, None);
         let state_2 = state_manager.get_latest_state().take();
 
         let hashes = state_manager.list_state_hashes_to_certify();
@@ -1052,13 +1057,13 @@ fn returns_state_no_committed_for_future_states() {
 fn panics_on_forked_history() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let (_height, mut state) = state_manager.take_tip();
         state.modify_streams(|streams| {
             streams.insert(subnet_test_id(1), Stream::default());
         });
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
     });
 }
 
@@ -1068,13 +1073,13 @@ fn can_commit_same_state_twice() {
         let (tip_height, state) = state_manager.take_tip();
         assert_eq!(tip_height, height(0));
         let state_copy = state.clone();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let (tip_height, _state) = state_manager.take_tip();
         assert_eq!(tip_height, height(1));
         // _state and state_copy will differ in metadata.prev_state_height,
         // so to commit the same state twice we need to commit the copy.
-        state_manager.commit_and_certify(state_copy, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state_copy, height(1), CertificationScope::Metadata, None);
 
         let (tip_height, _state) = state_manager.take_tip();
         assert_eq!(tip_height, height(1));
@@ -1107,22 +1112,22 @@ fn checkpoints_outlive_state_manager() {
             let (_height, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_id);
 
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata, None);
 
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata, None);
 
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(5), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(5), CertificationScope::Full, None);
 
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(6), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(6), CertificationScope::Full, None);
         }
 
         let metrics_registry = MetricsRegistry::new();
@@ -1172,7 +1177,7 @@ fn certifications_are_not_persisted() {
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
             assert_eq!(vec![height(1)], heights_to_certify(&state_manager));
             certify_height(&state_manager, height(1));
             assert_eq!(Vec::<Height>::new(), heights_to_certify(&state_manager));
@@ -1198,7 +1203,7 @@ fn certifications_are_not_persisted() {
 fn all_manifests_are_persisted() {
     state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
 
         let (metrics, state_manager) = restart_fn(state_manager, None);
@@ -1219,7 +1224,7 @@ fn all_manifests_are_persisted() {
 fn missing_manifests_are_recomputed() {
     state_manager_restart_test_deleting_metadata(|_metrics, state_manager, restart_fn| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_metrics, state_manager) = restart_fn(state_manager, None);
 
@@ -1259,7 +1264,7 @@ fn first_manifest_after_restart_is_incremental() {
             (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
         assert!(!any_manifest_was_incremental(metrics));
 
@@ -1267,7 +1272,7 @@ fn first_manifest_after_restart_is_incremental() {
 
         wait_for_checkpoint(&state_manager, height(1)); // Make sure the base manifest is available
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(2));
 
         assert!(any_manifest_was_incremental(&metrics));
@@ -1278,16 +1283,16 @@ fn first_manifest_after_restart_is_incremental() {
 fn can_filter_by_certification_mask() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata, None);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Full, None);
 
         for h in 1..=2 {
             certify_height(&state_manager, height(h));
@@ -1305,6 +1310,68 @@ fn can_filter_by_certification_mask() {
 }
 
 #[test]
+fn should_archive_checkpoints_correctly() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let mut heights = vec![height(0)];
+        for i in 1..14 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
+        }
+
+        assert_eq!(height(13), state_manager.latest_state_height());
+        let latest_state = state_manager.get_latest_state();
+        assert_eq!(height(13), latest_state.height());
+
+        // Manually marks checkpoint at height 6 and 10 as unverified, and it should be archived on restart.
+        let marker_file_6 = state_manager
+            .state_layout()
+            .checkpoint_untracked(height(6))
+            .unwrap()
+            .unverified_checkpoint_marker();
+        std::fs::File::create(marker_file_6).expect("failed to write to marker file");
+
+        let marker_file_10 = state_manager
+            .state_layout()
+            .checkpoint_untracked(height(10))
+            .unwrap()
+            .unverified_checkpoint_marker();
+        std::fs::File::create(marker_file_10).expect("failed to write to marker file");
+
+        let state_manager = restart_fn(state_manager, Some(height(6)));
+
+        // The unverified checkpoints at height 6 and 10, and any checkpoints at or above height 8 are archived.
+        // However, at most one checkpoint will be stored in the backups directory after cleanup.
+        assert_eq!(
+            state_manager.state_layout().backup_heights().unwrap(),
+            vec![height(12)],
+        );
+
+        // The checkpoints at height 2 and 4 should not be accidentally archived.
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(2), height(4)],
+        );
+
+        // State manager should restart from checkpoint at height 4 instead of 6 or 8.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(2), height(4)],
+        );
+        assert_eq!(height(4), state_manager.latest_state_height());
+        let (latest_height, _) = state_manager.take_tip();
+        assert_eq!(height(4), latest_height);
+    });
+}
+
+#[test]
 fn can_remove_checkpoints() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let mut heights = vec![height(0)];
@@ -1318,7 +1385,7 @@ fn can_remove_checkpoints() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, height(i), scope.clone());
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.flush_tip_channel();
@@ -1364,7 +1431,7 @@ fn cannot_remove_height_zero() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
@@ -1393,7 +1460,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, height(i), scope.clone());
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
 
         assert_eq!(
@@ -1413,7 +1480,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
         );
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(11), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(11), CertificationScope::Metadata, None);
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY).last(),
@@ -1454,7 +1521,7 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, height(i), scope.clone());
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
         // We need to wait for hashing to complete, otherwise the
         // checkpoint can be retained until the hashing is complete.
@@ -1514,7 +1581,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, height(i), scope.clone());
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.flush_tip_channel();
@@ -1562,7 +1629,7 @@ fn should_restart_from_the_latest_checkpoint_requested_to_remove() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, height(i), scope.clone());
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.flush_tip_channel();
@@ -1623,7 +1690,7 @@ fn should_be_able_to_restart_twice_from_the_same_checkpoint() {
         .iter()
         {
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, *h, scope.clone());
+            state_manager.commit_and_certify(state, *h, scope.clone(), None);
         }
 
         state_manager.remove_states_below(height(3));
@@ -1644,7 +1711,7 @@ fn should_be_able_to_restart_twice_from_the_same_checkpoint() {
         .iter()
         {
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, *h, scope.clone());
+            state_manager.commit_and_certify(state, *h, scope.clone(), None);
         }
 
         let state_manager = restart_fn(state_manager, Some(height(3)));
@@ -1669,7 +1736,7 @@ fn should_keep_the_last_checkpoint_on_restart() {
         .iter()
         {
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, *h, scope.clone());
+            state_manager.commit_and_certify(state, *h, scope.clone(), None);
         }
 
         state_manager.remove_states_below(height(3));
@@ -1689,10 +1756,10 @@ fn should_keep_the_last_checkpoint_on_restart() {
 fn backup_checkpoint_is_complete() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let state_hash = wait_for_checkpoint(&state_manager, height(2));
 
@@ -1714,14 +1781,14 @@ fn should_not_remove_latest_state_after_restarting_without_checkpoints() {
     state_manager_restart_test(|state_manager, restart_fn| {
         for i in 0..10 {
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata, None);
             state_manager.remove_states_below(height(i));
         }
 
         let state_manager = restart_fn(state_manager, Some(height(10)));
         for i in 0..10 {
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata, None);
             state_manager.remove_states_below(height(9));
             assert_eq!(height(i), state_manager.latest_state_height());
         }
@@ -1742,7 +1809,7 @@ fn can_keep_the_latest_snapshot_after_removal() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, height(i), scope.clone());
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
         state_manager.flush_tip_channel();
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
@@ -1772,7 +1839,7 @@ fn can_purge_intermediate_snapshots() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, height(i), scope.clone());
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
         state_manager.flush_tip_channel();
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
@@ -1852,17 +1919,17 @@ fn can_purge_intermediate_snapshots() {
 fn latest_certified_state_is_not_removed() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
         certify_height(&state_manager, height(1));
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata, None);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata, None);
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(4));
@@ -1881,10 +1948,10 @@ fn latest_certified_state_is_not_removed() {
 fn can_return_and_remember_certifications() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
 
         assert_eq!(
             vec![height(1), height(2)],
@@ -1900,11 +1967,11 @@ fn can_return_and_remember_certifications() {
 fn certifications_of_transient_states_are_not_cached() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         certify_height(&state_manager, height(1));
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
         certify_height(&state_manager, height(2));
 
         assert_eq!(Vec::<Height>::new(), heights_to_certify(&state_manager));
@@ -1914,7 +1981,7 @@ fn certifications_of_transient_states_are_not_cached() {
         assert_eq!(height(1), state_manager.latest_state_height());
         let (_height, state) = state_manager.take_tip();
         // Commit the same state again. The certification should be re-used.
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
         assert_eq!(
             vec![Height::from(1), Height::from(2)],
             heights_to_certify(&state_manager)
@@ -1926,7 +1993,7 @@ fn certifications_of_transient_states_are_not_cached() {
 fn uses_latest_certified_state_to_decode_certified_streams() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let subnet = subnet_test_id(42);
 
@@ -1943,7 +2010,7 @@ fn uses_latest_certified_state_to_decode_certified_streams() {
             streams.insert(subnet, Stream::default());
         });
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
         // Have a stream, but this state is not certified yet.
         assert_eq!(
             state_manager.encode_certified_stream_slice(subnet, None, None, None, None),
@@ -1970,7 +2037,7 @@ fn encode_stream_index_is_checked() {
             streams.insert(subnet, Stream::default());
         });
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
         certify_height(&state_manager, height(1));
 
         let zero_idx = StreamIndex::from(0);
@@ -1998,7 +2065,7 @@ fn delivers_state_adverts_once() {
     state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         let (_height, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2014,7 +2081,7 @@ fn delivers_state_adverts_once() {
 fn recomputes_metadata_on_restart_if_missing() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         std::fs::remove_file(state_manager.state_layout().states_metadata())
             .expect("Failed to remove states metadata");
         let cert_hashes = state_manager.list_state_hashes_to_certify();
@@ -2032,7 +2099,7 @@ fn state_sync_message_contains_manifest() {
     state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         let (_height, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2067,10 +2134,10 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
         }
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
 
         for (h, p) in [(1, false), (2, false), (3, false)].iter() {
             assert_eq!(
@@ -2152,7 +2219,7 @@ fn can_do_simple_state_sync_transfer() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2200,17 +2267,17 @@ fn test_start_and_cancel_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(101));
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(102));
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         let hash2 = wait_for_checkpoint(&*src_state_manager, height(2));
 
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(103));
-        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         let hash3 = wait_for_checkpoint(&*src_state_manager, height(3));
 
         let id1 = StateSyncArtifactId {
@@ -2242,7 +2309,12 @@ fn test_start_and_cancel_state_sync() {
             // the dst state manager just reaches state height @1.
             let (_height, mut dst_state) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut dst_state, canister_test_id(101));
-            dst_state_manager.commit_and_certify(dst_state, height(1), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(
+                dst_state,
+                height(1),
+                CertificationScope::Full,
+                None,
+            );
             wait_for_checkpoint(&*dst_state_manager, height(1));
 
             // the dst state manager won't fetch any state which it has reached.
@@ -2337,7 +2409,7 @@ fn state_sync_message_returns_none_for_invalid_chunk_requests() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2413,7 +2485,7 @@ fn can_state_sync_from_cache() {
             .page_map
             .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash1 = wait_for_checkpoint(&*src_state_manager, height(1));
         let id1 = StateSyncArtifactId {
             height: height(1),
@@ -2425,7 +2497,7 @@ fn can_state_sync_from_cache() {
             .expect("failed to get state sync messages");
 
         let (_height, state) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let hash2 = wait_for_checkpoint(&*src_state_manager, height(2));
         let id2 = StateSyncArtifactId {
@@ -2537,7 +2609,7 @@ fn can_state_sync_from_cache_alone() {
         insert_dummy_canister(&mut state, canister_test_id(100));
         insert_dummy_canister(&mut state, canister_test_id(200));
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2632,7 +2704,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2724,7 +2796,7 @@ fn state_sync_can_reject_invalid_chunks() {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2831,7 +2903,12 @@ fn can_state_sync_into_existing_checkpoint() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(
+            state.clone(),
+            height(1),
+            CertificationScope::Full,
+            None,
+        );
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2853,6 +2930,7 @@ fn can_state_sync_into_existing_checkpoint() {
                 state.clone(),
                 height(1),
                 CertificationScope::Full,
+                None,
             );
 
             pipe_state_sync(msg, chunkable);
@@ -2880,7 +2958,7 @@ fn can_group_small_files_in_state_sync() {
             1000,
         );
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2947,13 +3025,13 @@ fn can_commit_after_prev_state_is_gone() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
-        src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+        src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata, None);
 
         let (_height, tip) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+        src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata, None);
 
         let (_height, tip) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full);
+        src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full, None);
 
         let hash = wait_for_checkpoint(&*src_state_manager, height(3));
         let id = StateSyncArtifactId {
@@ -2970,7 +3048,12 @@ fn can_commit_after_prev_state_is_gone() {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut tip) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut tip, canister_test_id(100));
-            dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+            dst_state_manager.commit_and_certify(
+                tip,
+                height(1),
+                CertificationScope::Metadata,
+                None,
+            );
 
             let (_height, tip) = dst_state_manager.take_tip();
 
@@ -2987,12 +3070,22 @@ fn can_commit_after_prev_state_is_gone() {
             );
 
             // Check that we can still commit the old tip.
-            dst_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+            dst_state_manager.commit_and_certify(
+                tip,
+                height(2),
+                CertificationScope::Metadata,
+                None,
+            );
 
             // Check that after committing an old state, the state manager can still get the right tip and commit it.
             let (tip_height, tip) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
-            dst_state_manager.commit_and_certify(tip, height(4), CertificationScope::Metadata);
+            dst_state_manager.commit_and_certify(
+                tip,
+                height(4),
+                CertificationScope::Metadata,
+                None,
+            );
 
             assert_error_counters(dst_metrics);
         })
@@ -3004,13 +3097,13 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
-        src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+        src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata, None);
 
         let (_height, tip) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+        src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata, None);
 
         let (_height, tip) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full);
+        src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full, None);
 
         let hash = wait_for_checkpoint(&*src_state_manager, height(3));
         let id = StateSyncArtifactId {
@@ -3027,7 +3120,12 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut tip) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut tip, canister_test_id(100));
-            dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+            dst_state_manager.commit_and_certify(
+                tip,
+                height(1),
+                CertificationScope::Metadata,
+                None,
+            );
 
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
@@ -3037,7 +3135,12 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
             let (tip_height, tip) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
             // Check that we can still commit the new tip at the synced checkpoint height without prev state hash mismatch.
-            dst_state_manager.commit_and_certify(tip, height(4), CertificationScope::Metadata);
+            dst_state_manager.commit_and_certify(
+                tip,
+                height(4),
+                CertificationScope::Metadata,
+                None,
+            );
 
             assert_error_counters(dst_metrics);
         })
@@ -3049,11 +3152,11 @@ fn can_state_sync_based_on_old_checkpoint() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let hash = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
@@ -3069,7 +3172,7 @@ fn can_state_sync_based_on_old_checkpoint() {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut state) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_test_id(100));
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
             wait_for_checkpoint(&*dst_state_manager, height(1));
 
@@ -3143,7 +3246,7 @@ fn can_recover_from_corruption_on_state_sync() {
         // Create initial state with a single canister.
         let (_height, mut state) = src_state_manager.take_tip();
         populate_original_state(&mut state);
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
@@ -3177,7 +3280,7 @@ fn can_recover_from_corruption_on_state_sync() {
             (PageIndex::new(pages_per_chunk), &[111u8; PAGE_SIZE]),
         ]);
 
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
@@ -3193,7 +3296,7 @@ fn can_recover_from_corruption_on_state_sync() {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut state) = dst_state_manager.take_tip();
             populate_original_state(&mut state);
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
             let hash_dst_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
             assert_eq!(hash_1, hash_dst_1);
@@ -3315,9 +3418,9 @@ fn can_commit_below_state_sync() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let (_height, state) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let hash = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
@@ -3338,7 +3441,7 @@ fn can_commit_below_state_sync() {
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
             pipe_state_sync(msg, chunkable);
             // Check committing an old state doesn't panic
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
             dst_state_manager.flush_tip_channel();
 
             // take_tip should update the tip to the synced checkpoint
@@ -3359,7 +3462,12 @@ fn can_state_sync_below_commit() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(
+            state.clone(),
+            height(1),
+            CertificationScope::Full,
+            None,
+        );
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
 
         let id = StateSyncArtifactId {
@@ -3380,10 +3488,10 @@ fn can_state_sync_below_commit() {
 
             let (tip_height, state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(0));
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
             let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
             dst_state_manager.flush_tip_channel();
 
             let (_height, state) = dst_state_manager.take_tip();
@@ -3396,7 +3504,7 @@ fn can_state_sync_below_commit() {
                 dst_state_manager.checkpoint_heights(),
                 vec![height(1), height(2)]
             );
-            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
@@ -3416,7 +3524,7 @@ fn can_short_circuit_state_sync() {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let hash_at_1 = wait_for_checkpoint(&state_manager, height(1));
 
         state_manager.fetch_state(height(1000), hash_at_1.clone(), Height::new(999));
@@ -3475,7 +3583,7 @@ fn can_get_dirty_pages() {
         // deltas and the canister binaries are new.
         assert!(dirty_pages.is_empty());
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_height, mut state) = state_manager.take_tip();
         update_state(&mut state, canister_test_id(90));
@@ -3532,7 +3640,7 @@ fn can_get_dirty_pages() {
         expected_dirty_pages.sort();
         assert_eq!(dirty_pages, expected_dirty_pages);
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let (_height, mut state) = state_manager.take_tip();
         update_state(&mut state, canister_test_id(100));
@@ -3618,7 +3726,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
 
         let mut reused_label = Labels::new();
@@ -3632,7 +3740,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         let (_, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         let state_2_hash = wait_for_checkpoint(&state_manager, height(2));
 
         // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
@@ -3689,7 +3797,7 @@ fn certified_read_can_certify_ingress_history_entry() {
             },
             NumBytes::from(u64::MAX),
         );
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
             label("request_status") => LabeledTree::SubTree(
                 flatmap! {
@@ -3730,7 +3838,7 @@ fn certified_read_can_certify_time() {
         let (_, mut state) = state_manager.take_tip();
 
         state.metadata.batch_time += Duration::new(0, 100);
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
             label("time") => Leaf(())
         });
@@ -3760,7 +3868,7 @@ fn certified_read_can_certify_canister_data() {
         let canister_id: CanisterId = canister_test_id(100);
         insert_dummy_canister(&mut state, canister_id);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let path = SubTree(flatmap! {
             label("canister") => SubTree(
@@ -3830,7 +3938,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         state.metadata.network_topology = network_topology;
         state.metadata.node_public_keys = node_public_keys;
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let subnet_id = subnet_test_id(42).get();
         let node_id = node_test_id(39).get();
@@ -3903,7 +4011,7 @@ fn certified_read_can_certify_api_boundary_nodes_since_v16() {
             },
         };
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let api_bn_id = node_test_id(11).get();
         let path: Vec<&[u8]> = vec![b"api_boundary_nodes", api_bn_id.as_ref()];
@@ -3949,7 +4057,7 @@ fn certified_read_succeeds_for_empty_forks() {
     state_manager_test(|_metrics, state_manager| {
         let (_, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
             label("api_boundary_nodes") => LabeledTree::Leaf(()),
@@ -3998,7 +4106,7 @@ fn certified_read_succeeds_for_empty_tree() {
     state_manager_test(|_metrics, state_manager| {
         let (_, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {});
 
@@ -4028,7 +4136,7 @@ fn certified_read_returns_absence_proof_for_non_existing_entries() {
             },
             NumBytes::from(u64::MAX),
         );
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
             label("request_status") => LabeledTree::SubTree(
@@ -4070,7 +4178,7 @@ fn certified_read_returns_absence_proof_for_non_existing_entries_in_empty_state(
     state_manager_test(|_metrics, state_manager| {
         let (_, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
             label("request_status") => LabeledTree::SubTree(
@@ -4117,7 +4225,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
             },
             NumBytes::from(u64::MAX),
         );
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
             label("request_status") => LabeledTree::SubTree(
@@ -4182,7 +4290,7 @@ fn certified_read_can_produce_proof_of_absence() {
             },
             NumBytes::from(u64::MAX),
         );
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
             label("request_status") => LabeledTree::SubTree(
@@ -4234,13 +4342,13 @@ fn report_diverged_checkpoint() {
         vec![Box::new(|state_manager: StateManagerImpl| {
             std::thread::sleep(std::time::Duration::from_secs(2));
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height(3));
 
             // If the Tip thread is active while we report diverged checkpoint, it may crash
@@ -4299,10 +4407,10 @@ fn diverged_checkpoint_is_complete() {
         );
 
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let state_hash = wait_for_checkpoint(&state_manager, height(2));
 
@@ -4358,11 +4466,11 @@ fn report_diverged_state() {
     state_manager_crash_test(
         vec![Box::new(|state_manager: StateManagerImpl| {
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
             std::thread::sleep(std::time::Duration::from_secs(2));
             let mut certification = certify_height(&state_manager, height(1));
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
             // Hack the certification so it is a divergence
             certification.height = height(2);
 
@@ -4404,12 +4512,12 @@ fn remove_too_many_diverged_checkpoints() {
         for i in last_correct_checkpoint..(divergence - 1) {
             let (j, state) = state_manager.take_tip();
             debug_assert_eq!(height(i), j);
-            state_manager.commit_and_certify(state, height(i + 1), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(i + 1), CertificationScope::Full, None);
             state_manager.flush_tip_channel();
         }
 
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(divergence), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(divergence), CertificationScope::Full, None);
         // If the Tip thread is active while we report diverged checkpoint, it may crash
         // which is OK in production but confuses debug assertions.
         state_manager.flush_tip_channel();
@@ -4439,7 +4547,7 @@ fn remove_old_diverged_checkpoint() {
         vec![
             Box::new(|state_manager: StateManagerImpl| {
                 let (_, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+                state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
                 wait_for_checkpoint(&state_manager, height(1));
                 // If the Tip thread is active while we report diverged checkpoint, it may crash
                 // which is OK in production but confuses debug assertions.
@@ -4464,9 +4572,9 @@ fn remove_old_diverged_checkpoint() {
                     return;
                 };
                 let (_, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+                state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
                 let (_, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+                state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
                 wait_for_checkpoint(&state_manager, height(2));
 
                 panic!();
@@ -4505,14 +4613,14 @@ fn checkpoints_have_growing_mtime() {
         // The first checkpoint is special since the tip was created from scratch, compare two next
         // ones.
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(2));
         std::thread::sleep(std::time::Duration::from_secs(1));
         let (_, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(3));
         assert!(checkpoint_age(2) < checkpoint_age(3));
     });
@@ -4524,9 +4632,9 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
         vec![
             Box::new(|state_manager: StateManagerImpl| {
                 let (_, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+                state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
                 let (_, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+                state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
                 wait_for_checkpoint(&state_manager, height(2));
 
                 // If the Tip thread is active while we report diverged checkpoint, it may crash
@@ -4571,11 +4679,11 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
 fn remove_too_many_diverged_state_markers() {
     fn diverge_state_at(state_manager: StateManagerImpl, divergence: u64) {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
         let mut certification = certify_height(&state_manager, height(1));
         for i in 2..(divergence + 1) {
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata, None);
         }
         // Hack the certification so it is a divergence
         certification.height = height(divergence);
@@ -4613,12 +4721,17 @@ fn can_write_multiple_checkpoints() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         for _ in 1..10 {
             let (h, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_test_id(100));
-            state_manager.commit_and_certify(state, height(h.get() + 1), CertificationScope::Full);
+            state_manager.commit_and_certify(
+                state,
+                height(h.get() + 1),
+                CertificationScope::Full,
+                None,
+            );
         }
 
         wait_for_checkpoint(&state_manager, height(10));
@@ -4645,7 +4758,7 @@ fn can_reset_memory() {
             (PageIndex::new(7), &[99u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         // Check the data is written to disk.
         let canister_layout = state_manager
             .state_layout()
@@ -4682,7 +4795,7 @@ fn can_reset_memory() {
             &[0u8; PAGE_SIZE]
         );
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         // Check file in checkpoint does not contain old data by checking its size.
         let canister_layout = state_manager
@@ -4716,7 +4829,7 @@ fn can_reset_memory() {
         // Wipe data completely.
         execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
 
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
         // File should be empty after wiping and checkpoint.
         let canister_layout = state_manager
@@ -4828,7 +4941,7 @@ fn can_reset_stable_memory() {
             (PageIndex::new(7), &[99u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         // Check the data is written to disk.
         let canister_layout = state_manager
             .state_layout()
@@ -4866,7 +4979,7 @@ fn can_reset_stable_memory() {
             &[0u8; PAGE_SIZE]
         );
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         // Check file in checkpoint does not contain old data by checking its size.
         let canister_layout = state_manager
@@ -4901,7 +5014,7 @@ fn can_reset_stable_memory() {
         execution_state.stable_memory =
             Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
 
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
         // File should be empty after wiping and checkpoint.
         let canister_layout = state_manager
@@ -4939,7 +5052,7 @@ fn can_reset_wasm_chunk_store() {
                 (PageIndex::new(7), &[99u8; PAGE_SIZE]),
             ]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         // Check the data is written to disk.
         let canister_layout = state_manager
             .state_layout()
@@ -4981,7 +5094,7 @@ fn can_reset_wasm_chunk_store() {
             &[0u8; PAGE_SIZE]
         );
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         // Check file in checkpoint does not contain old data by checking its size.
         let canister_layout = state_manager
@@ -5016,7 +5129,7 @@ fn can_reset_wasm_chunk_store() {
         // Wipe data completely.
         canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing();
 
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
         // File should be empty after wiping and checkpoint.
         let canister_layout = state_manager
@@ -5039,7 +5152,7 @@ fn can_delete_canister() {
         // Insert a canister and a write checkpoint
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         // Check the checkpoint has the canister.
         let canister_path = state_manager
@@ -5057,11 +5170,11 @@ fn can_delete_canister() {
         let _deleted_canister = state.take_canister_state(&canister_test_id(100));
 
         // Commit two rounds, once without checkpointing and once with
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
 
         let (_height, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
         // Check that the checkpoint does not contain the canister
         assert!(!state_manager
@@ -5095,7 +5208,7 @@ fn can_uninstall_code() {
             (PageIndex::new(300), &[99u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         // Check the checkpoint has the canister
         let canister_layout = state_manager
@@ -5121,11 +5234,11 @@ fn can_uninstall_code() {
             .execution_state = None;
 
         // Commit two rounds, once without checkpointing and once with
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
 
         let (_height, state) = state_manager.take_tip();
 
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
         // Check that the checkpoint does contains the canister
         let canister_layout = state_manager
@@ -5203,7 +5316,7 @@ fn tip_is_initialized_correctly() {
             .stable_memory
             .page_map
             .update(&[(PageIndex::new(1), &[99u8; PAGE_SIZE])]);
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         state_manager.flush_tip_channel();
 
@@ -5232,7 +5345,7 @@ fn tip_is_initialized_correctly() {
         );
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let checkpoint_layout = state_manager.state_layout().checkpoint(height(2)).unwrap();
 
@@ -5261,7 +5374,7 @@ fn tip_is_initialized_correctly() {
 fn can_recover_ingress_history() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let (_height, mut state) = state_manager.take_tip();
 
         // Add a message to the ingress history, to later verify that it gets recovered.
@@ -5276,7 +5389,7 @@ fn can_recover_ingress_history() {
             NumBytes::from(u64::MAX),
         );
 
-        state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full, None);
         let (_height, state2) = state_manager.take_tip();
         state
             .metadata
@@ -5320,7 +5433,7 @@ fn checkpoints_are_readonly() {
             .page_map
             .update(&[(PageIndex::new(1), &[1u8; PAGE_SIZE])]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
 
@@ -5333,12 +5446,12 @@ fn checkpoints_are_readonly() {
             .page_map
             .update(&[(PageIndex::new(1), &[2u8; PAGE_SIZE])]);
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
 
@@ -5351,7 +5464,7 @@ fn checkpoints_are_readonly() {
             .page_map
             .update(&[(PageIndex::new(1), &[4u8; PAGE_SIZE])]);
 
-        state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
     });
@@ -5380,7 +5493,7 @@ fn can_downgrade_state_sync() {
         let src_state_sync = StateSync::new(src_state_manager.clone(), log);
 
         let (_height, state) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&*src_state_manager, height(1));
 
         let (_height, mut state) = src_state_manager.take_tip();
@@ -5392,7 +5505,7 @@ fn can_downgrade_state_sync() {
             (PageIndex::new(0), &[1u8; PAGE_SIZE]),
             (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
         ]);
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, height(2));
 
         assert!(!vmemory0_base_exists(
@@ -5430,7 +5543,7 @@ fn can_downgrade_state_sync() {
             ));
             let dst_state_sync = StateSync::new(dst_state_manager.clone(), log);
             let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
             wait_for_checkpoint(&*dst_state_manager, height(1));
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
@@ -5444,7 +5557,7 @@ fn can_downgrade_state_sync() {
             assert!(vmemory0_num_overlays(&dst_state_manager, &canister_test_id(1), height(2)) > 0);
             assert!(!any_manifest_was_incremental(&metrics_registry));
             let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
             wait_for_checkpoint(&*dst_state_manager, height(3));
             // After one checkpoint interval the state has no overlays.
             assert!(vmemory0_base_exists(
@@ -5479,11 +5592,11 @@ fn can_merge_unexpected_number_of_files() {
                     .update(&[(PageIndex::new(page as u64), &[1u8; PAGE_SIZE])]);
             }
 
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
             const HEIGHT: u64 = 30;
             for i in 2..HEIGHT {
                 let (_height, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
+                state_manager.commit_and_certify(state, height(i), CertificationScope::Full, None);
             }
 
             wait_for_checkpoint(&state_manager, height(HEIGHT - 1));
@@ -5519,7 +5632,7 @@ fn can_merge_unexpected_number_of_files() {
             );
             let (_metrics, state_manager) = restart_fn(state_manager, None, lsmt_with_sharding());
             let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(HEIGHT), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(HEIGHT), CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height(HEIGHT));
             assert_eq!(
                 state_manager
@@ -5534,6 +5647,70 @@ fn can_merge_unexpected_number_of_files() {
                     .len(),
                 NUM_PAGES
             );
+        },
+    );
+}
+
+#[test]
+fn batch_summary_is_respected_for_writing_overlay_files() {
+    state_manager_restart_test_with_lsmt(
+        lsmt_without_sharding(),
+        |_metrics, state_manager, _restart_fn| {
+            let checkpoint_interval = 200;
+            let (_, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_test_id(1));
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
+            state_manager.flush_tip_channel();
+
+            let tip_layout: CheckpointLayout<ReadOnly> = CheckpointLayout::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                height(0),
+            )
+            .unwrap();
+            let tip_vmemory_layout = tip_layout
+                .canister(&canister_test_id(1))
+                .unwrap()
+                .vmemory_0();
+
+            for h in 2_u64..600 {
+                let (_, mut state) = state_manager.take_tip();
+                let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+                let execution_state = canister_state.execution_state.as_mut().unwrap();
+                execution_state
+                    .wasm_memory
+                    .page_map
+                    .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+
+                let scope = if h % checkpoint_interval == 0 {
+                    CertificationScope::Full
+                } else {
+                    CertificationScope::Metadata
+                };
+                let batch_summary = BatchSummary {
+                    next_checkpoint_height: height(
+                        (h / checkpoint_interval + 1) * checkpoint_interval,
+                    ),
+                    current_interval_length: height(checkpoint_interval),
+                };
+
+                state_manager.commit_and_certify(
+                    state,
+                    height(h),
+                    scope.clone(),
+                    Some(batch_summary.clone()),
+                );
+                state_manager.flush_tip_channel();
+
+                let expect_file = scope == CertificationScope::Full
+                    || h + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+                        == batch_summary.next_checkpoint_height.get();
+
+                let has_file = tip_vmemory_layout
+                    .overlay(height(h), Shard::new(0))
+                    .exists();
+
+                assert_eq!(expect_file, has_file);
+            }
         },
     );
 }
@@ -5569,7 +5746,7 @@ fn can_downgrade_from_lsmt() {
 
             verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
 
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height(1));
 
             assert!(!vmemory0_base_exists(
@@ -5594,7 +5771,7 @@ fn can_downgrade_from_lsmt() {
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
 
-            state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height(2));
 
             assert!(vmemory0_base_exists(
@@ -5613,7 +5790,7 @@ fn can_downgrade_from_lsmt() {
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
 
-            state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
             wait_for_checkpoint(&state_manager, height(3));
             assert!(any_manifest_was_incremental(&metrics));
             assert_error_counters(&metrics);
@@ -5650,7 +5827,7 @@ fn can_upgrade_to_lsmt() {
 
         verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(1));
 
         assert!(vmemory0_base_exists(
@@ -5673,7 +5850,7 @@ fn can_upgrade_to_lsmt() {
             (PageIndex::new(NEW_WASM_PAGE), &[3u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(2));
 
         let (_height, mut state) = state_manager.take_tip();
@@ -5716,7 +5893,7 @@ fn can_upgrade_to_lsmt() {
             (PageIndex::new(NEW_WASM_PAGE), &[4u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(3));
 
         let (_height, mut state) = state_manager.take_tip();
@@ -5731,7 +5908,7 @@ fn can_upgrade_to_lsmt() {
         ));
         assert!(vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)) > 0);
 
-        state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Full, None);
         wait_for_checkpoint(&state_manager, height(4));
 
         assert_error_counters(&metrics);

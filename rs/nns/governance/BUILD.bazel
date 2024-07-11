@@ -16,22 +16,23 @@ filegroup(
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/governance",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
-    "//rs/nns/cmc",
-    "//rs/nns/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
-    "//rs/nervous_system/governance",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
     "//rs/nns/gtc_accounts",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
@@ -86,6 +87,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",
@@ -93,16 +95,19 @@ MACRO_DEPENDENCIES = [
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/nervous_system/common/test_utils",
     "//rs/nns/governance/protobuf_generator:lib",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:futures",
+    "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -188,6 +193,7 @@ rust_canbench(
     srcs = ["canbench/main.rs"],
     results_file = "canbench/canbench_results.yml",
     deps = [
+        # Keep sorted.
         ":governance--canbench_feature",
     ],
 )
@@ -251,6 +257,7 @@ generated_files_check(
         ":protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
+        "//rs/nns/governance/api:src",
         "//rs/rosetta-api/icp_ledger:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
@@ -258,6 +265,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/nns/governance",
     deps = [
+        # Keep sorted.
         "//rs/nns/governance/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
@@ -311,6 +319,7 @@ rust_bench(
     srcs = ["benches/scale.rs"],
     proc_macro_deps = ["@crate_index//:async-trait"],
     deps = [
+        # Keep sorted.
         ":governance",
         "//rs/nervous_system/common",
         "//rs/nns/common",

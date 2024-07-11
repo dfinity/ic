@@ -1,7 +1,9 @@
-use crate::canister_agent::HasCanisterAgentCapability;
-use crate::canister_api::{CallMode, GenericRequest};
-use crate::canister_requests;
-use crate::driver::{
+use crate::nns_dapp::set_authorized_subnets;
+use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
+use ic_system_test_driver::canister_requests;
+use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -10,11 +12,11 @@ use crate::driver::{
         HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
     },
 };
-use crate::generic_workload_engine::engine::Engine;
-use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
-use crate::nns_dapp::set_authorized_subnets;
-use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::util::assert_canister_counter_with_retries;
+use ic_system_test_driver::generic_workload_engine::engine::Engine;
+use ic_system_test_driver::generic_workload_engine::metrics::{
+    LoadTestMetricsProvider, RequestOutcome,
+};
+use ic_system_test_driver::util::assert_canister_counter_with_retries;
 
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
