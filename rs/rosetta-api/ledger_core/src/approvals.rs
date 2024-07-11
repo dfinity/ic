@@ -28,7 +28,7 @@ pub trait AllowancesData {
     fn set_allowance(
         &mut self,
         account_spender: (&Self::AccountId, &Self::AccountId),
-        allowance: &Allowance<Self::Tokens>,
+        allowance: Allowance<Self::Tokens>,
     );
 
     fn remove_allowance(&mut self, account_spender: (&Self::AccountId, &Self::AccountId));
@@ -110,10 +110,10 @@ where
     fn set_allowance(
         &mut self,
         account_spender: (&Self::AccountId, &Self::AccountId),
-        allowance: &Allowance<Self::Tokens>,
+        allowance: Allowance<Self::Tokens>,
     ) {
         let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.allowances.insert(asp, allowance.clone());
+        self.allowances.insert(asp, allowance);
     }
 
     fn remove_allowance(&mut self, account_spender: (&Self::AccountId, &Self::AccountId)) {
@@ -304,7 +304,7 @@ where
                     table.allowances_data.insert_arrival(&now, key.clone());
                     table.allowances_data.set_allowance(
                         key,
-                        &Allowance {
+                        Allowance {
                             amount: amount.clone(),
                             expires_at,
                             arrived_at: now,
@@ -356,7 +356,7 @@ where
                             table.allowances_data.insert_expiry(&expires_at, key);
                         }
                     }
-                    table.allowances_data.set_allowance(key, &new_allowance);
+                    table.allowances_data.set_allowance(key, new_allowance);
                     Ok(amount)
                 }
             }
@@ -408,7 +408,7 @@ where
                                 .remove_arrival(&old_allowance.arrived_at, key.clone());
                             table.allowances_data.remove_allowance(key);
                         } else {
-                            table.allowances_data.set_allowance(key, &new_allowance);
+                            table.allowances_data.set_allowance(key, new_allowance);
                         }
                         Ok(rest)
                     }
