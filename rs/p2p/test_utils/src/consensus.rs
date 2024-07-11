@@ -40,9 +40,7 @@ impl PbArtifact for U64Artifact {
     type PbMessage = Vec<u8>;
     type PbIdError = Infallible;
     type PbMessageError = Infallible;
-    type PbAttributeError = Infallible;
     type PbId = u64;
-    type PbAttribute = ();
 }
 
 impl U64Artifact {
@@ -291,6 +289,6 @@ impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensu
     ) -> ic_interfaces::p2p::consensus::PriorityFn<
         <U64Artifact as IdentifiableArtifact>::Id,
     > {
-        Box::new(|_, _| Priority::FetchNow)
+        Box::new(|_| Priority::FetchNow)
     }
 }

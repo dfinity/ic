@@ -162,7 +162,6 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
     #[instrument(skip_all)]
     fn handle_send_advert(&mut self, new_artifact: ArtifactWithOpt<Artifact>) {
         let id = new_artifact.artifact.id();
-        let attribute = new_artifact.artifact.attribute();
         let entry = self.active_adverts.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {

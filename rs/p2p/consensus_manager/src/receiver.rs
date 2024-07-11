@@ -106,7 +106,7 @@ async fn update_handler<Artifact: PbArtifact>(
                 let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
                     .map(|pb_id| pb_id.try_into().map_err(|_| StatusCode::BAD_REQUEST))
                     .map_err(|_| StatusCode::BAD_REQUEST)??;
-                Update::Advert((id, attr))
+                Update::Advert(id)
             }
             Some(pb::slot_update::Update::Artifact(artifact)) => {
                 let message: Artifact = Artifact::PbMessage::decode(artifact.as_slice())
@@ -196,10 +196,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: PbArtifact, Pool, ReceivedA
     active_downloads: HashMap<Artifact::Id, watch::Sender<PeerCounter>>,
 
     #[allow(clippy::type_complexity)]
-    artifact_processor_tasks: JoinSet<(
-        watch::Receiver<PeerCounter>,
-        Artifact::Id,
-    )>,
+    artifact_processor_tasks: JoinSet<(watch::Receiver<PeerCounter>, Artifact::Id)>,
 
     topology_watcher: watch::Receiver<SubnetTopology>,
 }
@@ -260,8 +257,8 @@ where
                 }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
                     match result {
-                        Ok((receiver, id, attr)) => {
-                            self.handle_artifact_processor_joined(receiver, id, attr);
+                        Ok((receiver, id)) => {
+                            self.handle_artifact_processor_joined(receiver, id);
 
                         }
                         Err(err) => {
@@ -325,7 +322,6 @@ where
                 Self::process_advert(
                     self.log.clone(),
                     id,
-                    attr,
                     None,
                     peer_rx,
                     self.current_priority_fn.subscribe(),
@@ -361,9 +357,9 @@ where
             update,
         } = advert_update;
 
-        let (id, attribute, artifact) = match update {
-            Update::Artifact(artifact) => (artifact.id(), artifact.attribute(), Some(artifact)),
-            Update::Advert((id, attribute)) => (id, attribute, None),
+        let (id, artifact) = match update {
+            Update::Artifact(artifact) => (artifact.id(), Some(artifact)),
+            Update::Advert(id) => (id, None),
         };
 
         if artifact.is_some() {
@@ -420,7 +416,6 @@ where
                         Self::process_advert(
                             self.log.clone(),
                             id.clone(),
-                            attribute,
                             artifact.map(|a| (a, peer_id)),
                             rx,
                             self.current_priority_fn.subscribe(),
@@ -460,11 +455,9 @@ where
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &ConsensusManagerMetrics,
         mut peer_rx: &mut watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: &mut watch::Receiver<
-            PriorityFn<Artifact::Id>,
-        >,
+        mut priority_fn_watcher: &mut watch::Receiver<PriorityFn<Artifact::Id>>,
     ) -> Result<(), DownloadStopped> {
-        let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
+        let mut priority = priority_fn_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
         if let Priority::Stash = priority {
@@ -475,7 +468,7 @@ where
         while let Priority::Stash = priority {
             select! {
                 Ok(_) = priority_fn_watcher.changed() => {
-                    priority = priority_fn_watcher.borrow_and_update()(id, attr);
+                    priority = priority_fn_watcher.borrow_and_update()(id);
                 }
                 res = peer_rx.changed() => {
                     match res {
@@ -519,7 +512,6 @@ where
         // Evaluate priority and wait until we should fetch.
         Self::wait_fetch(
             id,
-            attr,
             &mut artifact,
             &metrics,
             peer_rx,
@@ -590,7 +582,6 @@ where
                     sleep_until(next_request_at).await;
                     Self::wait_fetch(
                         id,
-                        attr,
                         &mut artifact,
                         &metrics,
                         peer_rx,
@@ -621,10 +612,7 @@ where
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
-    ) -> (
-        watch::Receiver<PeerCounter>,
-        Artifact::Id,
-    ) {
+    ) -> (watch::Receiver<PeerCounter>, Artifact::Id) {
         let _timer = metrics.download_task_duration.start_timer();
         let download_result = Self::download_artifact(
             log,
@@ -668,7 +656,7 @@ where
             }
         }
 
-        (peer_rx, id, attr)
+        (peer_rx, id)
     }
 
     /// Notifies all running tasks about the topology update.
@@ -782,7 +770,7 @@ mod tests {
 
             mock_pfn
                 .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
+                .returning(|_| Box::new(|_| Priority::Stash));
 
             Self {
                 adverts_received,
@@ -869,7 +857,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -895,7 +883,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -918,7 +906,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -941,7 +929,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(10),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -964,7 +952,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -1005,7 +993,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1032,7 +1020,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((1, ())),
+                update: Update::Advert(1),
             },
             NODE_1,
             ConnId::from(2),
@@ -1080,7 +1068,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1090,7 +1078,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_2,
             ConnId::from(1),
@@ -1119,7 +1107,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1129,13 +1117,13 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
+                update: Update::Advert(1),
             },
             NODE_1,
             ConnId::from(1),
         );
         // Check that the download task is closed.
-        let (peer_rx, id, attr) = mgr
+        let (peer_rx, id) = mgr
             .artifact_processor_tasks
             .join_next()
             .await
@@ -1146,14 +1134,14 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_2,
             ConnId::from(1),
         );
         assert_eq!(mgr.active_downloads.len(), 2);
         // Verify that we reopened the download task for advert 0.
-        mgr.handle_artifact_processor_joined(peer_rx, id, attr);
+        mgr.handle_artifact_processor_joined(peer_rx, id);
         assert_eq!(mgr.active_downloads.len(), 2);
     }
 
@@ -1173,12 +1161,12 @@ mod tests {
         mock_pfn
             .expect_get_priority_function()
             .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Stash))
+            .returning(|_| Box::new(|_| Priority::Stash))
             .in_sequence(&mut seq);
         mock_pfn
             .expect_get_priority_function()
             .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Drop))
+            .returning(|_| Box::new(|_| Priority::Drop))
             .in_sequence(&mut seq);
 
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
@@ -1189,7 +1177,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1205,7 +1193,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
+                update: Update::Advert(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1237,12 +1225,12 @@ mod tests {
         mock_pfn
             .expect_get_priority_function()
             .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Stash))
+            .returning(|_| Box::new(|_| Priority::Stash))
             .in_sequence(&mut seq);
         mock_pfn
             .expect_get_priority_function()
             .times(1)
-            .returning(|_| Box::new(|_, _| Priority::FetchNow))
+            .returning(|_| Box::new(|_| Priority::FetchNow))
             .in_sequence(&mut seq);
 
         let mut mock_transport = MockTransport::new();
@@ -1265,7 +1253,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1297,7 +1285,7 @@ mod tests {
         let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
-            .returning(|_| Box::new(|_, _| Priority::Stash));
+            .returning(|_| Box::new(|_| Priority::Stash));
         let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_priority_fn_producer(Arc::new(mock_pfn))
@@ -1308,7 +1296,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1317,7 +1305,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_2,
             ConnId::from(1),
@@ -1375,7 +1363,7 @@ mod tests {
         let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
-            .returning(|_| Box::new(|_, _| Priority::Stash));
+            .returning(|_| Box::new(|_| Priority::Stash));
 
         let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
 
@@ -1388,7 +1376,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1433,7 +1421,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1443,7 +1431,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1453,7 +1441,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((1, ())),
+                update: Update::Advert(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1473,7 +1461,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(4),
-                update: Update::Advert((1, ())),
+                update: Update::Advert(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1507,7 +1495,7 @@ mod tests {
         let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
-            .returning(|_| Box::new(|_, _| Priority::Stash));
+            .returning(|_| Box::new(|_| Priority::Stash));
 
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_priority_fn_producer(Arc::new(mock_pfn))
@@ -1517,7 +1505,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1526,7 +1514,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
+                update: Update::Advert(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1546,7 +1534,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1580,7 +1568,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1602,7 +1590,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1640,7 +1628,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((2, ())),
+                update: Update::Advert(2),
             },
             NODE_1,
             ConnId::from(1),
@@ -1682,7 +1670,7 @@ mod tests {
             .times(1)
             .returning(move |_| {
                 let priorities = priorities.clone();
-                Box::new(move |_, _| priorities.lock().unwrap().remove(0))
+                Box::new(move |_| priorities.lock().unwrap().remove(0))
             });
         let mut mock_transport = MockTransport::new();
         mock_transport.expect_rpc().once().returning(|_, _| {
@@ -1701,7 +1689,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Advert(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1761,7 +1749,7 @@ mod tests {
         let mut pc = PeerCounter::new();
         pc.insert(NODE_1);
         let (_peer_tx, mut peer_rx) = watch::channel(pc);
-        let pfn = |_: &_, _: &_| Priority::FetchNow;
+        let pfn = |_: &_| Priority::FetchNow;
         let (_pfn_tx, pfn_rx) = watch::channel(Box::new(pfn) as Box<_>);
 
         rt.block_on(async {
@@ -1773,7 +1761,6 @@ mod tests {
                 >::download_artifact(
                     no_op_logger(),
                     &0,
-                    &(),
                     None,
                     &mut peer_rx,
                     pfn_rx,
@@ -1812,9 +1799,7 @@ mod tests {
             type PbMessage = Vec<u8>;
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
-            type PbAttributeError = Infallible;
             type PbId = ();
-            type PbAttribute = ();
         }
 
         let (router, mut update_rx) = build_axum_router::<BigArtifact>(

@@ -455,8 +455,6 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessage = u64;
             type PbMessageError = Infallible;
-            type PbAttribute = ();
-            type PbAttributeError = Infallible;
         }
 
         struct DummyProcessor;
