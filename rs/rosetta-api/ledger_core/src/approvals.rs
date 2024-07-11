@@ -57,6 +57,7 @@ pub trait AllowancesData {
         account_spender: (Self::AccountId, Self::AccountId),
     );
 
+    #[allow(clippy::type_complexity)]
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
@@ -454,6 +455,7 @@ where
         self.len() == 0
     }
 
+    #[allow(clippy::type_complexity)]
     fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
         let expiry = self.allowances_data.first_expiry();
         if let Some((timestamp, (account, spender))) = expiry {
