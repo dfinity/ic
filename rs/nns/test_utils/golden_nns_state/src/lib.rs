@@ -96,18 +96,6 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
     for canister_range in extra_canister_ranges {
         state_machine_builder = state_machine_builder.with_extra_canister_range(canister_range);
     }
-    // using the canister ranges of both the NNS and II subnets. Note. The
-    // last canister ID in the canister range of the II subnet is omitted so
-    // that the canister range of the II subnet is not used for automatic
-    // generation of new canister IDs.
-    .with_extra_canister_range(RangeInclusive::new(
-        CanisterId::from_u64(0x2100000),
-        CanisterId::from_u64(0x21FFFFE),
-    ))
-    .with_extra_canister_range(RangeInclusive::new(
-        CanisterId::from_u64(0x2300000),
-        CanisterId::from_u64(0x23FFFFE),
-    ));
 
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
