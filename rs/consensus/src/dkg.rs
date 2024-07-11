@@ -459,19 +459,23 @@ pub fn make_registry_cup_from_cup_contents(
     );
     let cup_height = Height::new(cup_contents.height);
 
-    let ecdsa_summary =
-        match bootstrap_ecdsa_summary(&cup_contents, subnet_id, registry_version, registry, logger)
-        {
-            Ok(summary) => summary,
-            Err(err) => {
-                warn!(
-                    logger,
-                    "Failed constructing ECDSA summary block from CUP contents: {}", err
-                );
+    let idkg_summary = match bootstrap_idkg_summary(
+        &cup_contents,
+        subnet_id,
+        registry_version,
+        registry,
+        logger,
+    ) {
+        Ok(summary) => summary,
+        Err(err) => {
+            warn!(
+                logger,
+                "Failed constructing ECDSA summary block from CUP contents: {}", err
+            );
 
-                None
-            }
-        };
+            None
+        }
+    };
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)
@@ -495,7 +499,7 @@ pub fn make_registry_cup_from_cup_contents(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: dkg_summary,
-                ecdsa: ecdsa_summary,
+                ecdsa: idkg_summary,
             }),
         ),
         height: cup_height,
@@ -532,7 +536,7 @@ pub fn make_registry_cup_from_cup_contents(
     })
 }
 
-fn bootstrap_ecdsa_summary_from_cup_contents(
+fn bootstrap_idkg_summary_from_cup_contents(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
@@ -554,7 +558,7 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
 }
 
-fn bootstrap_ecdsa_summary(
+fn bootstrap_idkg_summary(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -562,7 +566,7 @@ fn bootstrap_ecdsa_summary(
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
     if let Some(summary) =
-        bootstrap_ecdsa_summary_from_cup_contents(cup_contents, subnet_id, logger)?
+        bootstrap_idkg_summary_from_cup_contents(cup_contents, subnet_id, logger)?
     {
         return Ok(Some(summary));
     }

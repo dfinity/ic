@@ -222,7 +222,7 @@ pub(crate) use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,
 };
 pub(crate) use payload_verifier::{
-    validate_payload, EcdsaPayloadValidationFailure, InvalidEcdsaPayloadReason,
+    validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
 };
 pub use stats::IDkgStatsImpl;
 

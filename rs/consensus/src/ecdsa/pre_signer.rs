@@ -1,7 +1,7 @@
 //! The pre signature process manager
 
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
-use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
+use crate::ecdsa::metrics::{timed_call, EcdsaPreSignerMetrics, IDkgPayloadMetrics};
 use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
@@ -987,7 +987,7 @@ pub(crate) trait EcdsaTranscriptBuilder {
 pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
     block_reader: &'a dyn EcdsaBlockReader,
     crypto: &'a dyn ConsensusCrypto,
-    metrics: &'a EcdsaPayloadMetrics,
+    metrics: &'a IDkgPayloadMetrics,
     idkg_pool: &'a dyn IDkgPool,
     cache: RefCell<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
     log: ReplicaLogger,
@@ -998,7 +998,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
         block_reader: &'a dyn EcdsaBlockReader,
         crypto: &'a dyn ConsensusCrypto,
         idkg_pool: &'a dyn IDkgPool,
-        metrics: &'a EcdsaPayloadMetrics,
+        metrics: &'a IDkgPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -2764,7 +2764,7 @@ mod tests {
         let (dealings, supports) = get_dealings_and_support(&env, &params);
         let block_reader =
             TestEcdsaBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
-        let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
+        let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
         let crypto = first_crypto(&env);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
