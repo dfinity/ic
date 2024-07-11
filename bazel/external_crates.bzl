@@ -45,6 +45,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "sha2": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
         "ring": [crate.annotation(
             build_script_env = {
                 "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
