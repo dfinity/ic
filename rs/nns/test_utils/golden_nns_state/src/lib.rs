@@ -16,16 +16,6 @@ pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine 
     );
     let setup_config = SetupConfig {
         archive_state_dir_name: "fiduciary_state",
-        extra_canister_ranges: vec![
-            RangeInclusive::new(
-                CanisterId::from_u64(0x2100000),
-                CanisterId::from_u64(0x21FFFFE),
-            ),
-            RangeInclusive::new(
-                CanisterId::from_u64(0x2300000),
-                CanisterId::from_u64(0x23FFFFE),
-            ),
-        ],
         scp_location: FIDUCIARY_STATE_SOURCE,
         subnet_id: fiduciary_subnet_id,
         subnet_type: SubnetType::Application,
@@ -40,14 +30,6 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
     );
     let setup_config = SetupConfig {
         archive_state_dir_name: "nns_state",
-        // using the canister ranges of both the NNS and II subnets. Note. The
-        // last canister ID in the canister range of the II subnet is omitted so
-        // that the canister range of the II subnet is not used for automatic
-        // generation of new canister IDs.
-        extra_canister_ranges: vec![RangeInclusive::new(
-            CanisterId::from_u64(0x2100000),
-            CanisterId::from_u64(0x21FFFFE),
-        )],
         scp_location: NNS_STATE_SOURCE,
         subnet_id: nns_subnet_id,
         subnet_type: SubnetType::System,
@@ -62,16 +44,6 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
     );
     let setup_config = SetupConfig {
         archive_state_dir_name: "sns_state",
-        extra_canister_ranges: vec![
-            RangeInclusive::new(
-                CanisterId::from_u64(0x2100000),
-                CanisterId::from_u64(0x21FFFFE),
-            ),
-            RangeInclusive::new(
-                CanisterId::from_u64(0x2300000),
-                CanisterId::from_u64(0x23FFFFE),
-            ),
-        ],
         scp_location: SNS_STATE_SOURCE,
         subnet_id: sns_subnet_id,
         subnet_type: SubnetType::Application,
@@ -82,7 +54,6 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
 fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> StateMachine {
     let SetupConfig {
         archive_state_dir_name,
-        extra_canister_ranges,
         scp_location,
         subnet_id,
         subnet_type,
@@ -92,10 +63,16 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
     // Application subnets have this set to 2 billion.
     const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000);
 
-    let mut state_machine_builder = StateMachineBuilder::new().with_current_time();
-    for canister_range in extra_canister_ranges {
-        state_machine_builder = state_machine_builder.with_extra_canister_range(canister_range);
-    }
+    let state_machine_builder = StateMachineBuilder::new()
+        .with_current_time()
+        // using the canister ranges of both the NNS and II subnets. Note. The
+        // last canister ID in the canister range of the II subnet is omitted so
+        // that the canister range of the II subnet is not used for automatic
+        // generation of new canister IDs.
+        .with_extra_canister_range(RangeInclusive::new(
+            CanisterId::from_u64(0x2100000),
+            CanisterId::from_u64(0x21FFFFE),
+        ));
 
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
@@ -177,7 +154,6 @@ impl ScpLocation {
 
 struct SetupConfig {
     archive_state_dir_name: &'static str,
-    extra_canister_ranges: Vec<RangeInclusive<CanisterId>>,
     scp_location: ScpLocation,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
