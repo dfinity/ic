@@ -10,7 +10,7 @@ use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, He
 pub fn get_priority_function(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
-) -> PriorityFn<ConsensusMessageId, ()> {
+) -> PriorityFn<ConsensusMessageId> {
     let pool_reader = PoolReader::new(pool);
     let cup_height = pool_reader.get_catch_up_height();
     let next_cup_height = pool_reader.get_next_cup_height();
@@ -18,7 +18,7 @@ pub fn get_priority_function(
     let notarized_height = pool_reader.get_notarized_height();
     let beacon_height = pool_reader.get_random_beacon_height();
 
-    Box::new(move |id: &'_ ConsensusMessageId, ()| {
+    Box::new(move |id: &'_ ConsensusMessageId| {
         compute_priority(
             cup_height,
             next_cup_height,

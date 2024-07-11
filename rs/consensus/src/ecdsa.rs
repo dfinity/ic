@@ -194,7 +194,7 @@ use ic_types::consensus::idkg::IDkgMessage;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::IDkgMessageId,
-    consensus::idkg::{EcdsaBlockReader, IDkgMessageAttribute, RequestId},
+    consensus::idkg::{EcdsaBlockReader, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
@@ -502,29 +502,26 @@ impl EcdsaPriorityFnArgs {
 }
 
 impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for EcdsaGossipImpl {
-    fn get_priority_function(
-        &self,
-        _idkg_pool: &Pool,
-    ) -> PriorityFn<IDkgMessageId, IDkgMessageAttribute> {
+    fn get_priority_function(&self, _idkg_pool: &Pool) -> PriorityFn<IDkgMessageId> {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = EcdsaPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
         let metrics = self.metrics.clone();
-        Box::new(move |_, attr: &'_ IDkgMessageAttribute| {
-            compute_priority(attr, subnet_id, &args, &metrics)
+        Box::new(move |id: &'_ IDkgMessageId| {
+            compute_priority(id, subnet_id, &args, &metrics)
         })
     }
 }
 
 fn compute_priority(
-    attr: &IDkgMessageAttribute,
+    attr: &IDkgMessageId,
     subnet_id: SubnetId,
     args: &EcdsaPriorityFnArgs,
     metrics: &EcdsaGossipMetrics,
 ) -> Priority {
     match attr {
-        IDkgMessageAttribute::Dealing(transcript_id)
-        | IDkgMessageAttribute::DealingSupport(transcript_id) => {
+        IDkgMessageId::Dealing(transcript_id)
+        | IDkgMessageId::DealingSupport(transcript_id) => {
             // For xnet dealings(target side), always fetch the artifacts,
             // as the source_height from different subnet cannot be compared
             // anyways.
@@ -533,56 +530,24 @@ fn compute_priority(
             }
 
             let height = transcript_id.source_height();
-            if height <= args.finalized_height {
-                if args.requested_transcripts.contains(transcript_id) {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
+            if height <= args.finalized_height + Height::from(LOOK_AHEAD) {
                 Priority::FetchNow
             } else {
                 Priority::Stash
             }
         }
-        IDkgMessageAttribute::EcdsaSigShare(request_id)
-        | IDkgMessageAttribute::SchnorrSigShare(request_id) => {
-            if request_id.height <= args.certified_height {
-                if args.requested_signatures.contains(request_id) {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if request_id.height < args.certified_height + Height::from(LOOK_AHEAD) {
+        IDkgMessageId::EcdsaSigShare(request_id)
+        | IDkgMessageId::SchnorrSigShare(request_id) => {
+            if request_id.height <= args.certified_height + Height::from(LOOK_AHEAD) {
                 Priority::FetchNow
             } else {
                 Priority::Stash
             }
         }
-        IDkgMessageAttribute::Complaint(transcript_id)
-        | IDkgMessageAttribute::Opening(transcript_id) => {
+        IDkgMessageId::Complaint(transcript_id)
+        | IDkgMessageId::Opening(transcript_id) => {
             let height = transcript_id.source_height();
-            if height <= args.finalized_height {
-                if args.active_transcripts.contains(transcript_id)
-                    || args.requested_transcripts.contains(transcript_id)
-                {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
+            if height <= args.finalized_height + Height::from(LOOK_AHEAD) {
                 Priority::FetchNow
             } else {
                 Priority::Stash
