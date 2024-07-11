@@ -29,6 +29,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
@@ -84,8 +85,6 @@ jobs:
           if [[ $BRANCH_NAME =~ hotfix-.*-rc--.* ]]; then
             echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate" >> $GITHUB_ENV
           fi
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/
@@ -216,12 +215,17 @@ jobs:
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          # Todo: remove once dependency scanner tests don't reference name of repo
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          ADDITIONAL_FLAGS=""
+          if [[ $REPO_NAME == "ic-private" ]]; then
+            ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
+          fi
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
-          pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 \
+          pytest --ignore=gitlab_config/ --ignore=git_changes/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
-
   build-ic:
     name: Build IC
     <<: *dind-large-setup
@@ -234,9 +238,10 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/ic/ic/artifacts
+          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"

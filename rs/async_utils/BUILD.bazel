@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_async_utils",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:async-stream",
         "@crate_index//:byte-unit",
         "@crate_index//:bytes",
@@ -25,6 +26,7 @@ rust_test(
     name = "async_utils_test",
     crate = ":async_utils",
     deps = [
+        # Keep sorted.
         "@crate_index//:rand",
     ],
 )

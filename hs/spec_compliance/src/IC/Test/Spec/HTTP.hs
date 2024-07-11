@@ -112,7 +112,7 @@ list_subset :: (Eq a) => [a] -> [a] -> Bool
 list_subset xs ys = all (\x -> elem x ys) xs
 
 headers_match :: [(T.Text, T.Text)] -> [(T.Text, T.Text)] -> Bool
-headers_match xs ys = all (\x -> elem x ys) xs && all (\(n, v) -> elem (n, v) xs || n == "host" || n == "content-length" || n == "accept" || n == "user-agent" && v == "ic/1.0") ys
+headers_match xs ys = all (\x -> elem x ys) xs && all (\(n, v) -> elem (n, v) xs || n == "host" || n == "content-length" || n == "accept-encoding" || n == "user-agent" && v == "ic/1.0") ys
 
 check_http_json :: String -> [(T.Text, T.Text)] -> BS.ByteString -> Maybe HttpRequest -> Assertion
 check_http_json _ _ _ Nothing = assertFailure "Could not parse the original HttpRequest from the response"

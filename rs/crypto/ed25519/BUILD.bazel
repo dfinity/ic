@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rus
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:curve25519-dalek",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:hkdf",
@@ -15,6 +16,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:hex",
     "@crate_index//:hex-literal",
     "@crate_index//:wycheproof",

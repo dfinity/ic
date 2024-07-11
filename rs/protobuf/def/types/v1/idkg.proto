@@ -8,7 +8,7 @@ import "state/queues/v1/queues.proto";
 import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
-message EcdsaPayload {
+message IDkgPayload {
   reserved 2, 3, 4, 9, 11, 12;
   repeated CompletedSignature signature_agreements = 1;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
@@ -33,7 +33,7 @@ message ConsensusResponse {
 }
 
 message MasterKeyTranscript {
-  registry.crypto.v1.EcdsaKeyId deprecated_key_id = 1;
+  reserved 1;
   UnmaskedTranscriptWithAttributes current = 2;
   KeyTranscriptCreation next_in_creation = 3;
   registry.crypto.v1.MasterPublicKeyId master_key_id = 4;
@@ -189,10 +189,9 @@ message CompletedSignature {
 }
 
 message IDkgReshareRequest {
-  reserved 1;
+  reserved 1, 4;
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
-  registry.crypto.v1.EcdsaKeyId key_id = 4;
   registry.crypto.v1.MasterPublicKeyId master_key_id = 5;
 }
 
@@ -266,21 +265,36 @@ message IDkgDealingSupport {
 message IDkgPrefix {
   uint64 group_tag = 1;
   uint64 meta_hash = 2;
-  uint64 height = 3;
 }
 
-message PrefixHashPair {
-  IDkgPrefix prefix = 1;
+message IDkgArtifactIdData {
+  uint64 height = 1;
   bytes hash = 2;
+  types.v1.SubnetId subnet_id = 3;
+}
+
+message SigShareIdData {
+  uint64 height = 1;
+  bytes hash = 2;
+}
+
+message PrefixPairIDkg {
+  IDkgPrefix prefix = 1;
+  IDkgArtifactIdData id_data = 2;
+}
+
+message PrefixPairSigShare {
+  IDkgPrefix prefix = 1;
+  SigShareIdData id_data = 2;
 }
 
 message IDkgArtifactId {
   oneof kind {
-    PrefixHashPair dealing = 1;
-    PrefixHashPair dealing_support = 2;
-    PrefixHashPair ecdsa_sig_share = 3;
-    PrefixHashPair complaint = 4;
-    PrefixHashPair opening = 5;
-    PrefixHashPair schnorr_sig_share = 6;
+    PrefixPairIDkg dealing = 1;
+    PrefixPairIDkg dealing_support = 2;
+    PrefixPairSigShare ecdsa_sig_share = 3;
+    PrefixPairIDkg complaint = 4;
+    PrefixPairIDkg opening = 5;
+    PrefixPairSigShare schnorr_sig_share = 6;
   }
 }

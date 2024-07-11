@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/canister_client",
     "//rs/canister_sandbox:backend_lib",
@@ -52,6 +53,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
 ]

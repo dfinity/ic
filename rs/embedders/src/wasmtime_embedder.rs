@@ -1215,6 +1215,11 @@ impl WasmtimeInstance {
         NumWasmPages::from(self.get_memory(name).map_or(0, |mem| mem.size(&self.store)) as usize)
     }
 
+    /// Returns true iff the Wasm memory is 32 bit.
+    pub fn is_wasm32(&self) -> bool {
+        matches!(self.main_memory_type, WasmMemoryType::Wasm32)
+    }
+
     /// Returns a list of exported globals.
     pub fn get_exported_globals(&mut self) -> HypervisorResult<Vec<Global>> {
         let globals = get_exported_globals(

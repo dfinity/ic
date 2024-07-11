@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_query_stats_test",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
+        # Keep sorted.
         "//rs/registry/subnet_type",
         "//rs/tests",
         "//rs/tests/driver:ic-system-test-driver",

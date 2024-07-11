@@ -6,6 +6,7 @@ rust_binary(
     name = "fees_and_limits",
     srcs = ["src/fees_and_limits.rs"],
     deps = [
+        # Keep sorted.
         "//rs/config",
         "//rs/embedders",
         "//rs/replicated_state",

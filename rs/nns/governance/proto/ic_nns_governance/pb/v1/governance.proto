@@ -2167,13 +2167,39 @@ message Governance {
     map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
+
+    // Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
     optional uint64 total_voting_power_non_self_authenticating_controller = 36;
     optional uint64 total_staked_e8s_non_self_authenticating_controller = 37;
+
+    // Statistics about some subset (not necessarily a proper subset) of
+    // neurons. So far, these are mostly totals.
+    message NeuronSubsetMetrics {
+      // The values in these fields can be derived from the value in the
+      // analogous fields (declared a little lower in this message). For
+      // example, count = count_buckets.values().sum().
+      optional uint64 count = 1;
+      optional uint64 total_staked_e8s = 2;
+      optional uint64 total_staked_maturity_e8s_equivalent = 3;
+      optional uint64 total_maturity_e8s_equivalent = 4;
+      optional uint64 total_voting_power = 5;
+
+      // These fields are keyed by floor(dissolve delay / 0.5 years). These are
+      // analogous to the (singular) fields above. Here, the usual definition of
+      // year for the IC is used: exactly 365.25 days.
+      map<uint64, uint64> count_buckets = 6;
+      map<uint64, uint64> staked_e8s_buckets = 7;
+      map<uint64, uint64> staked_maturity_e8s_equivalent_buckets = 8;
+      map<uint64, uint64> maturity_e8s_equivalent_buckets = 9;
+      map<uint64, uint64> voting_power_buckets = 10;
+    }
+
+    NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
   }
 
   GovernanceCachedMetrics metrics = 15;
 
-  MostRecentMonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
+  MonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
 
   // Cached value for the maturity modulation as calculated each day.
   optional int32 cached_daily_maturity_modulation_basis_points = 17;
@@ -2400,10 +2426,30 @@ message ClaimOrRefreshNeuronFromAccountResponse {
   }
 }
 
-// The most recent monthly Node Provider rewards
-message MostRecentMonthlyNodeProviderRewards {
+// The monthly Node Provider rewards as of a point in time.
+message MonthlyNodeProviderRewards {
+  // The time when the rewards were calculated.
   uint64 timestamp = 1;
+  // The Rewards calculated and rewarded.
   repeated RewardNodeProvider rewards = 2;
+
+  // The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+  // This field snapshots the actual rate used by governance when the rewards were calculated.
+  optional XdrConversionRate xdr_conversion_rate = 3;
+
+  // The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+  // why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+  optional uint64 minimum_xdr_permyriad_per_icp = 4;
+
+  // The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+  // from the value in network economics.
+  optional uint64 maximum_node_provider_rewards_e8s = 5;
+
+  // The registry version used to calculate these rewards at the time the rewards were calculated.
+  optional uint64 registry_version = 6;
+
+  // The list of node_provieders at the time when the rewards were calculated.
+  repeated NodeProvider node_providers = 7;
 }
 
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be

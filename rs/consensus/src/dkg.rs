@@ -15,7 +15,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -23,7 +23,6 @@ use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    artifact::{Priority, PriorityFn},
     batch::ValidationContext,
     consensus::{
         dkg::{DealingContent, DkgMessageId, Message},
@@ -387,7 +386,7 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> PriorityFnAndFilterProducer<Message, Pool> for DkgGossipImpl {
+impl<Pool: DkgPool> PriorityFnFactory<Message, Pool> for DkgGossipImpl {
     fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId, ()> {
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id, _| {
@@ -459,19 +458,23 @@ pub fn make_registry_cup_from_cup_contents(
     );
     let cup_height = Height::new(cup_contents.height);
 
-    let ecdsa_summary =
-        match bootstrap_ecdsa_summary(&cup_contents, subnet_id, registry_version, registry, logger)
-        {
-            Ok(summary) => summary,
-            Err(err) => {
-                warn!(
-                    logger,
-                    "Failed constructing ECDSA summary block from CUP contents: {}", err
-                );
+    let idkg_summary = match bootstrap_idkg_summary(
+        &cup_contents,
+        subnet_id,
+        registry_version,
+        registry,
+        logger,
+    ) {
+        Ok(summary) => summary,
+        Err(err) => {
+            warn!(
+                logger,
+                "Failed constructing ECDSA summary block from CUP contents: {}", err
+            );
 
-                None
-            }
-        };
+            None
+        }
+    };
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)
@@ -495,7 +498,7 @@ pub fn make_registry_cup_from_cup_contents(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: dkg_summary,
-                ecdsa: ecdsa_summary,
+                ecdsa: idkg_summary,
             }),
         ),
         height: cup_height,
@@ -532,7 +535,7 @@ pub fn make_registry_cup_from_cup_contents(
     })
 }
 
-fn bootstrap_ecdsa_summary_from_cup_contents(
+fn bootstrap_idkg_summary_from_cup_contents(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
@@ -554,7 +557,7 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
 }
 
-fn bootstrap_ecdsa_summary(
+fn bootstrap_idkg_summary(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -562,7 +565,7 @@ fn bootstrap_ecdsa_summary(
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
     if let Some(summary) =
-        bootstrap_ecdsa_summary_from_cup_contents(cup_contents, subnet_id, logger)?
+        bootstrap_idkg_summary_from_cup_contents(cup_contents, subnet_id, logger)?
     {
         return Ok(Some(summary));
     }

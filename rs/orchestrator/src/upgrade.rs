@@ -859,14 +859,13 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let mut ecdsa = idkg::EcdsaPayload::empty(
+        let mut ecdsa = idkg::IDkgPayload::empty(
             h,
             subnet_test_id(0),
             vec![MasterKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                deprecated_key_id: None,
             }],
         );
         ecdsa.idkg_transcripts = idkg_transcripts;

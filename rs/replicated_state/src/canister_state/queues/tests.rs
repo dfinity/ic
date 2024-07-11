@@ -33,6 +33,14 @@ impl CanisterQueuesFixture {
         }
     }
 
+    fn new_with_ids(this: CanisterId, other: CanisterId) -> CanisterQueuesFixture {
+        CanisterQueuesFixture {
+            queues: CanisterQueues::default(),
+            this,
+            other,
+        }
+    }
+
     fn push_input_request(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
         self.queues.push_input(
             RequestBuilder::default()
@@ -845,7 +853,7 @@ fn test_peek_canister_input_does_not_affect_schedule() {
             .get(&canister_test_id(1))
             .unwrap()
             .0
-            .num_messages(),
+            .len(),
         2
     );
 }
@@ -902,7 +910,7 @@ fn test_skip_canister_input() {
             .get(&canister_test_id(1))
             .unwrap()
             .0
-            .num_messages(),
+            .len(),
         2
     );
 }
@@ -2221,7 +2229,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
         if let Some((input_queue, output_queue)) = canister_queues.canister_queues.get(canister_id)
         {
             assert_eq!(num_output_messages, output_queue.num_messages());
-            assert_eq!(1, input_queue.num_messages());
+            assert_eq!(1, input_queue.len());
         }
     }
 
@@ -2268,11 +2276,76 @@ fn time_out_requests_pushes_correct_reject_responses() {
         canister_queues.canister_queues.get(&remote_canister_id)
     {
         assert_eq!(0, output_queue.num_messages());
-        assert_eq!(2, input_queue.num_messages());
+        assert_eq!(2, input_queue.len());
     }
     // Check that timing out twice does not lead to duplicate entries in subnet input schedules.
     assert_eq!(
         canister_queues.remote_subnet_input_schedule,
         VecDeque::from(vec![remote_canister_id]),
     );
+}
+
+/// These tests are used to check the compatibility with the mainnet version.
+/// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
+/// but instead invoked from the compiled test binary by a separate compatibility test.
+mod mainnet_compatibility_tests {
+    use prost::Message;
+    use std::fs::File;
+    use std::io::Write;
+
+    #[cfg(test)]
+    mod basic_test {
+
+        use super::super::*;
+        use super::*;
+
+        const OUTPUT_NAME: &str = "queues.pbuf";
+        const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
+        const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
+
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let mut queues = CanisterQueuesFixture::new_with_ids(CANISTER_ID, OTHER_CANISTER_ID);
+
+            queues.push_input_request().unwrap();
+            queues.push_output_request().unwrap();
+            queues.push_input_response().unwrap();
+            queues.push_output_response();
+
+            let pb_queues: pb_queues::CanisterQueues = (&queues.queues).into();
+            let serialized = pb_queues.encode_to_vec();
+
+            let output_path = std::path::Path::new(OUTPUT_NAME);
+            File::create(output_path)
+                .unwrap()
+                .write_all(&serialized)
+                .unwrap();
+        }
+
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            let serialized = std::fs::read(OUTPUT_NAME).expect("Could not read file");
+            let pb_queues = pb_queues::CanisterQueues::decode(&serialized as &[u8])
+                .expect("Failed to deserialize the protobuf");
+            let queues = CanisterQueues::try_from((
+                pb_queues,
+                &StrictMetrics as &dyn CheckpointLoadingMetrics,
+            ))
+            .expect("Failed to convert the protobuf to CanisterQueues");
+            let mut queues = CanisterQueuesFixture {
+                queues,
+                this: CANISTER_ID,
+                other: OTHER_CANISTER_ID,
+            };
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(_));
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(_));
+            assert!(!queues.queues.has_input());
+
+            assert_matches!(queues.pop_output().unwrap(), RequestOrResponse::Request(_));
+            assert_matches!(queues.pop_output().unwrap(), RequestOrResponse::Response(_));
+            assert!(!queues.queues.has_output());
+        }
+    }
 }

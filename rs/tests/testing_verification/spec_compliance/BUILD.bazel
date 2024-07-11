@@ -9,6 +9,7 @@ rust_library(
     crate_name = "spec_compliance",
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
+        # Keep sorted.
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",

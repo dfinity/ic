@@ -5,11 +5,11 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
 };
-use ic_types::consensus::idkg::{EcdsaPayload, HasMasterPublicKeyId};
+use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgPayload};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 
-pub const ECDSA_KEY_ID_LABEL: &str = "key_id";
+pub const KEY_ID_LABEL: &str = "key_id";
 
 pub(crate) const CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING: &str = "ecdsa_key_transcript_missing";
 pub(crate) const CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS: &str =
@@ -147,7 +147,7 @@ impl EcdsaSignerMetrics {
     }
 }
 
-pub(crate) struct EcdsaPayloadMetrics {
+pub(crate) struct IDkgPayloadMetrics {
     payload_metrics: IntGaugeVec,
     payload_errors: IntCounterVec,
     transcript_builder_metrics: IntCounterVec,
@@ -157,17 +157,17 @@ pub(crate) struct EcdsaPayloadMetrics {
     pub(crate) critical_error_ecdsa_key_transcript_missing: IntCounter,
 }
 
-impl EcdsaPayloadMetrics {
+impl IDkgPayloadMetrics {
     pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             payload_metrics: metrics_registry.int_gauge_vec(
-                "ecdsa_payload_metrics",
-                "ECDSA payload related metrics",
-                &["type", ECDSA_KEY_ID_LABEL],
+                "idkg_payload_metrics",
+                "IDKG payload related metrics",
+                &["type", KEY_ID_LABEL],
             ),
             payload_errors: metrics_registry.int_counter_vec(
-                "ecdsa_payload_errors",
-                "ECDSA payload related errors",
+                "idkg_payload_errors",
+                "IDKG payload related errors",
                 &["type"],
             ),
             transcript_builder_metrics: metrics_registry.int_counter_vec(
@@ -193,7 +193,7 @@ impl EcdsaPayloadMetrics {
         }
     }
 
-    pub(crate) fn report(&self, payload: &EcdsaPayload) {
+    pub(crate) fn report(&self, payload: &IDkgPayload) {
         let expected_keys = expected_keys(payload);
 
         self.payload_metrics_set_without_key_id_label(
@@ -230,14 +230,6 @@ impl EcdsaPayloadMetrics {
         self.payload_metrics_set_without_key_id_label(
             "key_transcripts",
             payload.key_transcripts.len(),
-        );
-        self.payload_metrics_set_without_key_id_label(
-            "key_transcripts_with_ecdsa_key_id",
-            payload
-                .key_transcripts
-                .values()
-                .filter(|k| k.deprecated_key_id.is_some())
-                .count(),
         );
     }
 
@@ -462,7 +454,7 @@ pub fn key_id_label(key_id: Option<&MasterPublicKeyId>) -> String {
     key_id.map(ToString::to_string).unwrap_or_default()
 }
 
-pub fn expected_keys(payload: &EcdsaPayload) -> Vec<MasterPublicKeyId> {
+pub fn expected_keys(payload: &IDkgPayload) -> Vec<MasterPublicKeyId> {
     payload.key_transcripts.keys().cloned().collect()
 }
 

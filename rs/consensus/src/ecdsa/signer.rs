@@ -1,7 +1,7 @@
 //! The signature process manager
 
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
-use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaSignerMetrics};
+use crate::ecdsa::metrics::{timed_call, EcdsaSignerMetrics, IDkgPayloadMetrics};
 use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
@@ -608,7 +608,7 @@ pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
     block_reader: &'a dyn EcdsaBlockReader,
     crypto: &'a dyn ConsensusCrypto,
     idkg_pool: &'a dyn IDkgPool,
-    metrics: &'a EcdsaPayloadMetrics,
+    metrics: &'a IDkgPayloadMetrics,
     log: ReplicaLogger,
 }
 
@@ -617,7 +617,7 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
         block_reader: &'a dyn EcdsaBlockReader,
         crypto: &'a dyn ConsensusCrypto,
         idkg_pool: &'a dyn IDkgPool,
-        metrics: &'a EcdsaPayloadMetrics,
+        metrics: &'a IDkgPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -1983,7 +1983,7 @@ mod tests {
                     vec![(req_id.clone(), (&sig_inputs).into())],
                 );
 
-                let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
+                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
                 let crypto: Arc<dyn ConsensusCrypto> = env
                     .nodes
                     .filter_by_receivers(&sig_inputs)
@@ -2121,7 +2121,7 @@ mod tests {
                     vec![(req_id.clone(), (&sig_inputs).into())],
                 );
 
-                let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
+                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
                 let crypto: Arc<dyn ConsensusCrypto> = env
                     .nodes
                     .filter_by_receivers(&sig_inputs)

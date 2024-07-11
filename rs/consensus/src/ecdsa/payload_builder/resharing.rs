@@ -15,7 +15,7 @@ use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 /// Checks for new reshare requests from execution and initiates the processing
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
 pub(crate) fn initiate_reshare_requests(
-    payload: &mut idkg::EcdsaPayload,
+    payload: &mut idkg::IDkgPayload,
     reshare_requests: BTreeSet<idkg::IDkgReshareRequest>,
 ) {
     for request in reshare_requests {
@@ -81,7 +81,7 @@ fn make_reshare_dealings_response(
 /// - if successful, moving the request to completed agreements as
 ///   [`idkg::CompletedReshareRequest::Unreported`].
 pub(crate) fn update_completed_reshare_requests(
-    payload: &mut idkg::EcdsaPayload,
+    payload: &mut idkg::IDkgPayload,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
     resolver: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
@@ -169,7 +169,6 @@ fn reshare_request_from_dealings_context(
     context: &IDkgDealingsContext,
 ) -> idkg::IDkgReshareRequest {
     idkg::IDkgReshareRequest {
-        key_id: None,
         master_key_id: context.key_id.clone(),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
@@ -188,13 +187,13 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::{ComputeInitialIDkgDealingsResponse, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::EcdsaPayload;
+    use ic_types::consensus::idkg::IDkgPayload;
 
     use crate::ecdsa::{
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
             fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-            set_up_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+            set_up_idkg_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
@@ -202,9 +201,9 @@ mod tests {
     fn set_up(
         key_ids: Vec<MasterPublicKeyId>,
         should_create_key_transcript: bool,
-    ) -> (EcdsaPayload, TestEcdsaBlockReader) {
+    ) -> (IDkgPayload, TestEcdsaBlockReader) {
         let mut rng = reproducible_rng();
-        let (ecdsa_payload, _env, block_reader) = set_up_ecdsa_payload(
+        let (idkg_payload, _env, block_reader) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
@@ -212,7 +211,7 @@ mod tests {
             should_create_key_transcript,
         );
 
-        (ecdsa_payload, block_reader)
+        (idkg_payload, block_reader)
     }
 
     fn consensus_response(
