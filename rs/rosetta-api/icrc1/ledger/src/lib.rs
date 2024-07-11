@@ -475,8 +475,8 @@ impl<Tokens: TokensType> Ledger<Tokens> {
 
 impl<Tokens: TokensType> LedgerContext for Ledger<Tokens> {
     type AccountId = Account;
-    type BalancesStore = BTreeMap<Self::AccountId, Tokens>;
     type AllowancesData = HeapAllowancesData<Self::AccountId, Tokens>;
+    type BalancesStore = BTreeMap<Self::AccountId, Tokens>;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {

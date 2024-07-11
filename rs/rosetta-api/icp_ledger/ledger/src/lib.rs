@@ -110,8 +110,8 @@ pub struct Ledger {
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
-    type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
     type AllowancesData = HeapAllowancesData<AccountIdentifier, Tokens>;
+    type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
