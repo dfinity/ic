@@ -185,56 +185,6 @@ where
     }
 }
 
-pub trait Approvals {
-    type AccountId;
-    type Tokens;
-
-    /// Returns the current spender's allowance for the account.
-    fn allowance(
-        &self,
-        account: &Self::AccountId,
-        spender: &Self::AccountId,
-        now: TimeStamp,
-    ) -> Allowance<Self::Tokens>;
-
-    /// Increases the spender's allowance for the account by the specified amount.
-    fn approve(
-        &mut self,
-        account: &Self::AccountId,
-        spender: &Self::AccountId,
-        amount: Self::Tokens,
-        expires_at: Option<TimeStamp>,
-        now: TimeStamp,
-        expected_allowance: Option<Self::Tokens>,
-    ) -> Result<Self::Tokens, ApproveError<Self::Tokens>>;
-
-    /// Returns the number of approvals.
-    fn get_num_approvals(&self) -> usize;
-
-    /// Consumes amount from the spender's allowance for the account.
-    ///
-    /// This method behaves like [decrease_amount] but bails out if the
-    /// allowance goes negative.
-    fn use_allowance(
-        &mut self,
-        account: &Self::AccountId,
-        spender: &Self::AccountId,
-        amount: Self::Tokens,
-        now: TimeStamp,
-    ) -> Result<Self::Tokens, InsufficientAllowance<Self::Tokens>>;
-
-    /// Returns a vector of pairs (account, spender) of size min(n, approvals_size)
-    /// that represent approvals selected for trimming.
-    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
-}
-
-#[allow(clippy::len_without_is_empty)]
-pub trait PrunableApprovals {
-    fn len(&self) -> usize;
-
-    fn prune(&mut self, now: TimeStamp, limit: usize) -> usize;
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Allowance<Tokens> {
     pub amount: Tokens,
@@ -298,6 +248,7 @@ where
         r
     }
 
+    /// Returns the current spender's allowance for the account.
     pub fn allowance(
         &self,
         account: &S::AccountId,
@@ -312,6 +263,7 @@ where
         }
     }
 
+    /// Changes the spender's allowance for the account to the specified amount and expiration.
     pub fn approve(
         &mut self,
         account: &S::AccountId,
@@ -411,10 +363,15 @@ where
         })
     }
 
+    /// Returns the number of approvals.
     pub fn get_num_approvals(&self) -> usize {
         self.allowances_data.len_allowances()
     }
 
+    /// Consumes amount from the spender's allowance for the account.
+    ///
+    /// This method behaves like [decrease_amount] but bails out if the
+    /// allowance goes negative.
     pub fn use_allowance(
         &mut self,
         account: &S::AccountId,
@@ -460,6 +417,8 @@ where
         })
     }
 
+    /// Returns a vector of pairs (account, spender) of size min(n, approvals_size)
+    /// that represent approvals selected for trimming.
     pub fn select_approvals_to_trim(&self, n: usize) -> Vec<(S::AccountId, S::AccountId)> {
         self.allowances_data.oldest_arrivals(n)
     }
