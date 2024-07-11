@@ -988,7 +988,7 @@ fn test_approval_upgrade() {
         .unwrap();
     let canister_id = env
         .install_canister(
-            ledger_wasm_mainnet,
+            ledger_wasm_mainnet.clone(),
             CandidOne(payload).into_bytes().unwrap(),
             None,
         )
@@ -1002,10 +1002,10 @@ fn test_approval_upgrade() {
     approve_args.expires_at = Some(expiration);
     send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
 
-    let test_upgrade_to_current = || {
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
         env.upgrade_canister(
             canister_id,
-            ledger_wasm_current.clone(),
+            ledger_wasm,
             Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
         )
         .unwrap();
@@ -1020,9 +1020,11 @@ fn test_approval_upgrade() {
     };
 
     // Test if the old serialized approvals are correctly deserialized
-    test_upgrade_to_current();
+    test_upgrade(ledger_wasm_current.clone());
     // Test if new approvals serialization also works
-    test_upgrade_to_current();
+    test_upgrade(ledger_wasm_current);
+    // Test if downgrade works
+    test_upgrade(ledger_wasm_mainnet);
 }
 
 #[test]

@@ -2277,10 +2277,6 @@ pub fn icrc1_test_block_transformation<T>(
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
-    let p4 = Account {
-        owner: PrincipalId::new_user_test_id(4).0,
-        subaccount: Some([3; 32]),
-    };
 
     // Setup ledger as it is deployed on the mainnet.
     let (env, canister_id) = setup(
@@ -2300,12 +2296,6 @@ pub fn icrc1_test_block_transformation<T>(
     transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
 
-    let mut approve_args = default_approve_args(p4, 150_000);
-    let expiration =
-        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
-    approve_args.expires_at = Some(expiration);
-    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
-
     // Fetch all blocks before the upgrade.
     let resp_pre_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
 
@@ -2316,10 +2306,6 @@ pub fn icrc1_test_block_transformation<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
-
-    let allowance = get_allowance(&env, canister_id, p1.0, p4);
-    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
-    assert_eq!(allowance.expires_at, Some(expiration));
 
     // Default archive threshold is 10 blocks so all blocks should be on the ledger directly
     // Fetch all blocks after the upgrade.
@@ -2370,6 +2356,88 @@ pub fn icrc1_test_block_transformation<T>(
             Transaction::<Tokens>::try_from(block_post_upgrade.clone()).unwrap()
         );
     }
+}
+
+pub fn icrc1_test_approval_upgrade<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let mut accounts = vec![];
+    accounts.push(Account::from(PrincipalId::new_user_test_id(1).0));
+    accounts.push(Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: Some([2; 32]),
+    });
+    accounts.push(Account::from(PrincipalId::new_user_test_id(3).0));
+    accounts.push(Account {
+        owner: PrincipalId::new_user_test_id(4).0,
+        subaccount: Some([4; 32]),
+    });
+    let mut initial_balances = vec![];
+    for account in &accounts {
+        initial_balances.push((account.clone(), 10_000_000u64));
+    }
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet.clone(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+
+    let mut expected_allowances = vec![];
+
+    for i in 0..accounts.len() {
+        for j in i + 1..accounts.len() {
+            let mut approve_args = default_approve_args(accounts[j], 150_000);
+            approve_args.from_subaccount = accounts[i].subaccount;
+            send_approval(&env, canister_id, accounts[i].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[i], accounts[j]));
+
+            let mut approve_args = default_approve_args(accounts[i], 150_000);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = accounts[j].subaccount;
+            send_approval(&env, canister_id, accounts[j].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[j], accounts[i]));
+        }
+    }
+
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm,
+            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
+
+        let mut allowances = vec![];
+        for i in 0..accounts.len() {
+            for j in i + 1..accounts.len() {
+                let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
+                assert_eq!(allowance.allowance, Nat::from(150_000u64));
+                allowances.push(allowance);
+                let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
+                assert_eq!(allowance.allowance, Nat::from(150_000u64));
+                allowances.push(allowance);
+            }
+        }
+        assert_eq!(expected_allowances, allowances);
+    };
+
+    // Test if the old serialized approvals are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone());
+    // Test if new approvals serialization also works
+    test_upgrade(ledger_wasm_current);
+    // Test if downgrade works
+    test_upgrade(ledger_wasm_mainnet);
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
