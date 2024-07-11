@@ -22,39 +22,39 @@ pub trait AllowancesData {
 
     fn get_allowance(
         &self,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        account_spender: &(Self::AccountId, Self::AccountId),
     ) -> Option<Allowance<Self::Tokens>>;
 
     fn set_allowance(
         &mut self,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        account_spender: (Self::AccountId, Self::AccountId),
         allowance: Allowance<Self::Tokens>,
     );
 
-    fn remove_allowance(&mut self, account_spender: (&Self::AccountId, &Self::AccountId));
+    fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId));
 
     fn insert_expiry(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     );
 
     fn remove_expiry(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     );
 
     fn insert_arrival(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     );
 
     fn remove_arrival(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     );
 
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
@@ -101,60 +101,53 @@ where
 
     fn get_allowance(
         &self,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        account_spender: &(Self::AccountId, Self::AccountId),
     ) -> Option<Allowance<Self::Tokens>> {
-        let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.allowances.get(&asp).cloned()
+        self.allowances.get(account_spender).cloned()
     }
 
     fn set_allowance(
         &mut self,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        account_spender: (Self::AccountId, Self::AccountId),
         allowance: Allowance<Self::Tokens>,
     ) {
-        let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.allowances.insert(asp, allowance);
+        self.allowances.insert(account_spender, allowance);
     }
 
-    fn remove_allowance(&mut self, account_spender: (&Self::AccountId, &Self::AccountId)) {
-        let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.allowances.remove(&asp);
+    fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId)) {
+        self.allowances.remove(account_spender);
     }
 
     fn insert_expiry(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     ) {
-        let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.expiration_queue.insert((*timestamp, asp));
+        self.expiration_queue.insert((timestamp, account_spender));
     }
 
     fn remove_expiry(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     ) {
-        let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.expiration_queue.remove(&(*timestamp, asp));
+        self.expiration_queue.remove(&(timestamp, account_spender));
     }
 
     fn insert_arrival(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     ) {
-        let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.arrival_queue.insert((*timestamp, asp));
+        self.arrival_queue.insert((timestamp, account_spender));
     }
 
     fn remove_arrival(
         &mut self,
-        timestamp: &TimeStamp,
-        account_spender: (&Self::AccountId, &Self::AccountId),
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
     ) {
-        let asp = (account_spender.0.clone(), account_spender.1.clone());
-        self.arrival_queue.remove(&(*timestamp, asp));
+        self.arrival_queue.remove(&(timestamp, account_spender));
     }
 
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
@@ -255,7 +248,10 @@ where
         spender: &S::AccountId,
         now: TimeStamp,
     ) -> Allowance<S::Tokens> {
-        match self.allowances_data.get_allowance((account, spender)) {
+        match self
+            .allowances_data
+            .get_allowance(&(account.clone(), spender.clone()))
+        {
             Some(allowance) if allowance.expires_at.unwrap_or_else(remote_future) > now => {
                 allowance.clone()
             }
@@ -282,9 +278,9 @@ where
                 return Err(ApproveError::ExpiredApproval { now });
             }
 
-            let key = (account, spender);
+            let key = (account.clone(), spender.clone());
 
-            match table.allowances_data.get_allowance(key.clone()) {
+            match table.allowances_data.get_allowance(&key) {
                 None => {
                     if let Some(expected_allowance) = expected_allowance {
                         if !expected_allowance.is_zero() {
@@ -297,11 +293,9 @@ where
                         return Ok(amount);
                     }
                     if let Some(expires_at) = expires_at {
-                        table
-                            .allowances_data
-                            .insert_expiry(&expires_at, key.clone());
+                        table.allowances_data.insert_expiry(expires_at, key.clone());
                     }
-                    table.allowances_data.insert_arrival(&now, key.clone());
+                    table.allowances_data.insert_arrival(now, key.clone());
                     table.allowances_data.set_allowance(
                         key,
                         Allowance {
@@ -329,17 +323,15 @@ where
                     }
                     table
                         .allowances_data
-                        .remove_arrival(&old_allowance.arrived_at, key.clone());
+                        .remove_arrival(old_allowance.arrived_at, key.clone());
                     if amount == S::Tokens::zero() {
                         if let Some(expires_at) = old_allowance.expires_at {
-                            table
-                                .allowances_data
-                                .remove_expiry(&expires_at, key.clone());
+                            table.allowances_data.remove_expiry(expires_at, key.clone());
                         }
-                        table.allowances_data.remove_allowance(key);
+                        table.allowances_data.remove_allowance(&key);
                         return Ok(amount);
                     }
-                    table.allowances_data.insert_arrival(&now, key.clone());
+                    table.allowances_data.insert_arrival(now, key.clone());
                     let new_allowance = Allowance {
                         amount: amount.clone(),
                         expires_at,
@@ -350,10 +342,10 @@ where
                         if let Some(old_expiration) = old_allowance.expires_at {
                             table
                                 .allowances_data
-                                .remove_expiry(&old_expiration, key.clone());
+                                .remove_expiry(old_expiration, key.clone());
                         }
                         if let Some(expires_at) = expires_at {
-                            table.allowances_data.insert_expiry(&expires_at, key);
+                            table.allowances_data.insert_expiry(expires_at, key.clone());
                         }
                     }
                     table.allowances_data.set_allowance(key, new_allowance);
@@ -380,9 +372,9 @@ where
         now: TimeStamp,
     ) -> Result<S::Tokens, InsufficientAllowance<S::Tokens>> {
         self.with_postconditions_check(|table| {
-            let key = (account, spender);
+            let key = (account.clone(), spender.clone());
 
-            match table.allowances_data.get_allowance(key.clone()) {
+            match table.allowances_data.get_allowance(&key) {
                 None => Err(InsufficientAllowance(S::Tokens::zero())),
                 Some(old_allowance) => {
                     if old_allowance.expires_at.unwrap_or_else(remote_future) <= now {
@@ -399,14 +391,12 @@ where
                         let rest = new_allowance.amount.clone();
                         if rest.is_zero() {
                             if let Some(expires_at) = old_allowance.expires_at {
-                                table
-                                    .allowances_data
-                                    .remove_expiry(&expires_at, key.clone());
+                                table.allowances_data.remove_expiry(expires_at, key.clone());
                             }
                             table
                                 .allowances_data
-                                .remove_arrival(&old_allowance.arrived_at, key.clone());
-                            table.allowances_data.remove_allowance(key);
+                                .remove_arrival(old_allowance.arrived_at, key.clone());
+                            table.allowances_data.remove_allowance(&key);
                         } else {
                             table.allowances_data.set_allowance(key, new_allowance);
                         }
@@ -438,13 +428,13 @@ where
                     }
                 }
                 if let Some((_, (account, spender))) = table.remove_first_expiry() {
-                    let key = (&account, &spender);
-                    if let Some(allowance) = table.allowances_data.get_allowance(key) {
+                    let key = (account, spender);
+                    if let Some(allowance) = table.allowances_data.get_allowance(&key) {
                         if allowance.expires_at.unwrap_or_else(remote_future) <= now {
                             table
                                 .allowances_data
-                                .remove_arrival(&allowance.arrived_at, key.clone());
-                            table.allowances_data.remove_allowance(key);
+                                .remove_arrival(allowance.arrived_at, key.clone());
+                            table.allowances_data.remove_allowance(&key);
                             pruned += 1;
                         }
                     }
@@ -462,7 +452,7 @@ where
         let expiry = self.allowances_data.first_expiry();
         if let Some((timestamp, (account, spender))) = expiry {
             self.allowances_data
-                .remove_expiry(&timestamp, (&account, &spender));
+                .remove_expiry(timestamp, (account.clone(), spender.clone()));
             return Some((timestamp, (account, spender)));
         }
         None
