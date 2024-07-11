@@ -101,6 +101,7 @@ rust_ic_test(
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     deps = [
+        # Keep sorted.
         "//rs/nns/test_utils/golden_nns_state",
         "//rs/rosetta-api/icrc1/ledger",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
