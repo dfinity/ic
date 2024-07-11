@@ -2365,17 +2365,18 @@ pub fn icrc1_test_approval_upgrade<T>(
 ) where
     T: CandidType,
 {
-    let mut accounts = vec![];
-    accounts.push(Account::from(PrincipalId::new_user_test_id(1).0));
-    accounts.push(Account {
-        owner: PrincipalId::new_user_test_id(2).0,
-        subaccount: Some([2; 32]),
-    });
-    accounts.push(Account::from(PrincipalId::new_user_test_id(3).0));
-    accounts.push(Account {
-        owner: PrincipalId::new_user_test_id(4).0,
-        subaccount: Some([4; 32]),
-    });
+    let accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(1).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(2).0,
+            subaccount: Some([2; 32]),
+        },
+        Account::from(PrincipalId::new_user_test_id(3).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(4).0,
+            subaccount: Some([4; 32]),
+        },
+    ];
     let mut initial_balances = vec![];
     for account in &accounts {
         initial_balances.push((account.clone(), 10_000_000u64));
