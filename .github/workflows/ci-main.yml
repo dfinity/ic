@@ -257,9 +257,10 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/ic/ic/artifacts
+          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
