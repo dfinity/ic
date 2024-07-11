@@ -473,21 +473,6 @@ impl<Tokens: TokensType> Ledger<Tokens> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
-pub struct ApprovalKey(Account, Account);
-
-impl From<(&Account, &Account)> for ApprovalKey {
-    fn from((account, spender): (&Account, &Account)) -> Self {
-        Self(*account, *spender)
-    }
-}
-
-impl From<ApprovalKey> for (Account, Account) {
-    fn from(key: ApprovalKey) -> Self {
-        (key.0, key.1)
-    }
-}
-
 impl<Tokens: TokensType> LedgerContext for Ledger<Tokens> {
     type AccountId = Account;
     type BalancesStore = BTreeMap<Self::AccountId, Tokens>;
