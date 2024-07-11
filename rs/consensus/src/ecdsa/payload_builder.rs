@@ -843,7 +843,7 @@ mod tests {
             create_available_pre_signature(&mut idkg_payload, valid_key_id.clone(), 10);
         let pre_sig_for_disabled_key =
             create_available_pre_signature(&mut idkg_payload, disabled_key_id.clone(), 11);
-        let non_existant_pre_sig_for_valid_key = idkg_payload.uid_generator.next_pre_signature_id();
+        let non_existent_pre_sig_for_valid_key = idkg_payload.uid_generator.next_pre_signature_id();
 
         let contexts = set_up_signature_request_contexts(vec![
             // Two request contexts without pre-signature
@@ -863,12 +863,12 @@ mod tests {
                 UNIX_EPOCH,
                 Some(pre_sig_for_disabled_key),
             ),
-            // One valid context matched to non-existant pre-signature
+            // One valid context matched to non-existent pre-signature
             (
                 valid_key_id.clone(),
                 4,
                 UNIX_EPOCH,
-                Some(non_existant_pre_sig_for_valid_key),
+                Some(non_existent_pre_sig_for_valid_key),
             ),
         ]);
 

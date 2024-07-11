@@ -2664,7 +2664,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: invalid or disabled key {}.",
+                    "{} request failed: unknown or signing disabled iDKG key {}.",
                     request.method_name, threshold_key
                 ),
             ));
@@ -2759,7 +2759,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: invalid or disabled key {}.",
+                    "{} request failed: unknown or signing disabled iDKG key {}.",
                     request.method_name, threshold_key
                 ),
             ));

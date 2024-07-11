@@ -338,7 +338,7 @@ fn route_idkg_message(
                 IDkgSubnetKind::HoldsAndSignWithKey => {
                     let keys = format_keys(network_topology.idkg_signing_subnets.keys());
                     Err(ResolveDestinationError::IDkgKeyError(format!(
-                        "Requested unknown iDKG key: {}, existing keys with signing enabled: {}",
+                        "Requested unknown or signing disabled iDKG key: {}, existing keys with signing enabled: {}",
                         key_id, keys
                     )))
                 }
@@ -727,7 +727,7 @@ mod tests {
             ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                     err,
                     format!(
-                        "Requested unknown iDKG key: {}, existing keys with signing enabled: []",
+                        "Requested unknown or signing disabled iDKG key: {}, existing keys with signing enabled: []",
                         idkg_key_id,
                     )
                 )
@@ -894,7 +894,7 @@ mod tests {
                 Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
-                        "Requested unknown iDKG key: {unknown_key_id}, existing keys with signing enabled: [{known_key_id}]",
+                        "Requested unknown or signing disabled iDKG key: {unknown_key_id}, existing keys with signing enabled: [{known_key_id}]",
                     )
                 ),
                 _ => panic!("Unexpected result."),
