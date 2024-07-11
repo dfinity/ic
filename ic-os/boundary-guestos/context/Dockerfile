@@ -25,8 +25,8 @@ WORKDIR /tmp
 
 # Download and verify ic-gateway
 RUN \
-    curl -L -O https://boundary-nodes.s3.eu-central-1.amazonaws.com/ic-gateway_0.1.32_amd64.deb && \
-    echo "14a569b92537506fbc700c649691330dcaadd703  ic-gateway_0.1.32_amd64.deb" | shasum -c
+    curl -L -O https://boundary-nodes.s3.eu-central-1.amazonaws.com/ic-gateway_0.1.33_amd64.deb && \
+    echo "d95103d3753b6bdfec6b404f466bcbfe7e0335b1  ic-gateway_0.1.33_amd64.deb" | shasum -c
 
 #
 # Second build stage:
