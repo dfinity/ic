@@ -6,12 +6,12 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
+    ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority, PriorityFnFactory,
     UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
-use ic_types::{artifact::Priority, NodeId};
+use ic_types::NodeId;
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
@@ -286,13 +286,11 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     }
 }
 
-impl PriorityFnAndFilterProducer<U64Artifact, TestConsensus<U64Artifact>>
-    for TestConsensus<U64Artifact>
-{
+impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
     fn get_priority_function(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_types::artifact::PriorityFn<
+    ) -> ic_interfaces::p2p::consensus::PriorityFn<
         <U64Artifact as IdentifiableArtifact>::Id,
         <U64Artifact as IdentifiableArtifact>::Attribute,
     > {
