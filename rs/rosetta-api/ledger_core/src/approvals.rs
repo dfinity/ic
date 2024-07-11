@@ -332,11 +332,14 @@ where
                         return Ok(amount);
                     }
                     table.allowances_data.insert_arrival(now, key.clone());
-                    let new_allowance = Allowance {
-                        amount: amount.clone(),
-                        expires_at,
-                        arrived_at: now,
-                    };
+                    table.allowances_data.set_allowance(
+                        key.clone(),
+                        Allowance {
+                            amount: amount.clone(),
+                            expires_at,
+                            arrived_at: now,
+                        },
+                    );
 
                     if expires_at != old_allowance.expires_at {
                         if let Some(old_expiration) = old_allowance.expires_at {
@@ -345,10 +348,9 @@ where
                                 .remove_expiry(old_expiration, key.clone());
                         }
                         if let Some(expires_at) = expires_at {
-                            table.allowances_data.insert_expiry(expires_at, key.clone());
+                            table.allowances_data.insert_expiry(expires_at, key);
                         }
                     }
-                    table.allowances_data.set_allowance(key, new_allowance);
                     Ok(amount)
                 }
             }
