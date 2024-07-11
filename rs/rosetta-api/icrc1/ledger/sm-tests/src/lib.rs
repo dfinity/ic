@@ -2277,6 +2277,10 @@ pub fn icrc1_test_block_transformation<T>(
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
+    let p4 = Account {
+        owner: PrincipalId::new_user_test_id(4).0,
+        subaccount: Some([3; 32]),
+    };
 
     // Setup ledger as it is deployed on the mainnet.
     let (env, canister_id) = setup(
@@ -2296,7 +2300,7 @@ pub fn icrc1_test_block_transformation<T>(
     transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
 
-    let mut approve_args = default_approve_args(p2.0, 150_000);
+    let mut approve_args = default_approve_args(p4, 150_000);
     let expiration =
         system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
     approve_args.expires_at = Some(expiration);
@@ -2313,7 +2317,7 @@ pub fn icrc1_test_block_transformation<T>(
     )
     .unwrap();
 
-    let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+    let allowance = get_allowance(&env, canister_id, p1.0, p4);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, Some(expiration));
 
