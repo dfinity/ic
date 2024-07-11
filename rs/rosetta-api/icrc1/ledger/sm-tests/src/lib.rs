@@ -2379,7 +2379,7 @@ pub fn icrc1_test_approval_upgrade<T>(
     ];
     let mut initial_balances = vec![];
     for account in &accounts {
-        initial_balances.push((account.clone(), 10_000_000u64));
+        initial_balances.push((*account, 10_000_000u64));
     }
 
     // Setup ledger as it is deployed on the mainnet.
