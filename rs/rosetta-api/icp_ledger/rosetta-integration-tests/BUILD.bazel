@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
@@ -46,6 +47,7 @@ rust_test_suite(
         "//rs/replica",
         "//rs/rosetta-api:ic-rosetta-api",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "//rs/rosetta-api/test_utils/sender_canister:ic-sender-canister",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
@@ -54,6 +56,7 @@ rust_test_suite(
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+        "IC_SENDER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/test_utils/sender_canister:ic-sender-canister)",
     },
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
@@ -64,5 +67,6 @@ rust_test_suite(
     tags = ["cpu:3"],
     deps = DEPENDENCIES + [
         ":rosetta-integration-tests-lib",
+        "//rs/rosetta-api/test_utils/sender_canister:ic_sender_canister_lib",
     ],
 )
