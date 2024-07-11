@@ -3,6 +3,7 @@
 // We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
     use futures::TryFutureExt;
+    use http::{header::HeaderValue, StatusCode};
     use ic_https_outcalls_adapter::{AdapterServer, Config};
     use ic_https_outcalls_service::{
         canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
@@ -20,14 +21,7 @@ mod test {
     use tower::service_fn;
     use unix::UnixListenerDrop;
     use uuid::Uuid;
-    use warp::{
-        filters::BoxedFilter,
-        http::{header::HeaderValue, Response, StatusCode},
-        Filter,
-    };
-
-    #[cfg(feature = "http")]
-    use std::net::IpAddr;
+    use warp::{http::Response, Filter};
 
     // Selfsigned localhost cert
     const CERT: &str = "
@@ -78,7 +72,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         dir
     }
 
-    fn warp_server() -> BoxedFilter<(impl warp::Reply,)> {
+    fn start_server(cert_dir: &TempDir) -> String {
         let basic_post = warp::post()
             .and(warp::path("post"))
             .and(warp::body::json())
@@ -87,6 +81,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let basic_get = warp::get()
             .and(warp::path("get"))
             .map(|| warp::reply::json(&"Hello"));
+
         let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
             Response::builder()
                 .header(
@@ -111,17 +106,14 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         let basic_head = warp::head().and(warp::path("head")).map(warp::reply::reply);
 
-        basic_post
+        let routes = basic_post
             .or(basic_get)
             .or(basic_head)
             .or(get_response_size)
             .or(get_delay)
-            .or(invalid_header)
-            .boxed()
-    }
+            .or(invalid_header);
 
-    fn start_server(cert_dir: &TempDir) -> String {
-        let (addr, fut) = warp::serve(warp_server())
+        let (addr, fut) = warp::serve(routes)
             .tls()
             .cert_path(cert_dir.path().join("cert.crt"))
             .key_path(cert_dir.path().join("key.pem"))
@@ -129,14 +121,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         tokio::spawn(fut);
         format!("localhost:{}", addr.port())
-    }
-
-    #[cfg(feature = "http")]
-    fn start_http_server(ip: IpAddr) -> String {
-        let (addr, fut) = warp::serve(warp_server()).bind_ephemeral((ip, 0));
-
-        tokio::spawn(fut);
-        format!("{}:{}", ip, addr.port())
     }
 
     #[tokio::test]
@@ -160,7 +144,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
-    #[cfg(not(feature = "http"))]
     #[tokio::test]
     async fn test_canister_http_http_protocol() {
         // Check that error is returned if a `http` url is specified.
@@ -188,30 +171,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .unwrap_err()
             .message()
             .contains(&"Url need to specify https scheme".to_string()));
-    }
-
-    #[cfg(feature = "http")]
-    #[tokio::test]
-    async fn test_canister_http_http_protocol_allowed() {
-        // Check that error is returned if a `http` url is specified.
-        let server_config = Config {
-            ..Default::default()
-        };
-
-        let url = start_http_server("127.0.0.1".parse().unwrap());
-        let mut client = spawn_grpc_server(server_config);
-
-        let request = tonic::Request::new(CanisterHttpSendRequest {
-            url: format!("http://{}/get", &url),
-            headers: Vec::new(),
-            method: HttpMethod::Get as i32,
-            body: "hello".to_string().as_bytes().to_vec(),
-            max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
-        });
-        let response = client.canister_http_send(request).await;
-        let http_response = response.unwrap().into_inner();
-        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
     #[tokio::test]
@@ -377,7 +336,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"Failed to directly connect".to_string()));
+            .contains(&"deadline has elapsed".to_string()));
     }
 
     #[tokio::test]

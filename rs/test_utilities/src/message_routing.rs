@@ -52,10 +52,15 @@ impl MessageRouting for FakeMessageRouting {
         };
         if batch.batch_number == expected_height {
             *next_batch_height = batch.batch_number.increment();
-            self.batches.write().unwrap().push(batch);
+            self.batches.write().unwrap().push(batch.clone());
             if let Some(state_manager) = &self.state_manager {
                 let (_height, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, expected_height, scope);
+                state_manager.commit_and_certify(
+                    state,
+                    expected_height,
+                    scope,
+                    batch.batch_summary,
+                );
             }
             return Ok(());
         }

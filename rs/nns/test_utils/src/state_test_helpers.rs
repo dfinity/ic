@@ -272,6 +272,8 @@ pub fn query_with_sender(
     query_impl(machine, canister, method_name, payload, Some(sender))
 }
 
+/// Once you have a Scrape, pass it to a function like get_gauge, get_counter,
+/// et. al., which are provided by nervous_system/common/test_utils.
 pub fn scrape_metrics(
     state_machine: &StateMachine,
     canister_id: CanisterId,
@@ -297,29 +299,6 @@ pub fn scrape_metrics(
         .into_iter();
 
     prometheus_parse::Scrape::parse(body).unwrap()
-}
-
-pub fn get_counter(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Counter(value) => value,
-        value => panic!("Metric found, but not a counter: {:?}", value),
-    }
-}
-
-pub fn get_gauge(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Gauge(value) => value,
-        value => panic!("Metric found, but not a gauge: {:?}", value),
-    }
-}
-
-pub fn get_sample(scrape: &prometheus_parse::Scrape, name: &str) -> prometheus_parse::Sample {
-    for sample in &scrape.samples {
-        if sample.metric == name {
-            return sample.clone();
-        }
-    }
-    panic!("Metric not found: {}", name);
 }
 
 pub fn make_http_request(

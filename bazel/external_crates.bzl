@@ -502,6 +502,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "hyper-socks2": crate.spec(
+                version = "^0.8.0",
+                default_features = False,
+                features = [
+                    "rustls",
+                ],
+            ),
             "hyper-util": crate.spec(
                 version = "^0.1.3",
                 features = [
@@ -1007,7 +1014,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "rustls-tls",
                     "rustls-tls-native-roots",
                     "stream",
-                    "socks",
                 ],
             ),
             "ring": crate.spec(
