@@ -1,18 +1,10 @@
-use candid::{candid_method, CandidType, Principal};
-use ic_cdk::{api::call::RejectionCode, update};
-use serde::{Deserialize, Serialize};
-
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
-struct SendArg {
-    to: Principal,
-    method: String,
-    arg: Vec<u8>,
-    payment: u128,
-}
+use candid::candid_method;
+use ic_cdk::update;
+use ic_sender_canister_lib::{SendArg, SendResult};
 
 #[update]
 #[candid_method(update)]
-async fn send(calls: Vec<SendArg>) -> Vec<Result<Vec<u8>, (RejectionCode, String)>> {
+async fn send(calls: Vec<SendArg>) -> Vec<SendResult> {
     let mut futures = vec![];
     for SendArg {
         to,
