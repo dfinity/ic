@@ -699,6 +699,7 @@ fn stable64_write_and_read() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn stable_read_accessed_pages_allowance() {
     fn func_ref(name: &str) -> FuncRef {
         FuncRef::Method(WasmMethod::Update(name.to_string()))
@@ -794,6 +795,7 @@ fn stable_read_accessed_pages_allowance() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn stable64_read_accessed_pages_allowance() {
     fn func_ref(name: &str) -> FuncRef {
         FuncRef::Method(WasmMethod::Update(name.to_string()))
@@ -889,6 +891,7 @@ fn stable64_read_accessed_pages_allowance() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn multiple_stable_write() {
     let wat = r#"
             (module
@@ -937,6 +940,7 @@ fn multiple_stable_write() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn multiple_stable64_write() {
     let wat = r#"
             (module

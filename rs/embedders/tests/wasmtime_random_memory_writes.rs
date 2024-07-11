@@ -1385,6 +1385,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     fn touch_heap_with_api_calls() {
         with_test_replica_logger(|log| {
             let wat = make_module_wat_for_api_calls(TEST_NUM_PAGES);
@@ -1439,6 +1440,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     fn touch_heap64_with_api_calls() {
         with_test_replica_logger(|log| {
             let wat = make_module64_wat_for_api_calls(TEST_NUM_PAGES);

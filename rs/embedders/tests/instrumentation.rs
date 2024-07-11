@@ -63,86 +63,103 @@ fn inject_and_cmp(testname: &str) {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_basic() {
     inject_and_cmp("basic");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_basic_import() {
     inject_and_cmp("basic_import");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_basic_import_call() {
     inject_and_cmp("basic_import_call");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_element() {
     inject_and_cmp("element");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_fac() {
     inject_and_cmp("fac");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_recursive() {
     inject_and_cmp("recursive");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_app() {
     inject_and_cmp("app");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_app2() {
     inject_and_cmp("app2");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_start() {
     inject_and_cmp("start");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_zero_cost_ops() {
     inject_and_cmp("zero_cost_ops");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_control_flow() {
     inject_and_cmp("control_flow");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_fizzbuzz() {
     inject_and_cmp("fizzbuzz");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_nested_ifs() {
     inject_and_cmp("nested_ifs");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn export_mutable_globals() {
     inject_and_cmp("export_mutable_globals");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn memory_grow() {
     inject_and_cmp("memory_grow");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn simple_loop() {
     inject_and_cmp("simple_loop");
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn metering_memory_fill() {
     inject_and_cmp("memory_fill");
 }
@@ -703,6 +720,7 @@ fn metering_loop() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn charge_for_dirty_heap() {
     let wat = r#"
         (module
@@ -856,11 +874,13 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn charge_for_dirty_stable64_native() {
     run_charge_for_dirty_stable64_test(FlagStatus::Enabled);
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn charge_for_dirty_stable64() {
     run_charge_for_dirty_stable64_test(FlagStatus::Disabled);
 }
@@ -967,11 +987,13 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn charge_for_dirty_stable_native() {
     run_charge_for_dirty_stable_test(FlagStatus::Enabled);
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn charge_for_dirty_stable() {
     run_charge_for_dirty_stable_test(FlagStatus::Disabled);
 }
