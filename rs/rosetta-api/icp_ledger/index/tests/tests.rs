@@ -9,13 +9,10 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
-use ic_ledger_test_utils::statemachine_helpers::{
-    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks, icp_get_blocks,
-};
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, Transaction, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, Transaction,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation};
 use icrc_ledger_types::icrc1::account::Account;
@@ -27,6 +24,7 @@ use num_traits::cast::ToPrimitive;
 use on_wire::FromWire;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
@@ -196,6 +194,94 @@ fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
         .map(|c| c.0)
         .expect("failed to decode tip_of_chain_pb result");
     tip.tip_index
+}
+
+fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let req = GetBlocksArgs {
+        start: 0u64,
+        length: MAX_BLOCKS_PER_REQUEST,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let res = env
+        .query(ledger_id, "query_encoded_blocks", req)
+        .expect("Failed to send get_blocks request")
+        .bytes();
+    let res =
+        Decode!(&res, QueryEncodedBlocksResponse).expect("Failed to decode GetBlocksResponse");
+    let mut blocks = vec![];
+    for archived in res.archived_blocks {
+        let req = GetBlocksArgs {
+            start: archived.start,
+            length: archived.length as usize,
+        };
+        let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
+        let canister_id = archived.callback.canister_id;
+        let res = env
+            .query(
+                CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                archived.callback.method,
+                req,
+            )
+            .expect("Failed to send get_blocks request to archive")
+            .bytes();
+        let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
+            .unwrap()
+            .unwrap();
+        blocks.extend(res);
+    }
+    blocks.extend(res.blocks);
+    blocks
+        .into_iter()
+        .map(icp_ledger::Block::decode)
+        .collect::<Result<Vec<icp_ledger::Block>, String>>()
+        .unwrap()
+}
+
+fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let req = GetBlocksArgs {
+        start: 0u64,
+        length: MAX_BLOCKS_PER_REQUEST,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
+    let res = env
+        .query(ledger_id, "query_blocks", req)
+        .expect("Failed to send get_blocks request")
+        .bytes();
+    let res = Decode!(&res, QueryBlocksResponse).expect("Failed to decode QueryBlocksResponse");
+    let mut blocks = vec![];
+    for archived in res.archived_blocks {
+        let req = GetBlocksArgs {
+            start: archived.start,
+            length: archived.length as usize,
+        };
+        let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
+        let canister_id = archived.callback.canister_id;
+        let res = env
+            .query(
+                CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                archived.callback.method,
+                req,
+            )
+            .expect("Failed to send get_blocks request to archive")
+            .bytes();
+        let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
+            .unwrap()
+            .unwrap();
+        blocks.extend(
+            res.into_iter()
+                .map(icp_ledger::Block::decode)
+                .collect::<Result<Vec<icp_ledger::Block>, String>>()
+                .unwrap(),
+        );
+    }
+    blocks.extend(
+        res.blocks
+            .into_iter()
+            .map(icp_ledger::Block::try_from)
+            .collect::<Result<Vec<icp_ledger::Block>, String>>()
+            .unwrap(),
+    );
+    blocks
 }
 
 fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
@@ -522,6 +608,58 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
     let ledger_blocks = icp_get_blocks(env, ledger_id);
     let index_blocks = index_get_blocks(env, index_id);
     assert_eq!(ledger_blocks, index_blocks);
+}
+
+/// Assert that the index canister contains the same blocks as the ledger, by querying both the
+/// `query_blocks` and `query_encoded_blocks` endpoints of the ledger.
+fn assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+) {
+    let ledger_blocks = icp_get_blocks(env, ledger_id);
+    let index_blocks = index_get_blocks(env, index_id);
+    let ledger_unencoded_blocks = icp_query_blocks(env, ledger_id);
+    assert_eq!(ledger_blocks, index_blocks);
+    assert_eq!(ledger_blocks.len(), ledger_unencoded_blocks.len());
+    if ledger_blocks != ledger_unencoded_blocks {
+        // If the ledger blocks are not equal, we need some special handling to compare them.
+        // If the client did not specify the `created_at_time` field when creating a transaction,
+        // the ledger populates the `created_at_time` field with the value of the `timestamp` field
+        // of the block, for blocks returned from the `query_blocks` endpoint. Blocks returned from
+        // the `query_encoded_blocks` endpoint do not have the `created_at_time` field set.
+        // Therefore, if the blocks do not match, verify that:
+        //  - the `created_at_time` field of the encoded block is set `None`
+        //  - the `created_at_time` field of the unencoded block is set to the `timestamp` field
+        //    of the block
+        //  - all the other fields of the blocks match
+        for (ledger_block, unencoded_ledger_block) in ledger_blocks
+            .into_iter()
+            .zip(ledger_unencoded_blocks.into_iter())
+        {
+            if ledger_block != unencoded_ledger_block {
+                if ledger_block.transaction.created_at_time.is_none() {
+                    assert_eq!(
+                        Some(unencoded_ledger_block.timestamp),
+                        unencoded_ledger_block.transaction.created_at_time
+                    );
+                    let unencoded_ledger_block_without_created_at_time_in_tx = icp_ledger::Block {
+                        transaction: Transaction {
+                            created_at_time: None,
+                            ..unencoded_ledger_block.transaction
+                        },
+                        ..unencoded_ledger_block
+                    };
+                    assert_eq!(
+                        unencoded_ledger_block_without_created_at_time_in_tx,
+                        ledger_block
+                    )
+                } else {
+                    assert_eq!(ledger_block, unencoded_ledger_block);
+                }
+            }
+        }
+    }
 }
 
 #[test]
