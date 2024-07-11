@@ -18,8 +18,8 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
+    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -3609,6 +3609,209 @@ fn ecdsa_signature_agreements_metric_is_updated() {
 }
 
 #[test]
+fn threshold_signature_agreements_metric_is_updated() {
+    let ecdsa_key_id = make_ecdsa_key_id(0);
+    let master_ecdsa_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    let schnorr_key_id = make_schnorr_key_id(0);
+    let master_schnorr_key_id = MasterPublicKeyId::Schnorr(schnorr_key_id.clone());
+    let mut test = SchedulerTestBuilder::new()
+        .with_idkg_keys(vec![
+            master_ecdsa_key_id.clone(),
+            master_schnorr_key_id.clone(),
+        ])
+        .build();
+
+    // The old (ecdsa-only) metric is set to an initial value which should later
+    // be used to initialize the new metric
+    let initial_ecdsa_agreements = 123;
+    test.state_mut()
+        .metadata
+        .subnet_metrics
+        .ecdsa_signature_agreements = initial_ecdsa_agreements;
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        1.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let metric_init = fetch_int_gauge(
+        test.metrics_registry(),
+        "replicated_state_ecdsa_signature_agreements_total",
+    )
+    .unwrap();
+
+    // metric is set to the initial value
+    assert_eq!(initial_ecdsa_agreements, metric_init);
+
+    let canister_id = test.create_canister();
+
+    let ecdsa_payload = Encode!(&SignWithECDSAArgs {
+        message_hash: [1; 32],
+        derivation_path: DerivationPath::new(Vec::new()),
+        key_id: ecdsa_key_id,
+    })
+    .unwrap();
+    let schnorr_payload = Encode!(&SignWithSchnorrArgs {
+        message: vec![1; 128],
+        derivation_path: DerivationPath::new(Vec::new()),
+        key_id: schnorr_key_id,
+    })
+    .unwrap();
+
+    // inject three signing request
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        ecdsa_payload.clone(),
+        test.ecdsa_signature_fee(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        ecdsa_payload,
+        test.ecdsa_signature_fee(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.inject_call_to_ic00(
+        Method::SignWithSchnorr,
+        schnorr_payload,
+        test.schnorr_signature_fee(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains all requests.
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
+    assert_eq!(sign_with_ecdsa_contexts.len(), 2);
+    let sign_with_schnorr_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_schnorr_contexts();
+    assert_eq!(sign_with_schnorr_contexts.len(), 1);
+
+    // reject the first ecdsa context
+    let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let response = ConsensusResponse::new(
+        *callback_id,
+        Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+    );
+
+    test.state_mut().consensus_queue.push(response);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        1.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let threshold_signature_agreements_before = &test
+        .state()
+        .metadata
+        .subnet_metrics
+        .threshold_signature_agreements;
+    let metric_before = fetch_int_gauge_vec(
+        test.metrics_registry(),
+        "replicated_state_threshold_signature_agreements_total",
+    );
+
+    // metric and state variable should not have been updated
+    assert!(threshold_signature_agreements_before.is_empty());
+    assert!(metric_before.is_empty());
+
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
+    assert_eq!(sign_with_ecdsa_contexts.len(), 1);
+
+    // send a reply to the remaining requests
+    let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let response = ConsensusResponse::new(
+        *callback_id,
+        Payload::Data(
+            ic00::SignWithECDSAReply {
+                signature: vec![1, 2, 3],
+            }
+            .encode(),
+        ),
+    );
+    test.state_mut().consensus_queue.push(response);
+    let (callback_id, _) = sign_with_schnorr_contexts.iter().next().unwrap();
+    let response = ConsensusResponse::new(
+        *callback_id,
+        Payload::Data(
+            ic00::SignWithSchnorrReply {
+                signature: vec![1, 2, 3],
+            }
+            .encode(),
+        ),
+    );
+    test.state_mut().consensus_queue.push(response);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        2.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let threshold_signature_agreements_after = &test
+        .state()
+        .metadata
+        .subnet_metrics
+        .threshold_signature_agreements;
+    assert_eq!(threshold_signature_agreements_after.len(), 2);
+
+    // Value of the new ecdsa metric should be set to the old ecdsa metric + 1
+    let ecdsa_count = threshold_signature_agreements_after
+        .get(&master_ecdsa_key_id)
+        .unwrap();
+    assert_eq!(initial_ecdsa_agreements + 1, *ecdsa_count);
+
+    // Value of the new schnorr metric should be set to 1
+    let schnorr_count = threshold_signature_agreements_after
+        .get(&master_schnorr_key_id)
+        .unwrap();
+    assert_eq!(1, *schnorr_count);
+
+    let metrics_after = fetch_int_gauge_vec(
+        test.metrics_registry(),
+        "replicated_state_threshold_signature_agreements_total",
+    );
+    assert_eq!(
+        metrics_after,
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                initial_ecdsa_agreements + 1
+            ),
+            (&[("key_id", &master_schnorr_key_id.to_string())], 1),
+        ]),
+    );
+
+    // Check that the requests were removed.
+    let sign_with_threshold_contexts = &test.state().signature_request_contexts();
+    assert!(sign_with_threshold_contexts.is_empty());
+}
+
+#[test]
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
@@ -5370,6 +5573,10 @@ pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
     EcdsaKeyId::from_str(&format!("Secp256k1:key_{:?}", id)).unwrap()
 }
 
+pub(crate) fn make_schnorr_key_id(id: u64) -> SchnorrKeyId {
+    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{:?}", id)).unwrap()
+}
+
 fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
     let canister_id = test.create_canister();
 
@@ -5402,7 +5609,11 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let contexts = test.state().sign_with_ecdsa_contexts();
+        let contexts = test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts();
         let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
         // Check that quadruple and nonce are none
@@ -5427,7 +5638,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let contexts = test.state().sign_with_ecdsa_contexts();
+    let contexts = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     let expected_height = Height::from(test.last_round().get());
@@ -5441,7 +5656,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let contexts = test.state().sign_with_ecdsa_contexts();
+    let contexts = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that quadruple is still matched
@@ -5454,7 +5673,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert!(nonce.is_some());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let contexts = test.state().sign_with_ecdsa_contexts();
+    let contexts = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that nonce wasn't changed
@@ -5500,7 +5723,11 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
 
-    let sign_with_ecdsa_contexts = &test.state().sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
 
     // First context (requesting key 3) should be unmatched
     let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();

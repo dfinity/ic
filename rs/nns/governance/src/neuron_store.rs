@@ -34,7 +34,7 @@ use std::{
 };
 
 pub mod metrics;
-pub use metrics::NeuronMetrics;
+pub(crate) use metrics::NeuronMetrics;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {

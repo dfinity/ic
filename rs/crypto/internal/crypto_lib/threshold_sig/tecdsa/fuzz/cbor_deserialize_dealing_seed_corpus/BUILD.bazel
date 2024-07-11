@@ -3,12 +3,13 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
     "//rs/types/types",
+    "@crate_index//:assert_matches",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
-    "@crate_index//:assert_matches",
 ]
 
 MACRO_DEPENDENCIES = []

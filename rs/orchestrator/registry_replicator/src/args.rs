@@ -1,6 +1,8 @@
 use clap::Parser;
-use ic_config::{logger::LogFormat, Config};
-use slog::Level;
+use ic_config::{
+    logger::{Level, LogFormat},
+    Config,
+};
 use std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::PathBuf,

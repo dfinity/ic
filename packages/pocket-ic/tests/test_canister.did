@@ -1,0 +1,16 @@
+type EcdsaPublicKeyResponse = record {
+  public_key : blob;
+  chain_code : blob;
+};
+type EcdsaPublicKeyResult = variant {
+  Ok : EcdsaPublicKeyResponse;
+  Err : text;
+};
+type SignWithEcdsaResult = variant {
+  Ok : blob;
+  Err : text;
+};
+service : {
+  ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);
+  sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
+}

@@ -79,7 +79,7 @@ jobs:
         # v0.1.15
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
         with:
-          token: ${{secrets.RELEASE_TOKEN}}
+          token: ${{secrets.IDX_PUSH_TO_PR}}
           body: "IC ${{github.ref_name}}"
           files: |
             canisters.tar

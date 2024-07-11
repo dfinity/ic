@@ -105,4 +105,5 @@ assert_matches = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
 
 [dev-dependencies]
+ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }

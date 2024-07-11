@@ -19,20 +19,19 @@ use candid::Principal;
 use hyper::Client;
 use hyper_rustls::HttpsConnectorBuilder;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{retry, secs, HasTopologySnapshot, NnsCanisterWasmStrategy},
+    test_env_api::{secs, HasTopologySnapshot, NnsCanisterWasmStrategy},
 };
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use ic_tests::nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_tests::retry_with_msg;
-use ic_tests::systest;
-use ic_tests::util::block_on;
 use libflate::gzip::Decoder;
 use std::io::Read;
 
@@ -70,7 +69,7 @@ pub fn setup(env: TestEnv) {
 fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: &str) {
     let log = env.logger();
     let dapp_url = &format!("https://{}.{}", canister_id, farm_url);
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!("get html from {}", dapp_url),
         log.clone(),
         secs(600),

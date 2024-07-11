@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/proto",
     "//rs/nns/common",
@@ -28,6 +29,7 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 

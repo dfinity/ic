@@ -1,6 +1,7 @@
 //! Defines types used for certification.
 
 use crate::{
+    artifact::{CertificationMessageId, IdentifiableArtifact, PbArtifact},
     consensus::{
         Committee, CountBytes, HasCommittee, HasHeight, IsShare, ThresholdSignature,
         ThresholdSignatureShare,
@@ -15,7 +16,7 @@ use ic_protobuf::{
     types::v1::{self as pb, certification_message::Msg},
 };
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use std::convert::{Infallible, TryFrom};
 
 /// CertificationMessage captures the different types of messages sent around
 /// for the purpose of state certification.
@@ -26,6 +27,25 @@ pub enum CertificationMessage {
     /// CertificationShare captures a share of a certification created by a
     /// single replica
     CertificationShare(CertificationShare),
+}
+
+impl IdentifiableArtifact for CertificationMessage {
+    const NAME: &'static str = "certification";
+    type Id = CertificationMessageId;
+    type Attribute = ();
+    fn id(&self) -> Self::Id {
+        self.into()
+    }
+    fn attribute(&self) -> Self::Attribute {}
+}
+
+impl PbArtifact for CertificationMessage {
+    type PbId = ic_protobuf::types::v1::CertificationMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::CertificationMessage;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
 }
 
 impl HasHeight for CertificationMessage {

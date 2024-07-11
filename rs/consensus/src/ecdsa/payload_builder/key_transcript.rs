@@ -5,18 +5,18 @@ use ic_logger::{info, ReplicaLogger};
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
-        self, EcdsaBlockReader, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes,
+        self, EcdsaBlockReader, EcdsaUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     Height, NodeId, RegistryVersion,
 };
 
-use super::EcdsaPayloadError;
+use super::IDkgPayloadError;
 
 pub(super) fn get_created_key_transcript(
-    key_transcript: &idkg::EcdsaKeyTranscript,
+    key_transcript: &idkg::MasterKeyTranscript,
     block_reader: &dyn EcdsaBlockReader,
-) -> Result<Option<idkg::UnmaskedTranscriptWithAttributes>, EcdsaPayloadError> {
+) -> Result<Option<idkg::UnmaskedTranscriptWithAttributes>, IDkgPayloadError> {
     if let idkg::KeyTranscriptCreation::Created(unmasked) = &key_transcript.next_in_creation {
         let transcript = block_reader.transcript(unmasked.as_ref())?;
         Ok(Some(idkg::UnmaskedTranscriptWithAttributes::new(
@@ -36,17 +36,17 @@ pub(super) fn get_created_key_transcript(
 pub(super) fn update_next_key_transcripts(
     receivers: &[NodeId],
     registry_version: RegistryVersion,
-    ecdsa_payload: &mut idkg::EcdsaPayload,
+    idkg_payload: &mut idkg::IDkgPayload,
     transcript_cache: &dyn EcdsaTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
-) -> Result<Vec<IDkgTranscript>, EcdsaPayloadError> {
+) -> Result<Vec<IDkgTranscript>, IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
 
-    for key_transcript in ecdsa_payload.key_transcripts.values_mut() {
+    for key_transcript in idkg_payload.key_transcripts.values_mut() {
         if let Some(new_transcript) = update_next_key_transcript(
             key_transcript,
-            &mut ecdsa_payload.uid_generator,
+            &mut idkg_payload.uid_generator,
             receivers,
             registry_version,
             transcript_cache,
@@ -61,14 +61,14 @@ pub(super) fn update_next_key_transcripts(
 }
 
 pub(super) fn update_next_key_transcript(
-    key_transcript: &mut EcdsaKeyTranscript,
+    key_transcript: &mut MasterKeyTranscript,
     uid_generator: &mut EcdsaUIDGenerator,
     receivers: &[NodeId],
     registry_version: RegistryVersion,
     transcript_cache: &dyn EcdsaTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
-) -> Result<Option<IDkgTranscript>, EcdsaPayloadError> {
+) -> Result<Option<IDkgTranscript>, IDkgPayloadError> {
     let mut new_transcript = None;
     match (&key_transcript.current, &key_transcript.next_in_creation) {
         (Some(transcript), idkg::KeyTranscriptCreation::Begin) => {
@@ -231,8 +231,8 @@ mod tests {
     use crate::ecdsa::{
         test_utils::{
             create_reshare_unmasked_transcript_param,
-            fake_master_public_key_ids_for_all_algorithms, set_up_ecdsa_payload,
-            EcdsaPayloadTestHelper, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+            fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
+            IDkgPayloadTestHelper, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
@@ -248,10 +248,9 @@ mod tests {
             idkg::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let current_key_transcript = idkg::EcdsaKeyTranscript {
+        let current_key_transcript = idkg::MasterKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
-            deprecated_key_id: None,
             master_key_id: MasterPublicKeyId::Ecdsa(key_id),
         };
 
@@ -272,10 +271,9 @@ mod tests {
     fn get_created_key_transcript_returns_none_test() {
         let block_reader = TestEcdsaBlockReader::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let key_transcript = idkg::EcdsaKeyTranscript {
+        let key_transcript = idkg::MasterKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            deprecated_key_id: None,
             master_key_id: MasterPublicKeyId::Ecdsa(key_id),
         };
 
@@ -308,7 +306,7 @@ mod tests {
 
     fn test_update_next_key_transcript_single(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let (mut payload, env, mut block_reader) = set_up_ecdsa_payload(
+        let (mut payload, env, mut block_reader) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
@@ -317,7 +315,7 @@ mod tests {
         );
         let registry_version = env.newest_registry_version;
         let subnet_nodes: Vec<_> = env.nodes.ids();
-        let config_ids = |payload: &idkg::EcdsaPayload| {
+        let config_ids = |payload: &idkg::IDkgPayload| {
             let mut arr = payload
                 .iter_transcript_configs_in_creation()
                 .map(|x| x.transcript_id.id())
@@ -496,7 +494,7 @@ mod tests {
 
     fn test_update_next_key_transcript_xnet_target_subnet_single(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let (mut payload, env, mut block_reader) = set_up_ecdsa_payload(
+        let (mut payload, env, mut block_reader) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
@@ -510,7 +508,7 @@ mod tests {
         assert_eq!(subnet_nodes.len(), target_subnet_nodes.len());
         let (subnet_nodes_ids, target_subnet_nodes_ids): (Vec<_>, Vec<_>) =
             (subnet_nodes.ids(), target_subnet_nodes.ids());
-        let config_ids = |payload: &idkg::EcdsaPayload| {
+        let config_ids = |payload: &idkg::IDkgPayload| {
             let mut arr = payload
                 .iter_transcript_configs_in_creation()
                 .map(|x| x.transcript_id.id())

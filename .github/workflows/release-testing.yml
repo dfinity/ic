@@ -1,13 +1,12 @@
 name: Release Testing
 on:
-  push:
-    workflow_run:
-      workflows: ["CI Main"]
-      types:
-        - completed
-      branches:
-        - 'hotfix-*-rc--*'
-        - 'rc--*'
+  workflow_run:
+    workflows: ["CI Main"]
+    types:
+      - completed
+    branches:
+      - 'hotfix-*-rc--*'
+      - 'rc--*'
   workflow_dispatch:
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
@@ -18,6 +17,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
@@ -28,11 +28,13 @@ env:
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   ci-main-failure:
+    name: Check CI Main Failure
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
       - run: |
           echo 'CI Main workflow failed'
+          echo "CI Main URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
           exit 1
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
@@ -46,6 +48,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
       - name: Before script
         id: before-script
         shell: bash
@@ -72,6 +76,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
       - name: Before script
         id: before-script
         shell: bash
@@ -97,6 +103,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
       - name: Before script
         id: before-script
         shell: bash

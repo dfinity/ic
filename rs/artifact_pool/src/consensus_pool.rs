@@ -24,10 +24,7 @@ use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{
-    artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId,
-    Time,
-};
+use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
@@ -684,7 +681,7 @@ impl ConsensusPool for ConsensusPoolImpl {
     }
 }
 
-impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
+impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
     type ChangeSet = ChangeSet;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
@@ -700,7 +697,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
@@ -829,7 +826,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
     }
 }
 
-impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
+impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id)
     }
@@ -1028,7 +1025,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        artifact::ArtifactKind,
+        artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},
         crypto::{crypto_hash, CryptoHash, CryptoHashOf},
@@ -1191,11 +1188,11 @@ mod tests {
             assert_eq!(result.artifacts_with_opt.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(
-                ConsensusArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                result.artifacts_with_opt[0].artifact.id(),
                 random_beacon_2.get_id()
             );
             assert_eq!(
-                ConsensusArtifact::message_to_advert(&result.artifacts_with_opt[1].artifact).id,
+                result.artifacts_with_opt[1].artifact.id(),
                 random_beacon_3.get_id()
             );
 
@@ -1273,7 +1270,7 @@ mod tests {
             assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.poll_immediately);
             assert_eq!(
-                ConsensusArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                result.artifacts_with_opt[0].artifact.id(),
                 random_beacon_share_3.get_id()
             );
 

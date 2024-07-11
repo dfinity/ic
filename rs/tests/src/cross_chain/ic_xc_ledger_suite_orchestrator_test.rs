@@ -1,17 +1,7 @@
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    NnsCanisterWasmStrategy, NnsCustomizations,
-};
-use crate::nns::vote_and_execute_proposal;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::retry_with_msg_async;
-use crate::util::{block_on, runtime_from_url};
 use anyhow::{anyhow, bail};
 use candid::{Encode, Nat, Principal};
-use canister_test::Wasm;
-use canister_test::{Canister, Runtime};
+use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_ledger_suite_orchestrator::candid::{
@@ -19,17 +9,26 @@ use ic_ledger_suite_orchestrator::candid::{
 };
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            NnsCanisterWasmStrategy, NnsCustomizations,
+        },
+    },
+    nns::vote_and_execute_proposal,
+    util::{block_on, runtime_from_url},
+};
 use ic_wasm_types::CanisterModule;
 use slog::info;
-use std::future::Future;
-use std::path::Path;
-use std::time::Duration;
+use std::{future::Future, path::Path, time::Duration};
 
 pub fn setup_with_system_and_application_subnets(env: TestEnv) {
     InternetComputer::new()
@@ -283,7 +282,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
         "Upgrade finished. Ledger orchestrator is back running"
     );
 
-    let created_canister_ids = retry_with_msg_async!(
+    let created_canister_ids = ic_system_test_driver::retry_with_msg_async!(
         "checking if all canisters are created",
         logger,
         Duration::from_secs(100),
@@ -380,7 +379,7 @@ async fn status_of_nns_controlled_canister_satisfy<P: Fn(&CanisterStatusResult) 
 ) {
     use dfn_candid::candid;
 
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling canister_status of {} to check if {} satisfies the predicate",
             root_canister.canister_id(),
@@ -467,7 +466,7 @@ where
     Fut: Future<Output = Result<R, String>>,
     F: Fn() -> Fut,
 {
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         msg.as_ref(),
         logger,
         Duration::from_secs(100),

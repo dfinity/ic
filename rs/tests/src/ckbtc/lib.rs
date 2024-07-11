@@ -1,15 +1,6 @@
 use crate::{
-    driver::{
-        test_env::TestEnv,
-        test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationBuilder, SubnetSnapshot,
-        },
-    },
     icrc1_agent_test::install_icrc1_ledger,
-    nns::vote_and_execute_proposal,
     tecdsa::{get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature},
-    util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
@@ -20,35 +11,43 @@ use ic_canister_client::Sender;
 use ic_ckbtc_kyt::{
     InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
 };
-use ic_ckbtc_minter::lifecycle::init::MinterArg;
-use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
-use ic_ckbtc_minter::CKBTC_LEDGER_MEMO_SIZE;
+use ic_ckbtc_minter::{
+    lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
+    CKBTC_LEDGER_MEMO_SIZE,
+};
 use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
-use ic_management_canister_types::{CanisterIdRecord, MasterPublicKeyId};
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{NnsFunction, ProposalStatus},
+use ic_management_canister_types::{
+    CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
 };
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{
+            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsInstallationBuilder, SubnetSnapshot,
+        },
+    },
+    nns::vote_and_execute_proposal,
+    util::{assert_create_agent, runtime_from_url, MessageCanister},
+};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 

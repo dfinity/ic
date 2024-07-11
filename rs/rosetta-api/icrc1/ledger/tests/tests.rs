@@ -55,6 +55,10 @@ pub enum LegacyLedgerArgument {
     Upgrade(Option<LegacyUpgradeArgs>),
 }
 
+fn ledger_mainnet_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -120,6 +124,10 @@ fn encode_init_args_with_small_sized_archive(
     }
 }
 
+fn encode_upgrade_args() -> LedgerArgument {
+    LedgerArgument::Upgrade(None)
+}
+
 #[test]
 fn test_metadata() {
     ic_icrc1_ledger_sm_tests::test_metadata(ledger_wasm(), encode_init_args)
@@ -128,6 +136,32 @@ fn test_metadata() {
 #[test]
 fn test_upgrade() {
     ic_icrc1_ledger_sm_tests::test_upgrade(ledger_wasm(), encode_init_args)
+}
+
+#[cfg_attr(feature = "u256-tokens", ignore)]
+#[test]
+fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
+    ic_icrc1_ledger_sm_tests::test_install_upgrade_downgrade(
+        ledger_mainnet_wasm(),
+        encode_init_args,
+        ledger_wasm(),
+        encode_upgrade_args,
+        ledger_mainnet_wasm(),
+        encode_upgrade_args,
+    )
+}
+
+#[cfg_attr(feature = "u256-tokens", ignore)]
+#[test]
+fn test_install_current_ledger_then_upgrade_then_downgrade_to_mainnet_version() {
+    ic_icrc1_ledger_sm_tests::test_install_upgrade_downgrade(
+        ledger_wasm(),
+        encode_init_args,
+        ledger_wasm(),
+        encode_upgrade_args,
+        ledger_mainnet_wasm(),
+        encode_upgrade_args,
+    )
 }
 
 #[test]
@@ -321,15 +355,14 @@ fn test_icrc21_standard() {
 #[test]
 fn test_block_transformation() {
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
-        std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
-            .unwrap(),
+        ledger_mainnet_wasm(),
         ledger_wasm(),
         encode_init_args,
     );
 }
 
 mod metrics {
-    use crate::{encode_init_args, ledger_wasm};
+    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -354,6 +387,15 @@ mod metrics {
             ledger_wasm(),
             encode_init_args,
             LedgerSuiteType::ICRC,
+        );
+    }
+
+    #[test]
+    fn should_set_ledger_upgrade_instructions_consumed_metric() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
+            ledger_wasm(),
+            encode_init_args,
+            encode_upgrade_args,
         );
     }
 }

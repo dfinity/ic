@@ -3,21 +3,24 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/common",
     "@crate_index//:lazy_static",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "//rs/nervous_system/common",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:rust_decimal_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:assert_matches",
     "@crate_index//:proptest",
     "@crate_index//:serde_bytes",
-    "@crate_index//:assert_matches",
 ]
 
 ALIASES = {}

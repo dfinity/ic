@@ -2659,7 +2659,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "ecdsa_payload_errors{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
+          "expr": "idkg_payload_errors{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
           "interval": "",
           "legendFormat": "{{instance}} {{type}}",
           "range": true,
@@ -2950,7 +2950,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "avg(sum by (instance)(ecdsa_pool_artifacts{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}))",
+          "expr": "avg(sum by (instance)(idkg_pool_artifacts{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}))",
           "interval": "",
           "legendFormat": "{{instance}} {{artifact_type}}",
           "range": true,

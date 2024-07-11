@@ -13,18 +13,8 @@ Success:: Upgrades work into both directions for all subnet types.
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
-use crate::generic_workload_engine::metrics::LoadTestMetricsProvider;
-use crate::generic_workload_engine::metrics::RequestOutcome;
 use crate::{
-    canister_agent::HasCanisterAgentCapability,
-    canister_requests,
     consensus::tecdsa_performance_test::ChainSignatureRequest,
-    driver::{
-        ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
-        test_env_api::*,
-    },
-    generic_workload_engine::engine::Engine,
     orchestrator::utils::{
         rw_message::{
             can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
@@ -34,7 +24,6 @@ use crate::{
         upgrade::*,
     },
     tecdsa::make_key_ids_for_all_schemes,
-    util::{block_on, get_app_subnet_and_node, MessageCanister},
 };
 use candid::Principal;
 use futures::future::join_all;
@@ -42,6 +31,19 @@ use ic_agent::Agent;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::generic_workload_engine::metrics::LoadTestMetricsProvider;
+use ic_system_test_driver::generic_workload_engine::metrics::RequestOutcome;
+use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
+    canister_requests,
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::*,
+    },
+    generic_workload_engine::engine::Engine,
+    util::{block_on, get_app_subnet_and_node, MessageCanister},
+};
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
 use std::collections::BTreeMap;

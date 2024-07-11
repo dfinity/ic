@@ -30,16 +30,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
 
-use crate::{
+use crate::orchestrator::utils::rw_message::{
+    can_read_msg, can_read_msg_with_retries, install_nns_and_check_progress, store_message,
+};
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     nns::{add_nodes_to_subnet, change_subnet_membership, remove_nodes_via_endpoint},
-    orchestrator::utils::rw_message::{
-        can_read_msg, can_read_msg_with_retries, install_nns_and_check_progress, store_message,
-    },
     util::{block_on, get_app_subnet_and_node},
 };
 

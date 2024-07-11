@@ -1464,7 +1464,10 @@ impl Blocks {
         Ok(())
     }
 
-    fn store_rosetta_block(&self, rosetta_block: RosettaBlock) -> Result<(), BlockStoreError> {
+    pub(crate) fn store_rosetta_block(
+        &self,
+        rosetta_block: RosettaBlock,
+    ) -> Result<(), BlockStoreError> {
         let mut connection = self
             .connection
             .lock()

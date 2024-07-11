@@ -41,7 +41,7 @@ pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
     let zero = 0u32;
 
     RouteSubnet {
-        id: Principal::from_text(id).unwrap().to_string(),
+        id: Principal::from_text(id).unwrap(),
         range_start: u256::from(zero),
         range_end: u256::from(zero),
         nodes,

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg};
 use crate::orchestrator::utils::rw_message::{
     can_store_msg, cert_state_makes_progress_with_retries,
 };
@@ -11,13 +12,6 @@ use crate::tecdsa::{
     add_chain_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
     empty_subnet_update, execute_update_subnet_proposal, get_public_key_with_retries,
     get_signature_with_logger, verify_signature,
-};
-use crate::util::*;
-use crate::{
-    driver::{test_env::TestEnv, test_env_api::*},
-    orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg},
-    retry_with_msg,
-    util::runtime_from_url,
 };
 use anyhow::bail;
 use candid::Principal;
@@ -29,6 +23,11 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_recovery::steps::Step;
 use ic_recovery::{get_node_metrics, NodeMetrics, Recovery};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::*;
+use ic_system_test_driver::{
+    driver::{test_env::TestEnv, test_env_api::*},
+    util::runtime_from_url,
+};
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::{Deserialize, Serialize};
@@ -95,7 +94,7 @@ pub(crate) fn halt_subnet(
         .halt_subnet(subnet_id, true, &[])
         .exec()
         .expect("Failed to halt subnet.");
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "check if consensus is halted",
         logger.clone(),
         secs(120),
@@ -212,7 +211,7 @@ pub(crate) fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) 
         .block_on_ssh_session()
         .expect("Failed to establish SSH session");
 
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!("check if node {} is unassigned", node.node_id),
         logger.clone(),
         secs(300),
@@ -432,7 +431,7 @@ pub(crate) fn disable_chain_key_on_subnet(
     info!(logger, "Waiting until signing fails.");
     let message_hash = vec![0xabu8; 32];
     for key_id in key_ids {
-        retry_with_msg!(
+        ic_system_test_driver::retry_with_msg!(
             "check if signing has failed",
             logger.clone(),
             secs(120),

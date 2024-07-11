@@ -594,7 +594,6 @@ fn follow(
 
 #[cfg(test)]
 mod tests {
-    use ed25519_consensus::SigningKey;
     use ic_base_types::CanisterId;
     use proptest::prop_assert;
     use proptest::test_runner::TestCaseError;
@@ -617,7 +616,7 @@ mod tests {
 
     #[test]
     fn test_payloads_parse_identity() {
-        let key = SigningKey::new(OsRng);
+        let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
         let ledger_client = futures::executor::block_on(LedgerClient::new(
             Url::from_str("http://localhost:1234").unwrap(),
             CanisterId::from_u64(1),
@@ -642,7 +641,7 @@ mod tests {
 
         // get the account from the public key
         let pub_key = crate::models::PublicKey {
-            hex_bytes: hex::encode(key.as_bytes()),
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
             curve_type: CurveType::Edwards25519,
         };
         let account = handler
@@ -820,12 +819,12 @@ mod tests {
             let mut signatures = vec![];
             for payload in construction_payloads_result.payloads {
                 let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
-                let signature = key.sign(&bytes);
+                let signature = key.sign_message(&bytes);
                 let signature = Signature {
                     signing_payload: payload,
-                    public_key: PublicKey::new(hex::encode(key.as_bytes()), CurveType::Edwards25519),
+                    public_key: PublicKey::new(hex::encode(key.public_key().serialize_raw()), CurveType::Edwards25519),
                     signature_type: SignatureType::Ed25519,
-                    hex_bytes: hex::encode(signature.to_bytes()),
+                    hex_bytes: hex::encode(signature),
                 };
                 signatures.push(signature);
             }

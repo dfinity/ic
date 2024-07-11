@@ -13,7 +13,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{idkg::EcdsaPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
+    consensus::{idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
@@ -567,7 +567,7 @@ pub fn get_subnet_record(
 /// Return the oldest registry version of transcripts in the given ECDSA summary payload that are
 /// referenced by the given replicated state.
 pub fn get_oldest_ecdsa_state_registry_version(
-    ecdsa: &EcdsaPayload,
+    ecdsa: &IDkgPayload,
     state: &ReplicatedState,
 ) -> Option<RegistryVersion> {
     state
@@ -601,8 +601,8 @@ mod tests {
     use ic_types::{
         consensus::idkg::{
             common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
-            schnorr::PreSignatureTranscriptRef, EcdsaKeyTranscript, KeyTranscriptCreation,
-            MaskedTranscript, PreSigId, UnmaskedTranscript,
+            schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
+            MasterKeyTranscript, PreSigId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -778,11 +778,11 @@ mod tests {
         assert_eq!(round_robin.call_next(&calls), vec![1]);
     }
 
-    fn empty_ecdsa_payload(key_id: MasterPublicKeyId) -> EcdsaPayload {
-        EcdsaPayload::empty(
+    fn empty_idkg_payload(key_id: MasterPublicKeyId) -> IDkgPayload {
+        IDkgPayload::empty(
             Height::new(0),
             subnet_test_id(0),
-            vec![EcdsaKeyTranscript::new(
+            vec![MasterKeyTranscript::new(
                 key_id,
                 KeyTranscriptCreation::Begin,
             )],
@@ -906,8 +906,8 @@ mod tests {
     }
 
     // Create an ECDSA payload with 10 pre-signatures, each using registry version 2, 3 or 4.
-    fn ecdsa_payload_with_pre_sigs(key_id: &MasterPublicKeyId) -> EcdsaPayload {
-        let mut ecdsa = empty_ecdsa_payload(key_id.clone());
+    fn idkg_payload_with_pre_sigs(key_id: &MasterPublicKeyId) -> IDkgPayload {
+        let mut ecdsa = empty_idkg_payload(key_id.clone());
         let mut rvs = [
             RegistryVersion::from(2),
             RegistryVersion::from(3),
@@ -934,7 +934,7 @@ mod tests {
     fn test_empty_state_should_return_no_registry_version() {
         for key_id in fake_key_ids() {
             println!("Running test for key ID {key_id}");
-            let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+            let ecdsa = idkg_payload_with_pre_sigs(&key_id);
             let state = fake_state_with_contexts(vec![]);
             assert_eq!(
                 None,
@@ -947,7 +947,7 @@ mod tests {
     fn test_state_without_matches_should_return_no_registry_version() {
         for key_id in fake_key_ids() {
             println!("Running test for key ID {key_id}");
-            let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+            let ecdsa = idkg_payload_with_pre_sigs(&key_id);
             let state = fake_state_with_contexts(vec![fake_context(None, &key_id)]);
             assert_eq!(
                 None,
@@ -965,7 +965,7 @@ mod tests {
     }
 
     fn test_should_return_oldest_registry_version(key_id: MasterPublicKeyId) {
-        let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+        let ecdsa = idkg_payload_with_pre_sigs(&key_id);
         // create contexts for all pre-signatures, but only create a match for
         // pre-signatures with registry version >= 3 (not 2!). Thus the oldest
         // registry version referenced by the state should be 3.
