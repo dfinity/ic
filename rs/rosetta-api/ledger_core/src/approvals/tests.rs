@@ -14,14 +14,8 @@ fn tokens(n: u64) -> Tokens {
     Tokens::from_e8s(n)
 }
 
-#[derive(PartialEq, Eq, Hash, Serialize, Clone, Default, PartialOrd)]
+#[derive(PartialEq, Eq, Hash, Serialize, Clone, Default, PartialOrd, Ord)]
 struct Account(u64);
-
-impl Ord for Account {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 type TestAllowanceTable = AllowanceTable<HeapAllowancesData<Account, Tokens>>;
 
