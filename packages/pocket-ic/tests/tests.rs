@@ -1167,5 +1167,5 @@ fn test_ecdsa_disabled() {
         .unwrap()
         .0
         .unwrap_err();
-    assert!(ecdsa_signature_err.contains("Requested unknown iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
+    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
 }

@@ -372,7 +372,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
                     "Unable to route management canister request sign_with_schnorr: \
-                    IDkgKeyError(\"Requested unknown iDKG key: {}, \
+                    IDkgKeyError(\"Requested unknown or signing disabled iDKG key: {}, \
                     existing keys with signing enabled: {}\")",
                     key_id3, initial_key_ids_as_string,
                 ),
@@ -478,7 +478,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                             reject_code: RejectCode::CanisterReject,
                             reject_message: format!(
                                 "Unable to route management canister request {}: \
-                                IDkgKeyError(\"Requested unknown iDKG key: {}, \
+                                IDkgKeyError(\"Requested unknown or signing disabled iDKG key: {}, \
                                 existing keys with signing enabled: []\")",
                                 method_name, key_id
                             ),
