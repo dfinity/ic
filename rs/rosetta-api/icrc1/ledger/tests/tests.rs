@@ -328,7 +328,6 @@ fn test_block_transformation() {
     );
 }
 
-#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn icrc1_test_approval_upgrade() {
     ic_icrc1_ledger_sm_tests::icrc1_test_approval_upgrade(
