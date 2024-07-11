@@ -197,22 +197,22 @@ impl<Tokens: Zero> Default for Allowance<Tokens> {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(transparent)]
-pub struct AllowanceTable<S: AllowancesData> {
-    allowances_data: S,
+pub struct AllowanceTable<AD: AllowancesData> {
+    allowances_data: AD,
 }
 
-impl<S> Default for AllowanceTable<S>
+impl<AD> Default for AllowanceTable<AD>
 where
-    S: Default + AllowancesData,
+    AD: Default + AllowancesData,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<S> AllowanceTable<S>
+impl<AD> AllowanceTable<AD>
 where
-    S: Default + AllowancesData,
+    AD: Default + AllowancesData,
 {
     pub fn new() -> Self {
         Self {
@@ -244,10 +244,10 @@ where
     /// Returns the current spender's allowance for the account.
     pub fn allowance(
         &self,
-        account: &S::AccountId,
-        spender: &S::AccountId,
+        account: &AD::AccountId,
+        spender: &AD::AccountId,
         now: TimeStamp,
-    ) -> Allowance<S::Tokens> {
+    ) -> Allowance<AD::Tokens> {
         match self
             .allowances_data
             .get_allowance(&(account.clone(), spender.clone()))
@@ -262,13 +262,13 @@ where
     /// Changes the spender's allowance for the account to the specified amount and expiration.
     pub fn approve(
         &mut self,
-        account: &S::AccountId,
-        spender: &S::AccountId,
-        amount: S::Tokens,
+        account: &AD::AccountId,
+        spender: &AD::AccountId,
+        amount: AD::Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
-        expected_allowance: Option<S::Tokens>,
-    ) -> Result<S::Tokens, ApproveError<S::Tokens>> {
+        expected_allowance: Option<AD::Tokens>,
+    ) -> Result<AD::Tokens, ApproveError<AD::Tokens>> {
         self.with_postconditions_check(|table| {
             if account == spender {
                 return Err(ApproveError::SelfApproval);
@@ -285,11 +285,11 @@ where
                     if let Some(expected_allowance) = expected_allowance {
                         if !expected_allowance.is_zero() {
                             return Err(ApproveError::AllowanceChanged {
-                                current_allowance: S::Tokens::zero(),
+                                current_allowance: AD::Tokens::zero(),
                             });
                         }
                     }
-                    if amount == S::Tokens::zero() {
+                    if amount == AD::Tokens::zero() {
                         return Ok(amount);
                     }
                     if let Some(expires_at) = expires_at {
@@ -310,7 +310,7 @@ where
                     if let Some(expected_allowance) = expected_allowance {
                         let current_allowance = if let Some(expires_at) = old_allowance.expires_at {
                             if expires_at <= now {
-                                S::Tokens::zero()
+                                AD::Tokens::zero()
                             } else {
                                 old_allowance.amount.clone()
                             }
@@ -324,7 +324,7 @@ where
                     table
                         .allowances_data
                         .remove_arrival(old_allowance.arrived_at, key.clone());
-                    if amount == S::Tokens::zero() {
+                    if amount == AD::Tokens::zero() {
                         if let Some(expires_at) = old_allowance.expires_at {
                             table.allowances_data.remove_expiry(expires_at, key.clone());
                         }
@@ -368,19 +368,19 @@ where
     /// allowance goes negative.
     pub fn use_allowance(
         &mut self,
-        account: &S::AccountId,
-        spender: &S::AccountId,
-        amount: S::Tokens,
+        account: &AD::AccountId,
+        spender: &AD::AccountId,
+        amount: AD::Tokens,
         now: TimeStamp,
-    ) -> Result<S::Tokens, InsufficientAllowance<S::Tokens>> {
+    ) -> Result<AD::Tokens, InsufficientAllowance<AD::Tokens>> {
         self.with_postconditions_check(|table| {
             let key = (account.clone(), spender.clone());
 
             match table.allowances_data.get_allowance(&key) {
-                None => Err(InsufficientAllowance(S::Tokens::zero())),
+                None => Err(InsufficientAllowance(AD::Tokens::zero())),
                 Some(old_allowance) => {
                     if old_allowance.expires_at.unwrap_or_else(remote_future) <= now {
-                        Err(InsufficientAllowance(S::Tokens::zero()))
+                        Err(InsufficientAllowance(AD::Tokens::zero()))
                     } else {
                         if old_allowance.amount < amount {
                             return Err(InsufficientAllowance(old_allowance.amount));
@@ -411,7 +411,7 @@ where
 
     /// Returns a vector of pairs (account, spender) of size min(n, approvals_size)
     /// that represent approvals selected for trimming.
-    pub fn select_approvals_to_trim(&self, n: usize) -> Vec<(S::AccountId, S::AccountId)> {
+    pub fn select_approvals_to_trim(&self, n: usize) -> Vec<(AD::AccountId, AD::AccountId)> {
         self.allowances_data.oldest_arrivals(n)
     }
 
@@ -450,7 +450,7 @@ where
         self.allowances_data.len_allowances()
     }
 
-    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (S::AccountId, S::AccountId))> {
+    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
         let expiry = self.allowances_data.first_expiry();
         if let Some((timestamp, (account, spender))) = expiry {
             self.allowances_data
