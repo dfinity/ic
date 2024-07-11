@@ -450,6 +450,10 @@ where
         self.allowances_data.len_allowances()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
         let expiry = self.allowances_data.first_expiry();
         if let Some((timestamp, (account, spender))) = expiry {
