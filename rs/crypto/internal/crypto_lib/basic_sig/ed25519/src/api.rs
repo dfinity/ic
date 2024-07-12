@@ -165,7 +165,7 @@ pub fn verify(
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Ed25519,
             key_bytes: Some(pk.0.to_vec()),
-            internal_error: format!("{e}"),
+            internal_error: e.to_string(),
         }
     })?;
 
@@ -175,7 +175,7 @@ pub fn verify(
             algorithm: AlgorithmId::Ed25519,
             public_key_bytes: public_key.serialize_raw().to_vec(),
             sig_bytes: sig.0.to_vec(),
-            internal_error: format!("{e}"),
+            internal_error: e.to_string(),
         })
 }
 
@@ -201,7 +201,7 @@ pub fn verify_batch(
                 CryptoError::MalformedPublicKey {
                     algorithm: AlgorithmId::Ed25519,
                     key_bytes: Some(key.0.to_vec()),
-                    internal_error: format!("{e}"),
+                    internal_error: e.to_string(),
                 }
             })?,
         );
@@ -215,7 +215,7 @@ pub fn verify_batch(
             algorithm: AlgorithmId::Ed25519,
             public_key_bytes: vec![],
             sig_bytes: vec![],
-            internal_error: format!("{e}"),
+            internal_error: e.to_string(),
         })
 }
 
