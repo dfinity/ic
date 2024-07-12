@@ -5550,6 +5550,7 @@ name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.28.2",
+ "flate2",
  "hex",
  "rand 0.8.5",
  "serde_json",
