@@ -14,6 +14,9 @@ const CK_BTC_LEDGER: (&str, &str) = ("mxzaz-hqaaa-aaaar-qaada-cai", "ckBTC");
 const CK_ETH_LEDGER: (&str, &str) = ("ss2fx-dyaaa-aaaar-qacoq-cai", "ckETH");
 const CK_USDC_LEDGER: (&str, &str) = ("xevnm-gaaaa-aaaar-qafnq-cai", "ckUSDC");
 const CK_LINK_LEDGER: (&str, &str) = ("g4tto-rqaaa-aaaar-qageq-cai", "ckLINK");
+const CK_OCT_LEDGER: (&str, &str) = ("ebo5g-cyaaa-aaaar-qagla-cai", "ckOCT");
+const CK_PEPE_LEDGER: (&str, &str) = ("etik7-oiaaa-aaaar-qagia-cai", "ckPEPE");
+const CK_SHIB_LEDGER: (&str, &str) = ("fxffn-xiaaa-aaaar-qagoa-cai", "ckSHIB");
 // SNS canisters
 const DRAGGINZ: (&str, &str) = ("zfcdd-tqaaa-aaaaq-aaaga-cai", "DRAGGINZ");
 const OPENCHAT: (&str, &str) = ("2ouva-viaaa-aaaaq-aaamq-cai", "OpenChat");
@@ -47,7 +50,14 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
     let ledger_wasm_u256 = ledger_wasm_u256();
 
     let canisters = vec![CK_BTC_LEDGER];
-    let canisters_u256 = vec![CK_ETH_LEDGER, CK_USDC_LEDGER, CK_LINK_LEDGER];
+    let canisters_u256 = vec![
+        CK_ETH_LEDGER,
+        CK_USDC_LEDGER,
+        CK_LINK_LEDGER,
+        CK_OCT_LEDGER,
+        CK_PEPE_LEDGER,
+        CK_SHIB_LEDGER,
+    ];
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
