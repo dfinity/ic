@@ -131,6 +131,7 @@ pub struct PocketIc {
     range_gen: RangeGen,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     runtime: Arc<Runtime>,
+    nonmainnet_features: bool,
 }
 
 impl Drop for PocketIc {
@@ -205,11 +206,16 @@ impl PocketIc {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         time: SystemTime,
+        nonmainnet_features: bool,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        let mut hypervisor_config = execution_environment::Config::default();
+        let mut hypervisor_config = if nonmainnet_features {
+            ic_starter::hypervisor_config(true)
+        } else {
+            execution_environment::Config::default()
+        };
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -252,6 +258,7 @@ impl PocketIc {
         runtime: Arc<Runtime>,
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -376,6 +383,7 @@ impl PocketIc {
                 instruction_config.clone(),
                 registry_data_provider.clone(),
                 time,
+                nonmainnet_features,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -483,6 +491,7 @@ impl PocketIc {
             range_gen,
             registry_data_provider,
             runtime,
+            nonmainnet_features,
         }
     }
 
@@ -577,6 +586,7 @@ impl Default for PocketIc {
                 ..Default::default()
             },
             None,
+            false,
         )
     }
 }
@@ -1905,6 +1915,7 @@ fn route(
                         instruction_config.clone(),
                         pic.registry_data_provider.clone(),
                         time,
+                        pic.nonmainnet_features,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
@@ -2188,6 +2199,7 @@ mod tests {
                 ..Default::default()
             },
             None,
+            false,
         );
         let canister_id = pic.any_subnet().create_canister(None);
 
