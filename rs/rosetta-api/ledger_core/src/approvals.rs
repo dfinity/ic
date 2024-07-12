@@ -17,8 +17,8 @@ pub enum ApproveError<Tokens> {
 }
 
 pub trait AllowancesData {
-    type AccountId: Ord + Clone;
-    type Tokens: TokensType;
+    type AccountId;
+    type Tokens;
 
     fn get_allowance(
         &self,
@@ -205,6 +205,8 @@ pub struct AllowanceTable<AD: AllowancesData> {
 impl<AD> Default for AllowanceTable<AD>
 where
     AD: Default + AllowancesData,
+    AD::AccountId: Ord + Clone,
+    AD::Tokens: TokensType,
 {
     fn default() -> Self {
         Self::new()
@@ -214,6 +216,8 @@ where
 impl<AD> AllowanceTable<AD>
 where
     AD: Default + AllowancesData,
+    AD::AccountId: Ord + Clone,
+    AD::Tokens: TokensType,
 {
     pub fn new() -> Self {
         Self {
