@@ -4,8 +4,9 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "@crate_index//:anyhow",
-    "@crate_index//:nftables",
     "@crate_index//:clap",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde",
 ]
 
 rust_binary(
