@@ -22,11 +22,11 @@ use axum::{
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
+use ic_interfaces::p2p::consensus::{Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, SubnetTopology, Transport};
-use ic_types::artifact::{PbArtifact, Priority, PriorityFn, UnvalidatedArtifactMutation};
+use ic_types::artifact::{PbArtifact, UnvalidatedArtifactMutation};
 use prost::Message;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use tokio::{
@@ -192,7 +192,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: PbArtifact, Pool, ReceivedA
     adverts_received: Receiver<ReceivedAdvert>,
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     raw_pool: Arc<RwLock<Pool>>,
-    priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+    priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
 
@@ -222,7 +222,7 @@ where
         rt_handle: Handle,
         adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
-        priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+        priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -747,7 +747,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{
         consensus::U64Artifact,
-        mocks::{MockPriorityFnAndFilterProducer, MockTransport, MockValidatedPoolReader},
+        mocks::{MockPriorityFnFactory, MockTransport, MockValidatedPoolReader},
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
@@ -765,7 +765,7 @@ mod tests {
         adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
         raw_pool: MockValidatedPoolReader<U64Artifact>,
         priority_fn_producer:
-            Arc<dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
+            Arc<dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -789,7 +789,7 @@ mod tests {
             let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
             let (_, topology_watcher) = watch::channel(SubnetTopology::default());
 
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            let mut mock_pfn = MockPriorityFnFactory::new();
 
             mock_pfn
                 .expect_get_priority_function()
@@ -811,7 +811,7 @@ mod tests {
         fn with_priority_fn_producer(
             mut self,
             priority_fn_producer: Arc<
-                dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
+                dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
             >,
         ) -> Self {
             self.priority_fn_producer = priority_fn_producer;
@@ -1179,7 +1179,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let mut seq = Sequence::new();
         mock_pfn
             .expect_get_priority_function()
@@ -1243,7 +1243,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let mut seq = Sequence::new();
         mock_pfn
             .expect_get_priority_function()
@@ -1305,7 +1305,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1383,7 +1383,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1515,7 +1515,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1686,7 +1686,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let priorities = Arc::new(Mutex::new(vec![Priority::FetchNow, Priority::Stash]));
         mock_pfn
             .expect_get_priority_function()

@@ -6,6 +6,7 @@ use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+    UpgradeArg,
 };
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
@@ -98,6 +99,29 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
         ledger_orchestrator.as_ref().canister_id()
     );
 
+    block_on(async {
+        upgrade_ledger_suite_orchestrator_by_nns_proposal(
+            &logger,
+            &governance_canister,
+            &root_canister,
+            ledger_orchestrator_wasm.clone(),
+            &ledger_orchestrator,
+            OrchestratorArg::UpgradeArg(UpgradeArg {
+                git_commit_hash: Some("6a8e5fca2c6b4e12966638c444e994e204b42989".to_string()),
+                ledger_compressed_wasm_hash: None,
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: None,
+                cycles_management: None,
+            }),
+        )
+        .await
+    });
+    info!(
+        &logger,
+        "Registered embedded wasms in the ledger suite orchestrator {}",
+        ledger_orchestrator.as_ref().canister_id()
+    );
+
     let managed_canister_ids =
         block_on(async { ledger_orchestrator.call_canister_ids(usdc_contract()).await });
     assert_eq!(managed_canister_ids, None);
@@ -112,9 +136,6 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
             AddErc20Arg {
                 contract: usdc_contract(),
                 ledger_init_arg: usdc_ledger_init_arg(),
-                git_commit_hash: "6a8e5fca2c6b4e12966638c444e994e204b42989".to_string(),
-                ledger_compressed_wasm_hash: hex::encode(embedded_ledger_wasm(&env).module_hash()),
-                index_compressed_wasm_hash: hex::encode(embedded_index_wasm(&env).module_hash()),
             },
         )
         .await
@@ -227,21 +248,19 @@ async fn install_nns_controlled_canister<'a>(
     canister
 }
 
-async fn add_erc_20_by_nns_proposal<'a>(
+async fn upgrade_ledger_suite_orchestrator_by_nns_proposal<'a>(
     logger: &slog::Logger,
     governance_canister: &Canister<'_>,
     root_canister: &Canister<'_>,
     canister_wasm: CanisterModule,
     orchestrator: &LedgerOrchestratorCanister<'a>,
-    erc20_token: AddErc20Arg,
-) -> ManagedCanisters<'a> {
+    upgrade_arg: OrchestratorArg,
+) {
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
     use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 
-    let erc20_contract = erc20_token.contract.clone();
-    let upgrade_arg = OrchestratorArg::AddErc20Arg(erc20_token);
     let wasm = canister_wasm.as_slice().to_vec();
     let proposal_payload = ChangeCanisterRequest::new(
         true,
@@ -257,8 +276,8 @@ async fn add_erc_20_by_nns_proposal<'a>(
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::NnsCanisterUpgrade,
         proposal_payload,
-        "Add ERC-20".to_string(),
-        "<proposal created by add_erc_20_by_nns_proposal>".to_string(),
+        "Upgrade LSO".to_string(),
+        "<proposal created by upgrade_lso_by_nns_proposal>".to_string(),
     )
     .await;
 
@@ -266,7 +285,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
     assert_eq!(proposal_result.status(), ProposalStatus::Executed);
     info!(
         logger,
-        "Added ERC-20 token {:?} via NNS proposal", upgrade_arg
+        "Upgrade ledger suite orchestrator {:?} via NNS proposal", upgrade_arg
     );
 
     status_of_nns_controlled_canister_satisfy(
@@ -281,6 +300,26 @@ async fn add_erc_20_by_nns_proposal<'a>(
         logger,
         "Upgrade finished. Ledger orchestrator is back running"
     );
+}
+
+async fn add_erc_20_by_nns_proposal<'a>(
+    logger: &slog::Logger,
+    governance_canister: &Canister<'_>,
+    root_canister: &Canister<'_>,
+    canister_wasm: CanisterModule,
+    orchestrator: &LedgerOrchestratorCanister<'a>,
+    erc20_token: AddErc20Arg,
+) -> ManagedCanisters<'a> {
+    let erc20_contract = erc20_token.contract.clone();
+    upgrade_ledger_suite_orchestrator_by_nns_proposal(
+        logger,
+        governance_canister,
+        root_canister,
+        canister_wasm,
+        orchestrator,
+        OrchestratorArg::AddErc20Arg(erc20_token),
+    )
+    .await;
 
     let created_canister_ids = ic_system_test_driver::retry_with_msg_async!(
         "checking if all canisters are created",
@@ -316,20 +355,6 @@ async fn add_erc_20_by_nns_proposal<'a>(
 
 fn wasm_from_path<P: AsRef<Path>>(env: &TestEnv, path: P) -> CanisterModule {
     CanisterModule::new(Wasm::from_file(env.get_dependency_path(path)).bytes())
-}
-
-fn embedded_ledger_wasm(env: &TestEnv) -> CanisterModule {
-    wasm_from_path(
-        env,
-        "rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz",
-    )
-}
-
-fn embedded_index_wasm(env: &TestEnv) -> CanisterModule {
-    wasm_from_path(
-        env,
-        "rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
-    )
 }
 
 fn usdc_contract() -> Erc20Contract {

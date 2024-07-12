@@ -434,10 +434,10 @@ fn generate_dkg_response_payload(
 /// Creates responses to `SignWithECDSA` system calls with the computed
 /// signature.
 pub fn generate_responses_to_sign_with_ecdsa_calls(
-    ecdsa_payload: &idkg::EcdsaPayload,
+    idkg_payload: &idkg::IDkgPayload,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
-    for completed in ecdsa_payload.signature_agreements.values() {
+    for completed in idkg_payload.signature_agreements.values() {
         if let CompletedSignature::Unreported(response) = completed {
             consensus_responses.push(response.clone());
         }
@@ -448,10 +448,10 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
 /// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
-    ecdsa_payload: &idkg::EcdsaPayload,
+    idkg_payload: &idkg::IDkgPayload,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
-    for agreement in ecdsa_payload.xnet_reshare_agreements.values() {
+    for agreement in idkg_payload.xnet_reshare_agreements.values() {
         if let idkg::CompletedReshareRequest::Unreported(response) = agreement {
             consensus_responses.push(response.clone());
         }

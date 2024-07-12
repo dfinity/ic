@@ -11,6 +11,7 @@ on:
       - 'hotfix-*-rc--*'
       - 'rc--*'
       - 'master'
+      - 'dev-gh-*'
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -40,6 +41,8 @@ jobs:
     name: Bazel Test All
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     runs-on:
       group: zh1
@@ -88,6 +91,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     name: Bazel Build All Config Check
     steps:
@@ -171,6 +176,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -194,6 +201,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -230,9 +239,15 @@ jobs:
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          # Todo: remove once dependency scanner tests don't reference name of repo
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          ADDITIONAL_FLAGS=""
+          if [[ $REPO_NAME == "ic-private" ]]; then
+            ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
+          fi
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
-          pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 \
+          pytest --ignore=gitlab_config/ --ignore=git_changes/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
   build-ic:
@@ -241,6 +256,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -257,9 +274,10 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/ic/ic/artifacts
+          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
@@ -333,6 +351,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -368,6 +388,8 @@ jobs:
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     steps:
       - name: Checkout

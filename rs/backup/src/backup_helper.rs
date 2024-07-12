@@ -168,7 +168,6 @@ impl BackupHelper {
         self.download_binary("ic-replay", replica_version)?;
         self.download_binary("sandbox_launcher", replica_version)?;
         self.download_binary("canister_sandbox", replica_version)?;
-        self.download_binary("compiler_sandbox", replica_version)?;
 
         if !self.ic_config_file_local(replica_version).exists() {
             // collect nodes from which we will fetch the config

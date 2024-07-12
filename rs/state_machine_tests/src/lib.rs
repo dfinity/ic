@@ -235,7 +235,7 @@ pub fn finalize_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    idkg_keys: &[MasterPublicKeyId],
+    idkg_keys_signing_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     features: SubnetFeatures,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
@@ -256,7 +256,10 @@ fn make_nodes_registry(
             raw: subnet_id.get_ref().to_vec(),
         }),
     };
-    for key_id in idkg_keys {
+    for (key_id, is_signing_enabled) in idkg_keys_signing_enabled_status {
+        if !*is_signing_enabled {
+            continue;
+        }
         registry_data_provider
             .add(
                 &make_chain_key_signing_subnet_list_key(key_id),
@@ -319,9 +322,9 @@ fn make_nodes_registry(
         .with_max_block_payload_size(max_block_payload_size)
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: idkg_keys
+            key_configs: idkg_keys_signing_enabled_status
                 .iter()
-                .map(|key_id| KeyConfig {
+                .map(|(key_id, _)| KeyConfig {
                     key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
@@ -695,7 +698,7 @@ pub struct StateMachineBuilder {
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
     enable_canister_snapshots: bool,
-    idkg_keys: Vec<MasterPublicKeyId>,
+    idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
     is_ecdsa_signing_enabled: bool,
@@ -725,7 +728,7 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            idkg_keys: Default::default(),
+            idkg_keys_signing_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
             is_ecdsa_signing_enabled: true,
@@ -855,7 +858,12 @@ impl StateMachineBuilder {
     }
 
     pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys.push(key_id);
+        self.idkg_keys_signing_enabled_status.insert(key_id, true);
+        self
+    }
+
+    pub fn with_signing_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys_signing_enabled_status.insert(key_id, false);
         self
     }
 
@@ -936,7 +944,7 @@ impl StateMachineBuilder {
             self.subnet_id,
             self.use_cost_scaling_flag,
             self.enable_canister_snapshots,
-            self.idkg_keys,
+            self.idkg_keys_signing_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
             self.is_ecdsa_signing_enabled,
@@ -1198,7 +1206,7 @@ impl StateMachine {
         subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
         enable_canister_snapshots: bool,
-        idkg_keys: Vec<MasterPublicKeyId>,
+        idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
         is_ecdsa_signing_enabled: bool,
@@ -1247,7 +1255,7 @@ impl StateMachine {
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            &idkg_keys,
+            &idkg_keys_signing_enabled_status,
             features,
             registry_data_provider.clone(),
             &nodes,
@@ -1379,8 +1387,8 @@ impl StateMachine {
         let mut idkg_subnet_public_keys = BTreeMap::new();
         let mut idkg_subnet_secret_keys = BTreeMap::new();
 
-        for key_id in idkg_keys {
-            let private_key: PrivateKey = if key_id == master_ecdsa_public_key {
+        for key_id in idkg_keys_signing_enabled_status.keys() {
+            let private_key: PrivateKey = if *key_id == master_ecdsa_public_key {
                 // ckETH tests rely on using the hard-coded ecdsa_secret_key
                 ecdsa_secret_key.clone()
             } else {

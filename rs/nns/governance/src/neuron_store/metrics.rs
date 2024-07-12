@@ -1,6 +1,8 @@
 use super::NeuronStore;
 use crate::{neuron_store::Neuron, pb::v1::NeuronState, storage::with_stable_neuron_store};
+use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use std::collections::HashMap;
 
 /// Metrics calculated based on neurons in the neuron store.
@@ -62,7 +64,14 @@ impl NeuronMetrics {
         now_seconds: u64,
         neuron: &Neuron,
     ) {
-        if neuron.controller().is_self_authenticating() {
+        let controller: PrincipalId = neuron.controller();
+
+        if controller.is_self_authenticating() {
+            return;
+        }
+
+        // Do not count neurons controlled by the GTC.
+        if controller == PrincipalId::from(GENESIS_TOKEN_CANISTER_ID) {
             return;
         }
 
@@ -686,13 +695,15 @@ mod tests {
     /// Tests rollups related to neurons with non-self-authenticating controller (basically,
     /// canister-controlled neurons).
     ///
-    /// In this test, the NeuronStore has 3 neurons. The principal differences among them are as
+    /// In this test, the NeuronStore has 4 neurons. The principal differences among them are as
     /// follows:
     ///
-    ///     1. Whether contoller is "normal" (self-authenticating) or "weird" (non-self
-    ///        authenticating; in practice, this means its a canister).
+    ///     1. Whether contoller is "normal" (self-authenticating), "weird" (non-self
+    ///        authenticating; in practice, this means its a canister), or the Genesis Token
+    ///        Canister (GTC).
     ///         a. Neurons 1 and 3 are weird. These (are supposed to) get counted.
     ///         b. Neuron 2 is normal. This is ignored.
+    ///         c. Neuron 4 is controlled by the GTC.
     ///
     ///     2. They have different amounts of ICP-like resources (staked, staked maturity, and
     ///        maturity). The amounts are radically different to make it clearer what bug(s) might
@@ -773,6 +784,21 @@ mod tests {
         .with_maturity_e8s_equivalent(330_000_000)
         .build();
 
+        let neuron_4 = NeuronBuilder::new(
+            NeuronId { id: 4 },
+            Subaccount::try_from([4_u8; 32].as_ref()).unwrap(),
+            PrincipalId::from(GENESIS_TOKEN_CANISTER_ID),
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 583 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: now_seconds - 927 * ONE_DAY_SECONDS,
+            },
+            now_seconds - 335 * ONE_DAY_SECONDS,
+        )
+        .with_cached_neuron_stake_e8s(715_631_327)
+        .with_staked_maturity_e8s_equivalent(281_771_001)
+        .with_maturity_e8s_equivalent(988_862_650)
+        .build();
+
         let voting_power_1 = neuron_1.voting_power(now_seconds);
         let voting_power_3 = neuron_3.voting_power(now_seconds);
         assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
@@ -781,12 +807,13 @@ mod tests {
             (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
         );
 
-        // Step 1.3: Gather neurons into collection
+        // Step 1.3: Assemble neurons into collection
 
         let neuron_store = NeuronStore::new(btreemap! {
             1 => neuron_1,
             2 => neuron_2,
             3 => neuron_3,
+            4 => neuron_4,
         });
 
         // Step 2: Call code under test.

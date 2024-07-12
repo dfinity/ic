@@ -27,6 +27,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "canbench": [crate.annotation(
             gen_binaries = True,
         )],
+        "curve25519-dalek": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -40,6 +46,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ],
         )],
         "p256": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
+        "sha2": [crate.annotation(
             rustc_flags = [
                 "-C",
                 "opt-level=3",
@@ -567,6 +579,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
             ),
+            "ic-canister-sig-creation": crate.spec(
+                version = "^1.0.1",
+            ),
             "ic-cbor": crate.spec(
                 version = "2.3.0",
             ),
@@ -607,6 +622,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-utils": crate.spec(
                 version = "^0.35.0",
                 features = ["raw"],
+            ),
+            "ic-verify-bls-signature": crate.spec(
+                version = "^0.2.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.7.1",
@@ -943,13 +961,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.10.2",
-                features = [
-                    "ring",
-                ],
+                git = "https://github.com/quinn-rs/quinn",
+                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                features = ["ring"],
             ),
             "quinn-udp": crate.spec(
-                version = "^0.5.1",
+                git = "https://github.com/quinn-rs/quinn",
+                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
             ),
             "quote": crate.spec(
                 version = "^1.0",

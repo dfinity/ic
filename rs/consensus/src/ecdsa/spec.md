@@ -1493,7 +1493,7 @@ type QuadruplesInCreation = Map<QuadrupleId, QuadrupleInCreation>;
 type OngoingReshareRequests = Map<ReshareRequestId,TranscriptParamRef>;
 type ReshareAgreements = Map<ReshareRequestId,CompletedReshareRequest>;
 
-struct EcdsaPayload {
+struct IDkgPayload {
     signature_agreements: SignatureAgreements,
     // collection of completed signatures
 
@@ -1652,13 +1652,13 @@ type ReshareCash = Map<ReshareRequestId, Set<Dealing>>;
 ````
 
 ````rust
-fn build_ecdsa_payload(
+fn build_idkg_payload(
     notarized_chain: Chain,
     signing_request_calls: List<SigningRequestCall>,
     reshare_request_calls: Map<ReshareRequestId,ReshareRequestCall>,
     next_registry_version: RegistryVersion,
     validated_pool: Pool,
-) -> EcdsaPayload
+) -> IDkgPayload
 // Builds a new ecdsa payload for a block that extends the block at the tip of notarized_chain.
 // signing_request_calls is obtained from the certified state of the validation context
 // to be used for the new block. 
@@ -1666,15 +1666,15 @@ fn build_ecdsa_payload(
 // next_registry_version is the registry version to be used in the next interval.
 {
     (payload, _) = 
-        build_ecdsa_payload_common(notarized_chain, signing_request_calls, reshare_request_calls, 
+        build_idkg_payload_common(notarized_chain, signing_request_calls, reshare_request_calls, 
                                    next_registry_version, 
                                    Some(validated_pool), None, None, None); 
 
     return payload;
 }
 
-fn validate_ecdsa_payload(
-    payload: EcdsaPayload,
+fn validate_idkg_payload(
+    payload: IDkgPayload,
     notarized_chain: Chain,
     signing_request_calls: List<SigningRequestCall>,
     reshare_request_calls: Map<ReshareRequestId,ReshareRequestCall>,
@@ -1694,7 +1694,7 @@ fn validate_ecdsa_payload(
                           (reshare_request, Unreported(param_ref,dealings)) in payload.reshare_agreeents; };
 
     (computed_payload, test) = 
-        build_ecdsa_payload_common(notarized_chain, signing_request_calls, reshare_request_calls,
+        build_idkg_payload_common(notarized_chain, signing_request_calls, reshare_request_calls,
                                    next_registry_version, 
                                    None, Some(transcript_cache), Some(signature_cache), Some(reshare_cache));
 
@@ -1712,7 +1712,7 @@ fn validate_ecdsa_payload(
 
 
 ````rust
-fn build_ecdsa_payload_common(
+fn build_idkg_payload_common(
     notarized_chain: Chain,
     signing_request_calls: List<SigningRequestCall>,
     reshare_request_calls: Map<ReshareRequestId,ReshareRequestCall>,
@@ -1721,7 +1721,7 @@ fn build_ecdsa_payload_common(
     opt_transcript_cache: Option<TranscriptCache>, 
     opt_signature_cache: Option<SignatureCache>,   
     opt_reshare_cache: Option<ReshareCache>,
-) -> (EcdsaPayload, Option<bool>)
+) -> (IDkgPayload, Option<bool>)
 // Builds a new ecdsa payload for a block that extends the block at the tip of notarized_chain.
 // signing_requests is obtained from the certified state of the validation context
 // to be used for the new block. 
@@ -1736,7 +1736,7 @@ fn build_ecdsa_payload_common(
 //    set to None otherwise (all crypto tests definitely passed).
 {
     parent_block = tip(notarized_chain);
-    parent_payload = parent_block.ecdsa_payload();
+    parent_payload = parent_block.idkg_payload();
     parent_height = parent_block.height();
  
     signature_agreements     = parent_payload.signature_agreements;
@@ -1800,7 +1800,7 @@ fn build_ecdsa_payload_common(
     transcripts += new_transcripts;
 
 
-    return (EcdsaPayload(signature_agreements, ongoing_signatures, available_quadruples, 
+    return (IDkgPayload(signature_agreements, ongoing_signatures, available_quadruples, 
                         quadruples_in_creation, uid_generator, current_key_state, next_key_state, 
                         reshare_agreements, ongoing_reshare_requests, transcripts),
             test);
@@ -2457,18 +2457,18 @@ fn update_ongoing_reshare_requests(
 
 
 ````rust
-fn build_ecdsa_summary_payload(
+fn build_idkg_summary_payload(
     notarized_chain: Chain,
     my_subnet_id: SubnetId,
     registry_version: RegistryVersion,
     next_registry_version: RegistryVersion,
-) -> EcdsaPayload
+) -> IDkgPayload
 // Builds a new ecdsa summary payload for a block that extends the block at the tip of notarized_chain.
 // registry_version is the registry version to be used in this interval.
 // next_registry_version is the registry version to be used in the next interval.
 {
     parent_block = tip(notarized_chain);
-    parent_payload = parent_block.ecdsa_payload();
+    parent_payload = parent_block.idkg_payload();
     parent_height = parent_block.height();
 
     signature_agreements     = parent_payload.signature_agreements;
@@ -2543,7 +2543,7 @@ fn build_ecdsa_summary_payload(
     }
 
     // *** update active transcript refs
-    result = EcdsaPayload(signature_agreements, ongoing_signatures, available_quadruples, 
+    result = IDkgPayload(signature_agreements, ongoing_signatures, available_quadruples, 
                           quadruples_in_creation, uid_generator, current_key_state, next_key_state, 
                           reshare_agreements, ongoing_reshare_requests, transcripts);
 
@@ -2569,9 +2569,9 @@ fn reshare_key(
 
 
 fn update_transcript_refs(
-    payload: EcdsaPayload,
+    payload: IDkgPayload,
     chain: Chain
-) -> EcdsaPayload
+) -> IDkgPayload
 // Assumes payload is in a block extending chain.
 // This identifies all of the transcript refs in payload, and then 
 // copies the actual transcripts from previous blocks in the chain to the transcripts
@@ -2586,7 +2586,7 @@ fn update_transcript_refs(
 fn build_ecdsa_bootstrap_summary_payload(
     my_subnet_id: SubnetId,
     opt_xnet_reshared_param_ref: Option<TranscriptParamRef>,
-) -> EcdsaPayload
+) -> IDkgPayload
 // Builds a new ecdsa summary payload for a genesis block.
 //
 // If this subnet is being initialized an xnet resharing, the optional
@@ -2612,7 +2612,7 @@ fn build_ecdsa_bootstrap_summary_payload(
         Some(xnet_reshared_param_ref) =>  next_key_state = NextKeyState::MakingReshared(xnet_reshared_param_ref);
     }
 
-    return EcdsaPayload(signature_agreements, ongoing_signatures, available_quadruples, 
+    return IDkgPayload(signature_agreements, ongoing_signatures, available_quadruples, 
                         quadruples_in_creation, uid_generator, current_key_state, next_key_state, 
                         reshare_agreements, ongoing_reshare_requests, transcripts);
 }

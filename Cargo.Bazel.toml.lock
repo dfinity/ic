@@ -1076,7 +1076,7 @@ dependencies = [
  "proc-macro2 1.0.85",
  "quote 1.0.35",
  "regex",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "shlex",
  "syn 2.0.66",
 ]
@@ -1096,7 +1096,7 @@ dependencies = [
  "proc-macro2 1.0.85",
  "quote 1.0.35",
  "regex",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "shlex",
  "syn 2.0.66",
 ]
@@ -1799,6 +1799,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cesu8"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d43a04d8753f35258c91f8ec639f792891f748a1edbd759cf1dcea3382ad83c"
+
+[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2064,6 +2070,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "combine"
+version = "4.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
+dependencies = [
+ "bytes",
+ "memchr",
+]
+
+[[package]]
 name = "comparable"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2257,7 +2273,7 @@ dependencies = [
  "hashbrown 0.14.5",
  "log",
  "regalloc2",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "smallvec",
  "target-lexicon",
 ]
@@ -2978,6 +2994,7 @@ dependencies = [
  "ic-btc-test-utils",
  "ic-btc-validation",
  "ic-canister-log",
+ "ic-canister-sig-creation",
  "ic-cbor",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
@@ -2990,6 +3007,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-test-state-machine-client",
  "ic-utils",
+ "ic-verify-bls-signature 0.2.0",
  "ic-wasm",
  "ic-xrc-types",
  "ic0 0.18.11",
@@ -3078,7 +3096,7 @@ dependencies = [
  "publicsuffix",
  "quickcheck",
  "quinn",
- "quinn-udp 0.5.2",
+ "quinn-udp",
  "quote 1.0.35",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -3104,7 +3122,7 @@ dependencies = [
  "rusqlite",
  "rust_decimal",
  "rust_decimal_macros",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "rustls 0.21.12",
  "rustls 0.23.10",
  "rustls-native-certs 0.7.0",
@@ -4771,7 +4789,7 @@ dependencies = [
  "hyper-util",
  "ic-certification",
  "ic-transport-types",
- "ic-verify-bls-signature",
+ "ic-verify-bls-signature 0.1.0",
  "k256",
  "leb128",
  "p256",
@@ -4835,6 +4853,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-canister-sig-creation"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d1fc58d747480967a25810d8a90d460e7e9ea4c669ab0286541a148736513f9"
+dependencies = [
+ "candid",
+ "hex",
+ "ic-cdk 0.14.0",
+ "ic-certification",
+ "ic-representation-independent-hash",
+ "lazy_static",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "sha2 0.10.8",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-cbor"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4874,6 +4911,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff384f182459bec490a7f50a58bbdf8f7a6934de4dcc259e30c70641bcbcb917"
+dependencies = [
+ "candid",
+ "ic-cdk-macros 0.14.0",
+ "ic0 0.23.0",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-cdk-macros"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4883,7 +4933,7 @@ dependencies = [
  "proc-macro2 1.0.85",
  "quote 1.0.35",
  "serde",
- "serde_tokenstream",
+ "serde_tokenstream 0.1.7",
  "syn 1.0.109",
 ]
 
@@ -4897,7 +4947,7 @@ dependencies = [
  "proc-macro2 1.0.85",
  "quote 1.0.35",
  "serde",
- "serde_tokenstream",
+ "serde_tokenstream 0.1.7",
  "syn 1.0.109",
 ]
 
@@ -4911,8 +4961,22 @@ dependencies = [
  "proc-macro2 1.0.85",
  "quote 1.0.35",
  "serde",
- "serde_tokenstream",
+ "serde_tokenstream 0.1.7",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01dc6bc425ec048d6ac4137c7c0f2cfbd6f8b0be8efc568feae2b265f566117c"
+dependencies = [
+ "candid",
+ "proc-macro2 1.0.85",
+ "quote 1.0.35",
+ "serde",
+ "serde_tokenstream 0.2.1",
+ "syn 2.0.66",
 ]
 
 [[package]]
@@ -4950,9 +5014,9 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b79fd38f674173bd0af3c80b9dab6fedd3391b81a2fc0f87a2e393fb723fe13b"
+checksum = "20052ce9255fbe2de7041a4f6996fddd095ba1f31ae83b6c0ccdee5be6e7bbcf"
 dependencies = [
  "hex",
  "serde",
@@ -4994,9 +5058,9 @@ checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
 name = "ic-representation-independent-hash"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be48db2f8b954b9b2a0f46424ddedda2728703d7b361bc65328ed17dcacd1e21"
+checksum = "b4d9c969c80e9b445255341da79772680f503ef856b95b3ddf162b41d096df1f"
 dependencies = [
  "leb128",
  "sha2 0.10.8",
@@ -5099,6 +5163,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-verify-bls-signature"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd0f1f8d75f50002970cc2136f909287bf1d59024fbc80ebffbee871afcbd237"
+dependencies = [
+ "bls12_381",
+ "hex",
+ "lazy_static",
+ "pairing 0.22.0",
+ "rand 0.6.5",
+ "sha2 0.9.9",
+]
+
+[[package]]
 name = "ic-wasm"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5136,6 +5214,12 @@ name = "ic0"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a54b5297861c651551676e8c43df805dad175cc33bc97dbd992edbbb85dcbcdf"
+
+[[package]]
+name = "ic0"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 
 [[package]]
 name = "ic_bls12_381"
@@ -5524,6 +5608,26 @@ dependencies = [
  "jemalloc-sys",
  "libc",
 ]
+
+[[package]]
+name = "jni"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6df18c2e3db7e453d3c6ac5b3e9d5182664d28788126d39b91f2d1e22b017ec"
+dependencies = [
+ "cesu8",
+ "combine",
+ "jni-sys",
+ "log",
+ "thiserror",
+ "walkdir",
+]
+
+[[package]]
+name = "jni-sys"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
 
 [[package]]
 name = "jobserver"
@@ -8184,16 +8288,15 @@ dependencies = [
 
 [[package]]
 name = "quinn"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cc2c5017e4b43d5995dcea317bc46c1e09404c0a9664d2908f7f02dfe943d75"
+version = "0.11.2"
+source = "git+https://github.com/quinn-rs/quinn?rev=fb63829dd1f78a98cb7da0fc757db44d14afd9ff#fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
 dependencies = [
  "bytes",
  "pin-project-lite",
  "quinn-proto",
- "quinn-udp 0.4.0",
- "rustc-hash",
- "rustls 0.21.12",
+ "quinn-udp",
+ "rustc-hash 2.0.0",
+ "rustls 0.23.10",
  "thiserror",
  "tokio",
  "tracing",
@@ -8201,16 +8304,15 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c78e758510582acc40acb90458401172d41f1016f8c9dde89e49677afb7eec1"
+version = "0.11.3"
+source = "git+https://github.com/quinn-rs/quinn?rev=fb63829dd1f78a98cb7da0fc757db44d14afd9ff#fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
 dependencies = [
  "bytes",
  "rand 0.8.5",
- "ring 0.16.20",
- "rustc-hash",
- "rustls 0.21.12",
- "rustls-native-certs 0.6.3",
+ "ring 0.17.7",
+ "rustc-hash 2.0.0",
+ "rustls 0.23.10",
+ "rustls-platform-verifier",
  "slab",
  "thiserror",
  "tinyvec",
@@ -8219,22 +8321,8 @@ dependencies = [
 
 [[package]]
 name = "quinn-udp"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6df19e284d93757a9fb91d63672f7741b129246a669db09d1c0063071debc0c0"
-dependencies = [
- "bytes",
- "libc",
- "socket2 0.5.7",
- "tracing",
- "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "quinn-udp"
 version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9096629c45860fc7fb143e125eb826b5e721e10be3263160c7d60ca832cf8c46"
+source = "git+https://github.com/quinn-rs/quinn?rev=fb63829dd1f78a98cb7da0fc757db44d14afd9ff#fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
 dependencies = [
  "libc",
  "once_cell",
@@ -8587,7 +8675,7 @@ checksum = "ad156d539c879b7a24a363a2016d77961786e71f48f2e2fc8302a92abd2429a6"
 dependencies = [
  "hashbrown 0.13.2",
  "log",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "slice-group-by",
  "smallvec",
 ]
@@ -9048,6 +9136,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "rustc-hash"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
+
+[[package]]
 name = "rustc-hex"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9187,6 +9281,33 @@ name = "rustls-pki-types"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "976295e77ce332211c0d24d92c0e83e50f5c5f046d11082cea19f3df13a3562d"
+
+[[package]]
+name = "rustls-platform-verifier"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "034f511ae2823d6a657925d5f7cf821d7458367ce0a54fbe743c471fdddd8111"
+dependencies = [
+ "core-foundation",
+ "core-foundation-sys",
+ "jni",
+ "log",
+ "once_cell",
+ "rustls 0.23.10",
+ "rustls-native-certs 0.7.0",
+ "rustls-platform-verifier-android",
+ "rustls-webpki 0.102.4",
+ "security-framework",
+ "security-framework-sys",
+ "webpki-roots 0.26.1",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "rustls-platform-verifier-android"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84e217e7fdc8466b5b35d30f8c0a30febd29173df4a3a0c2115d306b9c4117ad"
 
 [[package]]
 name = "rustls-webpki"
@@ -9479,6 +9600,7 @@ dependencies = [
  "core-foundation",
  "core-foundation-sys",
  "libc",
+ "num-bigint 0.4.6",
  "security-framework-sys",
 ]
 
@@ -9677,6 +9799,18 @@ dependencies = [
  "proc-macro2 1.0.85",
  "serde",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "serde_tokenstream"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8790a7c3fe883e443eaa2af6f705952bc5d6e8671a220b9335c8cae92c037e74"
+dependencies = [
+ "proc-macro2 1.0.85",
+ "quote 1.0.35",
+ "serde",
+ "syn 2.0.66",
 ]
 
 [[package]]

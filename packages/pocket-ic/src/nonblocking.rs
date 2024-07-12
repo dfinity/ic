@@ -79,7 +79,14 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS), None).await
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
+        .await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
@@ -90,7 +97,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None).await
+        Self::from_components(config, server_url, max_request_time_ms, None, false).await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -99,7 +106,14 @@ impl PocketIc {
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
     ) -> Self {
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS), None).await
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
+        .await
     }
 
     pub(crate) async fn from_components(
@@ -107,6 +121,7 @@ impl PocketIc {
         server_url: Url,
         max_request_time_ms: Option<u64>,
         state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
     ) -> Self {
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
@@ -117,6 +132,7 @@ impl PocketIc {
         let instance_config = InstanceConfig {
             subnet_config_set,
             state_dir,
+            nonmainnet_features,
         };
 
         let parent_pid = std::os::unix::process::parent_id();
