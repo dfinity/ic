@@ -1,3 +1,4 @@
+// Testing
 //! Provide a metrics verification utility for testing purposes,
 //! where observed metrics can be asserted upon in a unit test.
 //!
