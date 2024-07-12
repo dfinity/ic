@@ -1,5 +1,6 @@
-use crate::storage::TaskQueue;
-use crate::storage::WasmStore;
+use crate::storage::{
+    ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, TaskQueue, WasmStore,
+};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_stable_structures::BTreeMap;
 use ic_stable_structures::DefaultMemoryImpl;
@@ -16,5 +17,17 @@ pub fn empty_task_queue() -> TaskQueue {
         deadline_by_task: BTreeMap::init(
             MemoryManager::init(DefaultMemoryImpl::default()).get(MemoryId::new(1)),
         ),
+    }
+}
+
+pub fn embedded_ledger_suite_version() -> LedgerSuiteVersion {
+    LedgerSuiteVersion {
+        ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
+            .hash()
+            .clone(),
+        index_compressed_wasm_hash: IndexWasm::from(crate::state::INDEX_BYTECODE).hash().clone(),
+        archive_compressed_wasm_hash: ArchiveWasm::from(crate::state::ARCHIVE_NODE_BYTECODE)
+            .hash()
+            .clone(),
     }
 }

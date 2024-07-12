@@ -86,8 +86,6 @@ Adding a new ERC-20 token involves an NNS upgrade proposal for the ledger suite 
 
 * Identifier for the new ERC-20 token: this is the pair Ethereum chain ID (`1` for Ethereum mainnet or `11155111` for Ethereum Testnet Sepolia) and the ERC-20 smart contract Ethereum address.
 * Initialization args for the ICRC ledger
-* Wasm hash of the ledger
-* Wasm hash of the index
 
 See the <<ckusdc-example>> example for a detailed explanation of the arguments used.
 
@@ -96,6 +94,8 @@ See the <<ckusdc-example>> example for a detailed explanation of the arguments u
 .ckUSDC
 ====
 As an example, we detail the arguments used in proposal https://dashboard.internetcomputer.org/proposal/129750[129750] that added the ckUSDC token.
+Note that some of those arguments may no longer be required or use a slightly different syntax.
+Always refer to the Candid interface (`ledger_suite_orchestrator.did`) for the most up-to-date information.
 
 . `contract`: Uniquely identifies the ERC-20 smart contract.
 .. `chain_id = 1`: designates Ethereum mainnet. This value MUST be `1`.
