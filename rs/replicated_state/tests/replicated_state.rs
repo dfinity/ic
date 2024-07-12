@@ -1011,18 +1011,6 @@ proptest! {
         }
 
         assert_eq!(replicated_state.output_message_count(), 0);
-
-    }
-
-    #[test]
-    fn peek_next_loop_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
-
-        while output_iter.peek().is_some() {
-            output_iter.next();
-        }
     }
 
     #[test]
@@ -1058,5 +1046,48 @@ proptest! {
             }
             output_iter.next();
         }
+    }
+
+    #[test]
+    fn iter_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+        batch_time_seconds in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        // Just consume all output messages.
+        //
+        // We cannot check the exact ordering because timing out some messages messes it
+        // up, both across canisters and across a cainster's output queues.
+        let output_messages = replicated_state.output_into_iter().count();
+
+        // All messages have either been timed out or output.
+        assert_eq!(total_requests, timed_out_messages + output_messages);
+        assert_eq!(replicated_state.output_message_count(), 0);
+    }
+
+    #[test]
+    fn peek_next_loop_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+        batch_time in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        let mut output_iter = replicated_state.output_into_iter();
+
+        let mut output_messages = 0;
+        while let Some(msg) = output_iter.peek() {
+            output_messages += 1;
+            assert_eq!(Some(msg.clone()), output_iter.next());
+        }
+        drop(output_iter);
+
+        // All messages have either been timed out or output.
+        assert_eq!(total_requests, timed_out_messages + output_messages);
+        assert_eq!(replicated_state.output_message_count(), 0);
     }
 }

@@ -163,7 +163,6 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                 }
 
                 // Stale reference, pop it and try again.
-                // FIXME: Add a test that covers skipping over stale references.
                 assert_eq!(Some(*item), queue.pop());
                 self.size -= 1;
             }
@@ -183,10 +182,9 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     pub fn pop(&mut self) -> Option<RequestOrResponse> {
         while let Some((receiver, queue)) = self.queues.pop_front() {
             while let Some(item) = queue.pop() {
-                // FIXME: Add a test that covers skipping over stale references.
                 self.size -= 1;
 
-                // Consume any stale references.
+                // If the message is in the pool return it; else continue to the next reference.
                 if let msg @ Some(_) = self.pool.take(item.id()) {
                     if queue.len() > 0 {
                         self.queues.push_back((receiver, queue));
@@ -1567,10 +1565,7 @@ pub mod testing {
         }
 
         fn output_message_count(&self) -> usize {
-            self.canister_queues
-                .values()
-                .map(|(_, output_queue)| output_queue.len())
-                .sum()
+            self.pool.message_stats().outbound_message_count
         }
 
         fn push_input(
