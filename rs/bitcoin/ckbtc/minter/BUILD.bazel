@@ -135,9 +135,9 @@ rust_ic_test(
     data = [
         ":ckbtc_minter_debug.wasm",
         "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+        "//rs/bitcoin/ckbtc/tx-input:btc_tx_input_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-        "//rs/bitcoin/ckbtc/tx-input:btc_tx_input_canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
