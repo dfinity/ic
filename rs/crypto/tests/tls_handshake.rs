@@ -459,10 +459,7 @@ mod server {
         let (_, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert_handshake_server_error_containing(
-            &server_result,
-            "signature algorithm is not Ed25519 (OID 1.3.101.112)",
-        )
+        assert_handshake_server_error_containing(&server_result, "peer sent no certificates")
     }
 
     #[test]
@@ -991,7 +988,9 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
+            .expect_error(
+                "TlsAcceptor::accept failed: peer is incompatible: NoSignatureSchemesInCommon",
+            )
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1007,7 +1006,7 @@ mod client {
 
         assert_handshake_client_error_containing(
             &client_result,
-            "signature algorithm is not Ed25519 (OID 1.3.101.112)",
+            "received fatal alert: HandshakeFailure",
         )
     }
 
