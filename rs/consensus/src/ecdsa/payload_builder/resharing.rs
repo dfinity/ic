@@ -3,14 +3,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, EcdsaBlockReader, HasMasterPublicKeyId, IDkgReshareRequest},
+    consensus::idkg::{self, HasMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
     messages::CallbackId,
 };
 
-use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
+use crate::ecdsa::pre_signer::IDkgTranscriptBuilder;
 
 /// Checks for new reshare requests from execution and initiates the processing
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
@@ -83,8 +83,8 @@ fn make_reshare_dealings_response(
 pub(crate) fn update_completed_reshare_requests(
     payload: &mut idkg::IDkgPayload,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
-    resolver: &dyn EcdsaBlockReader,
-    transcript_builder: &dyn EcdsaTranscriptBuilder,
+    resolver: &dyn IDkgBlockReader,
+    transcript_builder: &dyn IDkgTranscriptBuilder,
     log: &ReplicaLogger,
 ) {
     let mut completed_reshares = BTreeMap::new();
@@ -193,7 +193,7 @@ mod tests {
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
             fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-            set_up_idkg_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+            set_up_idkg_payload, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
@@ -201,7 +201,7 @@ mod tests {
     fn set_up(
         key_ids: Vec<MasterPublicKeyId>,
         should_create_key_transcript: bool,
-    ) -> (IDkgPayload, TestEcdsaBlockReader) {
+    ) -> (IDkgPayload, TestIDkgBlockReader) {
         let mut rng = reproducible_rng();
         let (idkg_payload, _env, block_reader) = set_up_idkg_payload(
             &mut rng,
@@ -390,7 +390,7 @@ mod tests {
             vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
         );
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         let request_1 = create_reshare_request(key_id.clone(), 1, 1);
         let request_2 = create_reshare_request(key_id.clone(), 2, 2);
