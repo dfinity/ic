@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde",
+]
+
+rust_binary(
+    name = "nft-exporter",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    aliases = {},
+    version = "0.1.0",
+    proc_macro_deps = [],
+    deps = DEPENDENCIES,
+)
