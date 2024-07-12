@@ -1,7 +1,12 @@
 use crate::timestamp::TimeStamp;
 use crate::tokens::{CheckedSub, TokensType, Zero};
+use candid::Nat;
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::Storable;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::{Cursor, Read};
 
 #[cfg(test)]
 mod tests;
@@ -224,7 +229,7 @@ impl<Tokens: Zero> Default for Allowance<Tokens> {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(transparent)]
 pub struct AllowanceTable<AD: AllowancesData> {
-    allowances_data: AD,
+    pub allowances_data: AD,
 }
 
 impl<AD> Default for AllowanceTable<AD>
@@ -487,4 +492,45 @@ where
 
 fn remote_future() -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(u64::MAX)
+}
+
+impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allowance<Tokens> {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buffer = vec![];
+        let amount: Nat = self.amount.clone().into();
+        amount
+            .encode(&mut buffer)
+            .expect("Unable to serialize amount");
+        buffer.extend(self.arrived_at.as_nanos_since_unix_epoch().to_le_bytes());
+        if let Some(expires_at) = self.expires_at {
+            buffer.extend(expires_at.as_nanos_since_unix_epoch().to_le_bytes());
+        }
+        Cow::Owned(buffer)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut cursor = Cursor::new(bytes.into_owned());
+        let amount = Nat::decode(&mut cursor).expect("Unable to deserialize amount");
+        let amount = Tokens::try_from(amount).expect("Unable to deserialize amount");
+        let mut arrived_at_bytes = [0u8; 8];
+        cursor
+            .read_exact(&mut arrived_at_bytes)
+            .expect("Unable to read arrived_at bytes");
+        let arrived_at =
+            TimeStamp::from_nanos_since_unix_epoch(u64::from_le_bytes(arrived_at_bytes));
+        let mut expires_at_bytes = [0u8; 8];
+        let expires_at = match cursor.read_exact(&mut expires_at_bytes) {
+            Ok(()) => Some(TimeStamp::from_nanos_since_unix_epoch(u64::from_le_bytes(
+                expires_at_bytes,
+            ))),
+            _ => None,
+        };
+        Self {
+            amount,
+            arrived_at,
+            expires_at,
+        }
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }

@@ -1,16 +1,26 @@
+use candid::CandidType;
 use dfn_core::api::{now, trap_with};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canister_log::{log, Sink};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
 use ic_ledger_canister_core::blockchain::Blockchain;
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
+use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::tokens::{CheckedSub, Zero};
 use ic_ledger_core::{
-    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::Balances,
-    block::EncodedBlock, timestamp::TimeStamp,
+    approvals::Allowance, approvals::AllowanceTable, approvals::AllowancesData,
+    approvals::HeapAllowancesData, balances::Balances, block::EncodedBlock, timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
+use ic_stable_structures::{
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    storable::Bound,
+    RestrictedMemory, Storable, MAX_PAGES,
+};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icp_ledger::{
     AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
     PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
@@ -19,10 +29,14 @@ use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
+use std::{
+    borrow::Cow,
+    io::{Cursor, Read},
+};
 
 mod dfn_runtime;
 
@@ -33,6 +47,102 @@ lazy_static! {
     pub static ref LEDGER: RwLock<Ledger> = RwLock::new(Ledger::default());
     // Maximum inter-canister message size in bytes.
     pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
+}
+
+const WASM_PAGE_SIZE: u64 = 65_536;
+const UPGRADE_PAGES_SIZE: u64 = 2 * 1024 * 1024 * 1024;
+const UPGRADE_PAGES: u64 = UPGRADE_PAGES_SIZE / WASM_PAGE_SIZE;
+
+const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
+const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
+const ALLOWANCES_ARRIVALS_MEMORY_ID: MemoryId = MemoryId::new(3);
+
+type CanisterRestrictedMemory = RestrictedMemory<DefaultMemoryImpl>;
+type CanisterVirtualMemory = VirtualMemory<CanisterRestrictedMemory>;
+
+thread_local! {
+
+    static MEMORY_MANAGER: RefCell<MemoryManager<CanisterRestrictedMemory>> = RefCell::new(
+        MemoryManager::init(RestrictedMemory::new(DefaultMemoryImpl::default(), UPGRADE_PAGES..MAX_PAGES))
+    );
+
+    // allowances: BTreeMap<K, Allowance<Tokens>>,
+    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), Allowance<Tokens>, CanisterVirtualMemory>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_MEMORY_ID))));
+
+    // expiration_queue: BTreeSet<(TimeStamp, K)>,
+    pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, (AccountIdentifier, AccountIdentifier)), (), CanisterVirtualMemory>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
+
+    // arrival_queue: BTreeSet<(TimeStamp, K)>,
+    pub static ALLOWANCES_ARRIVALS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, (AccountIdentifier, AccountIdentifier)), (), CanisterVirtualMemory>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_ARRIVALS_MEMORY_ID))));
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum AllowanceTableField {
+    Allowances,
+    Expirations,
+    Arrivals,
+}
+
+impl AllowanceTableField {
+    pub fn first() -> Self {
+        Self::Allowances
+    }
+
+    // move to the beginning of the next field
+    pub fn next(&self) -> Option<Self> {
+        match self {
+            Self::Allowances => Some(Self::Expirations),
+            Self::Expirations => Some(Self::Arrivals),
+            Self::Arrivals => None,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerField {
+    AllowanceTable(AllowanceTableField),
+}
+
+impl LedgerField {
+    pub fn first() -> Self {
+        Self::AllowanceTable(AllowanceTableField::first())
+    }
+
+    pub fn next_field(&self) -> Option<Self> {
+        match self {
+            Self::AllowanceTable(field) => field.next().map(Self::AllowanceTable),
+        }
+    }
+}
+
+#[derive(CandidType, Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub enum LedgerStateType {
+    Migrating,
+    Ready,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerState {
+    Migrating(LedgerField),
+    Ready,
+}
+
+impl LedgerState {
+    pub fn type_(&self) -> LedgerStateType {
+        match self {
+            Self::Migrating(..) => LedgerStateType::Migrating,
+            Self::Ready => LedgerStateType::Ready,
+        }
+    }
+}
+
+impl Default for LedgerState {
+    fn default() -> Self {
+        Self::Ready
+    }
 }
 
 // Wasm bytecode of an Archive Node.
@@ -66,6 +176,8 @@ pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]
     pub approvals: LedgerAllowances,
+    #[serde(default)]
+    pub stable_approvals: AllowanceTable<StableAllowancesData>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
     // A cap on the maximum number of accounts.
     pub maximum_number_of_accounts: usize,
@@ -106,11 +218,17 @@ pub struct Ledger {
 
     #[serde(default)]
     pub feature_flags: FeatureFlags,
+
+    #[serde(default)]
+    pub state: LedgerState,
+
+    #[serde(default)]
+    pub rounds: u64,
 }
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
-    type AllowancesData = HeapAllowancesData<AccountIdentifier, Tokens>;
+    type AllowancesData = StableAllowancesData;
     type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
     type Tokens = Tokens;
 
@@ -123,11 +241,11 @@ impl LedgerContext for Ledger {
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        &self.approvals
+        &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        &mut self.approvals
+        &mut self.stable_approvals
     }
 
     fn fee_collector(&self) -> Option<&ic_ledger_core::block::FeeCollector<Self::AccountId>> {
@@ -208,6 +326,7 @@ impl Default for Ledger {
     fn default() -> Self {
         Self {
             approvals: Default::default(),
+            stable_approvals: Default::default(),
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
             maximum_number_of_accounts: 28_000_000,
@@ -224,6 +343,8 @@ impl Default for Ledger {
             token_symbol: unknown_token(),
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
+            state: LedgerState::Ready,
+            rounds: 0,
         }
     }
 }
@@ -447,6 +568,46 @@ impl Ledger {
             self.feature_flags = feature_flags;
         }
     }
+
+    pub fn compute_ledger_state(&mut self, sink: impl Sink + Clone) {
+        if let LedgerState::Ready = self.state {
+            // check whether there is state to migrate
+            // and begin the migration from the next field
+            if let Some(field) = self.next_field_to_migrate() {
+                log!(sink, "[ledger] Starting migration from {field:?}");
+                self.state = LedgerState::Migrating(field);
+            }
+        }
+    }
+
+    pub fn is_migrating(&self) -> bool {
+        match self.state {
+            LedgerState::Migrating(..) => true,
+            LedgerState::Ready => false,
+        }
+    }
+
+    pub fn is_ready(&self) -> bool {
+        match self.state {
+            LedgerState::Migrating(..) => false,
+            LedgerState::Ready => true,
+        }
+    }
+
+    pub fn next_field_to_migrate(&self) -> Option<LedgerField> {
+        use AllowanceTableField::*;
+        use LedgerField::*;
+
+        if self.approvals.allowances_data.len_allowances() > 0 {
+            Some(AllowanceTable(Allowances))
+        } else if self.approvals.allowances_data.len_expirations() > 0 {
+            Some(AllowanceTable(Expirations))
+        } else if self.approvals.allowances_data.len_arrivals() > 0 {
+            Some(AllowanceTable(Arrivals))
+        } else {
+            None
+        }
+    }
 }
 
 pub fn add_payment(
@@ -472,4 +633,126 @@ pub fn change_notification_state(
         new_state,
         TimeStamp::from(now()),
     )
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct StableAllowancesData {}
+
+impl AllowancesData for StableAllowancesData {
+    type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
+
+    fn get_allowance(
+        &self,
+        account_spender: &(Self::AccountId, Self::AccountId),
+    ) -> Option<Allowance<Self::Tokens>> {
+        ALLOWANCES_MEMORY.with_borrow(|allowances| allowances.get(account_spender))
+    }
+
+    fn set_allowance(
+        &mut self,
+        account_spender: (Self::AccountId, Self::AccountId),
+        allowance: Allowance<Self::Tokens>,
+    ) {
+        ALLOWANCES_MEMORY
+            .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance));
+    }
+
+    fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId)) {
+        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| allowances.remove(account_spender));
+    }
+
+    fn insert_expiry(
+        &mut self,
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
+    ) {
+        ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
+            expirations.insert((timestamp, account_spender), ());
+        });
+    }
+
+    fn remove_expiry(
+        &mut self,
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
+    ) {
+        ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
+            expirations.remove(&(timestamp, account_spender));
+        });
+    }
+
+    fn insert_arrival(
+        &mut self,
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
+    ) {
+        ALLOWANCES_ARRIVALS_MEMORY.with_borrow_mut(|arrivals| {
+            arrivals.insert((timestamp, account_spender), ());
+        });
+    }
+
+    fn remove_arrival(
+        &mut self,
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
+    ) {
+        ALLOWANCES_ARRIVALS_MEMORY.with_borrow_mut(|arrivals| {
+            arrivals.remove(&(timestamp, account_spender));
+        });
+    }
+
+    fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow(|expirations| expirations.first_key_value().map(|kv| kv.0))
+    }
+
+    fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
+        let mut result = vec![];
+        ALLOWANCES_ARRIVALS_MEMORY.with_borrow(|arrivals| {
+            for ((_t, key), ()) in arrivals.iter() {
+                if result.len() >= n {
+                    break;
+                }
+                result.push(key);
+            }
+        });
+        result
+    }
+
+    fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
+    }
+
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
+        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| allowances.pop_first())
+    }
+
+    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        ALLOWANCES_ARRIVALS_MEMORY.with_borrow_mut(|arrivals| arrivals.pop_first().map(|kv| kv.0))
+    }
+
+    fn len_allowances(&self) -> usize {
+        ALLOWANCES_MEMORY
+            .with_borrow(|allowances| allowances.len())
+            .try_into()
+            .unwrap()
+    }
+
+    fn len_expirations(&self) -> usize {
+        ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow(|expirations| expirations.len())
+            .try_into()
+            .unwrap()
+    }
+
+    fn len_arrivals(&self) -> usize {
+        ALLOWANCES_ARRIVALS_MEMORY
+            .with_borrow(|arrivals| arrivals.len())
+            .try_into()
+            .unwrap()
+    }
 }

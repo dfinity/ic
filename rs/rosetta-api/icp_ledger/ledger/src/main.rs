@@ -1376,7 +1376,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_num_approvals",
-        ledger.approvals.get_num_approvals() as f64,
+        ledger.stable_approvals.get_num_approvals() as f64,
         "Total number of approvals.",
     )?;
     let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
@@ -1483,7 +1483,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 let current_allowance = LEDGER
                     .read()
                     .unwrap()
-                    .approvals
+                    .stable_approvals
                     .allowance(&from, &spender, now)
                     .amount;
                 return Err(ApproveError::AllowanceChanged {
@@ -1560,7 +1560,7 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     let ledger = LEDGER.read().unwrap();
     let account = AccountIdentifier::from(arg.account);
     let spender = AccountIdentifier::from(arg.spender);
-    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    let allowance = ledger.stable_approvals.allowance(&account, &spender, now);
     Allowance {
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
