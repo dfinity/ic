@@ -170,7 +170,9 @@ mod withdraw_erc20 {
         DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC, TWO_USDC,
     };
     use ic_cketh_test_utils::flow::{
-        increment_max_priority_fee_per_gas, DepositParams, ProcessWithdrawalParams,
+        double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
+        increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
+        ProcessWithdrawalParams,
     };
     use ic_cketh_test_utils::mock::JsonRpcProvider;
     use ic_cketh_test_utils::response::{
@@ -953,6 +955,55 @@ mod withdraw_erc20 {
                 }
             ]
         )
+    }
+
+    #[test]
+    fn should_process_withdrawal_when_price_increases_moderately() {
+        fn test_when_tx_fee<F: FnMut(&mut ethers_core::types::FeeHistory)>(
+            tx_fee_increase: &mut F,
+        ) -> FeeHistoryProcessWithdrawal<CkErc20Setup, RetrieveErc20Request> {
+            let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+            let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+            let caller = ckerc20.caller();
+            let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+
+            ckerc20
+                .deposit_cketh_and_ckerc20(
+                    EXPECTED_BALANCE,
+                    TWO_USDC + CKERC20_TRANSFER_FEE,
+                    ckusdc.clone(),
+                    caller,
+                )
+                .expect_mint()
+                .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+                .call_ckerc20_ledger_approve_minter(
+                    ckusdc.ledger_canister_id,
+                    caller,
+                    TWO_USDC,
+                    None,
+                )
+                .call_minter_withdraw_erc20(
+                    caller,
+                    TWO_USDC,
+                    ckusdc.ledger_canister_id,
+                    DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+                )
+                .expect_refresh_gas_fee_estimate(identity)
+                .expect_withdrawal_request_accepted()
+                .start_processing_withdrawals()
+                .retrieve_fee_history(|mock| mock.modify_response_for_all(tx_fee_increase))
+        }
+
+        test_when_tx_fee(&mut increment_base_fee_per_gas)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::TxCreated);
+
+        test_when_tx_fee(&mut double_and_increment_base_fee_per_gas)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::Pending)
+            .expect_transaction_not_created();
     }
 
     #[test]
