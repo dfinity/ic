@@ -54,6 +54,7 @@ ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
+ic-nns-governance-api = { path = "./api" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
@@ -82,6 +83,7 @@ rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
+syn = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 canbench-rs = { version = "0.1.4", optional = true }
 ic-cdk = { workspace = true, optional = true }

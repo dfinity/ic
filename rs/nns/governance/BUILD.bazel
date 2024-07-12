@@ -28,6 +28,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/runtime",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/governance/api",
     "//rs/nns/gtc_accounts",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -64,6 +65,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
+    "@crate_index//:syn",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
