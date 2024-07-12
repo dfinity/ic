@@ -194,7 +194,6 @@ impl<'a> OutputIterator<'a> {
         if !subnet_queues_iter.is_empty() {
             canister_iterators.push_front(subnet_queues_iter)
         }
-        eprintln!("After rotation: {:?}", canister_iterators);
         let size = canister_iterators.iter().map(|q| q.size()).sum();
 
         OutputIterator {
@@ -997,10 +996,10 @@ impl ReplicatedState {
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
 
-        let mut timed_out_messages_count = 0;
+        let mut timed_out_requests_count = 0;
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            timed_out_messages_count += canister.system_state.time_out_messages(
+            timed_out_requests_count += canister.system_state.time_out_messages(
                 current_time,
                 &canister_id,
                 &self.canister_states,
@@ -1008,7 +1007,7 @@ impl ReplicatedState {
             self.canister_states.insert(canister_id, canister);
         }
 
-        timed_out_messages_count
+        timed_out_requests_count
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining

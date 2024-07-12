@@ -186,7 +186,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                 // FIXME: Add a test that covers skipping over stale references.
                 self.size -= 1;
 
-                // If the message is in the pool return it; else continue to the next reference.
+                // Consume any stale references.
                 if let msg @ Some(_) = self.pool.take(item.id()) {
                     if queue.len() > 0 {
                         self.queues.push_back((receiver, queue));
@@ -1567,7 +1567,10 @@ pub mod testing {
         }
 
         fn output_message_count(&self) -> usize {
-            self.pool.message_stats().outbound_message_count
+            self.canister_queues
+                .values()
+                .map(|(_, output_queue)| output_queue.len())
+                .sum()
         }
 
         fn push_input(

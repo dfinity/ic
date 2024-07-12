@@ -1091,42 +1091,26 @@ prop_compose! {
         request_queues in prop::collection::vec(prop::collection::vec(arbitrary::request(), 0..=max_requests_per_canister), 0..=max_canisters),
         num_receivers in arb_num_receivers(max_receivers)
     ) -> (ReplicatedState, VecDeque<VecDeque<RequestOrResponse>>, usize) {
-        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers);
-        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(time);
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaChaRng;
 
-        apply_pseudorandom_rotation(true, replicated_state.metadata.batch_time, &mut raw_requests);
+        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers);
+
+        // We pseudorandomly rotate the queues to match the rotation applied by the iterator.
+        // Note that subnet queues are always at the front which is why we need to pop them
+        // before the rotation and push them to the front afterwards.
+        let subnet_queue_requests = raw_requests.pop_front();
+        let mut raw_requests : VecDeque<_> = raw_requests.into_iter().filter(|requests| !requests.is_empty()).collect();
+
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(time);
+        let mut rng = ChaChaRng::seed_from_u64(time);
+        let rotation = rng.gen_range(0..raw_requests.len().max(1));
+        raw_requests.rotate_left(rotation);
+
+        if let Some(requests) = subnet_queue_requests {
+            raw_requests.push_front(requests);
+        }
 
         (replicated_state, raw_requests, total_requests)
     }
-}
-
-/// Pseudorandomly rotates the queues to match the rotation applied by the iterator.
-/// The `forward` argument determines whether to apply or revert the rotation.
-///
-/// Note that subnet queues are always at the front which is why we need to pop them
-/// before the rotation and push them to the front afterwards.
-pub fn apply_pseudorandom_rotation(
-    forward: bool,
-    time: Time,
-    raw_requests: &mut VecDeque<VecDeque<RequestOrResponse>>,
-) {
-    use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaChaRng;
-
-    let subnet_queue_requests = raw_requests.pop_front();
-    raw_requests.retain(|requests| !requests.is_empty());
-
-    let mut rng = ChaChaRng::seed_from_u64(time.as_nanos_since_unix_epoch() as u64);
-    let rotation = rng.gen_range(0..raw_requests.len().max(1));
-    if forward {
-        raw_requests.rotate_left(rotation);
-    } else {
-        raw_requests.rotate_right(rotation);
-    }
-
-    if let Some(requests) = subnet_queue_requests {
-        raw_requests.push_front(requests);
-    }
-    eprintln!("After rotation: {:?}", raw_requests);
-    assert!(time.as_nanos_since_unix_epoch() >= 0);
 }
