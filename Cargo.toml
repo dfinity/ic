@@ -553,6 +553,7 @@ pprof = { version = "0.13.0", default-features = false, features = [
     "prost-codec",
 ] }
 prometheus = { version = "0.13.4", features = ["process"] }
+prometheus-parse = { version = "0.2.4" }
 prost = "=0.12.2"
 prost-build = "=0.12.2"
 protobuf = "2.28.0"
