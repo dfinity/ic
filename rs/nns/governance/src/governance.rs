@@ -276,12 +276,15 @@ impl From<NervousSystemError> for GovernanceError {
 
 impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPortionPb {
     fn from(neuron: NeuronsFundNeuronPortion) -> Self {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove
         Self {
             nns_neuron_id: Some(neuron.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
-            hotkey_principal: Some(neuron.controller),
+            controller: Some(neuron.controller),
             is_capped: Some(neuron.is_capped),
+            hotkeys: Vec::new(), // TODO(NNS1-3199): populate hotkeys
+            hotkey_principal: Some(neuron.controller),
         }
     }
 }
