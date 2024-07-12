@@ -10,16 +10,20 @@ use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, 
 use ed25519_dalek::{Digest, Sha512};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use rand::{CryptoRng, Rng};
+use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
 /// An error if a private key cannot be decoded
-#[derive(Clone, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum PrivateKeyDecodingError {
     /// The outer PEM encoding is invalid
+    #[error("The outer PEM encoding is invalid")]
     InvalidPemEncoding(String),
     /// The PEM label was not the expected value
+    #[error("The PEM label was not the expected value")]
     UnexpectedPemLabel(String),
     /// The private key seems invalid in some way; the string contains details
+    #[error("The private key seems invalid in some way; the string contains details")]
     InvalidKeyEncoding(String),
 }
 
@@ -341,13 +345,16 @@ impl DerivedPrivateKey {
 }
 
 /// An invalid key was encountered
-#[derive(Clone, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum PublicKeyDecodingError {
     /// The outer PEM encoding is invalid
+    #[error("The outer PEM encoding is invalid")]
     InvalidPemEncoding(String),
     /// The PEM label was not the expected value
+    #[error("The PEM label was not the expected value")]
     UnexpectedPemLabel(String),
     /// The encoding of the public key is invalid, the string contains details
+    #[error("The encoding of the public key is invalid, the string contains details")]
     InvalidKeyEncoding(String),
 }
 
@@ -409,14 +416,20 @@ pub struct PublicKey {
 }
 
 /// An error that occurs when verifying signatures or batches of signatures
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Error, Debug)]
 pub enum SignatureError {
     /// The signature had an invalid length, and cannot possibly be valid
+    #[error("The signature had an invalid length, and cannot possibly be valid")]
     InvalidLength,
-    /// The batch was invalid (eg due to length mismatch between number of
+    /// The batch was invalid (e.g., due to length mismatch between number of
     /// messages and number of signatures)
+    #[error(
+        "The batch was invalid (e.g., due to length mismatch between number of 
+        messages and number of signatures)"
+    )]
     InvalidBatch,
     /// A signature was invalid
+    #[error("A signature was invalid")]
     InvalidSignature,
 }
 
