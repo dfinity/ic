@@ -33,7 +33,7 @@ const ICPANDA: (&str, &str) = ("druyg-tyaaa-aaaaq-aactq-cai", "ICPanda");
 const ICPCC: (&str, &str) = ("lrtnw-paaaa-aaaaq-aadfa-cai", "ICPCC");
 const ICX: (&str, &str) = ("rffwt-piaaa-aaaaq-aabqq-cai", "ICX");
 const KINIC: (&str, &str) = ("73mez-iiaaa-aaaaq-aaasq-cai", "Kinic");
-const MODCLUB: (&str, &str) = ("xsi2v-cyaaa-aaaaq-aabfq-cai", "ModClub");
+const DECIDEAI: (&str, &str) = ("xsi2v-cyaaa-aaaaq-aabfq-cai", "DecideAI");
 const MOTOKO: (&str, &str) = ("k45jy-aiaaa-aaaaq-aadcq-cai", "Motoko");
 const NEUTRINITE: (&str, &str) = ("f54if-eqaaa-aaaaq-aacea-cai", "Neutrinite");
 const NUANCE: (&str, &str) = ("rxdbk-dyaaa-aaaaq-aabtq-cai", "Nuance");
@@ -42,6 +42,7 @@ const ORIGYN: (&str, &str) = ("lkwrt-vyaaa-aaaaq-aadhq-cai", "Origyn");
 const SNEED: (&str, &str) = ("hvgxa-wqaaa-aaaaq-aacia-cai", "Sneed");
 const SONIC: (&str, &str) = ("qbizb-wiaaa-aaaaq-aabwq-cai", "Sonic");
 const TRAX: (&str, &str) = ("emww2-4yaaa-aaaaq-aacbq-cai", "Trax");
+const WATERNEURON: (&str, &str) = ("jcmow-hyaaa-aaaaq-aadlq-cai", "WaterNeuron");
 const YUKU: (&str, &str) = ("atbfz-diaaa-aaaaq-aacyq-cai", "Yuku");
 
 #[test]
@@ -89,7 +90,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ICPCC,
         ICX,
         KINIC,
-        MODCLUB,
+        DECIDEAI,
         MOTOKO,
         NEUTRINITE,
         NUANCE,
@@ -98,6 +99,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         SNEED,
         SONIC,
         TRAX,
+        WATERNEURON,
         YUKU,
     ];
 
