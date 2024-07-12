@@ -12,6 +12,7 @@ on:
       - 'hotfix-*-rc--*'
       - 'rc--*'
       - 'master'
+      - 'dev-gh-*'
 
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
