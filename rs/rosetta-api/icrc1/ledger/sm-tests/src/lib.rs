@@ -2422,6 +2422,7 @@ pub fn icrc1_test_approval_upgrade<T>(
         initial_balances,
     );
 
+    const APPROVE_AMOUNT: u64 = 150_000;
     let expiration =
         system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
 
@@ -2429,13 +2430,13 @@ pub fn icrc1_test_approval_upgrade<T>(
 
     for i in 0..accounts.len() {
         for j in i + 1..accounts.len() {
-            let mut approve_args = default_approve_args(accounts[j], 150_000);
+            let mut approve_args = default_approve_args(accounts[j], APPROVE_AMOUNT);
             approve_args.from_subaccount = accounts[i].subaccount;
             send_approval(&env, canister_id, accounts[i].owner, &approve_args)
                 .expect("approval failed");
             expected_allowances.push(get_allowance(&env, canister_id, accounts[i], accounts[j]));
 
-            let mut approve_args = default_approve_args(accounts[i], 150_000);
+            let mut approve_args = default_approve_args(accounts[i], APPROVE_AMOUNT);
             approve_args.expires_at = Some(expiration);
             approve_args.from_subaccount = accounts[j].subaccount;
             send_approval(&env, canister_id, accounts[j].owner, &approve_args)
@@ -2456,10 +2457,10 @@ pub fn icrc1_test_approval_upgrade<T>(
         for i in 0..accounts.len() {
             for j in i + 1..accounts.len() {
                 let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
-                assert_eq!(allowance.allowance, Nat::from(150_000u64));
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
                 allowances.push(allowance);
                 let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
-                assert_eq!(allowance.allowance, Nat::from(150_000u64));
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
                 allowances.push(allowance);
             }
         }
