@@ -60,6 +60,17 @@ pub trait AllowancesData {
     #[allow(clippy::type_complexity)]
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
+    #[allow(clippy::type_complexity)]
+    fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
+
+    #[allow(clippy::type_complexity)]
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
+
+    #[allow(clippy::type_complexity)]
+    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
+
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 
     fn len_allowances(&self) -> usize;
@@ -153,6 +164,20 @@ where
 
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         self.expiration_queue.first().cloned()
+    }
+
+    fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        self.expiration_queue.pop_first()
+    }
+
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
+        self.allowances.pop_first()
+    }
+
+    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        self.arrival_queue.pop_first()
     }
 
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
@@ -434,7 +459,7 @@ where
                         return pruned;
                     }
                 }
-                if let Some((_, (account, spender))) = table.remove_first_expiry() {
+                if let Some((_, (account, spender))) = table.pop_first_expiry() {
                     let key = (account, spender);
                     if let Some(allowance) = table.allowances_data.get_allowance(&key) {
                         if allowance.expires_at.unwrap_or_else(remote_future) <= now {
@@ -460,14 +485,20 @@ where
     }
 
     #[allow(clippy::type_complexity)]
-    fn remove_first_expiry(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
-        let expiry = self.allowances_data.first_expiry();
-        if let Some((timestamp, (account, spender))) = expiry {
-            self.allowances_data
-                .remove_expiry(timestamp, (account.clone(), spender.clone()));
-            return Some((timestamp, (account, spender)));
-        }
-        None
+    pub fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
+        self.allowances_data.pop_first_expiry()
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((AD::AccountId, AD::AccountId), Allowance<AD::Tokens>)> {
+        self.allowances_data.pop_first_allowance()
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
+        self.allowances_data.pop_first_arrival()
     }
 }
 
