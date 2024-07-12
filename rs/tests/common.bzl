@@ -2,6 +2,7 @@
 Common dependencies for system-tests.
 """
 
+load("//bazel:defs.bzl", "symlink_dir")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 DEPENDENCIES = [
@@ -384,43 +385,3 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
     "@candid//:didc",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 ]
-
-def _symlink_dir(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dir = rule(
-    implementation = _symlink_dir,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
-
-def _symlink_dirs(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, childdirname in ctx.attr.targets.items():
-        for file in target[DefaultInfo].files.to_list():
-            ln = ctx.actions.declare_file(dirname + "/" + childdirname + "/" + file.basename)
-            ctx.actions.symlink(
-                output = ln,
-                target_file = file,
-            )
-            lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dirs = rule(
-    implementation = _symlink_dirs,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
