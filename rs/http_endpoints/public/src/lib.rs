@@ -26,13 +26,12 @@ cfg_if::cfg_if! {
     }
 }
 
-pub use call::{CallServiceV2, IngressValidatorBuilder};
+pub use call::{CallServiceV2, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 
 use crate::{
-    call::ingress_watcher::IngressWatcher,
     catch_up_package::CatchUpPackageService,
     common::{
         get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,

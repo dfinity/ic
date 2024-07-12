@@ -21,7 +21,7 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 const INGRESS_WATCHER_CHANNEL_SIZE: usize = 1000;
 
 #[derive(Debug)]
-pub(crate) enum SubscriptionError {
+pub enum SubscriptionError {
     /// Another subscription for the same message id already exists.
     DuplicateSubscriptionError,
     /// The [`IngressWatcher`] is not running.
@@ -40,7 +40,7 @@ struct IngressWatcherSubscription {
 
 /// A handle to the [`IngressWatcher`] used to register subscription over a channel.
 #[derive(Clone)]
-pub(crate) struct IngressWatcherHandle {
+pub struct IngressWatcherHandle {
     subscriber_registration_tx: Sender<IngressWatcherSubscription>,
     metrics: HttpHandlerMetrics,
 }
@@ -48,7 +48,7 @@ pub(crate) struct IngressWatcherHandle {
 impl IngressWatcherHandle {
     /// Subscribes for the certification of an ingress message, and returns a [`IngressCertificationSubscriber`], that can be
     /// used to wait for a message to be certified.
-    pub(crate) async fn subscribe_for_certification(
+    pub async fn subscribe_for_certification(
         self,
         message: MessageId,
     ) -> Result<IngressCertificationSubscriber, SubscriptionError> {
@@ -88,7 +88,7 @@ impl IngressWatcherHandle {
     }
 }
 
-pub(crate) struct IngressCertificationSubscriber {
+pub struct IngressCertificationSubscriber {
     certification_notifier: Arc<Notify>,
     metrics: HttpHandlerMetrics,
     /// Cancels the subscription if the subscriber is dropped.
@@ -96,7 +96,7 @@ pub(crate) struct IngressCertificationSubscriber {
 }
 
 impl IngressCertificationSubscriber {
-    pub(crate) async fn wait_for_certification(self) {
+    pub async fn wait_for_certification(self) {
         let _timer = self
             .metrics
             .ingress_watcher_wait_for_certification_duration_seconds
@@ -115,7 +115,7 @@ enum MessageExecutionStatus {
 /// Invariants:
 /// - 1:1 mapping of keys in `message_statuses` and `cancellations`.
 /// - 1:1 mapping of keys in `message_statuses` with execution status as completed and `completed_execution_heights`.
-pub(crate) struct IngressWatcher {
+pub struct IngressWatcher {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
     rt_handle: Handle,
@@ -132,7 +132,7 @@ pub(crate) struct IngressWatcher {
 }
 
 impl IngressWatcher {
-    pub(crate) fn start(
+    pub fn start(
         rt_handle: Handle,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
