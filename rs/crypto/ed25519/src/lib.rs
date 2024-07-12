@@ -17,13 +17,13 @@ use zeroize::ZeroizeOnDrop;
 #[derive(Clone, Error, Debug)]
 pub enum PrivateKeyDecodingError {
     /// The outer PEM encoding is invalid
-    #[error("The outer PEM encoding is invalid")]
+    #[error("The outer PEM encoding is invalid: {0}")]
     InvalidPemEncoding(String),
     /// The PEM label was not the expected value
-    #[error("The PEM label was not the expected value")]
+    #[error("The PEM label was not the expected value: {0}")]
     UnexpectedPemLabel(String),
     /// The private key seems invalid in some way; the string contains details
-    #[error("The private key seems invalid in some way; the string contains details")]
+    #[error("The private key seems invalid in some way: {0}")]
     InvalidKeyEncoding(String),
 }
 
@@ -348,13 +348,13 @@ impl DerivedPrivateKey {
 #[derive(Clone, Error, Debug)]
 pub enum PublicKeyDecodingError {
     /// The outer PEM encoding is invalid
-    #[error("The outer PEM encoding is invalid")]
+    #[error("The outer PEM encoding is invalid: {0}")]
     InvalidPemEncoding(String),
     /// The PEM label was not the expected value
-    #[error("The PEM label was not the expected value")]
+    #[error("The PEM label was not the expected value: {0}")]
     UnexpectedPemLabel(String),
     /// The encoding of the public key is invalid, the string contains details
-    #[error("The encoding of the public key is invalid, the string contains details")]
+    #[error("The encoding of the public key is invalid: {0}")]
     InvalidKeyEncoding(String),
 }
 
