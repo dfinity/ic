@@ -10270,6 +10270,7 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
+ "syn 1.0.109",
  "tempfile",
  "tla_instrumentation",
  "tla_instrumentation_proc_macros",
