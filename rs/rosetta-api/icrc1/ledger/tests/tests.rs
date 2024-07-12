@@ -364,8 +364,7 @@ fn test_block_transformation() {
 #[test]
 fn icrc1_test_approval_upgrade() {
     ic_icrc1_ledger_sm_tests::icrc1_test_approval_upgrade(
-        std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
-            .unwrap(),
+        ledger_mainnet_wasm(),
         ledger_wasm(),
         encode_init_args,
     );
