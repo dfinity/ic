@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 
-use crate::ecdsa::{pre_signer::EcdsaTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::ecdsa::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{info, ReplicaLogger};
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
-        self, EcdsaBlockReader, EcdsaUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
+        self, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     Height, NodeId, RegistryVersion,
@@ -15,7 +15,7 @@ use super::IDkgPayloadError;
 
 pub(super) fn get_created_key_transcript(
     key_transcript: &idkg::MasterKeyTranscript,
-    block_reader: &dyn EcdsaBlockReader,
+    block_reader: &dyn IDkgBlockReader,
 ) -> Result<Option<idkg::UnmaskedTranscriptWithAttributes>, IDkgPayloadError> {
     if let idkg::KeyTranscriptCreation::Created(unmasked) = &key_transcript.next_in_creation {
         let transcript = block_reader.transcript(unmasked.as_ref())?;
@@ -37,7 +37,7 @@ pub(super) fn update_next_key_transcripts(
     receivers: &[NodeId],
     registry_version: RegistryVersion,
     idkg_payload: &mut idkg::IDkgPayload,
-    transcript_cache: &dyn EcdsaTranscriptBuilder,
+    transcript_cache: &dyn IDkgTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<Vec<IDkgTranscript>, IDkgPayloadError> {
@@ -62,10 +62,10 @@ pub(super) fn update_next_key_transcripts(
 
 pub(super) fn update_next_key_transcript(
     key_transcript: &mut MasterKeyTranscript,
-    uid_generator: &mut EcdsaUIDGenerator,
+    uid_generator: &mut IDkgUIDGenerator,
     receivers: &[NodeId],
     registry_version: RegistryVersion,
-    transcript_cache: &dyn EcdsaTranscriptBuilder,
+    transcript_cache: &dyn IDkgTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<Option<IDkgTranscript>, IDkgPayloadError> {
@@ -232,7 +232,7 @@ mod tests {
         test_utils::{
             create_reshare_unmasked_transcript_param,
             fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
-            IDkgPayloadTestHelper, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn get_created_key_transcript_returns_some_test() {
-        let mut block_reader = TestEcdsaBlockReader::new();
+        let mut block_reader = TestIDkgBlockReader::new();
         let mut rng = reproducible_rng();
         let key_transcript = create_key_transcript(&mut rng);
         let key_transcript_ref =
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn get_created_key_transcript_returns_none_test() {
-        let block_reader = TestEcdsaBlockReader::new();
+        let block_reader = TestIDkgBlockReader::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let key_transcript = idkg::MasterKeyTranscript {
             current: None,
@@ -323,7 +323,7 @@ mod tests {
             arr.sort_unstable();
             arr
         };
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         // 1. Nothing initially, masked transcript creation should start
         let cur_height = Height::new(10);
@@ -516,7 +516,7 @@ mod tests {
             arr.sort_unstable();
             arr
         };
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         // 1. Nothing initially, masked transcript creation should start
         let cur_height = Height::new(10);
