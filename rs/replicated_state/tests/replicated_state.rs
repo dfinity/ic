@@ -21,7 +21,9 @@ use ic_replicated_state::{
     CanisterState, IngressHistoryState, NextInputQueue, ReplicatedState, SchedulerState,
     StateError, SystemState,
 };
-use ic_test_utilities_state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
+use ic_test_utilities_state::{
+    apply_pseudorandom_rotation, arb_replicated_state_with_queues, ExecutionStateBuilder,
+};
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
@@ -1011,18 +1013,6 @@ proptest! {
         }
 
         assert_eq!(replicated_state.output_message_count(), 0);
-
-    }
-
-    #[test]
-    fn peek_next_loop_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
-
-        while output_iter.peek().is_some() {
-            output_iter.next();
-        }
     }
 
     #[test]
@@ -1058,5 +1048,109 @@ proptest! {
             }
             output_iter.next();
         }
+    }
+
+    #[test]
+    fn iter_with_stale_entries_yields_correct_elements(
+       (mut replicated_state, mut raw_requests, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 3, 3, Some(8)),
+        batch_time_seconds in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+
+        // Revert the rotation.
+        apply_pseudorandom_rotation(false, replicated_state.metadata.batch_time, &mut raw_requests);
+
+        // Time out some messages.
+        let batch_time_seconds = batch_time_seconds.max(1000) as u64;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time_seconds * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        // Also remove the expired messages from `raw_requests`. Skip over subnet
+        // queues, as they are not affected by `time_out_messages()`.
+        for requests in raw_requests.iter_mut().skip(1) {
+            // This implicitly drops all guaranteed response requests, which is OK, since
+            // their effective deadlines are all around 300 seconds.
+            requests.retain(|msg| Time::from(msg.deadline()) >= replicated_state.metadata.batch_time);
+        }
+
+        // Re-apply the rotation to the potentially reduced set of non-empty queues.
+        apply_pseudorandom_rotation(true, replicated_state.metadata.batch_time, &mut raw_requests);
+
+        // // Also remove expired messages from `raw_requests`.
+        // for requests in raw_requests.iter_mut() {
+        //     // Skip over subnet queues, as they are not affected by `time_out_messages()`.
+        //     if let Some(&RequestOrResponse::Request(ref request)) = requests.front() {
+        //         if request.sender.get() == SUBNET_ID.get() {
+        //             continue;
+        //         }
+        //     }
+
+        //     // This implicitly drops all guaranteed response requests, since their deadlines are all around 300 seconds.
+        //     requests.retain(|msg| Time::from(msg.deadline()) >= replicated_state.metadata.batch_time);
+        // }
+
+        let mut output_iter = replicated_state.output_into_iter();
+
+        let mut output_messages = 0;
+        for msg in &mut output_iter {
+            let mut requests = raw_requests.pop_front().unwrap();
+            while requests.is_empty() {
+                requests = raw_requests.pop_front().unwrap();
+            }
+
+            if let Some(raw_msg) = requests.pop_front() {
+                output_messages += 1;
+                assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
+            } else {
+                panic!("Pop yielded an element that was not contained in the respective queue");
+            }
+
+            raw_requests.push_back(requests);
+        }
+
+        drop(output_iter);
+        // Ensure that all elements have been consumed.
+        assert_eq!(total_requests, timed_out_messages + output_messages);
+        assert_eq!(raw_requests.iter().map(|requests| requests.len()).sum::<usize>(), 0);
+        assert_eq!(replicated_state.output_message_count(), 0);
+    }
+
+    #[test]
+    fn iter_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+        batch_time_seconds in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        let output_messages = replicated_state.output_into_iter().count();
+
+        // All messages have either been timed out or output.
+        assert_eq!(total_requests, timed_out_messages + output_messages);
+        assert_eq!(replicated_state.output_message_count(), 0);
+    }
+
+    #[test]
+    fn peek_next_loop_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+        batch_time in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        let mut output_iter = replicated_state.output_into_iter();
+
+        let mut output_messages = 0;
+        while let Some(msg) = output_iter.peek() {
+            output_messages += 1;
+            assert_eq!(Some(msg.clone()), output_iter.next());
+        }
+        drop(output_iter);
+
+        // All messages have either been timed out or output.
+        assert_eq!(total_requests, timed_out_messages + output_messages);
+        assert_eq!(replicated_state.output_message_count(), 0);
     }
 }
