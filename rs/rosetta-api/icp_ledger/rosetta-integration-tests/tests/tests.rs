@@ -406,8 +406,6 @@ async fn test_rosetta_blocks_mode_enabled() {
 
     // Check that passing --enable-rosetta-blocks enables the
     // rosetta blocks mode for the next block
-    // Check that passing --enable-rosetta-blocks enables the
-    // rosetta blocks mode for the next block
 
     // The first rosetta block index is the same as the index
     // of the next block to sync (i.e. current block index + 1)
