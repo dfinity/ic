@@ -113,8 +113,8 @@ impl BlockPayload {
         }
     }
 
-    /// Returns a reference to EcdsaPayload if it exists.
-    pub fn as_ecdsa(&self) -> Option<&idkg::EcdsaPayload> {
+    /// Returns a reference to IDkgPayload if it exists.
+    pub fn as_ecdsa(&self) -> Option<&idkg::IDkgPayload> {
         match self {
             BlockPayload::Data(data) => data.ecdsa.as_ref(),
             BlockPayload::Summary(data) => data.ecdsa.as_ref(),

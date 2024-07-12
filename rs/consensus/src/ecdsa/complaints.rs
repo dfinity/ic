@@ -1,7 +1,7 @@
 //! The complaint handling
 
 use crate::ecdsa::metrics::{timed_call, IDkgComplaintMetrics};
-use crate::ecdsa::utils::EcdsaBlockReaderImpl;
+use crate::ecdsa::utils::IDkgBlockReaderImpl;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
@@ -12,7 +12,7 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    complaint_prefix, opening_prefix, EcdsaBlockReader, IDkgComplaintContent, IDkgMessage,
+    complaint_prefix, opening_prefix, IDkgBlockReader, IDkgComplaintContent, IDkgMessage,
     IDkgOpeningContent, SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef,
 };
 use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
@@ -31,7 +31,7 @@ pub(crate) trait IDkgComplaintHandler: Send {
     fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet;
 
     /// Get a reference to the transcript loader.
-    fn as_transcript_loader(&self) -> &dyn EcdsaTranscriptLoader;
+    fn as_transcript_loader(&self) -> &dyn IDkgTranscriptLoader;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -101,7 +101,7 @@ impl IDkgComplaintHandlerImpl {
     fn validate_complaints(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
         let requested_transcripts = self.requested_transcripts(block_reader);
@@ -180,7 +180,7 @@ impl IDkgComplaintHandlerImpl {
     fn send_openings(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
 
@@ -224,7 +224,7 @@ impl IDkgComplaintHandlerImpl {
     fn validate_openings(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
         let requested_transcripts = self.requested_transcripts(block_reader);
@@ -312,7 +312,7 @@ impl IDkgComplaintHandlerImpl {
     fn purge_artifacts(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         let active_transcripts = block_reader
             .active_transcripts()
@@ -721,7 +721,7 @@ impl IDkgComplaintHandlerImpl {
     fn resolve_ref(
         &self,
         transcript_ref: &TranscriptRef,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
         reason: &str,
     ) -> Option<IDkgTranscript> {
         let _timer = self
@@ -753,7 +753,7 @@ impl IDkgComplaintHandlerImpl {
     /// Returns the active transcript map.
     fn active_transcripts(
         &self,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> BTreeMap<IDkgTranscriptId, TranscriptRef> {
         block_reader
             .active_transcripts()
@@ -765,7 +765,7 @@ impl IDkgComplaintHandlerImpl {
     /// Returns the requested transcript map.
     fn requested_transcripts(
         &self,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> BTreeSet<IDkgTranscriptId> {
         block_reader
             .requested_transcripts()
@@ -776,7 +776,7 @@ impl IDkgComplaintHandlerImpl {
 
 impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
     fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet {
-        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
         let mut changes =
@@ -819,12 +819,12 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         changes
     }
 
-    fn as_transcript_loader(&self) -> &dyn EcdsaTranscriptLoader {
+    fn as_transcript_loader(&self) -> &dyn IDkgTranscriptLoader {
         self
     }
 }
 
-pub(crate) trait EcdsaTranscriptLoader: Send {
+pub(crate) trait IDkgTranscriptLoader: Send {
     /// Loads the given transcript
     fn load_transcript(
         &self,
@@ -845,7 +845,7 @@ pub(crate) enum TranscriptLoadStatus {
     Complaints(Vec<SignedIDkgComplaint>),
 }
 
-impl EcdsaTranscriptLoader for IDkgComplaintHandlerImpl {
+impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
     fn load_transcript(
         &self,
         idkg_pool: &dyn IDkgPool,
@@ -945,7 +945,7 @@ impl<'a> Action<'a> {
     /// height/transcriptId
     #[allow(clippy::self_named_constructors)]
     fn action(
-        block_reader: &'a dyn EcdsaBlockReader,
+        block_reader: &'a dyn IDkgBlockReader,
         active_transcripts: &'a BTreeMap<IDkgTranscriptId, TranscriptRef>,
         requested_transcripts: &'a BTreeSet<IDkgTranscriptId>,
         msg_height: Height,
@@ -1003,11 +1003,8 @@ mod tests {
 
         let ref_1 = TranscriptRef::new(Height::new(10), id_1);
         let ref_2 = TranscriptRef::new(Height::new(20), id_2);
-        let block_reader = TestEcdsaBlockReader::for_complainer_test(
-            &key_id,
-            Height::new(100),
-            vec![ref_1, ref_2],
-        );
+        let block_reader =
+            TestIDkgBlockReader::for_complainer_test(&key_id, Height::new(100), vec![ref_1, ref_2]);
         let mut active = BTreeMap::new();
         active.insert(id_1, ref_1);
         active.insert(id_2, ref_2);
@@ -1115,7 +1112,7 @@ mod tests {
         });
 
         // Only id_3 is active
-        let block_reader = TestEcdsaBlockReader::for_complainer_test(
+        let block_reader = TestIDkgBlockReader::for_complainer_test(
             &key_id,
             Height::new(100),
             vec![TranscriptRef::new(Height::new(10), id_3)],
@@ -1199,7 +1196,7 @@ mod tests {
                 ))];
                 idkg_pool.apply_changes(change_set);
 
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(30),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
@@ -1296,7 +1293,7 @@ mod tests {
                     timestamp: UNIX_EPOCH,
                 });
 
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
@@ -1344,7 +1341,7 @@ mod tests {
         let complaint = create_complaint(id_3, NODE_2, NODE_3);
         artifacts.push(IDkgMessage::Complaint(complaint));
 
-        let block_reader = TestEcdsaBlockReader::for_complainer_test(
+        let block_reader = TestIDkgBlockReader::for_complainer_test(
             &key_id,
             Height::new(100),
             vec![
@@ -1483,7 +1480,7 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        let block_reader = TestEcdsaBlockReader::for_complainer_test(
+        let block_reader = TestIDkgBlockReader::for_complainer_test(
             &key_id,
             Height::new(100),
             vec![
@@ -1571,7 +1568,7 @@ mod tests {
                 ))];
                 idkg_pool.apply_changes(change_set);
 
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
@@ -1624,7 +1621,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(message)];
                 idkg_pool.apply_changes(change_set);
 
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
@@ -1679,7 +1676,7 @@ mod tests {
                 });
 
                 // Only id_1 is active
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
@@ -1728,7 +1725,7 @@ mod tests {
                 idkg_pool.apply_changes(change_set);
 
                 // Only id_1 is active
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
@@ -1780,7 +1777,7 @@ mod tests {
                 });
 
                 // Only id_1 is active
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
@@ -1829,7 +1826,7 @@ mod tests {
                 idkg_pool.apply_changes(change_set);
 
                 // Only id_1 is active
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],

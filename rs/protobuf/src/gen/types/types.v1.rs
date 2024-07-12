@@ -381,7 +381,7 @@ pub struct ThresholdSignatureShare {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaPayload {
+pub struct IDkgPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, optional, tag = "5")]
@@ -1012,7 +1012,7 @@ pub struct Block {
     #[prost(message, optional, tag = "12")]
     pub self_validating_payload: ::core::option::Option<SelfValidatingPayload>,
     #[prost(message, optional, tag = "13")]
-    pub ecdsa_payload: ::core::option::Option<EcdsaPayload>,
+    pub idkg_payload: ::core::option::Option<IDkgPayload>,
     #[prost(bytes = "vec", tag = "15")]
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]

@@ -11,7 +11,7 @@ use ic_types::{
     Time,
 };
 
-use crate::{ecdsa::metrics::EcdsaPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
+use crate::{ecdsa::metrics::IDkgPayloadMetrics, ecdsa::signer::ThresholdSignatureBuilder};
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message
@@ -36,11 +36,11 @@ fn reject_response(
 /// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
 pub(crate) fn update_signature_agreements(
     all_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
-    signature_builder: &dyn EcdsaSignatureBuilder,
+    signature_builder: &dyn ThresholdSignatureBuilder,
     request_expiry_time: Option<Time>,
-    payload: &mut idkg::EcdsaPayload,
+    payload: &mut idkg::IDkgPayload,
     valid_keys: &BTreeSet<MasterPublicKeyId>,
-    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
 ) {
     let all_random_ids = all_requests
         .iter()
@@ -81,7 +81,7 @@ pub(crate) fn update_signature_agreements(
                 )),
             );
 
-            if let Some(metrics) = ecdsa_payload_metrics {
+            if let Some(metrics) = idkg_payload_metrics {
                 metrics.payload_errors_inc("invalid_keyid_requests");
             }
             continue;
@@ -105,7 +105,7 @@ pub(crate) fn update_signature_agreements(
             );
             payload.available_pre_signatures.remove(&pre_sig_id);
 
-            if let Some(metrics) = ecdsa_payload_metrics {
+            if let Some(metrics) = idkg_payload_metrics {
                 metrics.payload_errors_inc("expired_requests");
             }
 
@@ -125,7 +125,7 @@ pub(crate) fn update_signature_agreements(
                 )),
             );
 
-            if let Some(metrics) = ecdsa_payload_metrics {
+            if let Some(metrics) = idkg_payload_metrics {
                 metrics.payload_errors_inc("missing_pre_signature");
             }
 
@@ -165,7 +165,7 @@ mod tests {
     use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::idkg::{EcdsaPayload, RequestId},
+        consensus::idkg::{IDkgPayload, RequestId},
         crypto::canister_threshold_sig::{
             ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
         },
@@ -173,11 +173,11 @@ mod tests {
     };
 
     use crate::ecdsa::test_utils::{
-        create_available_pre_signature, empty_ecdsa_payload_with_key_ids, empty_response,
+        create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
         fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
         fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,
-        fake_signature_request_context_with_pre_sig, set_up_ecdsa_payload,
-        TestEcdsaSignatureBuilder,
+        fake_signature_request_context_with_pre_sig, set_up_idkg_payload,
+        TestThresholdSignatureBuilder,
     };
 
     use super::*;
@@ -186,9 +186,9 @@ mod tests {
         should_create_key_transcript: bool,
         pseudo_random_ids: Vec<[u8; 32]>,
         key_id: MasterPublicKeyId,
-    ) -> (EcdsaPayload, BTreeMap<CallbackId, SignWithThresholdContext>) {
+    ) -> (IDkgPayload, BTreeMap<CallbackId, SignWithThresholdContext>) {
         let mut rng = reproducible_rng();
-        let (ecdsa_payload, _env, _block_reader) = set_up_ecdsa_payload(
+        let (idkg_payload, _env, _block_reader) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
@@ -204,7 +204,7 @@ mod tests {
             );
         }
 
-        (ecdsa_payload, contexts)
+        (idkg_payload, contexts)
     }
 
     fn pseudo_random_id(i: u8) -> [u8; 32] {
@@ -217,16 +217,16 @@ mod tests {
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
         let key_id = fake_ecdsa_master_public_key_id();
-        let (mut ecdsa_payload, contexts) = set_up(
+        let (mut idkg_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             vec![old_pseudo_random_id, new_pseudo_random_id],
             key_id.clone(),
         );
-        ecdsa_payload.signature_agreements.insert(
+        idkg_payload.signature_agreements.insert(
             delivered_pseudo_random_id,
             idkg::CompletedSignature::Unreported(empty_response()),
         );
-        ecdsa_payload.signature_agreements.insert(
+        idkg_payload.signature_agreements.insert(
             old_pseudo_random_id,
             idkg::CompletedSignature::Unreported(empty_response()),
         );
@@ -235,16 +235,16 @@ mod tests {
         // old signature in the agreement but NOT in state is removed.
         update_signature_agreements(
             &contexts,
-            &TestEcdsaSignatureBuilder::new(),
+            &TestThresholdSignatureBuilder::new(),
             None,
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             &BTreeSet::from([key_id]),
             None,
         );
 
-        assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
+        assert_eq!(idkg_payload.signature_agreements.len(), 1);
         assert_eq!(
-            ecdsa_payload.signature_agreements,
+            idkg_payload.signature_agreements,
             BTreeMap::from([(
                 old_pseudo_random_id,
                 idkg::CompletedSignature::ReportedToExecution
@@ -262,12 +262,12 @@ mod tests {
 
     fn test_update_signature_agreements_success(key_id: MasterPublicKeyId) {
         let subnet_id = subnet_test_id(0);
-        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let pre_sig_ids = (0..4)
-            .map(|i| create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), i as u8))
+            .map(|i| create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
-        let missing_pre_signature = ecdsa_payload.uid_generator.next_pre_signature_id();
+        let missing_pre_signature = idkg_payload.uid_generator.next_pre_signature_id();
 
         let contexts = BTreeMap::from([
             // insert request without completed signature
@@ -287,12 +287,12 @@ mod tests {
         ]);
 
         // insert agreement for completed request
-        ecdsa_payload.signature_agreements.insert(
+        idkg_payload.signature_agreements.insert(
             [2; 32],
             idkg::CompletedSignature::Unreported(empty_response()),
         );
 
-        let mut signature_builder = TestEcdsaSignatureBuilder::new();
+        let mut signature_builder = TestThresholdSignatureBuilder::new();
         for (i, pre_sig_id) in pre_sig_ids.iter().enumerate().skip(1) {
             signature_builder.signatures.insert(
                 RequestId {
@@ -320,32 +320,32 @@ mod tests {
             &contexts,
             &signature_builder,
             None,
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             &valid_keys,
             None,
         );
 
         // Only the pre-signature for the completed request should be removed
-        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 3);
-        assert!(!ecdsa_payload
+        assert_eq!(idkg_payload.available_pre_signatures.len(), 3);
+        assert!(!idkg_payload
             .available_pre_signatures
             .contains_key(&pre_sig_ids[1]));
 
-        assert_eq!(ecdsa_payload.signature_agreements.len(), 3);
+        assert_eq!(idkg_payload.signature_agreements.len(), 3);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =
-            ecdsa_payload.signature_agreements.get(&[1; 32])
+            idkg_payload.signature_agreements.get(&[1; 32])
         else {
             panic!("Request 1 should have a response");
         };
         assert_matches!(&response_1.payload, ic_types::messages::Payload::Data(_));
 
         assert_matches!(
-            ecdsa_payload.signature_agreements.get(&[2; 32]),
+            idkg_payload.signature_agreements.get(&[2; 32]),
             Some(idkg::CompletedSignature::ReportedToExecution)
         );
 
         let Some(idkg::CompletedSignature::Unreported(response_3)) =
-            ecdsa_payload.signature_agreements.get(&[4; 32])
+            idkg_payload.signature_agreements.get(&[4; 32])
         else {
             panic!("Request 3 should have a response");
         };

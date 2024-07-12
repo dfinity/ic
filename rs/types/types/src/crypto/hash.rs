@@ -8,16 +8,13 @@ use crate::consensus::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
     dkg as consensus_dkg,
-    idkg::{
-        EcdsaSigShare, EcdsaTranscript, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent,
-        SchnorrSigShare,
-    },
+    idkg::{EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare},
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgDealingSupport, SignedIDkgDealing,
+    IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
 };
 use crate::crypto::{CryptoHash, CryptoHashOf, Signed};
 use crate::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
@@ -118,7 +115,7 @@ mod private {
     impl CryptoHashDomainSeal for SignedIDkgDealing {}
     impl CryptoHashDomainSeal for IDkgDealingSupport {}
 
-    impl CryptoHashDomainSeal for EcdsaTranscript {}
+    impl CryptoHashDomainSeal for IDkgTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
     impl CryptoHashDomainSeal for SchnorrSigShare {}
 
@@ -365,9 +362,9 @@ impl CryptoHashDomain for IDkgDealingSupport {
     }
 }
 
-impl CryptoHashDomain for EcdsaTranscript {
+impl CryptoHashDomain for IDkgTranscript {
     fn domain(&self) -> String {
-        DomainSeparator::EcdsaTranscript.to_string()
+        DomainSeparator::IDkgTranscript.to_string()
     }
 }
 

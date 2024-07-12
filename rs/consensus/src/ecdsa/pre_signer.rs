@@ -1,8 +1,8 @@
 //! The pre signature process manager
 
-use crate::ecdsa::complaints::EcdsaTranscriptLoader;
-use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
-use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
+use crate::ecdsa::complaints::IDkgTranscriptLoader;
+use crate::ecdsa::metrics::{timed_call, IDkgPayloadMetrics, IDkgPreSignerMetrics};
+use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, IDkgBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
@@ -12,7 +12,7 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    dealing_prefix, dealing_support_prefix, EcdsaBlockReader, IDkgMessage, IDkgStats,
+    dealing_prefix, dealing_support_prefix, IDkgBlockReader, IDkgMessage, IDkgStats,
     IDkgTranscriptParamsRef,
 };
 use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
@@ -30,27 +30,27 @@ use std::sync::Arc;
 
 use super::utils::update_purge_height;
 
-pub(crate) trait EcdsaPreSigner: Send {
+pub(crate) trait IDkgPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
     fn on_state_change(
         &self,
         idkg_pool: &dyn IDkgPool,
-        transcript_loader: &dyn EcdsaTranscriptLoader,
+        transcript_loader: &dyn IDkgTranscriptLoader,
     ) -> IDkgChangeSet;
 }
 
 /// Pre-Signer subcomponent.
-pub struct EcdsaPreSignerImpl {
+pub struct IDkgPreSignerImpl {
     pub(crate) node_id: NodeId,
     pub(crate) consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
-    pub(crate) metrics: EcdsaPreSignerMetrics,
+    pub(crate) metrics: IDkgPreSignerMetrics,
     pub(crate) log: ReplicaLogger,
     prev_finalized_height: RefCell<Height>,
 }
 
-impl EcdsaPreSignerImpl {
+impl IDkgPreSignerImpl {
     pub(crate) fn new(
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -63,7 +63,7 @@ impl EcdsaPreSignerImpl {
             consensus_block_cache,
             crypto,
             schedule: RoundRobin::default(),
-            metrics: EcdsaPreSignerMetrics::new(metrics_registry),
+            metrics: IDkgPreSignerMetrics::new(metrics_registry),
             log,
             prev_finalized_height: RefCell::new(Height::from(0)),
         }
@@ -75,8 +75,8 @@ impl EcdsaPreSignerImpl {
     fn send_dealings(
         &self,
         idkg_pool: &dyn IDkgPool,
-        transcript_loader: &dyn EcdsaTranscriptLoader,
-        block_reader: &dyn EcdsaBlockReader,
+        transcript_loader: &dyn IDkgTranscriptLoader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         let mut target_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
@@ -124,7 +124,7 @@ impl EcdsaPreSignerImpl {
     fn validate_dealings(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         // TranscriptId -> TranscriptParamsRef
         let transcript_param_map = self.requested_transcripts(block_reader);
@@ -231,7 +231,7 @@ impl EcdsaPreSignerImpl {
     fn send_dealing_support(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         // TranscriptId -> TranscriptParamsRef
         let transcript_param_map = self.requested_transcripts(block_reader);
@@ -309,7 +309,7 @@ impl EcdsaPreSignerImpl {
     fn validate_dealing_support(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         // TranscriptId -> TranscriptParamsRef
         let transcript_param_map = self.requested_transcripts(block_reader);
@@ -508,7 +508,7 @@ impl EcdsaPreSignerImpl {
     fn purge_artifacts(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
     ) -> IDkgChangeSet {
         let in_progress = block_reader
             .requested_transcripts()
@@ -593,7 +593,7 @@ impl EcdsaPreSignerImpl {
     fn crypto_create_dealing(
         &self,
         idkg_pool: &dyn IDkgPool,
-        transcript_loader: &dyn EcdsaTranscriptLoader,
+        transcript_loader: &dyn IDkgTranscriptLoader,
         transcript_params: &IDkgTranscriptParams,
     ) -> IDkgChangeSet {
         if let Some(changes) =
@@ -793,7 +793,7 @@ impl EcdsaPreSignerImpl {
     fn load_dependencies(
         &self,
         idkg_pool: &dyn IDkgPool,
-        transcript_loader: &dyn EcdsaTranscriptLoader,
+        transcript_loader: &dyn IDkgTranscriptLoader,
         transcript_params: &IDkgTranscriptParams,
     ) -> Option<IDkgChangeSet> {
         match &transcript_params.operation_type() {
@@ -873,7 +873,7 @@ impl EcdsaPreSignerImpl {
     pub(crate) fn resolve_ref(
         &self,
         transcript_params_ref: &IDkgTranscriptParamsRef,
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
         reason: &str,
     ) -> Option<IDkgTranscriptParams> {
         match transcript_params_ref.translate(block_reader) {
@@ -900,7 +900,7 @@ impl EcdsaPreSignerImpl {
     /// Returns the requested transcript map.
     fn requested_transcripts<'a>(
         &self,
-        block_reader: &'a dyn EcdsaBlockReader,
+        block_reader: &'a dyn IDkgBlockReader,
     ) -> BTreeMap<IDkgTranscriptId, &'a IDkgTranscriptParamsRef> {
         block_reader
             .requested_transcripts()
@@ -909,13 +909,13 @@ impl EcdsaPreSignerImpl {
     }
 }
 
-impl EcdsaPreSigner for EcdsaPreSignerImpl {
+impl IDkgPreSigner for IDkgPreSignerImpl {
     fn on_state_change(
         &self,
         idkg_pool: &dyn IDkgPool,
-        transcript_loader: &dyn EcdsaTranscriptLoader,
+        transcript_loader: &dyn IDkgTranscriptLoader,
     ) -> IDkgChangeSet {
-        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
         idkg_pool.stats().update_active_transcripts(&block_reader);
         idkg_pool
@@ -974,7 +974,7 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
     }
 }
 
-pub(crate) trait EcdsaTranscriptBuilder {
+pub(crate) trait IDkgTranscriptBuilder {
     /// Returns the specified transcript if it can be successfully
     /// built from the current entries in the ECDSA pool
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript>;
@@ -984,21 +984,21 @@ pub(crate) trait EcdsaTranscriptBuilder {
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing>;
 }
 
-pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
-    block_reader: &'a dyn EcdsaBlockReader,
+pub(crate) struct IDkgTranscriptBuilderImpl<'a> {
+    block_reader: &'a dyn IDkgBlockReader,
     crypto: &'a dyn ConsensusCrypto,
-    metrics: &'a EcdsaPayloadMetrics,
+    metrics: &'a IDkgPayloadMetrics,
     idkg_pool: &'a dyn IDkgPool,
     cache: RefCell<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
     log: ReplicaLogger,
 }
 
-impl<'a> EcdsaTranscriptBuilderImpl<'a> {
+impl<'a> IDkgTranscriptBuilderImpl<'a> {
     pub(crate) fn new(
-        block_reader: &'a dyn EcdsaBlockReader,
+        block_reader: &'a dyn IDkgBlockReader,
         crypto: &'a dyn ConsensusCrypto,
         idkg_pool: &'a dyn IDkgPool,
-        metrics: &'a EcdsaPayloadMetrics,
+        metrics: &'a IDkgPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -1210,7 +1210,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     }
 }
 
-impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
+impl<'a> IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'a> {
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         timed_call(
             "get_completed_transcript",
@@ -1254,7 +1254,7 @@ impl<'a> Action<'a> {
     /// height/transcriptId
     #[allow(clippy::self_named_constructors)]
     fn action(
-        block_reader: &'a dyn EcdsaBlockReader,
+        block_reader: &'a dyn IDkgBlockReader,
         requested_transcripts: &'a BTreeMap<IDkgTranscriptId, &'a IDkgTranscriptParamsRef>,
         msg_height: Option<Height>,
         msg_transcript_id: &IDkgTranscriptId,
@@ -1376,7 +1376,7 @@ mod tests {
 
         // The finalized block requests transcripts 1, 2, 3
         let nodes = [NODE_1];
-        let block_reader = TestEcdsaBlockReader::for_pre_signer_test(
+        let block_reader = TestIDkgBlockReader::for_pre_signer_test(
             Height::from(100),
             vec![
                 create_transcript_param(&key_id, id_1, &nodes, &nodes),
@@ -1464,8 +1464,8 @@ mod tests {
                 let t2 = create_transcript_param(&key_id, id_4, &[NODE_1], &[NODE_3]);
                 let t3 = create_transcript_param(&key_id, id_5, &[NODE_1], &[NODE_4]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
-                let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
+                let transcript_loader: TestIDkgTranscriptLoader = Default::default();
 
                 // Since transcript 1 is already in progress, we should issue
                 // dealings only for transcripts 4, 5
@@ -1485,7 +1485,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer, mut consensus_pool) =
                     create_pre_signer_dependencies_and_pool(pool_config, logger);
-                let transcript_loader = TestEcdsaTranscriptLoader::default();
+                let transcript_loader = TestIDkgTranscriptLoader::default();
                 let transcript_height = Height::from(30);
                 let id_1 = create_transcript_id_with_height(1, Height::from(0));
                 let id_2 = create_transcript_id_with_height(2, transcript_height);
@@ -1549,8 +1549,8 @@ mod tests {
 
                 // Transcript 2 should not result in a dealing
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2]);
-                let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2]);
+                let transcript_loader: TestIDkgTranscriptLoader = Default::default();
 
                 let change_set =
                     pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
@@ -1574,9 +1574,9 @@ mod tests {
                 // transcript 1 has NODE_1 as a dealer
                 let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_1]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1.clone()])
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1.clone()])
                         .with_target_subnet_xnet_transcripts(vec![t1.transcript_params_ref]);
-                let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
+                let transcript_loader: TestIDkgTranscriptLoader = Default::default();
 
                 let change_set =
                     pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
@@ -1611,9 +1611,9 @@ mod tests {
                 let t2 = create_transcript_param(&key_id, id_2, &[NODE_1], &[NODE_3]);
                 let t3 = create_transcript_param(&key_id, id_3, &[NODE_1], &[NODE_4]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
                 let transcript_loader =
-                    TestEcdsaTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
+                    TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
 
                 let change_set =
                     pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
@@ -1710,7 +1710,7 @@ mod tests {
         let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_1]);
         let t3 = create_transcript_param(&key_id, id_3, &[NODE_2], &[NODE_1]);
         let t6 = create_transcript_param(&key_id, id_6, &[NODE_2], &[NODE_1]);
-        let block_reader = TestEcdsaBlockReader::for_pre_signer_test(
+        let block_reader = TestIDkgBlockReader::for_pre_signer_test(
             Height::from(100),
             vec![t2, t3.clone(), t6.clone()],
         );
@@ -1821,7 +1821,7 @@ mod tests {
                     v_1,
                 );
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t2, t3]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2, t3]);
 
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
@@ -1868,7 +1868,7 @@ mod tests {
 
                 let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_1]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -1927,7 +1927,7 @@ mod tests {
 
                 let t2 = create_transcript_param(&key_id, id_2, &[NODE_2, NODE_3], &[NODE_1]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
 
                 // One of msg_id_2_a or msg_id_2_b should be accepted, the other one dropped
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
@@ -1973,7 +1973,7 @@ mod tests {
                 // NODE_2 is not in the dealer list
                 let t2 = create_transcript_param(&key_id, id_2, &[NODE_3], &[NODE_1]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -2007,7 +2007,7 @@ mod tests {
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_dealing_support_added_to_validated(
@@ -2062,7 +2062,7 @@ mod tests {
                 );
 
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t.clone()])
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t.clone()])
                         // Xnet transcripts should raise a warning but should not stop this node from supporting it.
                         .with_source_subnet_xnet_transcripts(vec![t.transcript_params_ref]);
 
@@ -2102,7 +2102,7 @@ mod tests {
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
 
                 // Since there are no keys in the crypto component, dealing verification should fail permanently and
                 // the dealing is considered invalid.
@@ -2139,7 +2139,7 @@ mod tests {
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
 
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
             })
@@ -2162,7 +2162,7 @@ mod tests {
                 idkg_pool.apply_changes(change_set);
 
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![]);
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
             })
@@ -2229,7 +2229,7 @@ mod tests {
         // The block requests transcripts 2, 3
         let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_3]);
         let t3 = create_transcript_param(&key_id, id_3, &[NODE_2], &[NODE_3]);
-        let block_reader = TestEcdsaBlockReader::for_pre_signer_test(
+        let block_reader = TestIDkgBlockReader::for_pre_signer_test(
             Height::from(100),
             vec![t2.clone(), t3.clone()],
         );
@@ -2391,7 +2391,7 @@ mod tests {
 
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -2424,7 +2424,7 @@ mod tests {
                 // NODE_3 is not in the receiver list
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_4]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
@@ -2463,7 +2463,7 @@ mod tests {
                 // The block requests transcripts 1
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
@@ -2502,7 +2502,7 @@ mod tests {
                 // The block requests transcripts 1
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
@@ -2542,7 +2542,7 @@ mod tests {
                 // The block requests transcripts 1
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
@@ -2591,7 +2591,7 @@ mod tests {
 
                 let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
@@ -2638,7 +2638,7 @@ mod tests {
                 let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
                 let t4 = create_transcript_param(&key_id, id_4, &[NODE_2], &[NODE_4]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t])
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t])
                         .with_target_subnet_xnet_transcripts(vec![t4.transcript_params_ref]);
                 let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -2688,7 +2688,7 @@ mod tests {
 
                 let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
@@ -2729,7 +2729,7 @@ mod tests {
 
                 let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
                 let block_reader =
-                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
@@ -2763,8 +2763,8 @@ mod tests {
         let tid = params.transcript_id();
         let (dealings, supports) = get_dealings_and_support(&env, &params);
         let block_reader =
-            TestEcdsaBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
-        let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
+            TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
+        let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
         let crypto = first_crypto(&env);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -2773,7 +2773,7 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger.clone());
 
                 {
-                    let b = EcdsaTranscriptBuilderImpl::new(
+                    let b = IDkgTranscriptBuilderImpl::new(
                         &block_reader,
                         crypto.deref(),
                         &idkg_pool,
@@ -2795,7 +2795,7 @@ mod tests {
                 idkg_pool.apply_changes(change_set);
 
                 {
-                    let b = EcdsaTranscriptBuilderImpl::new(
+                    let b = IDkgTranscriptBuilderImpl::new(
                         &block_reader,
                         crypto.deref(),
                         &idkg_pool,
@@ -2821,7 +2821,7 @@ mod tests {
                     .collect();
                 idkg_pool.apply_changes(change_set);
 
-                let b = EcdsaTranscriptBuilderImpl::new(
+                let b = IDkgTranscriptBuilderImpl::new(
                     &block_reader,
                     crypto.deref(),
                     &idkg_pool,
@@ -2842,8 +2842,8 @@ mod tests {
 
                 {
                     let block_reader =
-                        TestEcdsaBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
-                    let b = EcdsaTranscriptBuilderImpl::new(
+                        TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
+                    let b = IDkgTranscriptBuilderImpl::new(
                         &block_reader,
                         crypto.deref(),
                         &idkg_pool,
@@ -2856,7 +2856,7 @@ mod tests {
                 }
 
                 let crypto = crypto_without_keys();
-                let b = EcdsaTranscriptBuilderImpl::new(
+                let b = IDkgTranscriptBuilderImpl::new(
                     &block_reader,
                     crypto.as_ref(),
                     &idkg_pool,

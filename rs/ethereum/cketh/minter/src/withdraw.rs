@@ -246,7 +246,8 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
         match create_transaction(
             &request,
             nonce,
-            gas_fee_estimate.clone().to_price(gas_limit),
+            gas_fee_estimate.clone(),
+            gas_limit,
             ethereum_network,
         ) {
             Ok(transaction) => {
@@ -272,9 +273,7 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
             }) => {
                 log!(
                     INFO,
-                    "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient
-                amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}.
-                Request moved back to end of queue."
+                    "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}. Request moved back to end of queue."
                 );
                 mutate_state(|s| s.eth_transactions.reschedule_withdrawal_request(request));
             }

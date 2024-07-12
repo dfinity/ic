@@ -1505,11 +1505,19 @@ message NeuronsFundSnapshot {
     optional uint64 amount_icp_e8s = 2;
     // Overall amount of maturity of the neuron from which this portion is taken.
     optional uint64 maturity_equivalent_icp_e8s = 3;
-    // The principal that can vote on behalf of this neuron.
-    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4;
     // Whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
     // participation constraints.
     optional bool is_capped = 5;
+
+    // The principal that can manage this neuron.
+    optional ic_base_types.pb.v1.PrincipalId controller = 6;
+
+    // The principals that can vote, propose, and follow on behalf of this neuron.
+    // TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
+    repeated ic_base_types.pb.v1.PrincipalId hotkeys = 7;
+
+    // Deprecated. Please use `controller` instead (not `hotkeys`!)
+    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4 [deprecated = true];
   }
 
   repeated NeuronsFundNeuronPortion neurons_fund_neuron_portions = 1;

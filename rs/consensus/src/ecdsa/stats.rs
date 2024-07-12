@@ -1,10 +1,10 @@
 //! ECDSA specific stats.
 
 use crate::ecdsa::metrics::{
-    EcdsaPreSignatureMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
+    IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
 };
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_types::consensus::idkg::{EcdsaBlockReader, IDkgStats, PreSigId, RequestId};
+use ic_types::consensus::idkg::{IDkgBlockReader, IDkgStats, PreSigId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
 };
@@ -18,9 +18,9 @@ use std::time::{Duration, Instant};
 /// Implementation of IDkgStats
 pub struct IDkgStatsImpl {
     state: Mutex<IDkgStatsInternal>,
-    transcript_metrics: EcdsaTranscriptMetrics,
-    pre_signature_metrics: EcdsaPreSignatureMetrics,
-    signature_metrics: EcdsaSignatureMetrics,
+    transcript_metrics: IDkgTranscriptMetrics,
+    pre_signature_metrics: IDkgPreSignatureMetrics,
+    signature_metrics: ThresholdSignatureMetrics,
 }
 
 struct IDkgStatsInternal {
@@ -57,9 +57,9 @@ impl IDkgStatsImpl {
                 pre_signature_stats: HashMap::new(),
                 signature_stats: HashMap::new(),
             }),
-            transcript_metrics: EcdsaTranscriptMetrics::new(metrics_registry.clone()),
-            pre_signature_metrics: EcdsaPreSignatureMetrics::new(metrics_registry.clone()),
-            signature_metrics: EcdsaSignatureMetrics::new(metrics_registry),
+            transcript_metrics: IDkgTranscriptMetrics::new(metrics_registry.clone()),
+            pre_signature_metrics: IDkgPreSignatureMetrics::new(metrics_registry.clone()),
+            signature_metrics: ThresholdSignatureMetrics::new(metrics_registry),
         }
     }
 
@@ -153,7 +153,7 @@ impl IDkgStatsImpl {
 }
 
 impl IDkgStats for IDkgStatsImpl {
-    fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader) {
+    fn update_active_transcripts(&self, block_reader: &dyn IDkgBlockReader) {
         let mut active_transcripts = HashSet::new();
         let mut state = self.state.lock().unwrap();
         for transcript_params_ref in block_reader.requested_transcripts() {
@@ -187,7 +187,7 @@ impl IDkgStats for IDkgStatsImpl {
             .set(state.transcript_stats.len() as i64);
     }
 
-    fn update_active_pre_signatures(&self, block_reader: &dyn EcdsaBlockReader) {
+    fn update_active_pre_signatures(&self, block_reader: &dyn IDkgBlockReader) {
         let mut active_pre_signatures = HashSet::new();
         let mut state = self.state.lock().unwrap();
         for (pre_sig_id, key_id) in block_reader.pre_signatures_in_creation() {
