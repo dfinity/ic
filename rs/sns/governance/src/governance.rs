@@ -3954,7 +3954,7 @@ impl Governance {
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
     ///   (permission `ManagePrincipals`), or the caller has the permission to
-    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   manage voting-related permissions (permission `ManageVotingPermission`)
     ///   and the permissions being added are voting-related.
     /// - the permissions provided in the request are a subset of neuron_grantable_permissions
     ///   as defined in the nervous system parameters. To see what the current parameters are
@@ -4048,7 +4048,7 @@ impl Governance {
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
     ///   (permission `ManagePrincipals`), or the caller has the permission to
-    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   manage voting-related permissions (permission `ManageVotingPermission`)
     ///   and the permissions being removed are voting-related.
     /// - the PrincipalId exists within the neuron's permissions
     /// - the PrincipalId's NeuronPermission contains the permission_types that are to be removed

@@ -107,9 +107,6 @@ pub enum StateError {
     /// their memory limit.
     OutOfMemory { requested: NumBytes, available: i64 },
 
-    /// Canister state is invalid because of broken invariant.
-    InvariantBroken(String),
-
     /// Response enqueuing failed due to not matching the expected response.
     NonMatchingResponse {
         err_str: String,
@@ -305,7 +302,6 @@ pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
 pub const LABEL_VALUE_CANISTER_MIGRATING: &str = "CanisterMigrating";
 pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
-pub const LABEL_VALUE_INVARIANT_BROKEN: &str = "InvariantBroken";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
 pub const LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE: &str = "BitcoinNonMatchingResponse";
 pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
@@ -324,7 +320,6 @@ impl StateError {
             StateError::CanisterMigrating { .. } => LABEL_VALUE_CANISTER_MIGRATING,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
-            StateError::InvariantBroken(_) => LABEL_VALUE_INVARIANT_BROKEN,
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
             StateError::BitcoinNonMatchingResponse { .. } => {
                 LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE
@@ -382,9 +377,6 @@ impl std::fmt::Display for StateError {
                 "Cannot enqueue message. Out of memory: requested {}, available {}",
                 requested, available
             ),
-            StateError::InvariantBroken(err) => {
-                write!(f, "Invariant broken: {}", err)
-            }
             StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
                 f,
                 "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",

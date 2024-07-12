@@ -1448,7 +1448,7 @@ impl SystemState {
     }
 
     /// Checks the invariants that should hold at the end of each consensus round.
-    pub fn check_invariants(&self) -> Result<(), StateError> {
+    pub fn check_invariants(&self) -> Result<(), String> {
         // Callbacks still awaiting a (potentially already enqueued) response.
         let pending_callbacks = self
             .call_context_manager()
@@ -1459,12 +1459,12 @@ impl SystemState {
         let input_queue_reserved_slots = self.queues.input_queues_reserved_slots();
 
         if pending_callbacks != input_queue_reserved_slots + input_queue_responses {
-            return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of callbacks ({}) is different from the cumulative number of reservations and responses ({})",
+            return Err(format!(
+                "Invariant broken: Canister {}: Number of callbacks ({}) is different from the cumulative number of reservations and responses ({})",
                 self.canister_id(),
                 pending_callbacks,
                 input_queue_reserved_slots + input_queue_responses
-            )));
+            ));
         }
 
         let unresponded_call_contexts = self
@@ -1478,12 +1478,12 @@ impl SystemState {
         let output_queue_reserved_slots = self.queues.output_queues_reserved_slots();
 
         if input_queue_requests + unresponded_call_contexts != output_queue_reserved_slots {
-            return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of output queue reserved slots ({}) is different from the cumulative number of input requests and unresponded call contexts ({})",
+            return Err(format!(
+                "Invariant broken: Canister {}: Number of output queue reserved slots ({}) is different from the cumulative number of input requests and unresponded call contexts ({})",
                 self.canister_id(),
                 output_queue_reserved_slots,
                 input_queue_requests + unresponded_call_contexts
-            )));
+            ));
         }
 
         Ok(())

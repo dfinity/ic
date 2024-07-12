@@ -52,7 +52,7 @@ use super::{
 };
 
 const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
-const ECDSA_PAYLOAD_METRICS: &str = "ecdsa_payload_metrics";
+const IDKG_PAYLOAD_METRICS: &str = "idkg_payload_metrics";
 const XNET_RESHARE_AGREEMENTS: &str = "xnet_reshare_agreements";
 
 /// Life cycle test requires more time
@@ -372,7 +372,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
                     "Unable to route management canister request sign_with_schnorr: \
-                    IDkgKeyError(\"Requested unknown iDKG key: {}, \
+                    IDkgKeyError(\"Requested unknown or signing disabled iDKG key: {}, \
                     existing keys with signing enabled: {}\")",
                     key_id3, initial_key_ids_as_string,
                 ),
@@ -478,7 +478,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                             reject_code: RejectCode::CanisterReject,
                             reject_message: format!(
                                 "Unable to route management canister request {}: \
-                                IDkgKeyError(\"Requested unknown iDKG key: {}, \
+                                IDkgKeyError(\"Requested unknown or signing disabled iDKG key: {}, \
                                 existing keys with signing enabled: []\")",
                                 method_name, key_id
                             ),
@@ -545,7 +545,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             // Reshare agreement on original App subnet should be purged
             let metric_with_label = format!(
                 "{}{{key_id=\"{}\",type=\"{}\"}}",
-                ECDSA_PAYLOAD_METRICS, key_id, XNET_RESHARE_AGREEMENTS,
+                IDKG_PAYLOAD_METRICS, key_id, XNET_RESHARE_AGREEMENTS,
             );
             let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
             ic_system_test_driver::retry_with_msg_async!(

@@ -262,6 +262,10 @@ impl IngressWatcher {
             self.metrics
                 .ingress_watcher_tracked_messages
                 .set(self.message_statuses.len() as i64);
+
+            self.metrics
+                .ingress_watcher_messages_completed_execution_channel_capacity
+                .set(completed_execution_messages_rx.capacity() as i64);
         }
     }
 

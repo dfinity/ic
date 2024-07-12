@@ -254,6 +254,7 @@ message SubnetMetrics {
   reserved "num_update_transactions";
   optional uint64 canister_state_bytes = 9;
   optional uint64 update_transactions_total = 10;
+  repeated ThresholdSignatureAgreementsEntry threshold_signature_agreements = 11;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {
@@ -272,6 +273,11 @@ message ApiBoundaryNodeEntry {
   optional string ipv4_address = 3;
   string ipv6_address = 4;
   optional bytes pubkey = 5;
+}
+
+message ThresholdSignatureAgreementsEntry {
+  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  uint64 count = 2;
 }
 
 message NodeBlockmakerStats {

@@ -415,6 +415,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub state_dir: Option<PathBuf>,
+    pub nonmainnet_features: bool,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
