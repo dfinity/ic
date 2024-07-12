@@ -1,6 +1,5 @@
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_ledger_sm_tests::metrics::retrieve_metrics;
 use ic_nns_test_utils_golden_nns_state::{
     new_state_machine_with_golden_fiduciary_state_or_panic,
     new_state_machine_with_golden_sns_state_or_panic,
@@ -43,7 +42,7 @@ const TRAX: (&str, &str) = ("emww2-4yaaa-aaaaq-aacbq-cai", "Trax");
 const YUKU: (&str, &str) = ("atbfz-diaaa-aaaaq-aacyq-cai", "Yuku");
 
 #[test]
-fn should_upgrade_icrc_ck_canisters_with_golden_state_and_print_metrics() {
+fn should_upgrade_icrc_ck_canisters_with_golden_state() {
     let ledger_wasm = ledger_wasm();
     let ledger_wasm_u256 = ledger_wasm_u256();
 
@@ -53,23 +52,15 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state_and_print_metrics() {
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
     for canister in canisters {
-        upgrade_canister_and_print_balances_and_approvals(
-            &state_machine,
-            canister,
-            ledger_wasm.clone(),
-        );
+        upgrade_canister(&state_machine, canister, ledger_wasm.clone());
     }
     for canister_u256 in canisters_u256 {
-        upgrade_canister_and_print_balances_and_approvals(
-            &state_machine,
-            canister_u256,
-            ledger_wasm_u256.clone(),
-        );
+        upgrade_canister(&state_machine, canister_u256, ledger_wasm_u256.clone());
     }
 }
 
 #[test]
-fn should_upgrade_icrc_sns_canisters_with_golden_state_and_print_metrics() {
+fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     let ledger_wasm = ledger_wasm();
 
     let canisters = vec![
@@ -103,15 +94,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state_and_print_metrics() {
     let state_machine = new_state_machine_with_golden_sns_state_or_panic();
 
     for canister in canisters {
-        upgrade_canister_and_print_balances_and_approvals(
-            &state_machine,
-            canister,
-            ledger_wasm.clone(),
-        );
+        upgrade_canister(&state_machine, canister, ledger_wasm.clone());
     }
 }
 
-fn upgrade_canister_and_print_balances_and_approvals(
+fn upgrade_canister(
     state_machine: &StateMachine,
     (canister_id_str, canister_name): (&str, &str),
     ledger_wasm: Vec<u8>,
@@ -119,15 +106,7 @@ fn upgrade_canister_and_print_balances_and_approvals(
     let canister_id =
         CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
     upgrade_ledger(state_machine, ledger_wasm, canister_id);
-    let metrics = retrieve_metrics(state_machine, canister_id);
     println!("{} '{}':", canister_name, canister_id_str);
-    for metric in &metrics {
-        if metric.starts_with("ledger_num_approvals")
-            || metric.starts_with("ledger_balance_store_entries")
-        {
-            println!("{}", metric);
-        }
-    }
 }
 
 fn ledger_wasm() -> Vec<u8> {
