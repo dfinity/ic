@@ -370,8 +370,8 @@ impl IDkgPoolImpl {
         let mut initial_dealings = Vec::new();
         if block.payload.is_summary() {
             let block_payload = block.payload.as_ref();
-            if let Some(ecdsa_summary) = &block_payload.as_summary().ecdsa {
-                initial_dealings = ecdsa_summary.initial_dkg_dealings().collect();
+            if let Some(idkg_summary) = &block_payload.as_summary().ecdsa {
+                initial_dealings = idkg_summary.initial_dkg_dealings().collect();
             }
         }
 
@@ -511,14 +511,12 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{
-        subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6,
-    };
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
-    use ic_types::{signature::BasicSignature, time::UNIX_EPOCH, Height, NodeId};
+    use ic_types::{signature::BasicSignature, time::UNIX_EPOCH, NodeId};
     use std::collections::BTreeSet;
 
     fn create_idkg_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> IDkgPoolImpl {
@@ -537,10 +535,6 @@ mod tests {
             content: idkg_dealing,
             signature: BasicSignature::fake(NODE_1),
         }
-    }
-
-    fn dummy_idkg_transcript_id_for_tests_with_height(id: u64, height: u64) -> IDkgTranscriptId {
-        IDkgTranscriptId::new(subnet_test_id(1), id, Height::from(height))
     }
 
     // Checks if the validated/unvalidated pool members are as expected
@@ -607,13 +601,11 @@ mod tests {
 
     // Verifies the prefix based search
     fn check_search_by_prefix(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
-        let transcript_10 = dummy_idkg_transcript_id_for_tests_with_height(10, 20);
-        let transcript_100 = dummy_idkg_transcript_id_for_tests_with_height(100, 20);
-        let transcript_1000 = dummy_idkg_transcript_id_for_tests_with_height(1000, 20);
-        // Same transcript Id but higher source transcript height
-        let transcript_1000_h = dummy_idkg_transcript_id_for_tests_with_height(1000, 40);
-        let transcript_50 = dummy_idkg_transcript_id_for_tests_with_height(50, 20);
-        let transcript_2000 = dummy_idkg_transcript_id_for_tests_with_height(2000, 20);
+        let transcript_10 = dummy_idkg_transcript_id_for_tests(10);
+        let transcript_100 = dummy_idkg_transcript_id_for_tests(100);
+        let transcript_1000 = dummy_idkg_transcript_id_for_tests(1000);
+        let transcript_50 = dummy_idkg_transcript_id_for_tests(50);
+        let transcript_2000 = dummy_idkg_transcript_id_for_tests(2000);
 
         // (transcript Id, dealer_id, signer_id, crypto hash pattern)
         let supports_to_add = [
@@ -621,13 +613,11 @@ mod tests {
             (transcript_1000, NODE_1, NODE_2, 1),
             (transcript_1000, NODE_1, NODE_2, 2),
             (transcript_1000, NODE_1, NODE_2, 3),
-            // Prefix 2 (higher source transcript height)
-            (transcript_1000_h, NODE_1, NODE_2, 3),
-            // Prefix 3
+            // Prefix 2
             (transcript_1000, NODE_2, NODE_3, 4),
-            // Prefix 4
+            // Prefix 3
             (transcript_10, NODE_3, NODE_4, 5),
-            // Prefix 5
+            // Prefix 4
             (transcript_100, NODE_5, NODE_6, 6),
             (transcript_100, NODE_5, NODE_6, 7),
         ];
@@ -679,7 +669,6 @@ mod tests {
             transcript_1000,
             transcript_1000,
             transcript_1000,
-            transcript_1000_h,
         ];
         assert_eq!(ret, expected);
 
@@ -707,12 +696,6 @@ mod tests {
                 (transcript_1000, NODE_1, NODE_2, 3),
             ]
         );
-
-        let ret: Vec<RetType> = pool_section
-            .dealing_support_by_prefix(dealing_support_prefix(&transcript_1000_h, &NODE_1, &NODE_2))
-            .map(|(_, support)| (ret_fn)(&support))
-            .collect();
-        assert_eq!(ret, vec![(transcript_1000_h, NODE_1, NODE_2, 3)]);
 
         let ret: Vec<RetType> = pool_section
             .dealing_support_by_prefix(dealing_support_prefix(&transcript_1000, &NODE_2, &NODE_3))

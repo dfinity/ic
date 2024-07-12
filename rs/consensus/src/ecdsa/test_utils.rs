@@ -1,8 +1,8 @@
 use crate::ecdsa::complaints::{
-    EcdsaTranscriptLoader, IDkgComplaintHandlerImpl, TranscriptLoadStatus,
+    IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus,
 };
-use crate::ecdsa::pre_signer::{EcdsaPreSignerImpl, EcdsaTranscriptBuilder};
-use crate::ecdsa::signer::{EcdsaSignatureBuilder, EcdsaSignerImpl};
+use crate::ecdsa::pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder};
+use crate::ecdsa::signer::{ThresholdSignatureBuilder, ThresholdSignerImpl};
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_mocks::{dependencies, Dependencies};
@@ -37,8 +37,8 @@ use ic_types::consensus::idkg::{
     common::{CombinedSignature, PreSignatureRef, ThresholdSigInputsRef},
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
-    EcdsaBlockReader, EcdsaPayload, EcdsaSigShare, IDkgArtifactId, IDkgComplaintContent,
-    IDkgMessage, IDkgOpeningContent, IDkgReshareRequest, IDkgTranscriptAttributes,
+    EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent, IDkgMessage,
+    IDkgOpeningContent, IDkgPayload, IDkgReshareRequest, IDkgTranscriptAttributes,
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
     MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams, SignedIDkgComplaint,
     SignedIDkgOpening, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
@@ -187,8 +187,8 @@ where
 }
 
 pub fn insert_test_sig_inputs<T>(
-    block_reader: &mut TestEcdsaBlockReader,
-    ecdsa_payload: &mut EcdsaPayload,
+    block_reader: &mut TestIDkgBlockReader,
+    idkg_payload: &mut IDkgPayload,
     inputs: T,
 ) where
     T: IntoIterator<Item = (PreSigId, TestSigInputs)>,
@@ -200,7 +200,7 @@ pub fn insert_test_sig_inputs<T>(
             .for_each(|(transcript_ref, transcript)| {
                 block_reader.add_transcript(*transcript_ref, transcript.clone())
             });
-        ecdsa_payload
+        idkg_payload
             .available_pre_signatures
             .insert(pre_sig_id, inputs.sig_inputs_ref.pre_signature());
         block_reader.add_available_pre_signature(pre_sig_id, inputs.sig_inputs_ref.pre_signature());
@@ -332,9 +332,9 @@ impl From<&ThresholdSchnorrSigInputs> for TestSigInputs {
     }
 }
 
-// Test implementation of EcdsaBlockReader to inject the test transcript params
+// Test implementation of IDkgBlockReader to inject the test transcript params
 #[derive(Clone, Default)]
-pub(crate) struct TestEcdsaBlockReader {
+pub(crate) struct TestIDkgBlockReader {
     height: Height,
     requested_transcripts: Vec<IDkgTranscriptParamsRef>,
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
@@ -345,7 +345,7 @@ pub(crate) struct TestEcdsaBlockReader {
     fail_to_resolve: bool,
 }
 
-impl TestEcdsaBlockReader {
+impl TestIDkgBlockReader {
     pub(crate) fn new() -> Self {
         Default::default()
     }
@@ -470,7 +470,7 @@ impl TestEcdsaBlockReader {
     }
 }
 
-impl EcdsaBlockReader for TestEcdsaBlockReader {
+impl IDkgBlockReader for TestIDkgBlockReader {
     fn tip_height(&self) -> Height {
         self.height
     }
@@ -528,12 +528,12 @@ pub(crate) enum TestTranscriptLoadStatus {
     Complaints,
 }
 
-pub(crate) struct TestEcdsaTranscriptLoader {
+pub(crate) struct TestIDkgTranscriptLoader {
     load_transcript_result: TestTranscriptLoadStatus,
     returned_complaints: Mutex<Vec<SignedIDkgComplaint>>,
 }
 
-impl TestEcdsaTranscriptLoader {
+impl TestIDkgTranscriptLoader {
     pub(crate) fn new(load_transcript_result: TestTranscriptLoadStatus) -> Self {
         Self {
             load_transcript_result,
@@ -551,7 +551,7 @@ impl TestEcdsaTranscriptLoader {
     }
 }
 
-impl EcdsaTranscriptLoader for TestEcdsaTranscriptLoader {
+impl IDkgTranscriptLoader for TestIDkgTranscriptLoader {
     fn load_transcript(
         &self,
         _idkg_pool: &dyn IDkgPool,
@@ -572,18 +572,18 @@ impl EcdsaTranscriptLoader for TestEcdsaTranscriptLoader {
     }
 }
 
-impl Default for TestEcdsaTranscriptLoader {
+impl Default for TestIDkgTranscriptLoader {
     fn default() -> Self {
         Self::new(TestTranscriptLoadStatus::Success)
     }
 }
 
-pub(crate) struct TestEcdsaTranscriptBuilder {
+pub(crate) struct TestIDkgTranscriptBuilder {
     transcripts: Mutex<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
     dealings: Mutex<BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>>,
 }
 
-impl TestEcdsaTranscriptBuilder {
+impl TestIDkgTranscriptBuilder {
     pub(crate) fn new() -> Self {
         Self {
             transcripts: Mutex::new(BTreeMap::new()),
@@ -614,7 +614,7 @@ impl TestEcdsaTranscriptBuilder {
     }
 }
 
-impl EcdsaTranscriptBuilder for TestEcdsaTranscriptBuilder {
+impl IDkgTranscriptBuilder for TestIDkgTranscriptBuilder {
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         self.transcripts
             .lock()
@@ -633,11 +633,11 @@ impl EcdsaTranscriptBuilder for TestEcdsaTranscriptBuilder {
     }
 }
 
-pub(crate) struct TestEcdsaSignatureBuilder {
+pub(crate) struct TestThresholdSignatureBuilder {
     pub(crate) signatures: BTreeMap<RequestId, CombinedSignature>,
 }
 
-impl TestEcdsaSignatureBuilder {
+impl TestThresholdSignatureBuilder {
     pub(crate) fn new() -> Self {
         Self {
             signatures: BTreeMap::new(),
@@ -645,7 +645,7 @@ impl TestEcdsaSignatureBuilder {
     }
 }
 
-impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
+impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
     fn get_completed_signature(
         &self,
         context: &SignWithThresholdContext,
@@ -704,12 +704,12 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
-) -> (IDkgPoolImpl, EcdsaPreSignerImpl) {
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
     // need to make sure subnet matches the transcript
-    let pre_signer = EcdsaPreSignerImpl::new(
+    let pre_signer = IDkgPreSignerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
@@ -725,11 +725,11 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
 pub(crate) fn create_pre_signer_dependencies_and_pool(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (IDkgPoolImpl, EcdsaPreSignerImpl, TestConsensusPool) {
+) -> (IDkgPoolImpl, IDkgPreSignerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
-    let pre_signer = EcdsaPreSignerImpl::new(
+    let pre_signer = IDkgPreSignerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         crypto,
@@ -745,7 +745,7 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
 pub(crate) fn create_pre_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (IDkgPoolImpl, EcdsaPreSignerImpl) {
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     create_pre_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
@@ -754,7 +754,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
-) -> (IDkgPoolImpl, EcdsaSignerImpl) {
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         pool,
@@ -763,7 +763,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
         ..
     } = dependencies(pool_config.clone(), 1);
 
-    let signer = EcdsaSignerImpl::new(
+    let signer = ThresholdSignerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
@@ -780,14 +780,14 @@ pub(crate) fn create_signer_dependencies_with_crypto(
 pub(crate) fn create_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (IDkgPoolImpl, EcdsaSignerImpl) {
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     create_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
 pub(crate) fn create_signer_dependencies_and_state_manager(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-) -> (IDkgPoolImpl, EcdsaSignerImpl, Arc<RefMockStateManager>) {
+) -> (IDkgPoolImpl, ThresholdSignerImpl, Arc<RefMockStateManager>) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         pool,
@@ -796,7 +796,7 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
         ..
     } = dependencies(pool_config.clone(), 1);
 
-    let signer = EcdsaSignerImpl::new(
+    let signer = ThresholdSignerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         crypto,
@@ -1593,15 +1593,15 @@ pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMe
     false
 }
 
-pub(crate) fn empty_ecdsa_payload(subnet_id: SubnetId) -> EcdsaPayload {
-    empty_ecdsa_payload_with_key_ids(subnet_id, vec![fake_ecdsa_master_public_key_id()])
+pub(crate) fn empty_idkg_payload(subnet_id: SubnetId) -> IDkgPayload {
+    empty_idkg_payload_with_key_ids(subnet_id, vec![fake_ecdsa_master_public_key_id()])
 }
 
-pub(crate) fn empty_ecdsa_payload_with_key_ids(
+pub(crate) fn empty_idkg_payload_with_key_ids(
     subnet_id: SubnetId,
     key_ids: Vec<MasterPublicKeyId>,
-) -> EcdsaPayload {
-    EcdsaPayload::empty(
+) -> IDkgPayload {
+    IDkgPayload::empty(
         Height::new(0),
         subnet_id,
         key_ids
@@ -1683,7 +1683,7 @@ pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
 }
 
 pub(crate) fn add_available_quadruple_to_payload(
-    ecdsa_payload: &mut EcdsaPayload,
+    idkg_payload: &mut IDkgPayload,
     pre_signature_id: PreSigId,
     registry_version: RegistryVersion,
 ) {
@@ -1691,24 +1691,24 @@ pub(crate) fn add_available_quadruple_to_payload(
         pre_signature_id.id() as u8,
         &fake_ecdsa_master_public_key_id(),
     );
-    ecdsa_payload
+    idkg_payload
         .available_pre_signatures
         .insert(pre_signature_id, sig_inputs.sig_inputs_ref.pre_signature());
     for (t_ref, mut transcript) in sig_inputs.idkg_transcripts {
         transcript.registry_version = registry_version;
-        ecdsa_payload
+        idkg_payload
             .idkg_transcripts
             .insert(t_ref.transcript_id, transcript);
     }
 }
 
 pub fn create_available_pre_signature(
-    ecdsa_payload: &mut EcdsaPayload,
+    idkg_payload: &mut IDkgPayload,
     key_id: MasterPublicKeyId,
     caller: u8,
 ) -> PreSigId {
     create_available_pre_signature_with_key_transcript(
-        ecdsa_payload,
+        idkg_payload,
         caller,
         key_id,
         /*key_transcript=*/ None,
@@ -1716,13 +1716,13 @@ pub fn create_available_pre_signature(
 }
 
 pub fn create_available_pre_signature_with_key_transcript(
-    ecdsa_payload: &mut EcdsaPayload,
+    idkg_payload: &mut IDkgPayload,
     caller: u8,
     key_id: MasterPublicKeyId,
     key_transcript: Option<UnmaskedTranscript>,
 ) -> PreSigId {
     let sig_inputs = create_sig_inputs(caller, &key_id);
-    let pre_sig_id = ecdsa_payload.uid_generator.next_pre_signature_id();
+    let pre_sig_id = idkg_payload.uid_generator.next_pre_signature_id();
     let mut pre_signature_ref = sig_inputs.sig_inputs_ref.pre_signature();
     if let Some(transcript) = key_transcript {
         match pre_signature_ref {
@@ -1734,12 +1734,12 @@ pub fn create_available_pre_signature_with_key_transcript(
             }
         }
     }
-    ecdsa_payload
+    idkg_payload
         .available_pre_signatures
         .insert(pre_sig_id, pre_signature_ref);
 
     for (t_ref, transcript) in sig_inputs.idkg_transcripts {
-        ecdsa_payload
+        idkg_payload
             .idkg_transcripts
             .insert(t_ref.transcript_id, transcript);
     }
@@ -1747,32 +1747,32 @@ pub fn create_available_pre_signature_with_key_transcript(
     pre_sig_id
 }
 
-pub(crate) fn set_up_ecdsa_payload(
+pub(crate) fn set_up_idkg_payload(
     rng: &mut ReproducibleRng,
     subnet_id: SubnetId,
     nodes_count: usize,
     key_ids: Vec<MasterPublicKeyId>,
     should_create_key_transcript: bool,
 ) -> (
-    EcdsaPayload,
+    IDkgPayload,
     CanisterThresholdSigTestEnvironment,
-    TestEcdsaBlockReader,
+    TestIDkgBlockReader,
 ) {
     let env = CanisterThresholdSigTestEnvironment::new(nodes_count, rng);
 
-    let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, key_ids.clone());
-    let mut block_reader = TestEcdsaBlockReader::new();
+    let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, key_ids.clone());
+    let mut block_reader = TestIDkgBlockReader::new();
 
     if should_create_key_transcript {
         for key_id in key_ids {
             let (key_transcript, key_transcript_ref) =
-                ecdsa_payload.generate_current_key(&key_id, &env, rng);
+                idkg_payload.generate_current_key(&key_id, &env, rng);
 
             block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
         }
     }
 
-    (ecdsa_payload, env, block_reader)
+    (idkg_payload, env, block_reader)
 }
 
 pub(crate) fn generate_key_transcript(
@@ -1805,7 +1805,7 @@ pub(crate) fn generate_key_transcript(
     (key_transcript, key_transcript_ref, with_attributes)
 }
 
-pub(crate) trait EcdsaPayloadTestHelper {
+pub(crate) trait IDkgPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
 
     #[allow(dead_code)]
@@ -1829,7 +1829,7 @@ pub(crate) trait EcdsaPayloadTestHelper {
     fn single_key_transcript_mut(&mut self) -> &mut MasterKeyTranscript;
 }
 
-impl EcdsaPayloadTestHelper for EcdsaPayload {
+impl IDkgPayloadTestHelper for IDkgPayload {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId {
         self.uid_generator.clone().next_transcript_id()
     }

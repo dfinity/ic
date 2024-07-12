@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is derived or a new PocketIC server is started).
 - The function `PocketIcBuilder::with_state_dir` to specify a directory in which the state of the PocketIC instance can be preserved across the PocketIC instance lifetime
   (that directory should be empty when specified as `state_dir` for the very first time).
+- The function `PocketIcBuilder::with_nonmainnet_features` to specify that non-mainnet features (e.g., best-effort responses) should be enabled for the PocketIC instance.
 
 ### Removed
 - Public field `instance_id` in the synchronous PocketIc library, use the function `instance_id` instead

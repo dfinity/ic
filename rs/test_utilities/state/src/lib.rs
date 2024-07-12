@@ -1,6 +1,9 @@
 use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
-use ic_management_canister_types::{CanisterStatusType, LogVisibility};
+use ic_management_canister_types::{
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibility, MasterPublicKeyId, SchnorrAlgorithm,
+    SchnorrKeyId,
+};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -46,6 +49,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Arc,
 };
+use strum::IntoEnumIterator;
 
 mod history;
 pub use history::MockIngressHistory;
@@ -843,8 +847,8 @@ prop_compose! {
     pub fn arb_stream_with_config(
         min_size: usize,
         max_size: usize,
-        min_signal_count:
-        usize, max_signal_count: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
     )(
         msg_start in 0..10000u64,
@@ -981,8 +985,36 @@ pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`SubnetMetrics`] (with only the fields relevant to
-    /// its canonical representation filled).
+    fn arb_ecdsa_key_id()(
+        curve in prop::sample::select(EcdsaCurve::iter().collect::<Vec<_>>())
+    ) -> EcdsaKeyId {
+        EcdsaKeyId {
+            curve,
+            name: String::from("ecdsa_key_id"),
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_schnorr_key_id()(
+        algorithm in prop::sample::select(SchnorrAlgorithm::iter().collect::<Vec<_>>())
+    ) -> SchnorrKeyId {
+        SchnorrKeyId {
+            algorithm,
+            name: String::from("schnorr_key_id"),
+        }
+    }
+}
+
+fn arb_master_public_key_id() -> impl Strategy<Value = MasterPublicKeyId> {
+    prop_oneof![
+        arb_ecdsa_key_id().prop_map(MasterPublicKeyId::Ecdsa),
+        arb_schnorr_key_id().prop_map(MasterPublicKeyId::Schnorr),
+    ]
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`SubnetMetrics`].
     pub fn arb_subnet_metrics()(
         consumed_cycles_by_deleted_canisters in arb_nominal_cycles(),
         consumed_cycles_http_outcalls in arb_nominal_cycles(),
@@ -991,6 +1023,8 @@ prop_compose! {
         canister_state_bytes in arb_num_bytes(),
         update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
+        threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
+        ecdsa_signature_agreements in any::<u64>(),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
@@ -1000,6 +1034,8 @@ prop_compose! {
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
+        metrics.threshold_signature_agreements = threshold_signature_agreements;
+        metrics.ecdsa_signature_agreements = ecdsa_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(

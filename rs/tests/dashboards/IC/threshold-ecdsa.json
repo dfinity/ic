@@ -2659,7 +2659,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "ecdsa_payload_errors{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
+          "expr": "idkg_payload_errors{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
           "interval": "",
           "legendFormat": "{{instance}} {{type}}",
           "range": true,

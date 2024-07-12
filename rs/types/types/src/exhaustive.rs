@@ -4,8 +4,8 @@ use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, EcdsaPayload, EcdsaUIDGenerator,
-    HasMasterPublicKeyId, IDkgReshareRequest, MaskedTranscript, MasterKeyTranscript, PreSigId,
+    CompletedReshareRequest, CompletedSignature, HasMasterPublicKeyId, IDkgPayload,
+    IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
     ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
@@ -727,22 +727,22 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedEcdsaPayload {
+pub struct DerivedIDkgPayload {
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
-    pub uid_generator: EcdsaUIDGenerator,
+    pub uid_generator: IDkgUIDGenerator,
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
     pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
 }
 
-impl ExhaustiveSet for EcdsaPayload {
+impl ExhaustiveSet for IDkgPayload {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedEcdsaPayload::exhaustive_set(rng)
+        DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
-            .map(|payload| EcdsaPayload {
+            .map(|payload| IDkgPayload {
                 signature_agreements: payload.signature_agreements,
                 available_pre_signatures: payload.available_pre_signatures,
                 pre_signatures_in_creation: payload.pre_signatures_in_creation,

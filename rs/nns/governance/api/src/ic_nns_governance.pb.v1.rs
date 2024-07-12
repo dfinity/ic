@@ -1596,13 +1596,21 @@ pub mod neurons_fund_snapshot {
         /// Overall amount of maturity of the neuron from which this portion is taken.
         #[prost(uint64, optional, tag = "3")]
         pub maturity_equivalent_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can vote on behalf of this neuron.
-        #[prost(message, optional, tag = "4")]
-        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// Whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
         /// participation constraints.
         #[prost(bool, optional, tag = "5")]
         pub is_capped: ::core::option::Option<bool>,
+        /// The principal that can manage this neuron.
+        #[prost(message, optional, tag = "6")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The principals that can vote, propose, and follow on behalf of this neuron.
+        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
+        #[prost(message, repeated, tag = "7")]
+        pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+        #[deprecated]
+        #[prost(message, optional, tag = "4")]
+        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
     }
 }
 /// Absolute constraints of this swap needed that the Neurons' Fund need to be aware of.
@@ -2376,7 +2384,7 @@ pub struct Governance {
     pub metrics: ::core::option::Option<governance::GovernanceCachedMetrics>,
     #[prost(message, optional, tag = "16")]
     pub most_recent_monthly_node_provider_rewards:
-        ::core::option::Option<MostRecentMonthlyNodeProviderRewards>,
+        ::core::option::Option<MonthlyNodeProviderRewards>,
     /// Cached value for the maturity modulation as calculated each day.
     #[prost(int32, optional, tag = "17")]
     pub cached_daily_maturity_modulation_basis_points: ::core::option::Option<i32>,
@@ -2541,10 +2549,52 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,
         #[prost(uint64, optional, tag = "37")]
         pub total_staked_e8s_non_self_authenticating_controller: ::core::option::Option<u64>,
+        #[prost(message, optional, tag = "38")]
+        pub non_self_authenticating_controller_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+    }
+    /// Nested message and enum types in `GovernanceCachedMetrics`.
+    pub mod governance_cached_metrics {
+        /// Statistics about some subset (not necessarily a proper subset) of
+        /// neurons. So far, these are mostly totals.
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct NeuronSubsetMetrics {
+            /// The values in these fields can be derived from the value in the
+            /// analogous fields (declared a little lower in this message). For
+            /// example, count = count_buckets.values().sum().
+            #[prost(uint64, optional, tag = "1")]
+            pub count: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "2")]
+            pub total_staked_e8s: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "3")]
+            pub total_staked_maturity_e8s_equivalent: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "4")]
+            pub total_maturity_e8s_equivalent: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "5")]
+            pub total_voting_power: ::core::option::Option<u64>,
+            /// These fields are keyed by floor(dissolve delay / 0.5 years). These are
+            /// analogous to the (singular) fields above. Here, the usual definition of
+            /// year for the IC is used: exactly 365.25 days.
+            #[prost(map = "uint64, uint64", tag = "6")]
+            pub count_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "7")]
+            pub staked_e8s_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "8")]
+            pub staked_maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "9")]
+            pub maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "10")]
+            pub voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+        }
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
     /// proposal is in progress. We only want one of these to be happening at the same time,
@@ -2857,15 +2907,35 @@ pub mod claim_or_refresh_neuron_from_account_response {
         NeuronId(::ic_nns_common::pb::v1::NeuronId),
     }
 }
-/// The most recent monthly Node Provider rewards
+/// The monthly Node Provider rewards as of a point in time.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MostRecentMonthlyNodeProviderRewards {
+pub struct MonthlyNodeProviderRewards {
+    /// The time when the rewards were calculated.
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
+    /// The Rewards calculated and rewarded.
     #[prost(message, repeated, tag = "2")]
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
+    /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+    /// This field snapshots the actual rate used by governance when the rewards were calculated.
+    #[prost(message, optional, tag = "3")]
+    pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
+    /// The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+    /// why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+    #[prost(uint64, optional, tag = "4")]
+    pub minimum_xdr_permyriad_per_icp: ::core::option::Option<u64>,
+    /// The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+    /// from the value in network economics.
+    #[prost(uint64, optional, tag = "5")]
+    pub maximum_node_provider_rewards_e8s: ::core::option::Option<u64>,
+    /// The registry version used to calculate these rewards at the time the rewards were calculated.
+    #[prost(uint64, optional, tag = "6")]
+    pub registry_version: ::core::option::Option<u64>,
+    /// The list of node_provieders at the time when the rewards were calculated.
+    #[prost(message, repeated, tag = "7")]
+    pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
 }
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.

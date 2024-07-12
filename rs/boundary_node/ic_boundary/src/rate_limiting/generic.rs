@@ -12,6 +12,7 @@ use axum::{
 };
 use candid::Principal;
 use humantime::parse_duration;
+use ic_types::CanisterId;
 use ratelimit::Ratelimiter;
 use regex::Regex;
 use serde::{
@@ -23,6 +24,7 @@ use tracing::warn;
 
 use crate::{
     core::Run,
+    persist::RouteSubnet,
     routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
 };
 
@@ -78,7 +80,8 @@ impl<'de> Deserialize<'de> for Action {
 
 #[derive(Debug, Clone, Deserialize)]
 struct Rule {
-    canister_id: Principal,
+    subnet_id: Option<Principal>,
+    canister_id: Option<Principal>,
     request_type: Option<RequestType>,
     #[serde(default, with = "serde_regex")]
     methods: Option<Regex>,
@@ -90,6 +93,7 @@ impl PartialEq for Rule {
     fn eq(&self, other: &Self) -> bool {
         self.methods.as_ref().map(|x| x.as_str()) == other.methods.as_ref().map(|x| x.as_str())
             && self.canister_id == other.canister_id
+            && self.subnet_id == other.subnet_id
             && self.limit == other.limit
     }
 }
@@ -162,12 +166,12 @@ impl Limiter {
         let old = self.buckets.load_full();
 
         if old != new {
-            warn!("CanisterLimiter: ruleset updated: {} rules", new.len());
+            warn!("GenericLimiter: ruleset updated: {} rules", new.len());
 
             for b in new.as_ref() {
                 warn!(
-                    "CanisterLimiter: canister: {}, methods: {:?}, action: {:?}",
-                    b.rule.canister_id, b.rule.methods, b.rule.limit,
+                    "GenericLimiter: subnet: {:?}, canister: {:?}, methods: {:?}, action: {:?}",
+                    b.rule.subnet_id, b.rule.canister_id, b.rule.methods, b.rule.limit,
                 );
             }
 
@@ -186,13 +190,24 @@ impl Limiter {
 
     fn acquire_token(
         &self,
-        canister_id: Principal,
+        subnet_id: Principal,
+        canister_id: Option<Principal>,
         method: Option<&str>,
         request_type: RequestType,
     ) -> bool {
         for b in self.buckets.load_full().as_ref() {
-            if b.rule.canister_id != canister_id {
-                continue;
+            if let Some(v) = b.rule.subnet_id {
+                if subnet_id != v {
+                    continue;
+                }
+            }
+
+            if let Some(v) = b.rule.canister_id {
+                if let Some(x) = canister_id {
+                    if x != v {
+                        continue;
+                    }
+                }
             }
 
             if let Some(v) = b.rule.request_type {
@@ -234,15 +249,18 @@ impl Run for Arc<Limiter> {
 pub async fn middleware(
     State(state): State<Arc<Limiter>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
+    Extension(subnet): Extension<Arc<RouteSubnet>>,
+    canister_id: Option<Extension<CanisterId>>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ErrorCause> {
-    // See if canister is there
-    if let Some(canister_id) = ctx.canister_id {
-        // Check if we can pass this request
-        if !state.acquire_token(canister_id, ctx.method_name.as_deref(), ctx.request_type) {
-            return Err(ErrorCause::RateLimited(RateLimitCause::Canister));
-        }
+    if !state.acquire_token(
+        subnet.id,
+        canister_id.map(|x| (x.0).get().into()),
+        ctx.method_name.as_deref(),
+        ctx.request_type,
+    ) {
+        return Err(ErrorCause::RateLimited(RateLimitCause::Generic));
     }
 
     Ok(next.run(request).await)
@@ -264,7 +282,8 @@ mod test {
           methods: ^(foo|bar)$
           limit: 60/1m
 
-        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
+        - subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
+          canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
           limit: 90/1m
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
@@ -286,37 +305,48 @@ mod test {
             rules,
             vec![
                 Rule {
-                    canister_id: Principal::from_text("aaaaa-aa").unwrap(),
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("aaaaa-aa").unwrap()),
                     request_type: None,
                     methods: Some(Regex::new("^.*$").unwrap()),
                     limit: Action::Limit(100, Duration::from_secs(1)),
                 },
                 Rule {
-                    canister_id: Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap(),
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_type: None,
                     methods: Some(Regex::new("^(foo|bar)$").unwrap()),
                     limit: Action::Limit(60, Duration::from_secs(60)),
                 },
                 Rule {
-                    canister_id: Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap(),
+                    subnet_id: Some(
+                        Principal::from_text(
+                            "3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"
+                        )
+                        .unwrap()
+                    ),
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_type: None,
                     methods: None,
                     limit: Action::Limit(90, Duration::from_secs(60)),
                 },
                 Rule {
-                    canister_id: Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap(),
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_type: None,
                     methods: Some(Regex::new("^(foo|bar)$").unwrap()),
                     limit: Action::Block,
                 },
                 Rule {
-                    canister_id: Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap(),
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_type: Some(RequestType::Query),
                     methods: Some(Regex::new("^(foo|bar)$").unwrap()),
                     limit: Action::Block,
                 },
                 Rule {
-                    canister_id: Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap(),
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_type: Some(RequestType::Call),
                     methods: None,
                     limit: Action::Block,
@@ -406,7 +436,8 @@ mod test {
     #[test]
     fn test_ratelimit() {
         let rules = indoc! {"
-        - canister_id: aaaaa-aa
+        - subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
+          canister_id: aaaaa-aa
           methods: ^.*$
           limit: 10/1h
 
@@ -433,57 +464,64 @@ mod test {
         let id1 = Principal::from_text("aaaaa-aa").unwrap();
         let id2 = Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap();
         let id3 = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
+        let subnet_id =
+            Principal::from_text("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe")
+                .unwrap();
+        let subnet_id2 =
+            Principal::from_text("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae")
+                .unwrap();
 
         // Check id1 blocking with any method
         // 10 pass
         for _ in 0..10 {
-            assert!(limiter.acquire_token(id1, Some("foo"), RequestType::Query));
+            assert!(limiter.acquire_token(subnet_id, Some(id1), Some("foo"), RequestType::Query));
         }
         // then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(id1, Some("bar"), RequestType::Query));
+            assert!(!limiter.acquire_token(subnet_id, Some(id1), Some("bar"), RequestType::Query));
         }
 
         // Check id2 blocking with two methods
         // 20 pass
+        // Another subnet_id which shouldn't have any difference
         for _ in 0..20 {
-            assert!(limiter.acquire_token(id2, Some("foo"), RequestType::Query));
+            assert!(limiter.acquire_token(subnet_id2, Some(id2), Some("foo"), RequestType::Query));
         }
         // Then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(id2, Some("bar"), RequestType::Query));
+            assert!(!limiter.acquire_token(subnet_id2, Some(id2), Some("bar"), RequestType::Query));
         }
         // Other methods should not block ever
         for _ in 0..100 {
-            assert!(limiter.acquire_token(id2, Some("lol"), RequestType::Query));
+            assert!(limiter.acquire_token(subnet_id2, Some(id2), Some("lol"), RequestType::Query));
         }
         for _ in 0..100 {
-            assert!(limiter.acquire_token(id2, Some("rofl"), RequestType::Query));
+            assert!(limiter.acquire_token(subnet_id2, Some(id2), Some("rofl"), RequestType::Query));
         }
 
         // This method should be blocked always
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(id2, Some("baz"), RequestType::Query));
+            assert!(!limiter.acquire_token(subnet_id, Some(id2), Some("baz"), RequestType::Query));
         }
 
         // Check id3 blocking with any method and request type call
         // 10 pass
         for _ in 0..10 {
-            assert!(limiter.acquire_token(id3, Some("foo"), RequestType::Call));
+            assert!(limiter.acquire_token(subnet_id, Some(id3), Some("foo"), RequestType::Call));
         }
         // then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(id3, Some("bar"), RequestType::Call));
+            assert!(!limiter.acquire_token(subnet_id, Some(id3), Some("bar"), RequestType::Call));
         }
 
         // Then check id3 blocking with any method and request type query
         // 20 pass
         for _ in 0..20 {
-            assert!(limiter.acquire_token(id3, Some("baz"), RequestType::Query));
+            assert!(limiter.acquire_token(subnet_id, Some(id3), Some("baz"), RequestType::Query));
         }
         // then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(id3, Some("zob"), RequestType::Query));
+            assert!(!limiter.acquire_token(subnet_id, Some(id3), Some("zob"), RequestType::Query));
         }
     }
 }

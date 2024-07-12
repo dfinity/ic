@@ -196,7 +196,7 @@ pub fn run_canister_sandbox(
     // hardcoding the parameters.
     let logger_config = ic_config::logger::Config {
         log_destination: ic_config::logger::LogDestination::Stderr,
-        level: slog::Level::Warning,
+        level: ic_config::logger::Level::Warning,
         ..Default::default()
     };
     let (log, _log_guard) = new_replica_logger_from_config(&logger_config);

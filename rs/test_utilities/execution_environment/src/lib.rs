@@ -1730,7 +1730,7 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+    pub fn with_signing_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
         self.idkg_keys_with_signing_enabled.insert(key_id, false);
         self
     }

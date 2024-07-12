@@ -48,6 +48,10 @@ anchors:
       labels: dind-large
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   before-script: &before-script
     name: Before script
@@ -215,12 +219,17 @@ jobs:
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          # Todo: remove once dependency scanner tests don't reference name of repo
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          ADDITIONAL_FLAGS=""
+          if [[ $REPO_NAME == "ic-private" ]]; then
+            ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
+          fi
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
-          pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 \
+          pytest --ignore=gitlab_config/ --ignore=git_changes/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
-
   build-ic:
     name: Build IC
     <<: *dind-large-setup
@@ -233,9 +242,10 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/ic/ic/artifacts
+          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"

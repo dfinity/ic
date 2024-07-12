@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/artifact_pool",
+    "//rs/async_utils",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
@@ -102,6 +103,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "@crate_index//:anyhow",
+    "@crate_index//:axum",
     "@crate_index//:assert_matches",
     "@crate_index//:assert-json-diff",
     "@crate_index//:backon",
@@ -119,8 +121,6 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http_0_2_12",
     "@crate_index//:humantime",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:hyper_0_14_27",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
@@ -400,31 +400,6 @@ def _symlink_dir(ctx):
 
 symlink_dir = rule(
     implementation = _symlink_dir,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
-
-def _symlink_dir_test(ctx):
-    # Use the no-op script as the executable
-    no_op_output = ctx.actions.declare_file("no_op")
-    ctx.actions.write(output = no_op_output, content = ":")
-
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns), executable = no_op_output)]
-
-symlink_dir_test = rule(
-    implementation = _symlink_dir_test,
-    test = True,
     attrs = {
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },

@@ -1352,7 +1352,110 @@ impl Blocks {
         }
     }
 
-    #[allow(dead_code)]
+    // Returns the index of the next Rosetta Block and of the first block
+    // to be put inside the next Rosetta Block
+    //
+    // Note: this method requires that the rosetta blocks table exist but
+    // it doesn't need them to be populated.
+    fn get_next_rosetta_block_indices(
+        &self,
+    ) -> Result<Option<RosettaBlockIndices>, BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
+        let last_rosetta_block_index: Option<BlockIndex> = connection
+            .query_row(
+                "SELECT max(rosetta_block_idx) FROM rosetta_blocks",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Unable to get the max index from the rosetta_blocks: {e:?}"))?;
+        let last_rosetta_block_index = match last_rosetta_block_index {
+            None => return Ok(None),
+            Some(last_rosetta_block_index) => last_rosetta_block_index,
+        };
+        let last_block_index_in_rosetta_block: BlockIndex = connection.query_row(
+            "SELECT max(block_idx) FROM rosetta_blocks_transactions WHERE rosetta_block_idx = :idx",
+            named_params! { ":idx": last_rosetta_block_index },
+            |row| row.get(0),
+        ).map_err(|e| format!("Unable to get the max block index for the rosetta block {last_rosetta_block_index}: {e:?}"))?;
+        Ok(Some(RosettaBlockIndices {
+            rosetta_block_index: last_rosetta_block_index + 1,
+            first_block_index: last_block_index_in_rosetta_block + 1,
+        }))
+    }
+
+    pub fn make_rosetta_blocks_if_enabled(
+        &self,
+        certified_tip_index: BlockIndex,
+    ) -> Result<(), BlockStoreError> {
+        let next_block_indices = match self.rosetta_blocks_mode {
+            RosettaBlocksMode::Disabled => return Ok(()),
+            RosettaBlocksMode::Enabled {
+                first_rosetta_block_index,
+            } => self
+                .get_next_rosetta_block_indices()?
+                .unwrap_or(RosettaBlockIndices {
+                    rosetta_block_index: first_rosetta_block_index,
+                    first_block_index: first_rosetta_block_index,
+                }),
+        };
+
+        let mut num_rosetta_blocks_created = 0;
+        let mut block_indices = next_block_indices.first_block_index..=certified_tip_index;
+        let block_index = match block_indices.next() {
+            None => return Ok(()),
+            Some(index) => index,
+        };
+        let Block {
+            parent_hash,
+            timestamp,
+            transaction,
+        } = Block::decode(self.get_hashed_block(&block_index)?.block)?;
+
+        let mut rosetta_block = RosettaBlock {
+            index: next_block_indices.rosetta_block_index,
+            parent_hash: parent_hash.map(|h| h.into_bytes()),
+            timestamp,
+            transactions: [(block_index, transaction)].into_iter().collect(),
+        };
+        for block_index in block_indices {
+            let block = self.get_hashed_block(&block_index)?;
+            let transaction = Block::decode(block.block)?.transaction;
+            // TODO: check for duplicates too and create new rosetta block if there are
+            if block.timestamp == rosetta_block.timestamp {
+                rosetta_block.transactions.insert(block_index, transaction);
+            } else {
+                let next_rosetta_block_index = rosetta_block.index + 1;
+                let parent_hash = rosetta_block.hash();
+                num_rosetta_blocks_created += 1;
+                self.store_rosetta_block(rosetta_block)?;
+                rosetta_block = RosettaBlock {
+                    index: next_rosetta_block_index,
+                    parent_hash: Some(parent_hash),
+                    timestamp: block.timestamp,
+                    transactions: [(block_index, transaction)].into_iter().collect(),
+                }
+            }
+        }
+        num_rosetta_blocks_created += 1;
+        let last_rosetta_block_index = rosetta_block.index;
+        self.store_rosetta_block(rosetta_block)?;
+
+        info!(
+            "Created {num_rosetta_blocks_created} Rosetta Block{}. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {last_rosetta_block_index}",
+            if num_rosetta_blocks_created > 1 {
+                "s"
+            } else {
+                ""
+            },
+            next_block_indices.first_block_index..=certified_tip_index,
+        );
+
+        Ok(())
+    }
+
     pub(crate) fn store_rosetta_block(
         &self,
         rosetta_block: RosettaBlock,
@@ -1497,6 +1600,11 @@ fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
             format!("Unable to decode block: {e:?}").into(),
         )
     })
+}
+
+struct RosettaBlockIndices {
+    pub rosetta_block_index: BlockIndex,
+    pub first_block_index: BlockIndex,
 }
 
 #[cfg(test)]
