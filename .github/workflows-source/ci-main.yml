@@ -134,7 +134,7 @@ jobs:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
     # TODO: enable once we have more macos runners
-    # if: ${{ github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'schedule' }}
     runs-on:
       labels: macOS
     steps:
