@@ -31,6 +31,7 @@ fn get_orchestrator_info() -> OrchestratorInfo {
         cycles_management: s.cycles_management().clone(),
         more_controller_ids: s.more_controller_ids().to_vec(),
         minter_id: s.minter_id().cloned(),
+        ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
     })
 }
 
