@@ -1154,8 +1154,9 @@ fn test_ecdsa_disabled() {
     .unwrap()
     .0
     .unwrap_err();
-    assert!(ecsda_public_key_error
-        .contains("Requested unknown iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys: []"));
+    assert!(ecsda_public_key_error.contains(
+        "Requested unknown threshold key: ecdsa:Secp256k1:dfx_test_key1, existing keys: []"
+    ));
 
     let ecdsa_signature_err =
         update_candid::<(Vec<u8>, Vec<Vec<u8>>, String), (Result<Vec<u8>, String>,)>(
@@ -1167,5 +1168,5 @@ fn test_ecdsa_disabled() {
         .unwrap()
         .0
         .unwrap_err();
-    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
+    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled threshold key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
 }
