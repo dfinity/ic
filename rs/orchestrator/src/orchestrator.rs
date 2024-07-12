@@ -411,7 +411,7 @@ impl Orchestrator {
             //
             // Additionally, there's a random +=50% range added to each delay, for jitter.
             let backoff = ExponentialBackoffBuilder::new()
-                .with_initial_interval(Duration::from_secs(1 * 60))
+                .with_initial_interval(Duration::from_secs(60))
                 .with_randomization_factor(0.5)
                 .with_multiplier(1.75)
                 .with_max_interval(Duration::from_secs(2 * 60 * 60))
