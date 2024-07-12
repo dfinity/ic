@@ -191,11 +191,13 @@ pub fn verify_batch(
     msg: &[u8],
     seed: Seed,
 ) -> CryptoResult<()> {
-    let mut keys = Vec::new();
-    let mut signatures = Vec::new();
     let mut messages = Vec::new();
+    let mut signatures = Vec::new();
+    let mut keys = Vec::new();
 
     for (key, signature) in key_signature_map {
+        messages.push(msg);
+        signatures.push(signature.0.as_ref());
         keys.push(
             ic_crypto_ed25519::PublicKey::deserialize_raw(&key.0).map_err(|e| {
                 CryptoError::MalformedPublicKey {
@@ -205,18 +207,17 @@ pub fn verify_batch(
                 }
             })?,
         );
-        signatures.push(signature.0.as_ref());
-        messages.push(msg);
     }
 
     let rng = &mut seed.into_rng();
-    ic_crypto_ed25519::PublicKey::batch_verify(&messages, signatures.as_slice(), &keys, rng)
-        .map_err(|e| CryptoError::SignatureVerification {
+    ic_crypto_ed25519::PublicKey::batch_verify(&messages, &signatures, &keys, rng).map_err(|e| {
+        CryptoError::SignatureVerification {
             algorithm: AlgorithmId::Ed25519,
             public_key_bytes: vec![],
             sig_bytes: vec![],
             internal_error: e.to_string(),
-        })
+        }
+    })
 }
 
 /// Verifies whether the given key is a valid Ed25519 public key.
