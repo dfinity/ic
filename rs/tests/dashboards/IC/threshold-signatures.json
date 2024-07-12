@@ -8,7 +8,7 @@
           "type": "prometheus",
           "uid": "000000001"
         },
-        "enable": false,
+        "enable": true,
         "expr": "process_start_time_seconds{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"} * 1000",
         "hide": false,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -187,16 +187,16 @@
             "uid": "000000001"
           },
           "exemplar": true,
-          "expr": "replicated_state_ecdsa_signature_agreements_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
+          "expr": "replicated_state_threshold_signature_agreements_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{instance}}, {{key_id}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "replicated_state_ecdsa_signature_agreements_total",
+      "title": "Number of signatures created by Key ID",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -281,15 +281,16 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "consensus_ecdsa_key_transcript_created{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
+          "expr": "consensus_ecdsa_key_transcript_created{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}",
           "interval": "",
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{instance}}, {{key_id}}",
+          "range": true,
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "consensus_ecdsa_key_transcript_created",
+      "title": "Created Key Transcripts",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -381,7 +382,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "rate consensus_ecdsa_signature_agreements",
+      "title": "Rate of Signature Agreements (all keys)",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -491,7 +492,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Ongoing Signatures",
+      "title": "Ongoing Signatures (all keys)",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -532,7 +533,7 @@
         "type": "prometheus",
         "uid": "000000001"
       },
-      "description": "Number of quadruples available in the payload",
+      "description": "Number of pre-signatures available in the payload",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -577,15 +578,16 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "consensus_ecdsa_available_quadruples{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
+          "expr": "consensus_ecdsa_available_quadruples{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}",
           "interval": "",
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{instance}}, {{key_id}}",
+          "range": true,
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Available Quadruples",
+      "title": "Completed Pre-Signatures",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -632,7 +634,7 @@
         "type": "prometheus",
         "uid": "000000001"
       },
-      "description": "The number of available quadruples delivered by all replicas to execution",
+      "description": "The number of completed pre-signatures delivered by all replicas to execution",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -711,7 +713,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (le) (\n  increase(execution_ecdsa_delivered_quadruples_bucket{ic=~\"$ic\", job=\"replica\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$__rate_interval])\n)",
+          "expr": "sum by (le) (\n  increase(execution_ecdsa_delivered_quadruples_bucket{ic=~\"$ic\", job=\"replica\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\",key_id=~\"$key_id\"}[$__rate_interval])\n)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -720,7 +722,7 @@
           "refId": "A"
         }
       ],
-      "title": "Quadruples delivered to Execution",
+      "title": "Pre-signatures delivered to Execution",
       "tooltip": {
         "show": true,
         "showHistogram": true
@@ -799,16 +801,16 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "consensus_ecdsa_quadruples_in_creation{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}",
+          "expr": "consensus_ecdsa_quadruples_in_creation{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}",
           "interval": "",
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{instance}}, {{key_id}}",
           "range": true,
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Quadruples in Creation",
+      "title": "Pre-signatures in Creation",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1061,7 +1063,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Transcript Latency",
+      "title": "Transcript Latency (all keys)",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1106,7 +1108,7 @@
         "uid": "000000001"
       },
       "decimals": 2,
-      "description": "Duration of signature creation, after it was matched with a completed quadruple.",
+      "description": "Duration of signature creation, after it was matched with a completed pre-signature.",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -1308,7 +1310,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Signature Latency",
+      "title": "Signature Latency (all keys)",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1353,7 +1355,7 @@
         "uid": "000000001"
       },
       "decimals": 2,
-      "description": "Duration of quadruple creation.",
+      "description": "Duration of pre-signature creation.",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -1461,7 +1463,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(1, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period])))",
+          "expr": "histogram_quantile(1, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}[$period])))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1477,7 +1479,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(.95, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period])))",
+          "expr": "histogram_quantile(.95, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}[$period])))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -1494,7 +1496,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(.9, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period])))",
+          "expr": "histogram_quantile(.9, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}[$period])))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -1511,7 +1513,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(.5, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period])))",
+          "expr": "histogram_quantile(.5, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}[$period])))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -1528,7 +1530,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(1e-9, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period])))",
+          "expr": "histogram_quantile(1e-9, sum by(ic, le) (rate(ecdsa_quadruple_e2e_latency_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}[$period])))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -1545,7 +1547,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "  sum(rate(ecdsa_quadruple_e2e_latency_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period]))\n/\n  sum(rate(ecdsa_quadruple_e2e_latency_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period]))",
+          "expr": "  sum(rate(ecdsa_quadruple_e2e_latency_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}[$period]))\n/\n  sum(rate(ecdsa_quadruple_e2e_latency_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",key_id=~\"$key_id\"}[$period]))",
           "interval": "",
           "legendFormat": "Avg",
           "range": true,
@@ -1554,7 +1556,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Quadruple Latency",
+      "title": "Pre-signature Latency",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1612,7 +1614,7 @@
         "uid": "000000001"
       },
       "decimals": 2,
-      "description": "Consensus ECDSA validation",
+      "description": "Consensus IDKG validation",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -1814,7 +1816,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Consensus ECDSA validation",
+      "title": "Consensus IDKG validation",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1859,7 +1861,7 @@
         "uid": "000000001"
       },
       "decimals": 2,
-      "description": "Duration of ECDSA pre-signer on state change",
+      "description": "Duration of pre-signer on state change",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -2061,7 +2063,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "ECDSA Pre-signer on state change",
+      "title": "Pre-signer on state change",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2106,7 +2108,7 @@
         "uid": "000000001"
       },
       "decimals": 2,
-      "description": "Total duration of ECDSA on state change",
+      "description": "Total duration of IDKG on state change",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -2308,7 +2310,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "ECDSA on state change total",
+      "title": "IDKG on state change total",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2353,7 +2355,7 @@
         "uid": "000000001"
       },
       "decimals": 2,
-      "description": "Duration of ECDSA signer on state change",
+      "description": "Duration of IDKG signer on state change",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -2556,7 +2558,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "ECDSA Signer on state change",
+      "title": "IDKG Signer on state change",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2668,7 +2670,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "ECDSA payload errors",
+      "title": "IDKG payload errors",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2765,7 +2767,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "ECDSA signer errors",
+      "title": "Signer errors",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2862,7 +2864,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Dropped ECDSA adverts per second",
+      "title": "Dropped IDKG adverts per second",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2959,7 +2961,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Average ECDSA pool artifacts per peer",
+      "title": "Average IDKG pool artifacts per peer",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2991,7 +2993,7 @@
       }
     }
   ],
-  "refresh": false,
+  "refresh": "10s",
   "schemaVersion": 37,
   "style": "dark",
   "tags": [],
@@ -3171,11 +3173,41 @@
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "000000001"
+        },
+        "definition": "label_values(key_id)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "key_id",
+        "options": [],
+        "query": {
+          "query": "label_values(key_id)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -3193,8 +3225,8 @@
     ]
   },
   "timezone": "utc",
-  "title": "Threshold ECDSA",
-  "uid": "threshold-ecdsa",
+  "title": "Threshold Signatures",
+  "uid": "threshold-signatures",
   "version": 1,
   "weekStart": ""
 }
