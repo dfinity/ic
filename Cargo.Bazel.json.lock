@@ -1,5 +1,5 @@
 {
-  "checksum": "1a867ee3ec94cfe7d2c40f6453c95849e44971476d52fdc4b05ec5a104eebbb4",
+  "checksum": "017e101ffd00a674c02f1283e61aeaec812f5b222fa3d9b5105592b932a859b9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15093,6 +15093,13 @@
               }
             ]
           }
+        },
+        "rustc_flags": {
+          "common": [
+            "-C",
+            "opt-level=3"
+          ],
+          "selects": {}
         },
         "version": "4.1.3"
       },
