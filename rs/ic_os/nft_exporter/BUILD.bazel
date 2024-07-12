@@ -15,7 +15,7 @@ rust_binary(
         ["src/**/*.rs"],
     ),
     aliases = {},
-    version = "0.1.0",
     proc_macro_deps = [],
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
