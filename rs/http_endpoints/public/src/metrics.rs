@@ -44,6 +44,7 @@ pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] =
 #[derive(Clone)]
 pub struct HttpHandlerMetrics {
     pub requests: HistogramVec,
+    pub in_flight_requests: IntGauge,
     pub request_http_version_counts: IntCounterVec,
     pub request_body_size_bytes: HistogramVec,
     pub response_body_size_bytes: HistogramVec,
@@ -88,6 +89,10 @@ impl HttpHandlerMetrics {
                 decimal_buckets(-3, 1),
                 // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 20s, 50s
                 &REQUESTS_LABEL_NAMES,
+            ),
+            in_flight_requests: metrics_registry.int_gauge(
+                "replica_in_flight_requests",
+                "Total number of in flight requests."
             ),
             request_http_version_counts: metrics_registry.int_counter_vec(
                 "replica_http_request_http_version_counts",
