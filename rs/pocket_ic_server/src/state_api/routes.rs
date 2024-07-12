@@ -6,10 +6,10 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, DashboardRequest, ExecuteIngressMessage,
-    GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query,
-    QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
-    Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, DashboardRequest,
+    ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
+    PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest,
+    SubmitIngressMessage, Tick,
 };
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
@@ -44,6 +44,7 @@ use pocket_ic::WasmResult;
 use serde::Serialize;
 use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
 
 type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
@@ -105,12 +106,11 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    use tower_http::limit::RequestBodyLimitLayer;
     ApiRouter::new()
         .directory_route("/status", get(handler_status))
         .directory_route(
             "/canister/:ecid/call",
-            post(handler_call)
+            post(handler_call_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -132,6 +132,21 @@ where
                 ))
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
+}
+
+pub fn instance_api_v3_routes<S>() -> ApiRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: extract::FromRef<S>,
+{
+    ApiRouter::new().directory_route(
+        "/canister/:ecid/call",
+        post(handler_call_v3)
+            .layer(RequestBodyLimitLayer::new(
+                4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+            ))
+            .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+    )
 }
 
 pub fn instances_routes<S>() -> ApiRouter<S>
@@ -159,6 +174,9 @@ where
         //
         // All the api v2 endpoints
         .nest("/:id/api/v2", instance_api_v2_routes())
+        //
+        // All the api v3 endpoints
+        .nest("/:id/api/v3", instance_api_v3_routes())
         //
         // The instance dashboard
         .api_route("/:id/_/dashboard", get(handler_dashboard))
@@ -601,7 +619,7 @@ pub async fn handler_status(
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_call(
+pub async fn handler_call_v3(
     State(AppState {
         api_state, runtime, ..
     }): State<AppState>,
@@ -612,6 +630,23 @@ pub async fn handler_call(
         effective_canister_id,
         bytes,
         runtime,
+        version: CallRequestVersion::V3,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_call_v2(
+    State(AppState {
+        api_state, runtime, ..
+    }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = CallRequest {
+        effective_canister_id,
+        bytes,
+        runtime,
+        version: CallRequestVersion::V2,
     };
     handle_raw(api_state, instance_id, op).await
 }

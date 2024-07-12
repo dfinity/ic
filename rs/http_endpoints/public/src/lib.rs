@@ -9,6 +9,7 @@ mod catch_up_package;
 mod common;
 mod dashboard;
 mod health_status_refresher;
+pub mod metrics;
 mod pprof;
 mod query;
 mod read_state;
@@ -19,14 +20,14 @@ mod tracing_flamegraph;
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod call;
-        pub mod metrics;
     } else {
-        mod metrics;
         mod call;
     }
 }
 
-pub use call::{CallServiceV2, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
+pub use call::{
+    CallServiceV2, CallServiceV3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
+};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};

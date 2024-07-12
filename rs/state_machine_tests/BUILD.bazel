@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
+    "//rs/http_endpoints/public",
     "//rs/https_outcalls/consensus",
     "//rs/ingress_manager",
     "//rs/interfaces",
@@ -61,6 +62,7 @@ DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:wat",
 ]

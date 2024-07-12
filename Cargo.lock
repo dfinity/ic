@@ -11425,6 +11425,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
+ "ic-http-endpoints-public",
  "ic-https-outcalls-consensus",
  "ic-ingress-manager",
  "ic-interfaces",
@@ -11468,6 +11469,7 @@ dependencies = [
  "slog-term",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tower",
  "wat",
 ]

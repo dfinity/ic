@@ -18,7 +18,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    CallServiceV2, CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
+    metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
+    IngressValidatorBuilder, QueryServiceBuilder,
 };
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_state_manager::StateReader;
@@ -1243,12 +1244,19 @@ impl Operation for StatusRequest {
     }
 }
 
+pub enum CallRequestVersion {
+    V2,
+    V3,
+}
+
 pub struct CallRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
     pub runtime: Arc<Runtime>,
+    pub version: CallRequestVersion,
 }
 
+const INGRESS_MESSAGE_CERTIFICATION_TIMEOUT_SECONDS: u64 = 10;
 #[derive(Clone)]
 struct PocketIngressPoolThrottler;
 
@@ -1304,22 +1312,49 @@ impl Operation for CallRequest {
                 )
                 .build();
 
-                let svc = CallServiceV2::new_service(ingress_validator);
+                let subnet_clone = subnet.clone();
+                let artifact_insertion_handle = self.runtime.spawn(async move {
+                    if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
+                        r.recv().await
+                    {
+                        subnet_clone.push_signed_ingress(msg);
+                    }
+                });
+
+                let svc = match self.version {
+                    CallRequestVersion::V2 => CallServiceV2::new_service(ingress_validator),
+                    CallRequestVersion::V3 => {
+                        let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                        let metrics = HttpHandlerMetrics::new(&subnet.metrics_registry);
+
+                        CallServiceV3::new_service(
+                            ingress_validator,
+                            subnet.ingress_watcher_handle.clone(),
+                            metrics,
+                            INGRESS_MESSAGE_CERTIFICATION_TIMEOUT_SECONDS,
+                            Arc::new(RwLock::new(delegation)),
+                            subnet.state_manager.clone(),
+                        )
+                    }
+                };
+
+                let api_version = match self.version {
+                    CallRequestVersion::V2 => "v2",
+                    CallRequestVersion::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/canister/{}/call",
+                        "/api/{}/canister/{}/call",
+                        api_version,
                         PrincipalId(self.effective_canister_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
-
-                if let Ok(UnvalidatedArtifactMutation::Insert((msg, _node_id))) = r.try_recv() {
-                    subnet.push_signed_ingress(msg);
-                }
+                let _ = self.runtime.block_on(artifact_insertion_handle).unwrap();
 
                 OpOut::RawResponse((
                     resp.status().into(),
