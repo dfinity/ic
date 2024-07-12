@@ -22,8 +22,8 @@ use ic_cketh_test_utils::{
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
-    MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
@@ -1517,10 +1517,11 @@ fn should_retrieve_minter_info() {
 #[test]
 fn should_scrape_from_last_scraped_after_upgrade() {
     let mut ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let max_eth_logs_block_range = ckerc20.as_ref().max_logs_block_range();
 
     // Set latest_finalized_block so that we scrapped twice each time.
     let latest_finalized_block =
-        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE * 2;
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
     ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
@@ -1531,7 +1532,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // ckETH event logs
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -1599,7 +1600,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
 
     // Advance block height and scrape again
     let latest_finalized_block =
-        u64::try_from(second_to_block.into_inner()).unwrap() + MAX_ETH_LOGS_BLOCK_RANGE;
+        u64::try_from(second_to_block.into_inner()).unwrap() + max_eth_logs_block_range;
     ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
@@ -1638,9 +1639,10 @@ fn should_scrape_from_last_scraped_after_upgrade() {
 #[test]
 fn should_not_scrape_when_no_erc20_token() {
     let ckerc20 = CkErc20Setup::default();
+    let max_eth_logs_block_range = ckerc20.as_ref().max_logs_block_range();
 
     // Set latest_finalized_block so that we scrapped twice each time.
-    let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE;
+    let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range;
     ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
@@ -1666,7 +1668,7 @@ fn should_not_scrape_when_no_erc20_token() {
     // ckETH event logs
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE - 1))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range - 1))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
