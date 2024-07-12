@@ -949,13 +949,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.10.2",
-                features = [
-                    "ring",
-                ],
+                git = "https://github.com/quinn-rs/quinn",
+                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                features = ["ring"],
             ),
             "quinn-udp": crate.spec(
-                version = "^0.5.1",
+                git = "https://github.com/quinn-rs/quinn",
+                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
             ),
             "quote": crate.spec(
                 version = "^1.0",
