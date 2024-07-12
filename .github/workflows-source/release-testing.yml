@@ -38,6 +38,10 @@ anchors:
       labels: dind-large
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
   checkout: &checkout
     name: Checkout
