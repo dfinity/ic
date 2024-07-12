@@ -459,7 +459,7 @@ where
                         return pruned;
                     }
                 }
-                if let Some((_, (account, spender))) = table.pop_first_expiry() {
+                if let Some((_, (account, spender))) = table.allowances_data.pop_first_expiry() {
                     let key = (account, spender);
                     if let Some(allowance) = table.allowances_data.get_allowance(&key) {
                         if allowance.expires_at.unwrap_or_else(remote_future) <= now {
@@ -482,23 +482,6 @@ where
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
-        self.allowances_data.pop_first_expiry()
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((AD::AccountId, AD::AccountId), Allowance<AD::Tokens>)> {
-        self.allowances_data.pop_first_allowance()
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (AD::AccountId, AD::AccountId))> {
-        self.allowances_data.pop_first_arrival()
     }
 }
 
