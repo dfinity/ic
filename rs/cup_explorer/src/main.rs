@@ -1,3 +1,4 @@
+// Testing
 use ic_cup_explorer::get_catchup_content;
 use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetRecord};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
