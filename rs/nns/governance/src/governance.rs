@@ -1324,7 +1324,7 @@ impl Topic {
     pub const MIN: Topic = Topic::Unspecified;
     // A unit test will fail if this value does not stay up to date (e.g. when a new value is
     // added).
-    pub const MAX: Topic = Topic::SubnetRental;
+    pub const MAX: Topic = Topic::ServiceNervousSystemManagement;
 
     /// When voting rewards are distributed, the voting power of
     /// neurons voting on proposals are weighted by this amount. The
@@ -5643,19 +5643,29 @@ impl Governance {
         }
 
         // Validate topic exists
-        Topic::try_from(follow_request.topic).map_err(|_| {
+        let topic = Topic::try_from(follow_request.topic).map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
             )
         })?;
 
+        #[cfg(not(feature = "test"))]
+        if topic == Topic::ProtocolCanisterManagement
+            || topic == Topic::ServiceNervousSystemManagement
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!("Cannot follow the {:?} topic yet", topic),
+            ));
+        }
+
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {
-                neuron.followees.remove(&follow_request.topic)
+                neuron.followees.remove(&(topic as i32))
             } else {
                 neuron.followees.insert(
-                    follow_request.topic,
+                    topic as i32,
                     Followees {
                         followees: follow_request.followees.clone(),
                     },
