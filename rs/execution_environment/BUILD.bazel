@@ -97,7 +97,7 @@ ENV = {}
 
 rust_library(
     name = "execution_environment",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     compile_data = glob(["tests/test-data/**"]),
     crate_name = "ic_execution_environment",

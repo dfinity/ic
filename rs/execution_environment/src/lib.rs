@@ -22,6 +22,7 @@ pub use execution_environment::{
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
+use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
@@ -104,6 +105,24 @@ impl ExecutionServices {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
     ) -> ExecutionServices {
+        for _ in 0..100 {
+            let metrics_registry = MetricsRegistry::new();
+            let mut config = config.clone();
+            // uncommenting the following lines mitigates the leak
+            // => the leak happens in `SandboxedExecutionController`
+            // config.canister_sandboxing_flag = FlagStatus::Disabled;
+            let _hypervisor = Arc::new(Hypervisor::new(
+                config,
+                &metrics_registry,
+                own_subnet_id,
+                own_subnet_type,
+                logger.clone(),
+                Arc::clone(&cycles_account_manager),
+                scheduler_config.dirty_page_overhead,
+                Arc::clone(&fd_factory),
+            ));
+        }
+
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
             metrics_registry,
