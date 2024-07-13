@@ -54,6 +54,11 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
             value: "bitcoin_inputs_collector".to_string(),
         },
     ];
+    // The max_response_bytes is set to 400KiB because:
+    // - The maximum size of a standard non-taproot transaction is 400k vBytes.
+    // - Taproot transactions could be as big as full block size (4MiB).
+    // - Currently a subnet's maximum response size is only 2 MiB.
+    // - Transactions bigger than 400KiB can't KYT-checked, but they are very rare.
     let request = CanisterHttpRequestArgument {
         url: url.to_string(),
         method: HttpMethod::GET,
