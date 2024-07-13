@@ -125,6 +125,14 @@ enum Topic {
   // Proposals related to subnet rental.
   TOPIC_SUBNET_RENTAL = 16;
 
+  // Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
+  // protocol, without which the IC will not be able to function properly.
+  TOPIC_PROTOCOL_CANISTER_MANAGEMENT = 17;
+
+  // Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
+  // Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+  TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT = 18;
+
   // Superseded by SNS_COMMUNITY_FUND.
   reserved 11;
   reserved "TOPIC_SNS_DECENTRALIZATION_SALE";

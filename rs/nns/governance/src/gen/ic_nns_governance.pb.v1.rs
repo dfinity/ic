@@ -3522,6 +3522,12 @@ pub enum Topic {
     ApiBoundaryNodeManagement = 15,
     /// Proposals related to subnet rental.
     SubnetRental = 16,
+    /// Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
+    /// protocol, without which the IC will not be able to function properly.
+    ProtocolCanisterManagement = 17,
+    /// Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
+    /// Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+    ServiceNervousSystemManagement = 18,
 }
 impl Topic {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3546,6 +3552,8 @@ impl Topic {
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
             Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
             Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
+            Topic::ProtocolCanisterManagement => "TOPIC_PROTOCOL_CANISTER_MANAGEMENT",
+            Topic::ServiceNervousSystemManagement => "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3567,6 +3575,8 @@ impl Topic {
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
             "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
             "TOPIC_SUBNET_RENTAL" => Some(Self::SubnetRental),
+            "TOPIC_PROTOCOL_CANISTER_MANAGEMENT" => Some(Self::ProtocolCanisterManagement),
+            "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT" => Some(Self::ServiceNervousSystemManagement),
             _ => None,
         }
     }
