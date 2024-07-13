@@ -12,6 +12,7 @@ struct BitcoinTxError;
 /// The function returns the Bitcoin addresses of the inputs in the
 /// transaction with the given transaction ID.
 async fn get_inputs(tx_id: String) -> Vec<String> {
+    // TODO(XC-157): Charge cycles and also add guards.
     match get_inputs_internal(tx_id).await {
         Ok(inputs) => inputs,
         Err(_) => panic!("Error in getting transaction inputs"),
@@ -76,6 +77,7 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
     let cycles = 49_140_000 + 1024 * 5_200 + 10_400 * 400 * 1024; // 1 KiB request, 400 KiB response
     match http_request(request, cycles).await {
         Ok((response,)) => {
+            // TODO(XC-158): ensure response is 200 before decoding
             let tx = Transaction::consensus_decode(&mut response.body.as_slice())
                 .map_err(|_| BitcoinTxError)?;
             // Verify the correctness of the transaction by recomputing the transaction ID.
@@ -85,6 +87,7 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
             Ok(tx)
         }
         Err((r, m)) => {
+            // TODO(XC-158): maybe try other providers and also log the error.
             println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
             Err(BitcoinTxError)
         }
