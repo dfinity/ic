@@ -19081,6 +19081,8 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-xrc-types",
+ "serde",
+ "serde_json",
  "slog",
  "tests",
  "xrc-mock",
