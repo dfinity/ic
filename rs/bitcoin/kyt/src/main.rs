@@ -14,7 +14,7 @@ struct BitcoinTxError;
 async fn get_inputs(tx_id: String) -> Vec<String> {
     match get_inputs_internal(tx_id).await {
         Ok(inputs) => inputs,
-        Err(_) => vec![],
+        Err(_) => panic!("Error in getting transaction inputs"),
     }
 }
 
