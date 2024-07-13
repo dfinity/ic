@@ -43,6 +43,7 @@ async fn get_inputs_internal(tx_id: String) -> Result<Vec<String>, BitcoinTxErro
 }
 
 async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
+    // TODO(XC-159): Support multiple providers
     let host = "btcscan.org";
     let url = format!("https://{}/api/tx/{}/raw", host, tx_id);
     let request_headers = vec![
