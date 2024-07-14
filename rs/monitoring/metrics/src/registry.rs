@@ -1,3 +1,4 @@
+// Testing
 use crate::adapter_metrics_registry::AdapterMetricsRegistry;
 use ic_adapter_metrics_client::AdapterMetrics;
 use prometheus::{
