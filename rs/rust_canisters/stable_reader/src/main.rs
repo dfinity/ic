@@ -1,3 +1,4 @@
+// Testing
 /// A tiny utility that takes a stable memory that was written by a canister
 /// using this library on stdin and outputs the "actual" content (that is,
 /// without the padding to an integer number of wasm pages) to stdout.
