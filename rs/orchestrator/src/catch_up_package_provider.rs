@@ -179,7 +179,7 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let uri = http_endpoint_to_url(&http, &self.logger)?.to_string();
+        let uri = http_endpoint_to_url(&http, &self.logger)?.to_string() + "_/catch_up_package";
 
         let protobuf = self
             .fetch_catch_up_package(node_id, uri.clone(), param)
