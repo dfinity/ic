@@ -7,6 +7,11 @@ use ic_registry_subnet_type::SubnetType;
 use pocket_ic::common::rest::DtsFlag;
 use pocket_ic::PocketIcBuilder;
 use spec_compliance::run_ic_ref_test;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+use tempfile::NamedTempFile;
+
+const LOCALHOST: &str = "127.0.0.1";
 
 const EXCLUDED: &[&str] = &[
     // blocked on canister https outcalls in PocketIC
@@ -49,6 +54,30 @@ fn subnet_config(
 }
 
 fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included_tests: Vec<&str>) {
+    let httpbin_path = std::env::var_os("HTTPBIN_BIN").expect("Missing httpbin binary path");
+    let mut cmd = Command::new(httpbin_path);
+    let port_file = NamedTempFile::new().unwrap();
+    let port_file_path = port_file.path().to_path_buf();
+    cmd.arg("--port-file")
+        .arg(port_file_path.as_os_str().to_str().unwrap());
+    cmd.stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("httpbin binary crashed");
+    let start = Instant::now();
+    let httpbin_url = loop {
+        let port_string = std::fs::read_to_string(port_file_path.clone())
+            .expect("Failed to read port from port file");
+        if !port_string.is_empty() {
+            let port: u16 = port_string.parse().expect("Failed to parse port to number");
+            break format!("{}:{}", LOCALHOST, port);
+        }
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Failed to start httpbin service in time");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+
     // create live PocketIc instance
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -123,8 +152,8 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     };
 
     run_ic_ref_test(
-        None,
-        None,
+        Some("http://".to_string()),
+        Some(httpbin_url),
         ic_ref_test_path.into_os_string().into_string().unwrap(),
         ic_test_data_path,
         endpoint.to_string(),
