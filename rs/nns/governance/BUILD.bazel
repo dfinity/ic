@@ -28,6 +28,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/runtime",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/governance/api",
     "//rs/nns/gtc_accounts",
     "//rs/protobuf",
     "//rs/registry/canister",
