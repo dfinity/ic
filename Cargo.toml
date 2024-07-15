@@ -489,8 +489,14 @@ http = "1.1.0"
 http-body = "1.0.0"
 http-body-util = "0.1.0"
 hyper = { version = "1.4.1", features = ["full"] }
+hyper-rustls = { version = "0.27.1", default-features = false, features = [
+    "http1",
+    "http2",
+    "native-tokio",
+    "ring",
+    "tls12",
+] }
 hyper-util = { version = "0.1.6", features = ["full"] }
-hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-socks2 = { version = "0.8.0", default-features = false, features = [
     "rustls",
 ] }
@@ -559,7 +565,7 @@ prometheus-parse = { version = "0.2.4" }
 prost = "=0.12.2"
 prost-build = "=0.12.2"
 protobuf = "2.28.0"
-quinn = { git = "https://github.com/quinn-rs/quinn", rev = "693c9b7cfbf89c541ba99523237594499984ffed", features = ["ring"] }
+quinn = { git = "https://github.com/quinn-rs/quinn", rev = "693c9b7cfbf89c541ba99523237594499984ffed", default-features = false, features = ["ring", "log", "runtime-tokio", "rustls"] }
 quinn-udp = { git = "https://github.com/quinn-rs/quinn", rev = "693c9b7cfbf89c541ba99523237594499984ffed"}
 rayon = "1.10.0"
 rand = { version = "0.8.5", features = ["small_rng"] }
@@ -577,7 +583,7 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "stream",
 ] }
 rstest = "0.19.0"
-rustls = { version = "0.23.10", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.11", default-features = false, features = ["ring"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.14"
 serde_cbor = "0.11.2"
