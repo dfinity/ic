@@ -1585,7 +1585,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
     with_test_replica_logger(|log| {
         let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
-        // Local canister with one reservation for two incoming responses.
+        // Local canister with two reservation for two incoming responses.
         let mut initial_canister_state = new_canister_state(
             *LOCAL_CANISTER,
             user_test_id(24).get(),
@@ -1728,6 +1728,150 @@ fn reroute_rejected_response_success() {
     });
 }
 
+/// Common implementation for tests checking reject responses generated locally by the
+/// `StreamHandler` directly.
+fn check_stream_handler_locally_generated_reject_response_impl(
+    reason: RejectReason,
+    expected_reject_code: RejectCode,
+    expected_message: String,
+) {
+    with_test_replica_logger(|log| {
+        let (stream_handler, mut state, _) = new_fixture(&log);
+
+        // Local canister with one reservation for one incoming reject response.
+        let mut canister_state = new_canister_state(
+            *LOCAL_CANISTER,
+            user_test_id(24).get(),
+            *INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        make_input_queue_reservations(&mut canister_state, 1, *REMOTE_CANISTER);
+        state.put_canister_state(canister_state);
+
+        // An outgoing stream with one request @21 in it.
+        let mut outgoing_stream = Stream::new(
+            StreamIndexedQueue::<RequestOrResponse>::with_begin(21.into()),
+            43.into(),
+        );
+        outgoing_stream.push(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
+
+        // An incoming stream slice with one reject signal @21 in it.
+        let stream_slice = generate_stream_slice(StreamSliceConfig {
+            header_begin: 43,
+            header_end: None,
+            messages_begin: 43,
+            message_count: 0,
+            signals_end: 22,
+            reject_signals: Some(vec![RejectSignal::new(reason, 21.into())]),
+            flags: Default::default(),
+        });
+
+        // The expected outgoing stream has been garbage collected.
+        let expected_outgoing_stream = Stream::new(
+            StreamIndexedQueue::<RequestOrResponse>::with_begin(22.into()),
+            43.into(),
+        );
+
+        // Generate the expected reject response for the request in `outgoing_stream`.
+        let request = get_request_at(outgoing_stream.messages(), 21);
+        let reject_response = Response {
+            originator: request.sender,
+            respondent: request.receiver,
+            originator_reply_callback: request.sender_reply_callback,
+            refund: request.payment,
+            response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                expected_reject_code,
+                expected_message,
+                MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+            )),
+            deadline: request.deadline,
+        };
+
+        // The expected state has this reject response inducted.
+        let mut expected_state = state.clone();
+        expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
+        expected_state
+            .push_input(reject_response.into(), &mut (i64::MAX / 2))
+            .unwrap();
+
+        // Put the canister state and the outgoing stream into `state` and process the incoming
+        // stream slice.
+        state.with_streams(btreemap![REMOTE_SUBNET => outgoing_stream]);
+        let inducted_state =
+            stream_handler.process_stream_slices(state, btreemap![REMOTE_SUBNET => stream_slice]);
+
+        assert_eq!(inducted_state, expected_state);
+    });
+}
+
+#[test]
+fn check_stream_handler_locally_generated_reject_response_canister_migrating() {
+    check_stream_handler_locally_generated_reject_response_impl(
+        RejectReason::CanisterMigrating,
+        RejectCode::SysTransient,
+        format!("Canister {} is migrating", *REMOTE_CANISTER),
+    );
+}
+
+#[test]
+fn check_stream_handler_locally_generated_reject_response_canister_not_found() {
+    check_stream_handler_locally_generated_reject_response_impl(
+        RejectReason::CanisterNotFound,
+        RejectCode::DestinationInvalid,
+        format!("Canister {} not found", *REMOTE_CANISTER),
+    );
+}
+
+#[test]
+fn check_stream_handler_locally_generated_reject_response_canister_stopped() {
+    check_stream_handler_locally_generated_reject_response_impl(
+        RejectReason::CanisterStopped,
+        RejectCode::CanisterError,
+        format!("Canister {} is stopped", *REMOTE_CANISTER),
+    );
+}
+
+#[test]
+fn check_stream_handler_locally_generated_reject_response_canister_stopping() {
+    check_stream_handler_locally_generated_reject_response_impl(
+        RejectReason::CanisterStopping,
+        RejectCode::CanisterError,
+        format!("Canister {} is stopping", *REMOTE_CANISTER),
+    );
+}
+
+#[test]
+fn check_stream_handler_locally_generated_reject_response_queue_full() {
+    check_stream_handler_locally_generated_reject_response_impl(
+        RejectReason::QueueFull,
+        RejectCode::SysTransient,
+        format!("Canister {} input queue is full", *REMOTE_CANISTER),
+    );
+}
+
+#[test]
+fn check_stream_handler_locally_generated_reject_response_out_of_memory() {
+    check_stream_handler_locally_generated_reject_response_impl(
+        RejectReason::OutOfMemory,
+        RejectCode::CanisterError,
+        format!(
+            "Cannot induct request. Out of memory: requested {}",
+            MAX_RESPONSE_COUNT_BYTES,
+        ),
+    );
+}
+
+#[test]
+fn check_stream_handler_locally_generated_reject_response_unknown() {
+    check_stream_handler_locally_generated_reject_response_impl(
+        RejectReason::Unknown,
+        RejectCode::SysFatal,
+        "Inducting request failed due to an unknown error".to_string(),
+    );
+}
+
+// TODO: [MR-579] Remove this fixture and the tests that depend on it, since reject responses of
+// this type are no longer produced.
 /// Common implementation for tests checking reject responses generated by the `StreamHandler`
 /// directly.
 fn check_stream_handler_generated_reject_response_impl(
