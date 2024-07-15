@@ -58,12 +58,15 @@ impl AdapterServer {
         let socks_client = Client::builder().build::<_, hyper::Body>(https_connector);
 
         // Https client setup.
-        let https_connector = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only()
-            .enable_http1()
-            .wrap_connector(http_connector);
-        let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
+        let builder = HttpsConnectorBuilder::new().with_native_roots();
+        #[cfg(not(feature = "http"))]
+        let builder = builder.https_only();
+        #[cfg(feature = "http")]
+        let builder = builder.https_or_http();
+
+        let builder = builder.enable_http1();
+        let https_client =
+            Client::builder().build::<_, hyper::Body>(builder.wrap_connector(http_connector));
         let canister_http = CanisterHttp::new(https_client, socks_client, logger, metrics);
 
         Self(
