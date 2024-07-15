@@ -612,7 +612,6 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     let env = TestEnv::setup_or_panic(true).await;
 
     // Rosetta block 0 contains transaction 0
-
     env.pocket_ic.stop_progress().await;
 
     // Create block 1 and Rosetta Block 1
@@ -708,7 +707,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
         .unwrap()]
     );
 
-    // chec block 2
+    // check block 2
     let block2 = env
         .rosetta
         .block_or_panic(PartialBlockIdentifier {
@@ -762,7 +761,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
         ]
     );
 
-    // chec block 3
+    // check block 3
     let block3 = env
         .rosetta
         .block_or_panic(PartialBlockIdentifier {
