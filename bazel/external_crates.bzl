@@ -527,16 +527,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
-            "hyper-rustls": crate.spec(
+            "hyper_rustls_0_24_2": crate.spec(
                 version = "^0.24.2",
+                package = "hyper-rustls",
                 features = [
                     "http2",
                 ],
             ),
-            "hyper-rustls_0_27_x": crate.spec(
+            "hyper-rustls": crate.spec(
                 default_features = False,
-                package = "hyper-rustls",
-                version = "^0.27.1",
+                version = "^0.27.2",
                 features = [
                     "http1",
                     "http2",
@@ -960,7 +960,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "quinn": crate.spec(
                 git = "https://github.com/quinn-rs/quinn",
                 rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
-                features = ["ring"],
+                default_features = False,
+                features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
                 git = "https://github.com/quinn-rs/quinn",
@@ -1085,7 +1086,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustls": crate.spec(
                 default_features = False,
-                version = "^0.23.10",
+                version = "^0.23.11",
                 features = [
                     "ring",
                 ],
