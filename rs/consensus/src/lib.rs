@@ -5,7 +5,7 @@
 //! algorithm, and a component responsible for certifying state hashes produced
 //! by the upper layers of the internet computer.
 //! Just some change to trigger a rebuild and rerun of most tests.
-//! Another trigger for GitHub.
+//! Another trigger for GitLab.
 
 pub mod certification;
 pub mod consensus;
