@@ -23,7 +23,6 @@ use ic_cketh_test_utils::{
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ERC20_HELPER_CONTRACT_ADDRESS,
     ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
@@ -1539,7 +1538,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1554,7 +1553,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1566,7 +1565,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1577,7 +1576,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1617,7 +1616,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1629,7 +1628,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1675,7 +1674,7 @@ fn should_not_scrape_when_no_erc20_token() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1687,7 +1686,7 @@ fn should_not_scrape_when_no_erc20_token() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC]
+            "topics": [ckerc20.received_erc20_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1744,19 +1743,19 @@ fn should_skip_single_block_containing_too_many_events() {
             "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
             "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&ckerc20);
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in ckerc20.as_ref().all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
                 "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+                "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -1764,13 +1763,13 @@ fn should_skip_single_block_containing_too_many_events() {
             .expect_rpc_calls(&ckerc20);
     }
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in ckerc20.as_ref().all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
                 "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+                "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -1778,13 +1777,13 @@ fn should_skip_single_block_containing_too_many_events() {
             .expect_rpc_calls(&ckerc20);
     }
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in ckerc20.as_ref().all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+                "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -1797,7 +1796,7 @@ fn should_skip_single_block_containing_too_many_events() {
             "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
             "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
         .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())

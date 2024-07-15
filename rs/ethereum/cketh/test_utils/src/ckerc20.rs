@@ -10,7 +10,7 @@ use crate::{
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS,
     ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    RECEIVED_ERC20_EVENT_TOPIC,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -366,6 +366,22 @@ impl CkErc20Setup {
             .map(|erc20_address| FixedSizeData(erc20_address.into()).to_string())
             .collect()
     }
+
+    pub fn received_erc20_event_topic(&self) -> serde_json::Value {
+        if self.as_ref().evm_rpc_id.is_none() {
+            serde_json::Value::String(RECEIVED_ERC20_EVENT_TOPIC.to_string())
+        } else {
+            // The EVM-RPC canister models topics as `opt vec vec text`, see
+            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/candid/evm_rpc.did#L69.
+            // This means that a simple topic such as `["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]`
+            // must actually be represented as `[["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]].
+            // The JSON-RPC providers seem to be able to handle both formats.
+            serde_json::Value::Array(vec![serde_json::Value::String(
+                RECEIVED_ERC20_EVENT_TOPIC.to_string(),
+            )])
+        }
+    }
+
 }
 
 pub struct CkErc20DepositParams {
@@ -555,7 +571,7 @@ impl CkErc20DepositFlow {
                 "fromBlock": first_from_block,
                 "toBlock": first_to_block,
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [self.as_ref().received_eth_event_topic()]
             }]))
             .respond_for_all_with(eth_logs)
             .build()
@@ -566,7 +582,7 @@ impl CkErc20DepositFlow {
                 "fromBlock": first_from_block,
                 "toBlock": first_to_block,
                 "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+                "topics": [self.setup.received_erc20_event_topic(), erc20_topics.clone()]
             }]))
             .respond_for_all_with(vec![self.params.erc20_log()])
             .build()
