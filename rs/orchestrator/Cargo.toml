@@ -13,6 +13,11 @@ clap = { version = "3.2.25", features = ["derive"] }
 exec = "0.3.1"
 get_if_addrs = "0.5.3"
 hex = { workspace = true }
+# hyper = { version = "^0.14.27", features = ["full"] }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { version = "^0.1.3", features = ["full"] }
+hyper-rustls = { version = "^0.27.1" }
 ic-async-utils = { path = "../async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
@@ -20,6 +25,7 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
+ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
@@ -57,6 +63,7 @@ url = "2.1.1"
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
+ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }

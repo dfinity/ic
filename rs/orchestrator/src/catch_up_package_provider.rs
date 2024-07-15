@@ -35,7 +35,11 @@ use crate::{
     registry_helper::RegistryHelper,
     utils::http_endpoint_to_url,
 };
-use ic_canister_client::{Agent, HttpClient, Sender};
+use http_body_util::{BodyExt, Full};
+use hyper::{body::Bytes, Method, Request};
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
@@ -48,8 +52,8 @@ use ic_types::{
     crypto::*,
     NodeId, RegistryVersion, SubnetId,
 };
+use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
-use url::Url;
 
 /// Fetches catch-up packages from peers and local storage.
 ///
@@ -59,8 +63,8 @@ use url::Url;
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
-    client: HttpClient,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+    crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
 }
@@ -71,6 +75,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {
@@ -78,8 +83,8 @@ impl CatchUpPackageProvider {
             node_id,
             registry,
             cup_dir,
-            client: HttpClient::new(),
             crypto,
+            crypto_tls_config,
             logger,
         }
     }
@@ -139,9 +144,9 @@ impl CatchUpPackageProvider {
             .map(CatchUpPackageParam::try_from)
             .and_then(Result::ok);
 
-        for (_, node_record) in peers.iter() {
+        for (node_id, node_record) in peers.iter() {
             if let Some((proto, cup)) = self
-                .fetch_and_verify_catch_up_package(node_record, param, subnet_id)
+                .fetch_and_verify_catch_up_package(node_id, node_record, param, subnet_id)
                 .await
             {
                 // Note: None is < Some(_)
@@ -162,6 +167,7 @@ impl CatchUpPackageProvider {
     // Also checks the signature of the downloaded catch up package.
     async fn fetch_and_verify_catch_up_package(
         &self,
+        node_id: &NodeId,
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
@@ -173,14 +179,16 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let url = http_endpoint_to_url(&http, &self.logger)?;
+        let uri = http_endpoint_to_url(&http, &self.logger)?.to_string();
 
-        let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
+        let protobuf = self
+            .fetch_catch_up_package(node_id, uri.clone(), param)
+            .await?;
         let cup = CatchUpPackage::try_from(&protobuf)
             .map_err(|e| {
                 warn!(
                     self.logger,
-                    "Failed to read CUP from peer at url {}: {:?}", url, e
+                    "Failed to read CUP from peer at url {}: {:?}", uri, e
                 )
             })
             .ok()?;
@@ -195,7 +203,7 @@ impl CatchUpPackageProvider {
             .map_err(|e| {
                 warn!(
                     self.logger,
-                    "Failed to verify CUP signature at: {:?} with: {:?}", url, e
+                    "Failed to verify CUP signature at: {:?} with: {:?}", uri, e
                 )
             })
             .ok()?;
@@ -209,14 +217,79 @@ impl CatchUpPackageProvider {
     // caller.
     async fn fetch_catch_up_package(
         &self,
-        url: Url,
+        node_id: &NodeId,
+        url: String,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
-        Agent::new_with_client(self.client.clone(), url, Sender::Anonymous)
-            .query_cup_endpoint(param)
+        let body = Bytes::from(
+            param
+                .and_then(|param| serde_cbor::to_vec(&param).ok())
+                .unwrap_or_default(),
+        );
+
+        let client_config = self
+            .crypto_tls_config
+            .client_config(*node_id, self.registry.get_latest_version())
+            .map_err(|e| warn!(self.logger, "Failed to create tls client config: {:?}", e))
+            .ok()?;
+
+        let https = HttpsConnectorBuilder::new()
+            .with_tls_config(client_config)
+            .https_only()
+            .enable_all_versions()
+            .build();
+
+        let client = Client::builder(TokioExecutor::new())
+            .http2_only(true)
+            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
+            .pool_max_idle_per_host(1)
+            .build::<_, Full<Bytes>>(https);
+
+        let req = tokio::time::timeout(
+            tokio::time::Duration::from_secs(10),
+            client.request(
+                Request::builder()
+                    .method(Method::POST)
+                    .header("content-type", "application/cbor")
+                    .uri(url)
+                    .body(Full::from(body))
+                    .map_err(|e| warn!(self.logger, "Failed to create request: {:?}", e))
+                    .ok()?,
+            ),
+        );
+
+        let res = req
             .await
-            .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
+            .map_err(|e| warn!(self.logger, "Querying CUP endpoint timed out: {:?}", e))
             .ok()?
+            .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
+            .ok()?;
+
+        let bytes = res
+            .into_body()
+            .collect()
+            .await
+            .map_err(|e| {
+                warn!(
+                    self.logger,
+                    "Failed to convert the response body to bytes: {:?}", e
+                )
+            })
+            .ok()?
+            .to_bytes();
+
+        if bytes.is_empty() {
+            None
+        } else {
+            pb::CatchUpPackage::decode(&bytes[..])
+                .map_err(|e| {
+                    warn!(
+                        self.logger,
+                        "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}", bytes, e
+                    )
+                })
+                .ok()
+        }
     }
 
     /// Persist the given CUP to disk.
