@@ -134,6 +134,7 @@ jobs:
     timeout-minutes: 120
     runs-on:
       labels: macOS
+    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
       - name: Filter Relevant Files
