@@ -70,12 +70,12 @@ async fn test_request_clone() -> Result<(), Error> {
     req.headers_mut().insert("baz", "bax".try_into().unwrap());
 
     let (parts_in, body_in) = req.into_parts();
-    let body_in = body::to_bytes(body_in).await.unwrap().to_vec();
+    let body_in = body::to_bytes(body_in).await.unwrap();
 
     let req = request_clone(&parts_in, &body_in);
 
     let (parts_out, body_out) = req.into_parts();
-    let body_out = body::to_bytes(body_out).await.unwrap().to_vec();
+    let body_out = body::to_bytes(body_out).await.unwrap();
 
     assert_eq!(body_in, body_out);
 
@@ -155,7 +155,7 @@ async fn test_retry() -> Result<(), Error> {
     // Check non-retriable ErrorCause
     {
         state.write().unwrap().failures = 2;
-        state.write().unwrap().error_cause = Some(ErrorCause::ReplicaTimeout);
+        state.write().unwrap().error_cause = Some(ErrorCause::PayloadTooLarge(123));
     }
 
     let req = gen_request(RequestType::Query);
