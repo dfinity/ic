@@ -2983,7 +2983,8 @@ dependencies = [
  "hyper-socks2",
  "hyper-util",
  "hyperlocal-next",
- "ic-agent",
+ "ic-agent 0.35.0",
+ "ic-agent 0.36.0",
  "ic-btc-interface",
  "ic-btc-test-utils",
  "ic-btc-validation",
@@ -4773,7 +4774,7 @@ dependencies = [
  "hyper-rustls 0.26.0",
  "hyper-util",
  "ic-certification",
- "ic-transport-types",
+ "ic-transport-types 0.35.0",
  "ic-verify-bls-signature",
  "k256",
  "leb128",
@@ -4796,6 +4797,46 @@ dependencies = [
  "time",
  "tokio",
  "tower",
+ "url",
+]
+
+[[package]]
+name = "ic-agent"
+version = "0.36.0"
+source = "git+https://github.com/dsharifi/agent-rs?rev=3b6c0e994d94be9e38484f47b8560d613b746e46#3b6c0e994d94be9e38484f47b8560d613b746e46"
+dependencies = [
+ "async-lock 3.3.0",
+ "backoff",
+ "cached 0.46.1",
+ "candid",
+ "ed25519-consensus",
+ "futures-util",
+ "hex",
+ "http 1.1.0",
+ "http-body 1.0.0",
+ "ic-certification",
+ "ic-transport-types 0.36.0",
+ "ic-verify-bls-signature",
+ "k256",
+ "leb128",
+ "p256",
+ "pem 2.0.1",
+ "pkcs8",
+ "rand 0.8.5",
+ "rangemap",
+ "reqwest 0.12.4",
+ "ring 0.17.7",
+ "rustls-webpki 0.101.7",
+ "sec1",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "serde_repr",
+ "sha2 0.10.8",
+ "simple_asn1",
+ "thiserror",
+ "time",
+ "tokio",
  "url",
 ]
 
@@ -5068,6 +5109,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-transport-types"
+version = "0.36.0"
+source = "git+https://github.com/dsharifi/agent-rs?rev=3b6c0e994d94be9e38484f47b8560d613b746e46#3b6c0e994d94be9e38484f47b8560d613b746e46"
+dependencies = [
+ "candid",
+ "hex",
+ "ic-certification",
+ "leb128",
+ "serde",
+ "serde_bytes",
+ "serde_repr",
+ "serde_with 3.8.1",
+ "sha2 0.10.8",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-utils"
 version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5076,7 +5134,7 @@ dependencies = [
  "async-trait",
  "candid",
  "futures-util",
- "ic-agent",
+ "ic-agent 0.35.0",
  "once_cell",
  "semver",
  "serde",
@@ -9685,6 +9743,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_with"
+version = "3.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ad483d2ab0149d5a5ebcd9972a3852711e0153d863bf5a5d0391d28883c4a20"
+dependencies = [
+ "base64 0.22.0",
+ "chrono",
+ "hex",
+ "indexmap 1.9.3",
+ "indexmap 2.2.6",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_with_macros 3.8.1",
+ "time",
+]
+
+[[package]]
 name = "serde_with_macros"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9701,6 +9777,18 @@ name = "serde_with_macros"
 version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
+dependencies = [
+ "darling 0.20.3",
+ "proc-macro2 1.0.85",
+ "quote 1.0.35",
+ "syn 2.0.66",
+]
+
+[[package]]
+name = "serde_with_macros"
+version = "3.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65569b702f41443e8bc8bbb1c5779bd0450bbe723b56198980e80ec45780bce2"
 dependencies = [
  "darling 0.20.3",
  "proc-macro2 1.0.85",

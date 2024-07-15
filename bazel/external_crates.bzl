@@ -18,6 +18,8 @@ def sanitize_external_crates(sanitizers_enabled):
         "ic-stable-structures": FUZZING_ANNOTATION,
     }
 
+IC_AGENT_CALL_V3_REV = "3b6c0e994d94be9e38484f47b8560d613b746e46"
+
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
@@ -554,6 +556,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "reqwest",
                     "pem",
                 ],
+            ),
+            "ic-agent-call-v3": crate.spec(
+                package = "ic-agent",
+                git = "https://github.com/dsharifi/agent-rs",
+                rev = IC_AGENT_CALL_V3_REV,
+                features = ["sync_call"],
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.0",
