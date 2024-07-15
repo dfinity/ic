@@ -509,7 +509,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper": crate.spec(
-                version = "^1.4.0",
+                version = "^1.4.1",
                 features = [
                     "full",
                 ],
@@ -522,7 +522,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.3",
+                version = "^0.1.6",
                 features = [
                     "full",
                 ],
@@ -796,11 +796,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "nix": crate.spec(
                 version = "^0.24.3",
             ),
-            "num": crate.spec(
-                version = "^0.4.0",
-            ),
             "num-bigint": crate.spec(
-                version = "^0.4.0",
+                version = "^0.4.6",
             ),
             "num-bigint-dig": crate.spec(
                 version = "^0.8",
@@ -1164,7 +1161,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.10.8",
             ),
             "sha3": crate.spec(
-                version = "^0.10",
+                version = "^0.10.8",
             ),
             "signal-hook": crate.spec(
                 version = "^0.3.6",
@@ -1270,7 +1267,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.57",
+                version = "^1.0.62",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",

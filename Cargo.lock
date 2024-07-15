@@ -757,7 +757,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "itoa",
  "matchit",
@@ -870,7 +870,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "pin-project-lite",
  "rustls 0.21.12",
@@ -1238,7 +1238,6 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
- "block-padding",
  "generic-array",
 ]
 
@@ -1250,12 +1249,6 @@ checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
 ]
-
-[[package]]
-name = "block-padding"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "bls12_381"
@@ -1328,7 +1321,7 @@ dependencies = [
  "futures",
  "glob",
  "humantime",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "ic-agent",
  "ic-utils 0.35.0",
  "indoc",
@@ -1447,7 +1440,7 @@ dependencies = [
  "base64 0.13.1",
  "bincode 1.3.3",
  "build-info-common",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "proc-macro-error",
  "proc-macro-hack",
@@ -1651,7 +1644,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "once_cell",
  "pin-project-lite",
  "regex",
@@ -1697,7 +1690,7 @@ dependencies = [
  "hex",
  "ic_principal",
  "leb128",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "paste 1.0.14",
  "pretty 0.12.1",
@@ -1733,7 +1726,7 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "logos",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "pretty 0.12.1",
  "thiserror",
 ]
@@ -2886,7 +2879,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_cbor",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "yansi",
 ]
 
@@ -3107,7 +3100,7 @@ dependencies = [
  "asn1-rs",
  "displaydoc",
  "nom",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "rusticata-macros",
 ]
@@ -3591,7 +3584,7 @@ version = "3.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a62bb1df8b45ecb7ffa78dca1c17a438fb193eb083db0b1b494d2a61bcb5096a"
 dependencies = [
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "proc-macro2 1.0.75",
  "quote 1.0.35",
@@ -3697,7 +3690,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "sha3 0.10.8",
+ "sha3",
  "thiserror",
  "uint",
 ]
@@ -4795,7 +4788,7 @@ version = "0.9.0"
 dependencies = [
  "axum 0.7.5",
  "clap 4.4.6",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "rustls 0.23.10",
  "rustls-pemfile 2.1.2",
@@ -4874,9 +4867,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4fe55fb7a772d59a5ff1dfbff4fe0258d19b89fec4b233e75d35d5d2316badc"
+checksum = "50dfd22e0e76d0f662d429a5f80fcaf3855009297eab6a0a9f8543834744ba05"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -4917,7 +4910,7 @@ checksum = "a0bea761b46ae2b24eb4aef630d8d1c398157b6fc29e6350ecf090a0b70c952c"
 dependencies = [
  "futures-util",
  "http 1.1.0",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "log",
  "rustls 0.22.2",
@@ -4937,7 +4930,7 @@ checksum = "908bb38696d7a037a01ebcc68a00634112ac2bbf8ca74e30a2c3d2f4f021302b"
 dependencies = [
  "futures-util",
  "http 1.1.0",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "rustls 0.23.10",
  "rustls-native-certs 0.7.0",
@@ -4989,16 +4982,16 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.3"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca38ef113da30126bbff9cd1705f9273e15d45498615d138b0c20279ac7a76aa"
+checksum = "3ab92f4f49ee4fb4f997c784b7a2e0fa70050211e0b6a287f898c3c9785ca956"
 dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
  "http 1.1.0",
  "http-body 1.0.0",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "pin-project-lite",
  "socket2 0.5.7",
  "tokio",
@@ -5015,7 +5008,7 @@ checksum = "acf569d43fa9848e510358c07b80f4adf34084ddc28c6a4a651ee8474c070dcc"
 dependencies = [
  "hex",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "pin-project-lite",
  "tokio",
@@ -5177,7 +5170,7 @@ dependencies = [
  "http-body 1.0.0",
  "http-body-to-bytes",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-rustls 0.26.0",
  "hyper-util",
  "ic-certification 2.5.0",
@@ -5335,7 +5328,7 @@ dependencies = [
  "dashmap",
  "futures",
  "humantime",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "ic-agent",
  "indoc",
  "mockall",
@@ -6221,7 +6214,7 @@ dependencies = [
  "maplit",
  "minicbor",
  "minicbor-derive",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "phantom_newtype",
  "proptest",
@@ -6549,7 +6542,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "k256",
  "lazy_static",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "pem 1.1.1",
  "rand 0.8.5",
  "simple_asn1",
@@ -6565,7 +6558,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
  "lazy_static",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "p256",
  "pem 1.1.1",
  "rand 0.8.5",
@@ -6724,7 +6717,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-protobuf",
  "ic-types",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "proptest",
  "proptest-derive",
  "rand 0.8.5",
@@ -6782,7 +6775,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
  "ic-types",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "pkcs8",
  "rsa",
@@ -7234,7 +7227,7 @@ name = "ic-crypto-sha3"
 version = "0.9.0"
 dependencies = [
  "hex",
- "sha3 0.10.8",
+ "sha3",
 ]
 
 [[package]]
@@ -8002,7 +7995,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "ic-async-utils",
  "ic-backtrace",
@@ -8262,7 +8255,7 @@ dependencies = [
  "icrc-ledger-types",
  "indicatif",
  "lazy_static",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "once_cell",
  "pocket-ic",
@@ -8306,7 +8299,7 @@ dependencies = [
  "ic-icrc-rosetta-runner",
  "ic-rosetta-api",
  "icrc-ledger-types",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "pocket-ic",
  "reqwest 0.12.4",
  "rosetta-core",
@@ -8345,7 +8338,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "icrc-ledger-types",
  "leb128",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "proptest",
  "rand 0.8.5",
@@ -8618,7 +8611,7 @@ dependencies = [
  "hex",
  "ic-ledger-core",
  "ic-stable-structures",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "proptest",
  "serde",
@@ -9474,7 +9467,7 @@ dependencies = [
  "prost",
  "serde",
  "serde_bytes",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "tempfile",
 ]
 
@@ -9633,7 +9626,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "serde",
- "sha3 0.9.1",
+ "sha3",
  "tempfile",
 ]
 
@@ -10822,7 +10815,7 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "lazy_static",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "on_wire",
  "prometheus",
  "proptest",
@@ -12526,7 +12519,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.10.8",
- "sha3 0.10.8",
+ "sha3",
  "subtle",
  "wasm-bindgen",
  "zeroize",
@@ -12895,7 +12888,7 @@ dependencies = [
  "crc32fast",
  "hex",
  "itertools 0.12.0",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "proptest",
  "serde",
@@ -12945,7 +12938,7 @@ dependencies = [
  "http-body 1.0.0",
  "http-body-util",
  "httptest",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-rustls 0.27.1",
  "hyper-util",
  "hyperlocal-next",
@@ -14688,11 +14681,10 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
-version = "0.4.3"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f93ab6289c7b344a8a9f60f88d80aa20032336fe78da341afc91c8a2341fc75f"
+checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
 dependencies = [
- "autocfg 1.1.0",
  "num-integer",
  "num-traits",
  "serde",
@@ -14734,11 +14726,10 @@ dependencies = [
 
 [[package]]
 name = "num-integer"
-version = "0.1.45"
+version = "0.1.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
+checksum = "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
 dependencies = [
- "autocfg 1.1.0",
  "num-traits",
 ]
 
@@ -14767,9 +14758,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.17"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg 1.1.0",
  "libm",
@@ -15781,7 +15772,7 @@ dependencies = [
  "flate2",
  "hex",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-util",
  "ic-agent",
  "ic-boundary",
@@ -16930,7 +16921,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-rustls 0.26.0",
  "hyper-util",
  "ipnet",
@@ -17132,7 +17123,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-types",
  "icrc-ledger-types",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "proptest",
  "serde",
  "serde_bytes",
@@ -17809,7 +17800,7 @@ dependencies = [
  "core-foundation",
  "core-foundation-sys",
  "libc",
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "security-framework-sys",
 ]
 
@@ -18181,18 +18172,6 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f81199417d4e5de3f04b1e871023acea7389672c4135918f05aa9cbf2f2fa809"
-dependencies = [
- "block-buffer 0.9.0",
- "digest 0.9.0",
- "keccak",
- "opaque-debug",
-]
-
-[[package]]
-name = "sha3"
 version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
@@ -18274,7 +18253,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adc4e5204eb1910f40f9cfa375f6f05b68c3abac4b6fd879c8ff5e7ae8a0a085"
 dependencies = [
- "num-bigint 0.4.3",
+ "num-bigint 0.4.6",
  "num-traits",
  "thiserror",
  "time",
@@ -19284,18 +19263,18 @@ checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
 
 [[package]]
 name = "thiserror"
-version = "1.0.57"
+version = "1.0.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e45bcbe8ed29775f228095caf2cd67af7a4ccf756ebff23a306bf3e8b47b24b"
+checksum = "f2675633b1499176c2dff06b0856a27976a8f9d436737b4cf4f312d4d91d8bbb"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.57"
+version = "1.0.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a953cb265bef375dae3de6663da4d3804eee9682ea80d8e2542529b73c531c81"
+checksum = "d20468752b09f49e909e55a5d338caa8bedf615594e9d80bc4c565d30faf798c"
 dependencies = [
  "proc-macro2 1.0.75",
  "quote 1.0.35",

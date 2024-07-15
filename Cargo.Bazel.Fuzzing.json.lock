@@ -1,5 +1,5 @@
 {
-  "checksum": "1dfe000977bed3c4144af12c400c27dbe62bf6883a7bd4764d8c26c09733e54b",
+  "checksum": "db14eebadfdedd4d1e89e18a2fd80bae6995ebf1f99672b5a99115e454b2eda1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1641,7 +1641,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -2627,7 +2627,7 @@
               "alias": "dep_humansize"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits",
               "alias": "dep_num_traits"
             },
@@ -2892,7 +2892,7 @@
               "target": "nom"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -2900,7 +2900,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -3623,7 +3623,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -4329,11 +4329,11 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.3",
+              "id": "hyper-util 0.1.6",
               "target": "hyper_util"
             },
             {
@@ -5111,11 +5111,11 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.3",
+              "id": "hyper-util 0.1.6",
               "target": "hyper_util"
             },
             {
@@ -8492,11 +8492,11 @@
               "target": "build_info_common"
             },
             {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -9275,7 +9275,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -9352,7 +9352,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -9420,7 +9420,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -9905,11 +9905,11 @@
               "target": "leb128"
             },
             {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -9925,7 +9925,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -10117,7 +10117,7 @@
               "target": "logos"
             },
             {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
@@ -10125,7 +10125,7 @@
               "target": "pretty"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -10903,7 +10903,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -11965,7 +11965,7 @@
               "target": "serde_with"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -14084,7 +14084,7 @@
               "target": "itertools"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -16443,11 +16443,11 @@
               "target": "nom"
             },
             {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -17429,7 +17429,7 @@
               "alias": "hyper_0_14_27"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
@@ -17446,7 +17446,7 @@
               "target": "hyper_socks2"
             },
             {
-              "id": "hyper-util 0.1.3",
+              "id": "hyper-util 0.1.6",
               "target": "hyper_util"
             },
             {
@@ -17702,11 +17702,7 @@
               "target": "nix"
             },
             {
-              "id": "num 0.4.1",
-              "target": "num"
-            },
-            {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
@@ -17718,7 +17714,7 @@
               "target": "num_rational"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -18150,7 +18146,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -19278,7 +19274,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -19950,11 +19946,11 @@
         "deps": {
           "common": [
             {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -20648,7 +20644,7 @@
               "target": "sha3"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -20937,7 +20933,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -22139,7 +22135,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -22457,7 +22453,7 @@
               "target": "nonempty"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -24740,7 +24736,7 @@
               "target": "byteorder"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -26609,14 +26605,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper 1.4.0": {
+    "hyper 1.4.1": {
       "name": "hyper",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "package_url": "https://github.com/hyperium/hyper",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper/1.4.0/download",
-          "sha256": "c4fe55fb7a772d59a5ff1dfbff4fe0258d19b89fec4b233e75d35d5d2316badc"
+          "url": "https://static.crates.io/crates/hyper/1.4.1/download",
+          "sha256": "50dfd22e0e76d0f662d429a5f80fcaf3855009297eab6a0a9f8543834744ba05"
         }
       },
       "targets": [
@@ -26707,7 +26703,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.4.0"
+        "version": "1.4.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -26862,11 +26858,11 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.3",
+              "id": "hyper-util 0.1.6",
               "target": "hyper_util"
             },
             {
@@ -26967,11 +26963,11 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.3",
+              "id": "hyper-util 0.1.6",
               "target": "hyper_util"
             },
             {
@@ -27083,7 +27079,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -27163,14 +27159,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hyper-util 0.1.3": {
+    "hyper-util 0.1.6": {
       "name": "hyper-util",
-      "version": "0.1.3",
+      "version": "0.1.6",
       "package_url": "https://github.com/hyperium/hyper-util",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-util/0.1.3/download",
-          "sha256": "ca38ef113da30126bbff9cd1705f9273e15d45498615d138b0c20279ac7a76aa"
+          "url": "https://static.crates.io/crates/hyper-util/0.1.6/download",
+          "sha256": "3ab92f4f49ee4fb4f997c784b7a2e0fa70050211e0b6a287f898c3c9785ca956"
         }
       },
       "targets": [
@@ -27202,6 +27198,7 @@
             "http2",
             "server",
             "server-auto",
+            "server-graceful",
             "service",
             "tokio"
           ],
@@ -27230,7 +27227,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
@@ -27261,7 +27258,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.3"
+        "version": "0.1.6"
       },
       "license": "MIT",
       "license_ids": [
@@ -27319,11 +27316,11 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.3",
+              "id": "hyper-util 0.1.6",
               "target": "hyper_util"
             },
             {
@@ -27585,7 +27582,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
@@ -27661,7 +27658,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -27688,7 +27685,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.3",
+                "id": "hyper-util 0.1.6",
                 "target": "hyper_util"
               },
               {
@@ -27992,7 +27989,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -28055,7 +28052,7 @@
               "target": "nom"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -28681,7 +28678,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -28870,7 +28867,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -29066,7 +29063,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -29273,7 +29270,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -29371,7 +29368,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -29614,7 +29611,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -29952,7 +29949,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -30014,7 +30011,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -31253,7 +31250,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -31611,7 +31608,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -32108,7 +32105,7 @@
               "target": "log"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -32387,7 +32384,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -32511,7 +32508,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -33145,7 +33142,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -33262,7 +33259,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -33420,7 +33417,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -35195,38 +35192,30 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
@@ -35239,14 +35228,10 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ]
@@ -35294,7 +35279,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -35406,7 +35391,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -36975,7 +36960,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.0",
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
@@ -36983,7 +36968,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.3",
+              "id": "hyper-util 0.1.6",
               "target": "hyper_util"
             },
             {
@@ -37907,7 +37892,7 @@
               "target": "tagptr"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -38376,7 +38361,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -38911,82 +38896,6 @@
       ],
       "license_file": null
     },
-    "num 0.4.1": {
-      "name": "num",
-      "version": "0.4.1",
-      "package_url": "https://github.com/rust-num/num",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num/0.4.1/download",
-          "sha256": "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "num-bigint",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-bigint 0.4.3",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-complex 0.4.5",
-              "target": "num_complex"
-            },
-            {
-              "id": "num-integer 0.1.45",
-              "target": "num_integer"
-            },
-            {
-              "id": "num-iter 0.1.43",
-              "target": "num_iter"
-            },
-            {
-              "id": "num-rational 0.4.1",
-              "target": "num_rational"
-            },
-            {
-              "id": "num-traits 0.2.17",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "num-bigint 0.2.6": {
       "name": "num-bigint",
       "version": "0.2.6",
@@ -39041,11 +38950,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-integer 0.1.45",
+              "id": "num-integer 0.1.46",
               "target": "num_integer"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -39075,14 +38984,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-bigint 0.4.3": {
+    "num-bigint 0.4.6": {
       "name": "num-bigint",
-      "version": "0.4.3",
+      "version": "0.4.6",
       "package_url": "https://github.com/rust-num/num-bigint",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/num-bigint/0.4.3/download",
-          "sha256": "f93ab6289c7b344a8a9f60f88d80aa20032336fe78da341afc91c8a2341fc75f"
+          "url": "https://static.crates.io/crates/num-bigint/0.4.6/download",
+          "sha256": "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
         }
       },
       "targets": [
@@ -39090,18 +38999,6 @@
           "Library": {
             "crate_name": "num_bigint",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": false,
               "include": [
@@ -39127,15 +39024,11 @@
         "deps": {
           "common": [
             {
-              "id": "num-bigint 0.4.3",
-              "target": "build_script_build"
-            },
-            {
-              "id": "num-integer 0.1.45",
+              "id": "num-integer 0.1.46",
               "target": "num_integer"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -39145,22 +39038,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.4.3"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
+        "edition": "2021",
+        "version": "0.4.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -39242,7 +39121,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-integer 0.1.45",
+              "id": "num-integer 0.1.46",
               "target": "num_integer"
             },
             {
@@ -39250,7 +39129,7 @@
               "target": "num_iter"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -39281,60 +39160,6 @@
         ]
       },
       "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "num-complex 0.4.5": {
-      "name": "num-complex",
-      "version": "0.4.5",
-      "package_url": "https://github.com/rust-num/num-complex",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num-complex/0.4.5/download",
-          "sha256": "23c6602fda94a57c990fe0df199a035d83576b496aa29f4e634a8ac6004e68a6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_complex",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_complex",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.17",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.5"
-      },
-      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -39432,14 +39257,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-integer 0.1.45": {
+    "num-integer 0.1.46": {
       "name": "num-integer",
-      "version": "0.1.45",
+      "version": "0.1.46",
       "package_url": "https://github.com/rust-num/num-integer",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/num-integer/0.1.45/download",
-          "sha256": "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
+          "url": "https://static.crates.io/crates/num-integer/0.1.46/download",
+          "sha256": "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
         }
       },
       "targets": [
@@ -39447,18 +39272,6 @@
           "Library": {
             "crate_name": "num_integer",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": false,
               "include": [
@@ -39483,32 +39296,14 @@
         "deps": {
           "common": [
             {
-              "id": "num-integer 0.1.45",
-              "target": "build_script_build"
-            },
-            {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.1.45"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
+        "edition": "2018",
+        "version": "0.1.46"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -39558,17 +39353,10 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "i128",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
-              "id": "num-integer 0.1.45",
+              "id": "num-integer 0.1.46",
               "target": "num_integer"
             },
             {
@@ -39576,7 +39364,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -39664,7 +39452,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-integer 0.1.45",
+              "id": "num-integer 0.1.46",
               "target": "num_integer"
             },
             {
@@ -39672,7 +39460,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -39702,108 +39490,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-rational 0.4.1": {
-      "name": "num-rational",
-      "version": "0.4.1",
-      "package_url": "https://github.com/rust-num/num-rational",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num-rational/0.4.1/download",
-          "sha256": "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_rational",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_rational",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "num-bigint",
-            "num-bigint-std",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-bigint 0.4.3",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-integer 0.1.45",
-              "target": "num_integer"
-            },
-            {
-              "id": "num-rational 0.4.1",
-              "target": "build_script_build"
-            },
-            {
-              "id": "num-traits 0.2.17",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "num-traits 0.2.17": {
+    "num-traits 0.2.19": {
       "name": "num-traits",
-      "version": "0.2.17",
+      "version": "0.2.19",
       "package_url": "https://github.com/rust-num/num-traits",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/num-traits/0.2.17/download",
-          "sha256": "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
+          "url": "https://static.crates.io/crates/num-traits/0.2.19/download",
+          "sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
         }
       },
       "targets": [
@@ -39853,14 +39547,14 @@
               "target": "libm"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.2.17"
+        "edition": "2021",
+        "version": "0.2.19"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -40689,7 +40383,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -41007,7 +40701,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -41090,7 +40784,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -41180,7 +40874,7 @@
               "target": "prost"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -41583,7 +41277,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -41666,7 +41360,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -41767,7 +41461,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -41876,7 +41570,7 @@
               "target": "regex"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -41988,7 +41682,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -42107,7 +41801,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -42178,7 +41872,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -42232,7 +41926,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -42286,7 +41980,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -43794,7 +43488,7 @@
               "target": "memchr"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -44807,7 +44501,7 @@
               "target": "socket2"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -45028,7 +44722,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -45594,7 +45288,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -47218,7 +46912,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -47366,7 +47060,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -48494,7 +48188,7 @@
               "target": "rustls"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -48590,7 +48284,7 @@
               "target": "slab"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -49589,7 +49283,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -50269,7 +49963,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -50718,7 +50412,7 @@
               "target": "syscall"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -51739,7 +51433,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper 1.4.0",
+                "id": "hyper 1.4.1",
                 "target": "hyper"
               },
               {
@@ -51747,7 +51441,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.3",
+                "id": "hyper-util 0.1.6",
                 "target": "hyper_util"
               },
               {
@@ -52814,7 +52508,7 @@
               "alias": "num_bigint"
             },
             {
-              "id": "num-integer 0.1.45",
+              "id": "num-integer 0.1.46",
               "target": "num_integer"
             },
             {
@@ -52822,7 +52516,7 @@
               "target": "num_iter"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -53408,7 +53102,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -56598,7 +56292,7 @@
               "target": "libc"
             },
             {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
@@ -57541,7 +57235,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -57606,7 +57300,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             }
           ],
@@ -59153,15 +58847,15 @@
         "deps": {
           "common": [
             {
-              "id": "num-bigint 0.4.3",
+              "id": "num-bigint 0.4.6",
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -59284,7 +58978,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.17",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -62789,7 +62483,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -63544,14 +63238,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "thiserror 1.0.57": {
+    "thiserror 1.0.62": {
       "name": "thiserror",
-      "version": "1.0.57",
+      "version": "1.0.62",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/1.0.57/download",
-          "sha256": "1e45bcbe8ed29775f228095caf2cd67af7a4ccf756ebff23a306bf3e8b47b24b"
+          "url": "https://static.crates.io/crates/thiserror/1.0.62/download",
+          "sha256": "f2675633b1499176c2dff06b0856a27976a8f9d436737b4cf4f312d4d91d8bbb"
         }
       },
       "targets": [
@@ -63588,7 +63282,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "build_script_build"
             }
           ],
@@ -63598,13 +63292,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 1.0.57",
+              "id": "thiserror-impl 1.0.62",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.57"
+        "version": "1.0.62"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -63618,14 +63312,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 1.0.57": {
+    "thiserror-impl 1.0.62": {
       "name": "thiserror-impl",
-      "version": "1.0.57",
+      "version": "1.0.62",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/1.0.57/download",
-          "sha256": "a953cb265bef375dae3de6663da4d3804eee9682ea80d8e2542529b73c531c81"
+          "url": "https://static.crates.io/crates/thiserror-impl/1.0.62/download",
+          "sha256": "d20468752b09f49e909e55a5d338caa8bedf615594e9d80bc4c565d30faf798c"
         }
       },
       "targets": [
@@ -63665,7 +63359,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.57"
+        "version": "1.0.62"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -64985,7 +64679,7 @@
               "target": "futures_util"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -66309,7 +66003,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -66451,7 +66145,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -67334,7 +67028,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -67450,7 +67144,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -67598,7 +67292,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -71731,7 +71425,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -75674,7 +75368,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.57",
+              "id": "thiserror 1.0.62",
               "target": "thiserror"
             },
             {
@@ -77733,11 +77427,11 @@
     "httptest 0.15.4",
     "humantime 2.1.0",
     "hyper 0.14.27",
-    "hyper 1.4.0",
+    "hyper 1.4.1",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.27.1",
     "hyper-socks2 0.8.0",
-    "hyper-util 0.1.3",
+    "hyper-util 0.1.6",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.35.0",
     "ic-btc-interface 0.2.0",
@@ -77804,11 +77498,10 @@
     "more-asserts 0.3.1",
     "nftables 0.4.0",
     "nix 0.24.3",
-    "num 0.4.1",
-    "num-bigint 0.4.3",
+    "num-bigint 0.4.6",
     "num-bigint-dig 0.8.4",
     "num-rational 0.2.4",
-    "num-traits 0.2.17",
+    "num-traits 0.2.19",
     "num_cpus 1.16.0",
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
@@ -77921,7 +77614,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 1.0.57",
+    "thiserror 1.0.62",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "time 0.3.36",
