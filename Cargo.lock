@@ -15191,7 +15191,7 @@ dependencies = [
  "get_if_addrs",
  "hex",
  "http-body-util",
- "hyper 1.4.0",
+ "hyper 1.4.1",
  "hyper-rustls 0.27.1",
  "hyper-util",
  "ic-async-utils",
