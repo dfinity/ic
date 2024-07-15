@@ -1597,6 +1597,13 @@ impl Blocks {
         }
         Ok(transactions)
     }
+
+    pub fn contains_block(&self, block_idx: &BlockIndex) -> Result<bool, BlockStoreError> {
+        let mut connection = self.connection.lock().map_err(|e| {
+            BlockStoreError::Other(format!("Unable to acquire the connection mutex: {e:?}"))
+        })?;
+        database_access::contains_block(&mut connection, block_idx)
+    }
 }
 
 fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {

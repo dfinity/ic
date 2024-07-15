@@ -1,6 +1,6 @@
 //! Common utils for the ECDSA implementation.
 
-use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
+use crate::ecdsa::complaints::{IDkgTranscriptLoader, TranscriptLoadStatus};
 use crate::ecdsa::metrics::IDkgPayloadMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
@@ -22,7 +22,7 @@ use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
-        EcdsaBlockReader, IDkgMessage, IDkgTranscriptParamsRef, PreSigId, RequestId,
+        IDkgBlockReader, IDkgMessage, IDkgTranscriptParamsRef, PreSigId, RequestId,
         TranscriptLookupError, TranscriptRef,
     },
     HasHeight,
@@ -52,17 +52,17 @@ impl Display for InvalidChainCacheError {
     }
 }
 
-pub(super) struct EcdsaBlockReaderImpl {
+pub(super) struct IDkgBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
 }
 
-impl EcdsaBlockReaderImpl {
+impl IDkgBlockReaderImpl {
     pub(crate) fn new(chain: Arc<dyn ConsensusBlockChain>) -> Self {
         Self { chain }
     }
 }
 
-impl EcdsaBlockReader for EcdsaBlockReaderImpl {
+impl IDkgBlockReader for IDkgBlockReaderImpl {
     fn tip_height(&self) -> Height {
         self.chain.tip().height()
     }
@@ -178,11 +178,11 @@ pub(super) fn block_chain_reader(
     parent_block: &Block,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
-) -> Result<EcdsaBlockReaderImpl, InvalidChainCacheError> {
+) -> Result<IDkgBlockReaderImpl, InvalidChainCacheError> {
     // Resolve the transcript refs pointing into the parent chain,
     // copy the resolved transcripts into the summary block.
     block_chain_cache(pool_reader, summary_block, parent_block)
-        .map(EcdsaBlockReaderImpl::new)
+        .map(IDkgBlockReaderImpl::new)
         .map_err(|err| {
             warn!(
                 log,
@@ -260,7 +260,7 @@ impl BuildSignatureInputsError {
 /// the pre-signature
 pub(super) fn build_signature_inputs(
     context: &SignWithThresholdContext,
-    block_reader: &dyn EcdsaBlockReader,
+    block_reader: &dyn IDkgBlockReader,
 ) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
     let request_id =
         get_context_request_id(context).ok_or(BuildSignatureInputsError::ContextIncomplete)?;
@@ -316,7 +316,7 @@ pub(super) fn build_signature_inputs(
 /// Otherwise, returns the complaint change set to be added to the pool
 pub(super) fn load_transcripts(
     idkg_pool: &dyn IDkgPool,
-    transcript_loader: &dyn EcdsaTranscriptLoader,
+    transcript_loader: &dyn IDkgTranscriptLoader,
     transcripts: &[&IDkgTranscript],
 ) -> Option<IDkgChangeSet> {
     let mut new_complaints = Vec::new();
@@ -526,7 +526,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
         ));
     };
     let chain = pool.pool().build_block_chain(&summary, block);
-    let block_reader = EcdsaBlockReaderImpl::new(chain);
+    let block_reader = IDkgBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();
 

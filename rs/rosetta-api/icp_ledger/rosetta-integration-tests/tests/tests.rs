@@ -6,7 +6,8 @@ use ic_icrc_rosetta_client::RosettaClient;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_rosetta_api::convert;
 use ic_rosetta_api::models::{
-    NetworkIdentifier, NetworkListResponse, NetworkStatusResponse, PartialBlockIdentifier,
+    CallResponse, NetworkIdentifier, NetworkListResponse, NetworkStatusResponse,
+    PartialBlockIdentifier, QueryBlockRangeRequest, QueryBlockRangeResponse,
 };
 use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
 use ic_sender_canister_lib::{SendArg, SendResult};
@@ -16,8 +17,10 @@ use icp_ledger::{
 use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use num_traits::cast::ToPrimitive;
 use pocket_ic::WasmResult;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::thread::sleep;
@@ -159,6 +162,14 @@ impl RosettaTestingClient {
             sleep(DURATION_BETWEEN_ATTEMPTS);
             network_status = self.network_status_or_panic().await;
         }
+    }
+
+    pub async fn call_or_panic(&self, method: String, arg: ObjectMap) -> CallResponse {
+        let network_identifier = self.network_or_panic().await;
+        self.rosetta_client
+            .call(network_identifier, method, arg)
+            .await
+            .expect("Unable to call method")
     }
 }
 
@@ -784,4 +795,53 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
         )
         .unwrap()]
     );
+
+async fn test_query_block_range() {
+    let env = TestEnv::setup_or_panic(false).await;
+    env.pocket_ic.auto_progress().await;
+
+    let minter = test_identity()
+        .sender()
+        .expect("test identity sender not found!");
+    let mut block_indices: Vec<Nat> = vec![];
+    for i in 0..100u64 {
+        let mint_arg = TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(i),
+        };
+        let arg = Encode!(&mint_arg).unwrap();
+        block_indices.push(
+            env.pocket_ic
+                .update_call(env.ledger_id, minter, "icrc1_transfer", arg)
+                .await
+                .expect("Unable to submit call")
+                .unwrap_as::<Result<BlockIndex, TransferError>>()
+                .expect("Error performing icrc1_transfer"),
+        );
+    }
+
+    env.rosetta
+        .wait_or_panic_until_synced_up_to(block_indices.last().unwrap().0.to_u64().unwrap())
+        .await;
+
+    let response: QueryBlockRangeResponse = env
+        .rosetta
+        .call_or_panic(
+            "query_block_range".to_owned(),
+            ObjectMap::try_from(QueryBlockRangeRequest {
+                highest_block_index: 100,
+                number_of_blocks: 10,
+            })
+            .unwrap(),
+        )
+        .await
+        .result
+        .try_into()
+        .unwrap();
+
+    assert_eq!(response.blocks.len(), 10);
 }

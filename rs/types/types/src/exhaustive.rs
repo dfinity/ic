@@ -4,8 +4,8 @@ use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, EcdsaUIDGenerator, HasMasterPublicKeyId,
-    IDkgPayload, IDkgReshareRequest, MaskedTranscript, MasterKeyTranscript, PreSigId,
+    CompletedReshareRequest, CompletedSignature, HasMasterPublicKeyId, IDkgPayload,
+    IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
     ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
@@ -731,7 +731,7 @@ pub struct DerivedIDkgPayload {
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
-    pub uid_generator: EcdsaUIDGenerator,
+    pub uid_generator: IDkgUIDGenerator,
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,

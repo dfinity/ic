@@ -11,7 +11,7 @@ use ic_types::{
     Time,
 };
 
-use crate::{ecdsa::metrics::IDkgPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
+use crate::{ecdsa::metrics::IDkgPayloadMetrics, ecdsa::signer::ThresholdSignatureBuilder};
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message
@@ -36,7 +36,7 @@ fn reject_response(
 /// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
 pub(crate) fn update_signature_agreements(
     all_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
-    signature_builder: &dyn EcdsaSignatureBuilder,
+    signature_builder: &dyn ThresholdSignatureBuilder,
     request_expiry_time: Option<Time>,
     payload: &mut idkg::IDkgPayload,
     valid_keys: &BTreeSet<MasterPublicKeyId>,
@@ -177,7 +177,7 @@ mod tests {
         fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
         fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,
         fake_signature_request_context_with_pre_sig, set_up_idkg_payload,
-        TestEcdsaSignatureBuilder,
+        TestThresholdSignatureBuilder,
     };
 
     use super::*;
@@ -235,7 +235,7 @@ mod tests {
         // old signature in the agreement but NOT in state is removed.
         update_signature_agreements(
             &contexts,
-            &TestEcdsaSignatureBuilder::new(),
+            &TestThresholdSignatureBuilder::new(),
             None,
             &mut idkg_payload,
             &BTreeSet::from([key_id]),
@@ -292,7 +292,7 @@ mod tests {
             idkg::CompletedSignature::Unreported(empty_response()),
         );
 
-        let mut signature_builder = TestEcdsaSignatureBuilder::new();
+        let mut signature_builder = TestThresholdSignatureBuilder::new();
         for (i, pre_sig_id) in pre_sig_ids.iter().enumerate().skip(1) {
             signature_builder.signatures.insert(
                 RequestId {

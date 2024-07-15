@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "symlink_dir")
+load("//bazel:defs.bzl", "symlink_dir")
 
 package(default_visibility = ["//visibility:public"])
 

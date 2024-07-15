@@ -21,7 +21,6 @@ lint:
     - DEFAULT
 breaking:
   ignore:
-    - types/v1/consensus.proto
   use:
     - WIRE
   except:
