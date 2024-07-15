@@ -28,7 +28,7 @@ use ic_cketh_test_utils::{
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
     EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -658,7 +658,7 @@ fn should_not_overlap_when_scrapping_logs() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -675,7 +675,7 @@ fn should_not_overlap_when_scrapping_logs() {
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -708,7 +708,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             "fromBlock": from_block,
             "toBlock": to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .respond_with(JsonRpcProvider::PublicNode, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
@@ -733,7 +733,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             "fromBlock": from_block,
             "toBlock": to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -761,7 +761,7 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
             "fromBlock": from_block,
             "toBlock": from_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -801,7 +801,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -822,6 +822,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
         ethereum_block_height: Some(CandidBlockTag::Safe),
         ..Default::default()
     });
+    let received_eth_event_topic = cketh.received_eth_event_topic();
     cketh.env.tick();
 
     let cketh = cketh
@@ -836,7 +837,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
                         "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                         "toBlock": BlockNumber::from(safe_block_number),
                         "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                        "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                        "topics": [received_eth_event_topic]
                     }]))
                 }),
         )
@@ -890,13 +891,13 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
         .build()
         .expect_rpc_calls(&cketh);
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": from_block,
                 "toBlock": to_block,
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -909,7 +910,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
             "fromBlock": from_block,
             "toBlock": half_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())
@@ -938,13 +939,13 @@ fn should_skip_single_block_containing_too_many_events() {
         .build()
         .expect_rpc_calls(&cketh);
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -952,13 +953,13 @@ fn should_skip_single_block_containing_too_many_events() {
             .expect_rpc_calls(&cketh);
     }
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -966,13 +967,13 @@ fn should_skip_single_block_containing_too_many_events() {
             .expect_rpc_calls(&cketh);
     }
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -985,7 +986,7 @@ fn should_skip_single_block_containing_too_many_events() {
             "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
             "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())

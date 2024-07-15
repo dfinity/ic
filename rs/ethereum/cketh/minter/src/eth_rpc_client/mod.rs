@@ -61,6 +61,7 @@ impl EthRpcClient {
                 EvmRpcClient::builder_for_ic(TRACE_HTTP)
                     .with_providers(providers)
                     .with_evm_canister_id(evm_rpc_id)
+                    .with_min_attached_cycles(300_000_000_000)
                     .with_override_rpc_config(OverrideRpcConfig {
                         eth_get_logs: Some(RpcConfig {
                             response_size_estimate: Some(100 + HEADER_SIZE_LIMIT),

@@ -214,16 +214,15 @@ pub mod candid {
         pub headers: Option<Vec<HttpHeader>>,
     }
 
-    #[derive(
-        Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
-    )]
+    #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, CandidType)]
     pub enum RpcService {
+        Custom(RpcApi),
         EthMainnet(EthMainnetService),
         EthSepolia(EthSepoliaService),
     }
 
     #[derive(
-        Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+        Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, CandidType,
     )]
     pub enum EthMainnetService {
         Alchemy,
@@ -234,7 +233,7 @@ pub mod candid {
     }
 
     #[derive(
-        Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+        Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, CandidType,
     )]
     pub enum EthSepoliaService {
         Alchemy,

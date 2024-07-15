@@ -588,6 +588,58 @@ impl CkEthSetup {
             500
         }
     }
+
+    pub fn received_eth_event_topic(&self) -> serde_json::Value {
+        if self.evm_rpc_id.is_none() {
+            serde_json::Value::String(RECEIVED_ETH_EVENT_TOPIC.to_string())
+        } else {
+            // The EVM-RPC canister models topics as `opt vec vec text`, see
+            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/candid/evm_rpc.did#L69.
+            // This means that a simple topic such as `["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]`
+            // must actually be represented as `[["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]].
+            // The JSON-RPC providers seem to be able to handle both formats.
+            serde_json::Value::Array(vec![serde_json::Value::String(
+                RECEIVED_ETH_EVENT_TOPIC.to_string(),
+            )])
+        }
+    }
+
+    pub fn all_eth_get_logs_response_size_estimates(&self) -> Vec<u64> {
+        if self.evm_rpc_id.is_none() {
+            vec![
+                100 + HEADER_SIZE_LIMIT,
+                2048 + HEADER_SIZE_LIMIT,
+                4096 + HEADER_SIZE_LIMIT,
+                8192 + HEADER_SIZE_LIMIT,
+                16_384 + HEADER_SIZE_LIMIT,
+                32_768 + HEADER_SIZE_LIMIT,
+                65_536 + HEADER_SIZE_LIMIT,
+                131_072 + HEADER_SIZE_LIMIT,
+                262_144 + HEADER_SIZE_LIMIT,
+                524_288 + HEADER_SIZE_LIMIT,
+                1_048_576 + HEADER_SIZE_LIMIT,
+                2_000_000,
+            ]
+        } else {
+            // The EVM RPC canister has a different adjustment mechanism for the response size limit.
+            // In contrast to the ckETH minter, the HEADER_SIZE_LIMIT is not added to the adjusted response size,
+            // which simply consists in doubling the estimate (the result is capped by 2_000_000 - HEADER_SIZE_LIMIT).
+            const INITIAL_ESTIMATE: u64 = 100 + HEADER_SIZE_LIMIT;
+            vec![
+                INITIAL_ESTIMATE,
+                INITIAL_ESTIMATE << 1,
+                INITIAL_ESTIMATE << 2,
+                INITIAL_ESTIMATE << 3,
+                INITIAL_ESTIMATE << 4,
+                INITIAL_ESTIMATE << 5,
+                INITIAL_ESTIMATE << 6,
+                INITIAL_ESTIMATE << 7,
+                INITIAL_ESTIMATE << 8,
+                INITIAL_ESTIMATE << 9,
+                2_000_000 - HEADER_SIZE_LIMIT,
+            ]
+        }
+    }
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {

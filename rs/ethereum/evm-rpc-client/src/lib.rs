@@ -91,12 +91,13 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
         loop {
             log!(
                 self.logger,
-                "[{}]: Calling providers {:?} for {} with arguments '{:?}' and {} cycles",
+                "[{}]: Calling providers {:?} for {} with arguments '{:?}' and {} cycles (retry {})",
                 self.evm_canister_id,
                 self.providers,
                 method,
                 args,
-                attached_cycles
+                attached_cycles,
+                retries
             );
             let result: MultiRpcResult<Out> = self
                 .runtime
