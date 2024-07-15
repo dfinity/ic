@@ -133,10 +133,10 @@ While we adapt our development processes and security reviews for a world of dev
 
 === Rust Dependency Policy
 
-To make the mono repository a success, there needs to be some basic rules in order to make development faster.
+To make the mono repository a success, there needs to be some basic rules to make development faster.
 
-1. When using an external crate, use it's most recent semantic version.
-2. Do not depend on unmaintained crates.
-3. Keep the rust-lang up-to-date.
-5. It is everyones responsibility to adhere to this policy. 
-6. As with any rules there are exceptions in some circumstances. 
+* When adding a new external crate dependency please make sure it is necessary. Check that
+** There isn't another already imported crate with similar functionality.
+** The crate is well maintained and comes from reputable authors.
+* When bumping the semantic version of an external crate, please do it for the whole repository. Avoid importing the same crate with multiple versions.
+* Keep the rust-lang up-to-date for Bazel and Cargo.
