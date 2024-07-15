@@ -185,9 +185,13 @@ jobs:
       actions: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CARGO_WASMPACK_VERSION: "0.12.1"
+      DEFAULT_NODE_VERSION : "20"
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -199,10 +203,6 @@ jobs:
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Setup environment deps
         id: setup-environment-deps
-        env:
-          CARGO_WASMPACK_VERSION: "0.12.1"
-          DEFAULT_NODE_VERSION : "20"
-          PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies" 
         shell: bash
         run: |
           pip3 install --ignore-installed -r requirements.txt
@@ -211,22 +211,13 @@ jobs:
           nvm use ${DEFAULT_NODE_VERSION}
           node --version
           npm --version
-          cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
-      - name: Run Dependency Scan Rust
-        id: dependency-scan-nightly-rust
+      - name: Run Dependency Scan Nightly
+        id: dependency-scan-nightly
         shell: bash
         run: |
           set -euo pipefail
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          cd gitlab-ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
-      - name: Run Dependency Scan NPM
-        id: dependency-scan-nightly-npm
-        shell: bash
-        run: |
-          set -euo pipefail
           $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
-      - name: Run Dependency Scan Trivy
-        id: dependency-scan-nightly-trivy
-        shell: bash
-        run: |
-          set -euo pipefail
           $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py

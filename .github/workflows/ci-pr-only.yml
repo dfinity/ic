@@ -112,6 +112,15 @@ jobs:
     timeout-minutes: 60
     permissions:
       pull-requests: write
+    env:
+      SHELL_WRAPPER: "/usr/bin/time"
+      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
+      CI_PROJECT_PATH: ${{ github.repository }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      CI_COMMIT_SHA: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -123,22 +132,14 @@ jobs:
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Setup python deps
         id: setup-python-deps
-        env:
-          PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies" 
         shell: bash
         run: |
           pip3 install --ignore-installed -r requirements.txt
       - name: Dependency Scan for Pull Request
         id: dependencies-check
-        env:
-          SHELL_WRAPPER: "/usr/bin/time"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
-          CI_PROJECT_PATH: ${{ github.repository }}
-          CI_PIPELINE_ID: ${{ github.run_id }}
-          CI_COMMIT_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          cd gitlab-ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
