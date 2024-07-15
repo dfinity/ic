@@ -12,7 +12,7 @@ backoff = { workspace = true }
 candid = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-util = { version = "0.1.3", features = ["client"] }
+hyper-util = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
 tokio = { workspace = true }
@@ -42,6 +42,7 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-interfaces = { path = "../interfaces" }
+ic-starter = { path = "../starter" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }

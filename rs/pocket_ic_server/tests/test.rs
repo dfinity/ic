@@ -93,6 +93,7 @@ fn test_creation_of_instance_extended() {
         }
         .into(),
         state_dir: None,
+        nonmainnet_features: false,
     };
     let response = client
         .post(url.join("instances").unwrap())

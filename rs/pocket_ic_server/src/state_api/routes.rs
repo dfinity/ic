@@ -1038,7 +1038,12 @@ pub async fn create_instance(
     }
 
     let pocket_ic = tokio::task::spawn_blocking(move || {
-        PocketIc::new(runtime, subnet_configs, instance_config.state_dir)
+        PocketIc::new(
+            runtime,
+            subnet_configs,
+            instance_config.state_dir,
+            instance_config.nonmainnet_features,
+        )
     })
     .await
     .expect("Failed to launch PocketIC");

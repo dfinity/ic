@@ -27,6 +27,7 @@ LIB_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/starter:ic-starter-lib",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",

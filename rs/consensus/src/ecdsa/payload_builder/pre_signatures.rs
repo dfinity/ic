@@ -1,6 +1,6 @@
 use super::IDkgPayloadError;
 
-use crate::ecdsa::{pre_signer::EcdsaTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::ecdsa::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -11,7 +11,7 @@ use ic_types::{
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        EcdsaUIDGenerator, HasMasterPublicKeyId, PreSigId, TranscriptAttributes,
+        HasMasterPublicKeyId, IDkgUIDGenerator, PreSigId, TranscriptAttributes,
         UnmaskedTranscriptWithAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Returns the newly created transcripts.
 pub(super) fn update_pre_signatures_in_creation(
     payload: &mut idkg::IDkgPayload,
-    transcript_cache: &dyn EcdsaTranscriptBuilder,
+    transcript_cache: &dyn IDkgTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<Vec<IDkgTranscript>, IDkgPayloadError> {
@@ -126,8 +126,8 @@ fn update_ecdsa_quadruple_in_creation(
     pre_signature_id: PreSigId,
     quadruple: &mut QuadrupleInCreation,
     key_transcript: &UnmaskedTranscriptWithAttributes,
-    transcript_cache: &dyn EcdsaTranscriptBuilder,
-    uid_generator: &mut EcdsaUIDGenerator,
+    transcript_cache: &dyn IDkgTranscriptBuilder,
+    uid_generator: &mut IDkgUIDGenerator,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
@@ -257,7 +257,7 @@ fn update_ecdsa_quadruple_in_creation(
 fn update_schnorr_transcript_in_creation(
     pre_signature_id: PreSigId,
     pre_signature: &mut TranscriptInCreation,
-    transcript_cache: &dyn EcdsaTranscriptBuilder,
+    transcript_cache: &dyn IDkgTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
@@ -349,7 +349,7 @@ fn make_new_pre_signatures_if_needed_helper(
     registry_version: RegistryVersion,
     chain_key_config: &ChainKeyConfig,
     key_id: &MasterPublicKeyId,
-    uid_generator: &mut EcdsaUIDGenerator,
+    uid_generator: &mut IDkgUIDGenerator,
     unassigned_pre_signatures: usize,
 ) -> BTreeMap<PreSigId, PreSignatureInCreation> {
     let mut new_pre_signatures = BTreeMap::new();
@@ -409,7 +409,7 @@ fn new_random_config(
     key_id: &MasterPublicKeyId,
     subnet_nodes: &[NodeId],
     summary_registry_version: RegistryVersion,
-    uid_generator: &mut idkg::EcdsaUIDGenerator,
+    uid_generator: &mut idkg::IDkgUIDGenerator,
 ) -> idkg::RandomTranscriptParams {
     let transcript_id = uid_generator.next_transcript_id();
     let dealers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
@@ -430,7 +430,7 @@ pub fn new_random_unmasked_config(
     key_id: &MasterPublicKeyId,
     subnet_nodes: &[NodeId],
     summary_registry_version: RegistryVersion,
-    uid_generator: &mut idkg::EcdsaUIDGenerator,
+    uid_generator: &mut idkg::IDkgUIDGenerator,
 ) -> idkg::RandomUnmaskedTranscriptParams {
     let transcript_id = uid_generator.next_transcript_id();
     let dealers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
@@ -461,7 +461,7 @@ pub(super) mod test_utils {
     pub fn create_new_pre_signature_in_creation(
         subnet_nodes: &[NodeId],
         registry_version: RegistryVersion,
-        uid_generator: &mut idkg::EcdsaUIDGenerator,
+        uid_generator: &mut idkg::IDkgUIDGenerator,
         key_id: MasterPublicKeyId,
         pre_signatures_in_creation: &mut BTreeMap<idkg::PreSigId, PreSignatureInCreation>,
     ) -> Vec<IDkgTranscriptParamsRef> {
@@ -537,7 +537,7 @@ pub(super) mod tests {
         fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_schnorr_key_id, fake_schnorr_master_public_key_id,
         fake_signature_request_context_with_pre_sig, set_up_idkg_payload, IDkgPayloadTestHelper,
-        TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        TestIDkgBlockReader, TestIDkgTranscriptBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -564,7 +564,7 @@ pub(super) mod tests {
     ) -> (
         IDkgPayload,
         CanisterThresholdSigTestEnvironment,
-        TestEcdsaBlockReader,
+        TestIDkgBlockReader,
     ) {
         let (mut idkg_payload, env, block_reader) = set_up_idkg_payload(
             rng, subnet_id, /*nodes_count=*/ 4, key_ids,
@@ -584,7 +584,7 @@ pub(super) mod tests {
         let registry_version = RegistryVersion::from(1);
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
-        let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, height);
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_id, height);
         let pre_signatures_to_create_in_advance = 4;
 
         let mut create_pre_signatures = |key_id: &MasterPublicKeyId, unassigned| {
@@ -723,10 +723,10 @@ pub(super) mod tests {
             &IDkgParticipants::AllNodesAsDealersAndReceivers,
             &mut rng,
         );
-        let block_reader = TestEcdsaBlockReader::new();
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let block_reader = TestIDkgBlockReader::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
         let height = Height::from(1);
-        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(0), height);
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(0), height);
 
         for algorithm in SchnorrAlgorithm::iter() {
             let key_id = fake_schnorr_key_id(algorithm);
@@ -792,7 +792,7 @@ pub(super) mod tests {
         let key_id = fake_ecdsa_master_public_key_id();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         // Start quadruple creation
         let [ref lambda_config_ref, ref kappa_unmasked_config_ref] =
@@ -962,7 +962,7 @@ pub(super) mod tests {
         let key_id = fake_schnorr_master_public_key_id(algorithm);
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         // Start quadruple creation
         let [ref blinder_config_ref] = create_new_pre_signature_in_creation(

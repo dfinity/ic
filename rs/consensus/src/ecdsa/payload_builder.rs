@@ -3,8 +3,8 @@
 #![allow(clippy::enum_variant_names)]
 #![allow(clippy::result_large_err)]
 
-use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
-use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
+use super::pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl};
+use super::signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl};
 use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
 use crate::ecdsa::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::IDkgPayloadError;
@@ -24,7 +24,7 @@ use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        idkg::{self, EcdsaBlockReader, IDkgPayload, MasterKeyTranscript, TranscriptAttributes},
+        idkg::{self, IDkgBlockReader, IDkgPayload, MasterKeyTranscript, TranscriptAttributes},
         Block, HasHeight,
     },
     crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
@@ -192,7 +192,7 @@ fn create_summary_payload_helper(
     subnet_id: SubnetId,
     key_ids: &[MasterPublicKeyId],
     registry_client: &dyn RegistryClient,
-    block_reader: &dyn EcdsaBlockReader,
+    block_reader: &dyn IDkgBlockReader,
     height: Height,
     curr_interval_registry_version: RegistryVersion,
     next_interval_registry_version: RegistryVersion,
@@ -312,7 +312,7 @@ fn create_summary_payload_helper(
 fn update_summary_refs(
     height: Height,
     summary: &mut IDkgPayload,
-    block_reader: &dyn EcdsaBlockReader,
+    block_reader: &dyn IDkgBlockReader,
 ) -> Result<(), IDkgPayloadError> {
     // Gather the refs and update them to point to the new
     // summary block height.
@@ -429,14 +429,14 @@ pub(crate) fn create_data_payload(
     )?;
     let idkg_pool = idkg_pool.read().unwrap();
 
-    let signature_builder = EcdsaSignatureBuilderImpl::new(
+    let signature_builder = ThresholdSignatureBuilderImpl::new(
         &block_reader,
         crypto,
         idkg_pool.deref(),
         idkg_payload_metrics,
         log.clone(),
     );
-    let transcript_builder = EcdsaTranscriptBuilderImpl::new(
+    let transcript_builder = IDkgTranscriptBuilderImpl::new(
         &block_reader,
         crypto,
         idkg_pool.deref(),
@@ -494,9 +494,9 @@ pub(crate) fn create_data_payload_helper(
     context: &ValidationContext,
     parent_block: &Block,
     summary_block: &Block,
-    block_reader: &dyn EcdsaBlockReader,
-    transcript_builder: &dyn EcdsaTranscriptBuilder,
-    signature_builder: &dyn EcdsaSignatureBuilder,
+    block_reader: &dyn IDkgBlockReader,
+    transcript_builder: &dyn IDkgTranscriptBuilder,
+    signature_builder: &dyn ThresholdSignatureBuilder,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
@@ -576,9 +576,9 @@ pub(crate) fn create_data_payload_helper_2(
     receivers: &[NodeId],
     all_signing_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
-    block_reader: &dyn EcdsaBlockReader,
-    transcript_builder: &dyn EcdsaTranscriptBuilder,
-    signature_builder: &dyn EcdsaSignatureBuilder,
+    block_reader: &dyn IDkgBlockReader,
+    transcript_builder: &dyn IDkgTranscriptBuilder,
+    signature_builder: &dyn ThresholdSignatureBuilder,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), IDkgPayloadError> {
@@ -843,7 +843,7 @@ mod tests {
             create_available_pre_signature(&mut idkg_payload, valid_key_id.clone(), 10);
         let pre_sig_for_disabled_key =
             create_available_pre_signature(&mut idkg_payload, disabled_key_id.clone(), 11);
-        let non_existant_pre_sig_for_valid_key = idkg_payload.uid_generator.next_pre_signature_id();
+        let non_existent_pre_sig_for_valid_key = idkg_payload.uid_generator.next_pre_signature_id();
 
         let contexts = set_up_signature_request_contexts(vec![
             // Two request contexts without pre-signature
@@ -863,12 +863,12 @@ mod tests {
                 UNIX_EPOCH,
                 Some(pre_sig_for_disabled_key),
             ),
-            // One valid context matched to non-existant pre-signature
+            // One valid context matched to non-existent pre-signature
             (
                 valid_key_id.clone(),
                 4,
                 UNIX_EPOCH,
-                Some(non_existant_pre_sig_for_valid_key),
+                Some(non_existent_pre_sig_for_valid_key),
             ),
         ]);
 
@@ -895,9 +895,9 @@ mod tests {
             &[node_test_id(0)],
             &contexts,
             &BTreeMap::default(),
-            &TestEcdsaBlockReader::new(),
-            &TestEcdsaTranscriptBuilder::new(),
-            &TestEcdsaSignatureBuilder::new(),
+            &TestIDkgBlockReader::new(),
+            &TestIDkgTranscriptBuilder::new(),
+            &TestThresholdSignatureBuilder::new(),
             /*idkg_payload_metrics*/ None,
             &ic_logger::replica_logger::no_op_logger(),
         )
@@ -954,7 +954,7 @@ mod tests {
         assert_eq!(idkg_payload.signature_agreements.len(), 0);
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
 
-        let signature_builder = TestEcdsaSignatureBuilder::new();
+        let signature_builder = TestThresholdSignatureBuilder::new();
         signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -1014,7 +1014,7 @@ mod tests {
         assert_eq!(idkg_payload.signature_agreements.len(), 0);
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
 
-        let signature_builder = TestEcdsaSignatureBuilder::new();
+        let signature_builder = TestThresholdSignatureBuilder::new();
         signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -1068,9 +1068,9 @@ mod tests {
 
         let valid_keys = BTreeSet::from([key_id.clone()]);
 
-        let block_reader = TestEcdsaBlockReader::new();
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
-        let mut signature_builder = TestEcdsaSignatureBuilder::new();
+        let block_reader = TestIDkgBlockReader::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let mut signature_builder = TestThresholdSignatureBuilder::new();
 
         signature_builder.signatures.insert(
             get_context_request_id(&context.1).unwrap(),
@@ -1151,7 +1151,7 @@ mod tests {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
-            let transcript_builder = TestEcdsaTranscriptBuilder::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
             let mut add_expected_transcripts = |trancript_refs: Vec<idkg::TranscriptRef>| {
                 for transcript_ref in trancript_refs {
                     expected_transcripts.insert(transcript_ref.transcript_id);
@@ -1239,7 +1239,7 @@ mod tests {
             add_expected_transcripts(vec![*key_transcript_ref.as_ref()]);
             add_expected_transcripts(reshare_params_1.as_ref().get_refs());
 
-            let block_reader = TestEcdsaBlockReader::new();
+            let block_reader = TestIDkgBlockReader::new();
             // Add a pre-signatures in creation without progress
             pre_signatures::test_utils::create_new_pre_signature_in_creation(
                 &subnet_nodes,
@@ -1410,7 +1410,7 @@ mod tests {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let transcript_builder = TestEcdsaTranscriptBuilder::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
             let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -1498,7 +1498,7 @@ mod tests {
                 idkg::CompletedReshareRequest::Unreported(empty_response()),
             );
 
-            let block_reader = TestEcdsaBlockReader::new();
+            let block_reader = TestIDkgBlockReader::new();
             // Add a pre-signature in creation without progress
             pre_signatures::test_utils::create_new_pre_signature_in_creation(
                 &subnet_nodes,
@@ -1705,7 +1705,7 @@ mod tests {
                 ..
             } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let mut block_reader = TestEcdsaBlockReader::new();
+            let mut block_reader = TestIDkgBlockReader::new();
 
             // Create two key transcripts
             let (mut key_transcript, mut key_transcript_ref, mut current_key_transcript) =
@@ -1847,7 +1847,7 @@ mod tests {
             let subnet_id = subnet_test_id(1);
             let mut valid_keys = BTreeSet::new();
             valid_keys.insert(key_id.clone());
-            let mut block_reader = TestEcdsaBlockReader::new();
+            let mut block_reader = TestIDkgBlockReader::new();
 
             // Create a key transcript
             let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -2101,8 +2101,8 @@ mod tests {
             );
             assert!(!payload_4.available_pre_signatures.is_empty());
 
-            let transcript_builder = TestEcdsaTranscriptBuilder::new();
-            let signature_builder = TestEcdsaSignatureBuilder::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone(),
@@ -2192,9 +2192,9 @@ mod tests {
             let registry_version = registry.get_latest_version();
             let mut valid_keys = BTreeSet::new();
             valid_keys.insert(key_id.clone());
-            let block_reader = TestEcdsaBlockReader::new();
-            let transcript_builder = TestEcdsaTranscriptBuilder::new();
-            let signature_builder = TestEcdsaSignatureBuilder::new();
+            let block_reader = TestIDkgBlockReader::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone(),
@@ -2340,9 +2340,9 @@ mod tests {
                 .build();
             let mut valid_keys = BTreeSet::new();
             valid_keys.insert(key_id.clone());
-            let mut block_reader = TestEcdsaBlockReader::new();
-            let transcript_builder = TestEcdsaTranscriptBuilder::new();
-            let signature_builder = TestEcdsaSignatureBuilder::new();
+            let mut block_reader = TestIDkgBlockReader::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone(),

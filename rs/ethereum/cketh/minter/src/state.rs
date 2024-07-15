@@ -10,7 +10,7 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
-use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData};
+use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
@@ -358,7 +358,17 @@ impl State {
             .eth_transactions
             .get_finalized_transaction(withdrawal_id)
             .expect("BUG: missing finalized transaction");
-        let charged_tx_fee = tx.transaction_price().max_transaction_fee();
+        let withdrawal_request = self
+            .eth_transactions
+            .get_processed_withdrawal_request(withdrawal_id)
+            .expect("BUG: missing withdrawal request");
+        let charged_tx_fee = match withdrawal_request {
+            WithdrawalRequest::CkEth(req) => req
+                .withdrawal_amount
+                .checked_sub(tx.transaction().amount)
+                .expect("BUG: withdrawal amount MUST always be at least the transaction amount"),
+            WithdrawalRequest::CkErc20(req) => req.max_transaction_fee,
+        };
         let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect(
             "BUG: charged transaction fee MUST always be at least the effective transaction fee",
         );

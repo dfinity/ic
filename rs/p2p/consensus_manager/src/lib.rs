@@ -13,7 +13,7 @@ use ic_interfaces::p2p::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_quic_transport::{ConnId, SubnetTopology, Transport};
+use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
 use ic_types::artifact::{PbArtifact, UnvalidatedArtifactMutation};
 use phantom_newtype::AmountOf;
 use tokio::{
@@ -23,13 +23,13 @@ use tokio::{
         watch,
     },
 };
-use tokio_util::sync::CancellationToken;
 
 mod metrics;
 mod receiver;
 mod sender;
 
-type StartConsensusManagerFn = Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>)>;
+type StartConsensusManagerFn =
+    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Shutdown>;
 
 pub struct ConsensusManagerBuilder {
     log: ReplicaLogger,
@@ -37,7 +37,6 @@ pub struct ConsensusManagerBuilder {
     rt_handle: Handle,
     clients: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
-    cancellation_token: CancellationToken,
 }
 
 impl ConsensusManagerBuilder {
@@ -48,7 +47,6 @@ impl ConsensusManagerBuilder {
             rt_handle,
             clients: Vec::new(),
             router: None,
-            cancellation_token: CancellationToken::new(),
         }
     }
 
@@ -68,7 +66,6 @@ impl ConsensusManagerBuilder {
         let log = self.log.clone();
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
-        let cancellation_token = self.cancellation_token.child_token();
 
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
@@ -82,7 +79,6 @@ impl ConsensusManagerBuilder {
                 inbound_artifacts_tx,
                 transport,
                 topology_watcher,
-                cancellation_token,
             )
         };
 
@@ -99,11 +95,12 @@ impl ConsensusManagerBuilder {
         self,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
-    ) -> CancellationToken {
+    ) -> Vec<Shutdown> {
+        let mut ret = vec![];
         for client in self.clients {
-            client(transport.clone(), topology_watcher.clone());
+            ret.push(client(transport.clone(), topology_watcher.clone()));
         }
-        self.cancellation_token
+        ret
     }
 }
 
@@ -120,20 +117,19 @@ fn start_consensus_manager<Artifact, Pool>(
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
-    cancellation_token: CancellationToken,
-) where
+) -> Shutdown
+where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
     Artifact: PbArtifact,
 {
     let metrics = ConsensusManagerMetrics::new::<Artifact>(metrics_registry);
 
-    ConsensusManagerSender::run(
+    let shutdown = ConsensusManagerSender::run(
         log.clone(),
         metrics.clone(),
         rt_handle.clone(),
         transport.clone(),
         adverts_to_send,
-        cancellation_token,
     );
 
     ConsensusManagerReceiver::run(
@@ -147,6 +143,7 @@ fn start_consensus_manager<Artifact, Pool>(
         transport,
         topology_watcher,
     );
+    shutdown
 }
 
 pub(crate) struct SlotUpdate<Artifact: PbArtifact> {

@@ -2664,7 +2664,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: invalid or disabled key {}.",
+                    "{} request failed: unknown or signing disabled threshold key {}.",
                     request.method_name, threshold_key
                 ),
             ));
@@ -2759,7 +2759,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: invalid or disabled key {}.",
+                    "{} request failed: unknown or signing disabled threshold key {}.",
                     request.method_name, threshold_key
                 ),
             ));
@@ -3861,7 +3861,10 @@ fn get_master_public_key<'a>(
     match idkg_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!("Subnet {} does not hold iDKG key {}.", subnet_id, key_id),
+            format!(
+                "Subnet {} does not hold threshold key {}.",
+                subnet_id, key_id
+            ),
         )),
         Some(master_key) => Ok(master_key),
     }

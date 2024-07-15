@@ -419,7 +419,8 @@ impl NeuronsFundNeuronPortionPb {
                 maturity_equivalent_icp_e8s,
             });
         }
-        let controller = self.hotkey_principal.ok_or_else(|| {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove .or(hotkey_principal)
+        let controller = self.controller.or(self.hotkey_principal).ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("hotkey_principal".to_string())
         })?;
         let is_capped = self.is_capped.ok_or_else(|| {
@@ -1706,6 +1707,7 @@ where
             Some(participation.intended_neurons_fund_participation_icp_e8s);
         let allocated_neurons_fund_participation_icp_e8s =
             Some(participation.allocated_neurons_fund_participation_icp_e8s);
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove
         let neurons_fund_neuron_portions: Vec<NeuronsFundNeuronPortionPb> = participation
             .into_snapshot()
             .neurons()
@@ -1714,8 +1716,12 @@ where
                 nns_neuron_id: Some(neuron.id),
                 amount_icp_e8s: Some(neuron.amount_icp_e8s),
                 maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
-                hotkey_principal: Some(neuron.controller),
                 is_capped: Some(neuron.is_capped),
+                controller: Some(neuron.controller),
+                // TODO(NNS1-3199): populate
+                hotkeys: Vec::new(),
+                // TODO(NNS1-3198): remove due to the  very misleading name
+                hotkey_principal: Some(neuron.controller),
             })
             .collect();
         let neurons_fund_reserves = Some(NeuronsFundSnapshotPb {

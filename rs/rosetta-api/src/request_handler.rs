@@ -10,16 +10,20 @@ mod construction_submit;
 use crate::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
-use crate::models::{AccountBalanceMetadata, CallResponse, NetworkIdentifier};
+use crate::models::{
+    AccountBalanceMetadata, CallResponse, NetworkIdentifier, QueryBlockRangeRequest,
+    QueryBlockRangeResponse,
+};
 use crate::request_types::GetProposalInfo;
 use crate::transaction_id::TransactionIdentifier;
-use crate::{convert, models, API_VERSION, NODE_VERSION};
+use crate::{convert, models, API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_ledger_canister_blocks_synchronizer::rosetta_block::RosettaBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use rosetta_core::objects::ObjectMap;
+use tracing::info;
 
 use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
 use crate::errors::{ApiError, Details};
@@ -197,6 +201,52 @@ impl RosettaRequestHandler {
                 Ok(CallResponse::new(
                     ObjectMap::try_from(list_known_neurons_response)?,
                     false,
+                ))
+            }
+            "query_block_range" => {
+                let query_block_range = QueryBlockRangeRequest::try_from(msg.parameters)
+                    .map_err(|err| ApiError::internal_error(format!("{:?}", err)))?;
+                let mut blocks = vec![];
+
+                let storage = self.ledger.read_blocks().await;
+                if query_block_range.number_of_blocks > 0 {
+                    let lowest_index = query_block_range.highest_block_index.saturating_sub(
+                        std::cmp::min(
+                            query_block_range.number_of_blocks,
+                            MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST,
+                        )
+                        .saturating_sub(1),
+                    );
+                    if storage.contains_block(&lowest_index).map_err(|err| {
+                        ApiError::InvalidBlockId(false, format!("{:?}", err).into())
+                    })? {
+                        info!("Querying verified blocks");
+                        // TODO: Use block range with rosetta blocks
+                        for hb in storage
+                            .get_hashed_block_range(
+                                lowest_index
+                                    ..query_block_range.highest_block_index.saturating_add(1),
+                            )
+                            .map_err(ApiError::from)?
+                            .into_iter()
+                        {
+                            blocks.push(self.hashed_block_to_rosetta_core_block(hb).await?);
+                        }
+                    }
+                };
+                let idempotent = match blocks.last() {
+                    // If the block with the highest block index that was retrieved from the database has the same index as the highest block index in the query we return true
+                    Some(last_block) => {
+                        last_block.block_identifier.index == query_block_range.highest_block_index
+                    }
+                    // If the database is empty or the requested block range does not exist we return false
+                    None => false,
+                };
+                let block_range_response = QueryBlockRangeResponse { blocks };
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(block_range_response)
+                        .map_err(|err| ApiError::internal_error(format!("{:?}", err)))?,
+                    idempotent,
                 ))
             }
             _ => Err(ApiError::InvalidRequest(
