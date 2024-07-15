@@ -622,7 +622,6 @@ mod tests {
     use std::{io::Write, path::Path};
 
     use ic_config::{ConfigOptional, ConfigSource};
-    use ic_crypto_test_utils_tls::temp_crypto_tls_config;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
@@ -881,11 +880,13 @@ mod tests {
 
         let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
 
+        let (crypto, _) =
+            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node);
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
-            temp_crypto_tls_config(registry),
+            Arc::new(crypto),
             no_op_logger(),
             node,
         );

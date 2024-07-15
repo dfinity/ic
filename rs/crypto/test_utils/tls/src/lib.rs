@@ -78,13 +78,3 @@ pub fn temp_crypto_component_with_tls_keys(
         .expect("failed to create X509 cert from DER");
     (temp_crypto, tls_pubkey)
 }
-
-pub fn temp_crypto_tls_config(
-    registry: Arc<FakeRegistryClient>,
-) -> Arc<dyn TlsConfig + Send + Sync> {
-    Arc::new(
-        TempCryptoComponent::builder()
-            .with_registry(registry)
-            .build(),
-    )
-}
