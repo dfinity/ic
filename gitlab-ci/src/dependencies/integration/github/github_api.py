@@ -7,8 +7,11 @@ from github import Github
 from github.GithubException import GithubException
 from integration.github.github_workflow_config import GithubWorklow
 
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-if GITHUB_TOKEN is None:
+# Github dataclass has len(token) > 0 assertion, so we set a placeholder
+# value and validate against it.
+TOKEN_NOT_SET = "token-not-set"
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", TOKEN_NOT_SET)
+if GITHUB_TOKEN == TOKEN_NOT_SET:
     logging.error("GITHUB_TOKEN is not set, can not send comments to Github")
 
 GITHUB_REPOSITORY = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
@@ -21,7 +24,7 @@ class GithubApi:
 
     def comment_on_github(self, info: typing.List):
         """Add a github comment with dependency delta info."""
-        if not info or not GITHUB_TOKEN:
+        if not info or GITHUB_TOKEN == TOKEN_NOT_SET:
             return
 
         GITHUB_PR_NUMBER = os.environ.get("CI_MERGE_REQUEST_IID", "")
