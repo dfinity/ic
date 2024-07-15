@@ -171,6 +171,11 @@ use tokio::{
 };
 use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
+/// The size of the channel used to communicate between the [`IngressWatcher`] and
+/// execution. Should be large enough such that if fits multiple messages
+/// if PocketIC is executing multiple messages concurrently.
+const INGRESS_WATCHER_COMPLETED_EXECUTION_BUFFER_SIZE: usize = 100;
+
 #[cfg(test)]
 mod tests;
 
@@ -641,9 +646,8 @@ pub struct StateMachine {
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
     certified_height_tx: watch::Sender<Height>,
     pub ingress_watcher_handle: IngressWatcherHandle,
-    #[allow(dead_code)]
     /// A drop guard to gracefully cancel the ingress watcher task.
-    ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
+    _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -1334,7 +1338,8 @@ impl StateMachine {
         ));
 
         // Setup ingress watcher for synchronous call endpoint.
-        let (completed_execution_messages_tx, completed_execution_messages_rx) = mpsc::channel(100);
+        let (completed_execution_messages_tx, completed_execution_messages_rx) =
+            mpsc::channel(INGRESS_WATCHER_COMPLETED_EXECUTION_BUFFER_SIZE);
         let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
@@ -1487,7 +1492,7 @@ impl StateMachine {
                 TowerBuffer::new(execution_services.query_execution_service, 1)
             }),
             ingress_watcher_handle,
-            ingress_watcher_drop_guard,
+            __ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,
             runtime,
             state_dir,
