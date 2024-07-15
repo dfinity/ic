@@ -172,9 +172,8 @@ use tokio::{
 use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
-/// execution. Should be large enough such that if fits multiple messages
-/// if PocketIC is executing multiple messages concurrently.
-const INGRESS_WATCHER_COMPLETED_EXECUTION_BUFFER_SIZE: usize = 100;
+/// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
+const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 #[cfg(test)]
 mod tests;
