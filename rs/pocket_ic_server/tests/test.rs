@@ -685,9 +685,12 @@ fn canister_state_dir() {
         .unwrap();
 }
 
+/// Test that the PocketIC can handle update calls to the new
 #[test]
 fn test_specified_id_call_v3() {
+    use ic_agent_call_v3::agent::CallResponse;
     use ic_utils_call_v3::interfaces::ManagementCanister;
+    use tokio::time::timeout;
 
     // Create live PocketIc instance.
     let mut pic = PocketIcBuilder::new()
@@ -716,14 +719,22 @@ fn test_specified_id_call_v3() {
 
         let ic00 = ManagementCanister::create(&agent);
 
-        let (canister_id,) = ic00
-            .create_canister()
-            .as_provisional_create_with_specified_id(specified_id)
-            .call_and_wait()
-            .await
-            .unwrap();
+        let call_response = timeout(
+            Duration::from_secs(5),
+            ic00.create_canister()
+                .as_provisional_create_with_specified_id(specified_id)
+                .call(),
+        )
+        .await
+        .expect("Request completes within timeout")
+        .unwrap();
 
-        canister_id
+        match call_response {
+            CallResponse::Response((canister_id,)) => canister_id,
+            CallResponse::Poll(_) => {
+                panic!("Call V3 endpoint should have responded with a certificate")
+            }
+        }
     });
     assert_eq!(canister_id, specified_id);
 }

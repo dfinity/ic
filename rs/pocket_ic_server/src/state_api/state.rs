@@ -321,6 +321,20 @@ pub trait HasStateLabel {
     fn get_state_label(&self) -> StateLabel;
 }
 
+enum ApiVersion {
+    V2,
+    V3,
+}
+
+impl std::fmt::Display for ApiVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiVersion::V2 => write!(f, "v2"),
+            ApiVersion::V3 => write!(f, "v3"),
+        }
+    }
+}
+
 impl ApiState {
     /// For polling:
     /// The client lib dispatches a long running operation and gets a Started {state_label, op_id}.
@@ -402,7 +416,8 @@ impl ApiState {
             (resp.status(), resp)
         }
 
-        async fn handler_api_v2_canister(
+        async fn handler_api_canister(
+            api_version: ApiVersion,
             replica_url: String,
             effective_canister_id: CanisterId,
             endpoint: &str,
@@ -411,8 +426,8 @@ impl ApiState {
             let client =
                 Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
             let url = format!(
-                "{}/api/v2/canister/{}/{}",
-                replica_url, effective_canister_id, endpoint
+                "{}/api/{}/canister/{}/{}",
+                replica_url, api_version, effective_canister_id, endpoint
             );
             let req = Request::builder()
                 .method(Method::POST)
@@ -425,12 +440,34 @@ impl ApiState {
             (resp.status(), resp)
         }
 
-        async fn handler_call(
+        async fn handler_call_v2(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "call", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "call",
+                bytes,
+            )
+            .await
+        }
+
+        async fn handler_call_v3(
+            State(replica_url): State<String>,
+            Path(effective_canister_id): Path<CanisterId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_canister(
+                ApiVersion::V3,
+                replica_url,
+                effective_canister_id,
+                "call",
+                bytes,
+            )
+            .await
         }
 
         async fn handler_query(
@@ -438,7 +475,14 @@ impl ApiState {
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "query", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "query",
+                bytes,
+            )
+            .await
         }
 
         async fn handler_read_state(
@@ -446,7 +490,14 @@ impl ApiState {
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "read_state", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "read_state",
+                bytes,
+            )
+            .await
         }
 
         // converts an HTTP request to an HTTP/1.1 request required by icx-proxy
@@ -518,11 +569,13 @@ impl ApiState {
                 .route("/api/v2/status", get(handler_status))
                 .route(
                     "/api/v2/canister/:ecid/call",
-                    post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    post(handler_call_v2)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
                     "/api/v3/canister/:ecid/call",
-                    post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    post(handler_call_v3)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
                     "/api/v2/canister/:ecid/query",
