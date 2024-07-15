@@ -197,6 +197,7 @@ pub struct NeuronsFundNeuron {
     pub id: NeuronId,
     pub maturity_equivalent_icp_e8s: u64,
     pub controller: PrincipalId,
+    pub hotkeys: Vec<PrincipalId>,
 }
 
 enum StorageLocation {
@@ -725,6 +726,8 @@ impl NeuronStore {
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
             id: n.id(),
             controller: n.controller(),
+            // TODO(NNS1-3198): This should be replaced with a call to `n.hotkeys()`
+            hotkeys: Vec::new(),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
         .into_iter()
