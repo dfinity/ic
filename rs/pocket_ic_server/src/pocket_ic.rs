@@ -2084,9 +2084,10 @@ mod tests {
     fn test_time() {
         let mut pic = PocketIc::default();
 
-        let time = Time::from_nanos_since_unix_epoch(21);
+        let unix_time_ns = 1640995200000000000; // 1st Jan 2022
+        let time = Time::from_nanos_since_unix_epoch(unix_time_ns);
         compute_assert_state_change(&mut pic, SetTime { time });
-        let expected_time = OpOut::Time(21);
+        let expected_time = OpOut::Time(unix_time_ns);
         let actual_time = compute_assert_state_immutable(&mut pic, GetTime {});
 
         assert_eq!(expected_time, actual_time);
