@@ -58,3 +58,13 @@ system_test(
     runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
+
+system_test(
+    name = "queues_compatibility_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = [
+        "//rs/replicated_state:replicated_state_test_binary",
+    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)

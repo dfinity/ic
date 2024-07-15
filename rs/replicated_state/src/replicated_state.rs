@@ -16,9 +16,8 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
@@ -107,9 +106,6 @@ pub enum StateError {
     /// Message enqueuing would have caused the canister or subnet to run over
     /// their memory limit.
     OutOfMemory { requested: NumBytes, available: i64 },
-
-    /// Canister state is invalid because of broken invariant.
-    InvariantBroken(String),
 
     /// Response enqueuing failed due to not matching the expected response.
     NonMatchingResponse {
@@ -280,7 +276,6 @@ pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
 pub const LABEL_VALUE_CANISTER_MIGRATING: &str = "CanisterMigrating";
 pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
-pub const LABEL_VALUE_INVARIANT_BROKEN: &str = "InvariantBroken";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
 pub const LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE: &str = "BitcoinNonMatchingResponse";
 pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
@@ -299,7 +294,6 @@ impl StateError {
             StateError::CanisterMigrating { .. } => LABEL_VALUE_CANISTER_MIGRATING,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
-            StateError::InvariantBroken(_) => LABEL_VALUE_INVARIANT_BROKEN,
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
             StateError::BitcoinNonMatchingResponse { .. } => {
                 LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE
@@ -357,9 +351,6 @@ impl std::fmt::Display for StateError {
                 "Cannot enqueue message. Out of memory: requested {}, available {}",
                 requested, available
             ),
-            StateError::InvariantBroken(err) => {
-                write!(f, "Invariant broken: {}", err)
-            }
             StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
                 f,
                 "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",
@@ -415,24 +406,6 @@ impl From<&IngressInductionError> for ErrorCode {
             IngressInductionError::CanisterMethodNotFound(_) => ErrorCode::CanisterMethodNotFound,
             IngressInductionError::InvalidManagementPayload => ErrorCode::InvalidManagementPayload,
             IngressInductionError::IngressHistoryFull { .. } => ErrorCode::IngressHistoryFull,
-        }
-    }
-}
-
-impl From<&StateError> for RejectCode {
-    fn from(err: &StateError) -> Self {
-        match err {
-            StateError::CanisterNotFound(_) => Self::DestinationInvalid,
-            StateError::CanisterStopped(_) => Self::CanisterError,
-            StateError::CanisterStopping(_) => Self::CanisterError,
-            StateError::CanisterMigrating { .. } => Self::SysTransient,
-            StateError::QueueFull { .. } => Self::SysTransient,
-            StateError::OutOfMemory { .. } => Self::CanisterError,
-            StateError::InvariantBroken { .. }
-            | StateError::NonMatchingResponse { .. }
-            | StateError::BitcoinNonMatchingResponse { .. } => {
-                unreachable!("Not a user error: {}", err);
-            }
         }
     }
 }
@@ -681,31 +654,11 @@ impl ReplicatedState {
     }
 
     /// Returns all IDKG dealings contexts.
-    pub fn idkg_dealings_contexts(&self) -> BTreeMap<CallbackId, IDkgDealingsContext> {
-        self.metadata
+    pub fn idkg_dealings_contexts(&self) -> &BTreeMap<CallbackId, IDkgDealingsContext> {
+        &self
+            .metadata
             .subnet_call_context_manager
             .idkg_dealings_contexts
-            .clone()
-            .into_iter()
-            .chain(
-                self.metadata
-                    .subnet_call_context_manager
-                    .ecdsa_dealings_contexts
-                    .iter()
-                    .map(|(callback, ecdsa_context)| {
-                        (
-                            *callback,
-                            IDkgDealingsContext {
-                                request: ecdsa_context.request.clone(),
-                                key_id: MasterPublicKeyId::Ecdsa(ecdsa_context.key_id.clone()),
-                                nodes: ecdsa_context.nodes.clone(),
-                                registry_version: ecdsa_context.registry_version,
-                                time: ecdsa_context.time,
-                            },
-                        )
-                    }),
-            )
-            .collect()
     }
 
     /// Retrieves a reference to the stream from this subnet to the destination

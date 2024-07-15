@@ -33,7 +33,7 @@ fn test_artifact_sent_to_other_peer() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -90,7 +90,7 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -173,7 +173,7 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -542,7 +542,7 @@ fn test_adverts_are_retransmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -638,7 +638,7 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -731,7 +731,7 @@ fn test_large_msgs() {
         let mut sim = Builder::new()
             .max_message_latency(Duration::from_millis(0))
             .udp_capacity(1024 * 1024)
-            .simulation_duration(Duration::from_secs(30))
+            .simulation_duration(Duration::from_secs(20 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());

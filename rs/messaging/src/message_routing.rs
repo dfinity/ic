@@ -1159,6 +1159,8 @@ impl BatchProcessor for BatchProcessorImpl {
             .blockmaker_metrics_time_series
             .observe(batch.time, &batch.blockmaker_metrics);
 
+        let batch_summary = batch.batch_summary.clone();
+
         let mut state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
@@ -1189,6 +1191,7 @@ impl BatchProcessor for BatchProcessorImpl {
             state_after_round,
             commit_height,
             certification_scope,
+            batch_summary,
         );
         self.observe_phase_duration(PHASE_COMMIT, &phase_since);
 
@@ -1295,6 +1298,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             state_after_stream_builder,
             commit_height,
             certification_scope,
+            batch.batch_summary,
         );
     }
 }

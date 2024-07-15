@@ -14,7 +14,7 @@ use std::fmt;
 use std::hash::Hash;
 
 use super::{
-    EcdsaBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
+    IDkgBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
     ThresholdSchnorrPresignatureTranscriptCreationError, ThresholdSchnorrSigInputsCreationError,
     TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
 };
@@ -142,7 +142,7 @@ impl PreSignatureTranscriptRef {
     /// Resolves the refs to get the PreSignatureTranscript.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<SchnorrPreSignatureTranscript, PreSignatureTranscriptError> {
         let blinder_unmasked = resolver
             .transcript(self.blinder_unmasked_ref.as_ref())
@@ -245,7 +245,7 @@ impl ThresholdSchnorrSigInputsRef {
     /// Resolves the refs to get the ThresholdEcdsaSigInputs.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<ThresholdSchnorrSigInputs, ThresholdSchnorrSigInputsError> {
         let presig_transcript = self
             .presig_transcript_ref

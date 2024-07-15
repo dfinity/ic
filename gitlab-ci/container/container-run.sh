@@ -33,7 +33,7 @@ else
     PODMAN_ARGS=()
 fi
 
-IMAGE="docker.io/dfinity/ic-build"
+IMAGE="ghcr.io/dfinity/ic-build"
 BUILD_ARGS=(--bazel)
 CTR=0
 while test $# -gt $CTR; do
@@ -63,13 +63,6 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
 if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
-    if grep 'index.docker.io' $HOME/.docker/config.json >/dev/null 2>&1; then
-        # copy credentials for root
-        ROOT_HOME="$(getent passwd root | awk -F: '{print $6}')"
-        sudo mkdir -p $ROOT_HOME/.docker
-        sudo cp -f $HOME/.docker/config.json $ROOT_HOME/.docker/
-        sudo podman "${PODMAN_ARGS[@]}" login --authfile $ROOT_HOME/.docker/config.json docker.io
-    fi
     if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
         docker() { sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host; }

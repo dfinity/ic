@@ -25,7 +25,10 @@ pub struct Config {
     pub incoming_source: IncomingSource,
     pub logger: LoggerConfig,
     /// Socks proxy docs: https://github.com/dfinity/ic/blob/master/ic-os/boundary-guestos/docs/Components.adoc#user-content-socks-proxy
-    /// If the socks_proxy is an empty String, the socks proxy client will be None.
+    /// Proxy url is validated and needs to have scheme, host and port specified. I.e socks5://socksproxy.com:1080
+    /// `Option<String>` can't be used because the decision on using a proxy is based on the subnet and this information
+    /// is not present at adapter startup. So to enable/disable the proxy there exists a `socks_proxy_allowed` field in
+    /// the adapter request.
     pub socks_proxy: String,
 }
 
@@ -36,7 +39,7 @@ impl Default for Config {
             http_request_timeout_secs: DEFAULT_HTTP_REQUEST_TIMEOUT_SECS,
             incoming_source: IncomingSource::default(),
             logger: LoggerConfig::default(),
-            socks_proxy: String::default(),
+            socks_proxy: "socks5://notaproxy:1080".to_string(),
         }
     }
 }

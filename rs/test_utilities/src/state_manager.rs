@@ -14,6 +14,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    batch::BatchSummary,
     consensus::certification::Certification,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     crypto::{CryptoHash, CryptoHashOf},
@@ -226,6 +227,7 @@ impl StateManager for FakeStateManager {
         state: ReplicatedState,
         height: Height,
         _scope: CertificationScope,
+        _batch_summary: Option<BatchSummary>,
     ) {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         self.states.write().unwrap().push(Snapshot {
@@ -701,11 +703,12 @@ impl StateManager for RefMockStateManager {
         state: ReplicatedState,
         height: Height,
         scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
     ) {
         self.mock
             .read()
             .unwrap()
-            .commit_and_certify(state, height, scope)
+            .commit_and_certify(state, height, scope, batch_summary)
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
