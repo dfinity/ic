@@ -12733,6 +12733,7 @@ dependencies = [
  "icrc-ledger-agent",
  "icrc-ledger-types",
  "ledger-canister",
+ "num-traits",
  "pocket-ic",
  "reqwest 0.12.4",
  "rosetta-core",
