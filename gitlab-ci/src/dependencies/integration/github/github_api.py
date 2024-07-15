@@ -38,7 +38,7 @@ class GithubApi:
         repo = self.github.get_repo(GITHUB_REPOSITORY)
 
         # Get the pull request
-        pull_request = repo.get_pull(GITHUB_PR_NUMBER)
+        pull_request = repo.get_pull(int(GITHUB_PR_NUMBER))
 
         # Get the comments
         comments = pull_request.get_issue_comments()
