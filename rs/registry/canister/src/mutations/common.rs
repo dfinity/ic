@@ -1,30 +1,17 @@
-use std::collections::HashSet;
-use std::convert::TryFrom;
-use std::net::Ipv4Addr;
-use std::str::FromStr;
-
+use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetListRecord,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
     make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_node_record_key,
+    make_unassigned_nodes_config_record_key,
 };
-use ic_registry_transport::pb::v1::RegistryValue;
 use prost::Message;
-
-use crate::registry::Registry;
-
-/// Wraps around Message::encode and panics on error.
-pub(crate) fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
-    let mut buf = Vec::<u8>::new();
-    msg.encode(&mut buf).unwrap();
-    buf
-}
-
-pub fn decode_registry_value<T: Message + Default>(registry_value: Vec<u8>) -> T {
-    T::decode(registry_value.as_slice()).unwrap()
-}
+use std::{
+    cmp::Eq, collections::HashSet, convert::TryFrom, fmt, hash::Hash, net::Ipv4Addr, str::FromStr,
+};
 
 pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<SubnetId> {
     subnet_list
@@ -51,35 +38,42 @@ pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[No
     });
 }
 
-pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
+pub(crate) fn get_blessed_replica_versions(
+    registry: &Registry,
+) -> Result<BlessedReplicaVersions, String> {
     let blessed_replica_key = make_blessed_replica_versions_key();
-    // Get the current list of blessed replica versions
-    if let Some(RegistryValue {
-        value: blessed_list_vec,
-        version,
-        deletion_marker: _,
-    }) = registry.get(blessed_replica_key.as_bytes(), registry.latest_version())
-    {
-        let blessed_list =
-            decode_registry_value::<BlessedReplicaVersions>(blessed_list_vec.clone());
-        // Verify that the new one is blessed
-        assert!(
-            blessed_list
-                .blessed_version_ids
-                .iter()
-                .any(|v| v == replica_version_id),
-            "Attempt to change the replica version to '{}' is rejected, \
-            because that version is NOT blessed. The list of blessed replica versions, at \
-            registry version {}, is: {}.",
-            replica_version_id,
-            version,
-            blessed_versions_to_string(&blessed_list)
-        );
-    } else {
-        panic!(
-            "Error while fetching the list of blessed replica versions record: {}",
-            replica_version_id
+    registry
+        .get(blessed_replica_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err("Failed to retrieve the blessed replica versions.".to_string()),
+            |result| {
+                let decoded = BlessedReplicaVersions::decode(result.value.as_slice()).unwrap();
+                Ok(decoded)
+            },
         )
+}
+
+pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
+    match get_blessed_replica_versions(registry) {
+        Ok(blessed_list) => {
+            // Verify that the new one is blessed
+            assert!(
+                blessed_list
+                    .blessed_version_ids
+                    .iter()
+                    .any(|v| v == replica_version_id),
+                "Attempt to check if the replica version to '{}' is blessed was rejected, \
+                because that version is NOT blessed. The list of blessed replica versions is: {}.",
+                replica_version_id,
+                blessed_versions_to_string(&blessed_list)
+            );
+        }
+        Err(_) => {
+            panic!(
+                "Error while fetching the list of blessed replica versions record: {}",
+                replica_version_id
+            )
+        }
     }
 }
 
@@ -104,6 +98,21 @@ pub fn check_ipv6_format(ipv6_string: &str) -> bool {
         }
     }
     count == 8
+}
+
+pub fn get_unassigned_nodes_record(
+    registry: &Registry,
+) -> Result<UnassignedNodesConfigRecord, String> {
+    let unassigned_nodes_key = make_unassigned_nodes_config_record_key();
+    registry
+        .get(unassigned_nodes_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err("No unassigned nodes record found in the registry.".to_string()),
+            |result| {
+                let decoded = UnassignedNodesConfigRecord::decode(result.value.as_slice()).unwrap();
+                Ok(decoded)
+            },
+        )
 }
 
 // Perform a basic domain validation for a string
@@ -190,35 +199,81 @@ fn extract_subnet_bytes(ipv4_address: &str, subnet_mask: Ipv4Addr) -> Vec<u8> {
         .collect::<Vec<u8>>()
 }
 
+#[derive(Debug)]
+pub enum IPv4ConfigError {
+    InvalidIPv4Address,
+    InvalidGatewayAddress,
+    InvalidPrefixLength,
+    NotInSameSubnet,
+    NotGlobalIPv4Address,
+}
+
+impl fmt::Display for IPv4ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IPv4ConfigError::InvalidIPv4Address => {
+                write!(f, "Invalid IPv4 address")
+            }
+            IPv4ConfigError::InvalidGatewayAddress => {
+                write!(f, "Invalid gateway IPv4 address")
+            }
+            IPv4ConfigError::InvalidPrefixLength => {
+                write!(f, "Invalid prefix length")
+            }
+            IPv4ConfigError::NotInSameSubnet => {
+                write!(f, "IP addresses are not in the same subnet")
+            }
+            IPv4ConfigError::NotGlobalIPv4Address => {
+                write!(f, "IPv4 address is not a global address")
+            }
+        }
+    }
+}
+
 // Check that a given IPv4 config is valid
-pub fn check_ipv4_config(ip_addr: String, gateway_ip_addrs: Vec<String>, prefix_length: u32) {
+pub fn check_ipv4_config(
+    ip_addr: String,
+    gateway_ip_addrs: Vec<String>,
+    prefix_length: u32,
+) -> Result<(), IPv4ConfigError> {
     // Ensure all are valid IPv4 addresses
     if !is_valid_ipv4_address(&ip_addr) {
-        panic!("The specified IPv4 address is not valid");
+        return Err(IPv4ConfigError::InvalidIPv4Address);
     }
 
     for gateway_ip_addr in &gateway_ip_addrs {
         if !is_valid_ipv4_address(gateway_ip_addr) {
-            panic!("The specified IPv4 address of the gateway is not valid");
+            return Err(IPv4ConfigError::InvalidGatewayAddress);
         }
     }
 
     // Ensure the prefix length is valid
     if !is_valid_ipv4_prefix_length(prefix_length) {
-        panic!("The prefix length is not valid");
+        return Err(IPv4ConfigError::InvalidPrefixLength);
     }
 
     // Ensure all IPv4 addresses are in the same subnet
     let mut all_ip_addrs = gateway_ip_addrs.clone();
     all_ip_addrs.push(ip_addr.clone());
     if !are_in_the_same_subnet(all_ip_addrs, prefix_length) {
-        panic!("The specified IPv4 addresses are not in the same subnet");
+        return Err(IPv4ConfigError::NotInSameSubnet);
     }
 
     // Ensure the IPv4 address is a routable address
     if !is_global_ipv4_address(&ip_addr) {
-        panic!("The specified IPv4 address is not a global address");
+        return Err(IPv4ConfigError::NotGlobalIPv4Address);
     }
+
+    Ok(())
+}
+
+/// Returns whether a list has duplicate elements.
+pub fn has_duplicates<T>(v: &Vec<T>) -> bool
+where
+    T: Hash + Eq,
+{
+    let s: HashSet<_> = HashSet::from_iter(v);
+    s.len() < v.len()
 }
 
 #[cfg(test)]

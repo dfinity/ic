@@ -4,15 +4,15 @@
 use assert_matches::assert_matches;
 use dfn_candid::candid_multi_arity;
 use ic_error_types::ErrorCode;
-use ic_ic00_types::CanisterIdRecord;
+use ic_management_canister_types::CanisterIdRecord;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 
 #[test]
 fn test_that_the_anonymous_user_cannot_stop_any_nns_canister() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_canisters =
             NnsCanisters::set_up(&runtime, NnsInitPayloadsBuilder::new().build()).await;
 

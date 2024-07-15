@@ -1,7 +1,7 @@
 //! Consensus utility functions
 use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
-    consensus::{PayloadTransientError, PayloadValidationError},
+    consensus::{PayloadValidationError, PayloadValidationFailure},
     consensus_pool::ConsensusPoolCache,
     time_source::TimeSource,
     validation::ValidationError,
@@ -13,7 +13,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
+    consensus::{idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
@@ -34,12 +34,18 @@ pub mod pool_reader;
 /// rate.
 pub const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 3;
 
-/// The acceptable ratio between the length of the dkg interval and the gap
-/// between a summary height and the current finalized tip that transpires
-/// without the production the cup. This means that we will start slowing down
-/// if we get approximately halfway through a dkg interval without producing the
-/// cup for the last summary block.
-pub const ACCEPTABLE_CUP_GAP_RATIO: f64 = 0.5;
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the notarization/certification gap.
+pub const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
+
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the gap between notarized height and the height of the next pending CUP.
+pub const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 70;
+
+/// In order to have a bound on the validated consensus pool, we don't validate
+/// artifacts with a height greater than the given value above the next pending CUP.
+/// The only exception to this are CUPs, which have no upper bound on the height.
+pub const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
 
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
@@ -91,22 +97,6 @@ pub fn get_block_maker_delay(
         .map(|settings| settings.unit_delay * rank.0 as u32)
 }
 
-/// Return true if the given subnet id is the root subnet
-pub fn is_root_subnet(
-    registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-) -> Result<bool, String> {
-    let root_subnet_id = registry_client
-        .get_root_subnet_id(registry_version)
-        .map_err(|e| format!("Encountered error retrieving root subnet id {:?}", e))?
-        .ok_or(format!(
-            "No value for root subnet id at registry version {:?}",
-            registry_version
-        ))?;
-    Ok(root_subnet_id == subnet_id)
-}
-
 /// Return true if the time since round start is greater than the required block
 /// maker delay for the given rank.
 pub fn is_time_to_make_block(
@@ -118,26 +108,34 @@ pub fn is_time_to_make_block(
     rank: Rank,
     time_source: &dyn TimeSource,
 ) -> bool {
-    let registry_version = match pool.registry_version(height) {
-        Some(rv) => rv,
-        _ => return false,
+    let Some(registry_version) = pool.registry_version(height) else {
+        return false;
     };
-    let block_maker_delay =
-        match get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank) {
-            Some(delay) => delay,
-            _ => return false,
-        };
-    match pool.get_round_start_time(height) {
-        Some(start_time) => time_source.get_relative_time() >= start_time + block_maker_delay,
-        None => false,
-    }
+    let Some(block_maker_delay) =
+        get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank)
+    else {
+        return false;
+    };
+
+    // If the relative time indicates that not enough time has passed, we fall
+    // back to the the monotonic round start time. We do this to safeguard
+    // against a stalled relative clock.
+    pool.get_round_start_time(height)
+        .is_some_and(|start_time| time_source.get_relative_time() >= start_time + block_maker_delay)
+        || pool
+            .get_round_start_instant(height, time_source.get_origin_instant())
+            .is_some_and(|start_instant| {
+                time_source.get_instant() >= start_instant + block_maker_delay
+            })
 }
 
-/// Calculate the required delay for notary based on the rank of block to
-/// notarize, adjusted by a multiplier depending the gap between finalized and
-/// notarized heights, and adjusted by how far the certified height lags behind
-/// the finalized height. Use membership and height to determine the
-/// notarization settings that should be used.
+/// Calculate the required delay for notary based on the rank of block to notarize,
+/// adjusted by a multiplier depending on the gap between finalized and notarized
+/// heights, adjusted by how far the certified height lags behind the finalized
+/// height. Return `None` when the registry is unavailable, or when the notary has
+/// reached a hard limit (either notarization/certification or notarization/CUP gap
+/// limits).
+/// Use membership and height to determine the notarization settings that should be used.
 pub fn get_adjusted_notary_delay(
     membership: &Membership,
     pool: &PoolReader<'_>,
@@ -146,7 +144,7 @@ pub fn get_adjusted_notary_delay(
     height: Height,
     rank: Rank,
 ) -> Option<Duration> {
-    Some(get_adjusted_notary_delay_from_settings(
+    match get_adjusted_notary_delay_from_settings(
         get_notarization_delay_settings(
             log,
             &*membership.registry_client,
@@ -156,25 +154,85 @@ pub fn get_adjusted_notary_delay(
         pool,
         state_manager,
         rank,
-    ))
+    ) {
+        NotaryDelay::CanNotarizeAfter(duration) => Some(duration),
+        NotaryDelay::ReachedMaxNotarizationCertificationGap {
+            notarized_height,
+            certified_height,
+        } => {
+            warn!(
+                every_n_seconds => 5,
+                log,
+                "The gap between the notarization height ({notarized_height}) and \
+                 the certification height ({certified_height}) exceeds hard bound of \
+                 {ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP}"
+            );
+            None
+        }
+        NotaryDelay::ReachedMaxNotarizationCUPGap {
+            notarized_height,
+            next_cup_height,
+        } => {
+            warn!(
+                every_n_seconds => 5,
+                log,
+                "The gap between the notarization height ({notarized_height}) and \
+                the next CUP height ({next_cup_height}) exceeds hard bound of \
+                {ACCEPTABLE_NOTARIZATION_CUP_GAP}"
+            );
+            None
+        }
+    }
 }
 
-/// Calculate the required delay for notary based on the rank of block to
-/// notarize, adjusted by a multiplier depending the gap between finalized and
-/// notarized heights, by how far the certified height lags behind the finalized
-/// height, and by how far we have advanced beyond a summary block without
-/// creating a CUP.
+#[derive(Debug, PartialEq)]
+pub enum NotaryDelay {
+    /// Notary can notarize after this delay.
+    CanNotarizeAfter(Duration),
+    /// Gap between notarization and certification is too large. Because we have a
+    /// hard limit on this gap, the notary cannot progress for now.
+    ReachedMaxNotarizationCertificationGap {
+        notarized_height: Height,
+        certified_height: Height,
+    },
+    /// Gap between notarization and the next CUP is too large. Because we have a
+    /// hard limit on this gap, the notary cannot progress for now.
+    ReachedMaxNotarizationCUPGap {
+        notarized_height: Height,
+        next_cup_height: Height,
+    },
+}
+
+/// Calculate the required delay for notary based on the rank of block to notarize,
+/// adjusted by a multiplier depending on the gap between finalized and notarized
+/// heights, adjusted by how far the certified height lags behind the finalized
+/// height.
 pub fn get_adjusted_notary_delay_from_settings(
     settings: NotarizationDelaySettings,
     pool: &PoolReader<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     rank: Rank,
-) -> Duration {
+) -> NotaryDelay {
     let NotarizationDelaySettings {
         unit_delay,
         initial_notary_delay,
         ..
     } = settings;
+
+    // We impose a hard limit on the gap between notarization and certification.
+    let notarized_height = pool.get_notarized_height();
+    let certified_height = state_manager.latest_certified_height();
+    if notarized_height
+        .get()
+        .saturating_sub(certified_height.get())
+        >= ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
+    {
+        return NotaryDelay::ReachedMaxNotarizationCertificationGap {
+            notarized_height,
+            certified_height,
+        };
+    }
+
     // We adjust regular delay based on the gap between finalization and
     // notarization to make it exponentially longer to keep the gap from growing too
     // big. This is because increasing delay leads to higher chance of notarizing
@@ -199,35 +257,19 @@ pub fn get_adjusted_notary_delay_from_settings(
     let certified_adjusted_delay =
         finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
 
-    // We measure the gap between a summary height and the current finalized tip that
-    // transpires without producing the cup, and we will start slowing down if
-    // we get approximately halfway (see ACCEPTABLE_CUP_GAP_RATIO) through a dkg interval
-    // without producing the cup for the last summary block.
-    //
-    // At the moment this is a linear slowdown, which could be switched to
-    // exponential if required.
-    let cup_gap = finalized_height.saturating_sub(pool.get_catch_up_height().get());
-    let last_cup_dkg_info = pool
-        .get_highest_catch_up_package()
-        .content
-        .block
-        .as_ref()
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .clone();
+    // We bound the gap between the next CUP height and the current notarization
+    // height by ACCEPTABLE_NOTARIZATION_CUP_GAP.
+    let next_cup_height = pool.get_next_cup_height();
+    if notarized_height.get().saturating_sub(next_cup_height.get())
+        >= ACCEPTABLE_NOTARIZATION_CUP_GAP
+    {
+        return NotaryDelay::ReachedMaxNotarizationCUPGap {
+            notarized_height,
+            next_cup_height,
+        };
+    }
 
-    let last_interval_length = last_cup_dkg_info.interval_length;
-    let missing_cup_interval_length = last_cup_dkg_info.next_interval_length;
-
-    let acceptable_gap_size = last_interval_length.get()
-        + (ACCEPTABLE_CUP_GAP_RATIO * missing_cup_interval_length.get() as f64).round() as u64;
-
-    let cup_multiple = cup_gap.saturating_sub(acceptable_gap_size);
-
-    let adjusted_delay = certified_adjusted_delay + unit_delay.as_millis() as u64 * cup_multiple;
-    Duration::from_millis(adjusted_delay)
+    NotaryDelay::CanNotarizeAfter(Duration::from_millis(certified_adjusted_delay))
 }
 
 /// Return the validated block proposals with the lowest rank at height `h`, if
@@ -405,13 +447,6 @@ pub fn lookup_replica_version(
     }
 }
 
-// Data we usually pull from the latest relevant DKG summary block.
-struct DkgData {
-    registry_version: RegistryVersion,
-    low_threshold_transcript: NiDkgTranscript,
-    high_threshold_transcript: NiDkgTranscript,
-}
-
 /// Return the registry version to be used for the given height.
 /// Note that this can only look up for height that is greater than or equal
 /// to the latest catch-up package height, otherwise an error is returned.
@@ -419,7 +454,7 @@ pub fn registry_version_at_height(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<RegistryVersion> {
-    get_active_data_at(reader, height).map(|data| data.registry_version)
+    get_active_data_at(reader, height, get_registry_version_at_given_summary)
 }
 
 /// Return the current low transcript for the given height if it was found.
@@ -427,7 +462,9 @@ pub fn active_low_threshold_transcript(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<NiDkgTranscript> {
-    get_active_data_at(reader, height).map(|data| data.low_threshold_transcript)
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_at_given_summary(block, height, NiDkgTag::LowThreshold)
+    })
 }
 
 /// Return the current high transcript for the given height if it was found.
@@ -435,11 +472,17 @@ pub fn active_high_threshold_transcript(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<NiDkgTranscript> {
-    get_active_data_at(reader, height).map(|data| data.high_threshold_transcript)
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_at_given_summary(block, height, NiDkgTag::HighThreshold)
+    })
 }
 
 /// Return the active DKGData active at the given height if it was found.
-fn get_active_data_at(reader: &dyn ConsensusPoolCache, height: Height) -> Option<DkgData> {
+fn get_active_data_at<T>(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+    getter: impl Fn(&Block, Height) -> Option<T>,
+) -> Option<T> {
     // Note that we cannot always use the latest finalized DKG summary to determine
     // the active DKG data: Suppose we have CUPs every 100th block, and we just
     // finalized DKG summary block 300. With that block, we can find the active
@@ -459,43 +502,45 @@ fn get_active_data_at(reader: &dyn ConsensusPoolCache, height: Height) -> Option
     // As a solution, we try to establish the active DKG data using the summary
     // block from the CUP first, and if that does not work, we try the latest
     // finalized summary block. This way we avoid both ways of getting stuck.
-    get_active_data_at_given_summary(reader.catch_up_package().content.block.get_value(), height)
-        .or_else(|| get_active_data_at_given_summary(&reader.summary_block(), height))
+    getter(reader.catch_up_package().content.block.get_value(), height)
+        .or_else(|| getter(&reader.summary_block(), height))
 }
 
-/// Return the active DKGData active at the given height using the given summary
-/// block.
-fn get_active_data_at_given_summary(summary_block: &Block, height: Height) -> Option<DkgData> {
+fn get_registry_version_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<RegistryVersion> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(DkgData {
-            registry_version: dkg_summary.registry_version,
-            high_threshold_transcript: dkg_summary
-                .current_transcript(&NiDkgTag::HighThreshold)
-                .clone(),
-            low_threshold_transcript: dkg_summary
-                .current_transcript(&NiDkgTag::LowThreshold)
-                .clone(),
-        })
+        Some(dkg_summary.registry_version)
     } else if dkg_summary.next_interval_includes(height) {
-        let get_transcript_for = |tag| {
-            dkg_summary
-                .next_transcript(&tag)
-                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
-                .clone()
-        };
-        Some(DkgData {
-            registry_version: summary_block.context.registry_version,
-            high_threshold_transcript: get_transcript_for(NiDkgTag::HighThreshold),
-            low_threshold_transcript: get_transcript_for(NiDkgTag::LowThreshold),
-        })
+        Some(summary_block.context.registry_version)
     } else {
         None
     }
 }
 
-/// Get the [`SubnetRecord`] of this subnet with the
-/// specified [`RegistryVersion`]
+fn get_transcript_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+    tag: NiDkgTag,
+) -> Option<NiDkgTranscript> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.current_transcript(&tag).clone())
+    } else if dkg_summary.next_interval_includes(height) {
+        Some(
+            dkg_summary
+                .next_transcript(&tag)
+                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
+                .clone(),
+        )
+    } else {
+        None
+    }
+}
+
+/// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
 pub fn get_subnet_record(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -506,27 +551,69 @@ pub fn get_subnet_record(
         Ok(Some(record)) => Ok(record),
         Ok(None) => {
             warn!(logger, "Subnet id {:?} not found in registry", subnet_id);
-            Err(ValidationError::Transient(
-                PayloadTransientError::SubnetNotFound(subnet_id),
+            Err(ValidationError::ValidationFailed(
+                PayloadValidationFailure::SubnetNotFound(subnet_id),
             ))
         }
         Err(err) => {
             warn!(logger, "Failed to get subnet record in block_maker");
-            Err(ValidationError::Transient(
-                PayloadTransientError::RegistryUnavailable(err),
+            Err(ValidationError::ValidationFailed(
+                PayloadValidationFailure::RegistryUnavailable(err),
             ))
         }
     }
 }
 
+/// Return the oldest registry version of transcripts in the given ECDSA summary payload that are
+/// referenced by the given replicated state.
+pub fn get_oldest_ecdsa_state_registry_version(
+    ecdsa: &IDkgPayload,
+    state: &ReplicatedState,
+) -> Option<RegistryVersion> {
+    state
+        .signature_request_contexts()
+        .values()
+        .flat_map(|context| context.matched_pre_signature.as_ref())
+        .flat_map(|(pre_sig_id, _)| ecdsa.available_pre_signatures.get(pre_sig_id))
+        .flat_map(|pre_signature| pre_signature.get_refs())
+        .flat_map(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id))
+        .map(|transcript| transcript.registry_version)
+        .min()
+}
+
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
+    use std::str::FromStr;
+
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
+    };
+    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_state::ReplicatedStateBuilder;
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::RequestBuilder,
+    };
     use ic_types::{
-        crypto::{ThresholdSigShare, ThresholdSigShareOf},
+        consensus::idkg::{
+            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
+            schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
+            MasterKeyTranscript, PreSigId, UnmaskedTranscript,
+        },
+        crypto::{
+            canister_threshold_sig::idkg::{
+                IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+                IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+            },
+            ThresholdSigShare, ThresholdSigShareOf,
+        },
+        messages::CallbackId,
         signature::ThresholdSignatureShare,
+        time::UNIX_EPOCH,
     };
 
     /// Test that two shares with the same content are grouped together, and
@@ -561,11 +648,17 @@ mod tests {
                 unit_delay: Duration::from_secs(1),
                 initial_notary_delay: Duration::from_secs(0),
             };
+            let committee = (0..3).map(node_test_id).collect::<Vec<_>>();
+            /* use large enough DKG interval to trigger notarization/CUP gap limit */
+            let record = SubnetRecordBuilder::from(&committee)
+                .with_dkg_interval_length(ACCEPTABLE_NOTARIZATION_CUP_GAP + 30)
+                .build();
+
             let Dependencies {
                 mut pool,
                 state_manager,
                 ..
-            } = dependencies(pool_config, 3);
+            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
             let last_cup_dkg_info = PoolReader::new(&pool)
                 .get_highest_catch_up_package()
                 .content
@@ -577,14 +670,35 @@ mod tests {
                 .dkg
                 .clone();
 
-            for _ in 0..last_cup_dkg_info.interval_length.get() {
-                pool.advance_round_normal_operation_no_cup();
-            }
+            // Advance to next summary height
+            pool.advance_round_normal_operation_no_cup_n(
+                last_cup_dkg_info.interval_length.get() + 1,
+            );
+            assert!(pool.get_cache().finalized_block().payload.is_summary());
+            // Advance to one height before the highest possible CUP-less notarized height
+            pool.advance_round_normal_operation_no_cup_n(ACCEPTABLE_NOTARIZATION_CUP_GAP - 1);
 
-            for _ in 0..(last_cup_dkg_info.next_interval_length.get() / 2 + 1) {
-                pool.advance_round_normal_operation_no_cup();
-            }
+            let gap_trigger_height = Height::new(
+                PoolReader::new(&pool).get_notarized_height().get()
+                    - ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
+                    - 1,
+            );
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(gap_trigger_height);
 
+            assert_matches!(
+                get_adjusted_notary_delay_from_settings(
+                    settings.clone(),
+                    &PoolReader::new(&pool),
+                    state_manager.as_ref(),
+                    Rank(0),
+                ),
+                NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
+            );
+
+            state_manager.get_mut().checkpoint();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -597,7 +711,7 @@ mod tests {
                     state_manager.as_ref(),
                     Rank(0),
                 ),
-                Duration::from_secs(0)
+                NotaryDelay::CanNotarizeAfter(Duration::from_secs(0))
             );
 
             state_manager.get_mut().checkpoint();
@@ -608,14 +722,14 @@ mod tests {
 
             pool.advance_round_normal_operation_no_cup();
 
-            assert_eq!(
+            assert_matches!(
                 get_adjusted_notary_delay_from_settings(
                     settings,
                     &PoolReader::new(&pool),
                     state_manager.as_ref(),
                     Rank(0),
                 ),
-                Duration::from_secs(1)
+                NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
             );
         });
     }
@@ -662,5 +776,227 @@ mod tests {
         let calls: [&'_ dyn Fn() -> Vec<u8>; 3] = [&make_empty, &make_1, &make_empty];
         assert_eq!(round_robin.call_next(&calls), vec![1]);
         assert_eq!(round_robin.call_next(&calls), vec![1]);
+    }
+
+    fn empty_idkg_payload(key_id: MasterPublicKeyId) -> IDkgPayload {
+        IDkgPayload::empty(
+            Height::new(0),
+            subnet_test_id(0),
+            vec![MasterKeyTranscript::new(
+                key_id,
+                KeyTranscriptCreation::Begin,
+            )],
+        )
+    }
+
+    fn fake_transcript(id: IDkgTranscriptId, registry_version: RegistryVersion) -> IDkgTranscript {
+        IDkgTranscript {
+            transcript_id: id,
+            receivers: IDkgReceivers::new(BTreeSet::from_iter([node_test_id(0)])).unwrap(),
+            registry_version,
+            verified_dealings: Default::default(),
+            transcript_type: IDkgTranscriptType::Unmasked(
+                IDkgUnmaskedTranscriptOrigin::ReshareMasked(fake_transcript_id(0)),
+            ),
+            algorithm_id: ic_types::crypto::AlgorithmId::EcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        }
+    }
+
+    fn fake_transcript_id(id: u64) -> IDkgTranscriptId {
+        IDkgTranscriptId::new(subnet_test_id(0), id, Height::from(0))
+    }
+
+    // Create a fake ecdsa pre-signature, it will use transcripts with ids
+    // id, id+1, id+2, and id+3.
+    fn fake_ecdsa_quadruple(id: u64, key_id: EcdsaKeyId) -> PreSignatureQuadrupleRef {
+        let temp_rv = RegistryVersion::from(0);
+        let kappa_unmasked = fake_transcript(fake_transcript_id(id), temp_rv);
+        let mut lambda_masked = kappa_unmasked.clone();
+        lambda_masked.transcript_id = fake_transcript_id(id + 1);
+        lambda_masked.transcript_type =
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
+        let mut kappa_times_lambda = lambda_masked.clone();
+        kappa_times_lambda.transcript_id = fake_transcript_id(id + 2);
+        let mut key_times_lambda = lambda_masked.clone();
+        key_times_lambda.transcript_id = fake_transcript_id(id + 3);
+        let mut key_unmasked = kappa_unmasked.clone();
+        key_unmasked.transcript_id = fake_transcript_id(id + 4);
+        let h = Height::from(0);
+        PreSignatureQuadrupleRef {
+            key_id,
+            kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
+            lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
+            kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),
+            key_times_lambda_ref: MaskedTranscript::try_from((h, &key_times_lambda)).unwrap(),
+            key_unmasked_ref: UnmaskedTranscript::try_from((h, &key_unmasked)).unwrap(),
+        }
+    }
+
+    // Create a fake schnorr pre-signature, it will use transcripts with ids
+    // id and id+1.
+    fn fake_schnorr_transcript(id: u64, key_id: SchnorrKeyId) -> PreSignatureTranscriptRef {
+        let temp_rv = RegistryVersion::from(0);
+        let blinder_unmasked = fake_transcript(fake_transcript_id(id), temp_rv);
+        let mut key_unmasked = blinder_unmasked.clone();
+        key_unmasked.transcript_id = fake_transcript_id(id + 1);
+        let h = Height::from(0);
+        PreSignatureTranscriptRef {
+            key_id,
+            blinder_unmasked_ref: UnmaskedTranscript::try_from((h, &blinder_unmasked)).unwrap(),
+            key_unmasked_ref: UnmaskedTranscript::try_from((h, &key_unmasked)).unwrap(),
+        }
+    }
+
+    fn fake_pre_signature(id: u64, key_id: &MasterPublicKeyId) -> PreSignatureRef {
+        match key_id {
+            MasterPublicKeyId::Ecdsa(key_id) => {
+                PreSignatureRef::Ecdsa(fake_ecdsa_quadruple(id, key_id.clone()))
+            }
+            MasterPublicKeyId::Schnorr(key_id) => {
+                PreSignatureRef::Schnorr(fake_schnorr_transcript(id, key_id.clone()))
+            }
+        }
+    }
+
+    fn fake_context(
+        pre_signature_id: Option<PreSigId>,
+        key_id: &MasterPublicKeyId,
+    ) -> SignWithThresholdContext {
+        SignWithThresholdContext {
+            request: RequestBuilder::new().build(),
+            args: match key_id {
+                MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
+                    message_hash: [0; 32],
+                    key_id: key_id.clone(),
+                }),
+                MasterPublicKeyId::Schnorr(key_id) => {
+                    ThresholdArguments::Schnorr(SchnorrArguments {
+                        message: vec![1; 64],
+                        key_id: key_id.clone(),
+                    })
+                }
+            },
+            derivation_path: vec![],
+            pseudo_random_id: [0; 32],
+            matched_pre_signature: pre_signature_id.map(|qid| (qid, Height::from(0))),
+            nonce: None,
+            batch_time: UNIX_EPOCH,
+        }
+    }
+
+    fn fake_state_with_contexts(contexts: Vec<SignWithThresholdContext>) -> ReplicatedState {
+        let mut state = ReplicatedStateBuilder::default().build();
+        let iter = contexts
+            .into_iter()
+            .enumerate()
+            .map(|(i, context)| (CallbackId::from(i as u64), context));
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts = BTreeMap::from_iter(iter);
+        state
+    }
+
+    fn fake_key_ids() -> Vec<MasterPublicKeyId> {
+        vec![
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
+            MasterPublicKeyId::Schnorr(SchnorrKeyId::from_str("Ed25519:some_key").unwrap()),
+        ]
+    }
+
+    // Create an ECDSA payload with 10 pre-signatures, each using registry version 2, 3 or 4.
+    fn idkg_payload_with_pre_sigs(key_id: &MasterPublicKeyId) -> IDkgPayload {
+        let mut ecdsa = empty_idkg_payload(key_id.clone());
+        let mut rvs = [
+            RegistryVersion::from(2),
+            RegistryVersion::from(3),
+            RegistryVersion::from(4),
+        ]
+        .into_iter()
+        .cycle();
+        for i in (0..50).step_by(5) {
+            let pre_sig = fake_pre_signature(i as u64, key_id);
+            let rv = rvs.next().unwrap();
+            for r in pre_sig.get_refs() {
+                ecdsa
+                    .idkg_transcripts
+                    .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
+            }
+            ecdsa
+                .available_pre_signatures
+                .insert(PreSigId(i as u64), pre_sig);
+        }
+        ecdsa
+    }
+
+    #[test]
+    fn test_empty_state_should_return_no_registry_version() {
+        for key_id in fake_key_ids() {
+            println!("Running test for key ID {key_id}");
+            let ecdsa = idkg_payload_with_pre_sigs(&key_id);
+            let state = fake_state_with_contexts(vec![]);
+            assert_eq!(
+                None,
+                get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+            );
+        }
+    }
+
+    #[test]
+    fn test_state_without_matches_should_return_no_registry_version() {
+        for key_id in fake_key_ids() {
+            println!("Running test for key ID {key_id}");
+            let ecdsa = idkg_payload_with_pre_sigs(&key_id);
+            let state = fake_state_with_contexts(vec![fake_context(None, &key_id)]);
+            assert_eq!(
+                None,
+                get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+            );
+        }
+    }
+
+    #[test]
+    fn test_should_return_oldest_registry_version_all() {
+        for key_id in fake_key_ids() {
+            println!("Running test for key ID {key_id}");
+            test_should_return_oldest_registry_version(key_id)
+        }
+    }
+
+    fn test_should_return_oldest_registry_version(key_id: MasterPublicKeyId) {
+        let ecdsa = idkg_payload_with_pre_sigs(&key_id);
+        // create contexts for all pre-signatures, but only create a match for
+        // pre-signatures with registry version >= 3 (not 2!). Thus the oldest
+        // registry version referenced by the state should be 3.
+        let contexts = ecdsa
+            .available_pre_signatures
+            .iter()
+            .map(|(id, pre_sig)| {
+                let t_id = pre_sig.key_unmasked().as_ref().transcript_id;
+                let transcript = ecdsa.idkg_transcripts.get(&t_id).unwrap();
+                (transcript.registry_version.get() >= 3).then_some(*id)
+            })
+            .map(|id| fake_context(id, &key_id))
+            .collect();
+        let state = fake_state_with_contexts(contexts);
+        assert_eq!(
+            Some(RegistryVersion::from(3)),
+            get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+        );
+
+        let mut ecdsa_without_transcripts = ecdsa.clone();
+        ecdsa_without_transcripts.idkg_transcripts = BTreeMap::new();
+        assert_eq!(
+            None,
+            get_oldest_ecdsa_state_registry_version(&ecdsa_without_transcripts, &state)
+        );
+
+        let mut ecdsa_without_pre_sigs = ecdsa.clone();
+        ecdsa_without_pre_sigs.available_pre_signatures = BTreeMap::new();
+        assert_eq!(
+            None,
+            get_oldest_ecdsa_state_registry_version(&ecdsa_without_pre_sigs, &state)
+        );
     }
 }

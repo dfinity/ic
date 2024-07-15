@@ -141,6 +141,9 @@ class DependencyScanner:
                 )
         except Exception as err:
             logging.error(
+                f"{self.dependency_manager.get_scanner_id()} for {current_repo_name} failed for {self.job_id}."
+            )
+            logging.debug(
                 f"{self.dependency_manager.get_scanner_id()} for {current_repo_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
@@ -213,13 +216,17 @@ class DependencyScanner:
                 subscriber.on_merge_request_blocked(
                     self.dependency_manager.get_scanner_id(), self.job_id, merge_request_id
                 )
-            logging.error(f"There were new findings in the MR and no exceptions were granted. {findings_to_flag}")
+            logging.error("There were new findings in the MR and no exceptions were granted.")
+            logging.debug(f"There were new findings in the MR and no exceptions were granted. {findings_to_flag}")
 
             sys.exit(1)
         except Exception as err:
             should_fail_job = True
             logging.error(
-                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n {traceback.format_exc()}"
+                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id}."
+            )
+            logging.debug(
+                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(
@@ -276,13 +283,17 @@ class DependencyScanner:
             # Job must be failed
             for subscriber in self.subscribers:
                 subscriber.on_release_build_blocked(self.dependency_manager.get_scanner_id(), self.job_id)
-            logging.error(f"Release job failed with failures : {failures}")
+            logging.error("Release job failed with failures.")
+            logging.debug(f"Release job failed with failures : {failures}")
 
             sys.exit(1)
         except Exception as err:
             should_fail_job = True
             logging.error(
-                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n {traceback.format_exc()}"
+                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id}."
+            )
+            logging.debug(
+                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(

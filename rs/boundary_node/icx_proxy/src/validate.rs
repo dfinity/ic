@@ -20,7 +20,7 @@ pub trait Validate: Sync + Send {
     ) -> Result<Option<VerificationInfo>, Cow<'static, str>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Validator {}
 
 impl Validator {
@@ -80,12 +80,10 @@ fn get_current_time_in_ns() -> u128 {
 mod tests {
     use crate::http::request::HttpRequest;
     use crate::http::response::HttpResponse;
+    use axum::body::Body;
     use candid::Principal;
     use hyper::Uri;
-    use ic_agent::{
-        agent::http_transport::hyper_transport::{hyper::Body, HyperReplicaV2Transport},
-        Agent,
-    };
+    use ic_agent::{agent::http_transport::hyper_transport::HyperReplicaV2Transport, Agent};
 
     use crate::validate::{Validate, Validator};
 

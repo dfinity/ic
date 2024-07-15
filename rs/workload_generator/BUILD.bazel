@@ -1,23 +1,24 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/sha2",
-    "//rs/monitoring/metrics",
     "//rs/http_endpoints/metrics",
+    "//rs/monitoring/metrics",
     "//rs/test_utilities/identity",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:backoff",
     "@crate_index//:byte-unit",
     "@crate_index//:candid",
     "@crate_index//:chrono",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:console",
     "@crate_index//:futures",
     "@crate_index//:hex",

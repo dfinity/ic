@@ -7,6 +7,8 @@ use crate::NumberOfNodes;
 use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
 use serde::{Deserialize, Serialize};
@@ -32,6 +34,7 @@ mod tests;
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, EnumIter,
 )]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
@@ -48,6 +51,7 @@ impl From<&NiDkgTag> for pb::NiDkgTag {
 
 /// The subnet for which the DKG generates keys.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTargetSubnet {
     /// `Local` means the subnet creates keys for itself.
     Local,
@@ -67,6 +71,7 @@ pub enum NiDkgTargetSubnet {
 /// Please refer to the rustdoc of `NiDkgTargetSubnet::Remote` for an
 /// explanation of why this is needed.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgTargetId([u8; NiDkgTargetId::SIZE]);
 ic_crypto_internal_types::derive_serde!(NiDkgTargetId, NiDkgTargetId::SIZE);
 

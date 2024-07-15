@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-common-proto = { path = "../proto" }
@@ -18,9 +18,9 @@ ic-registry-routing-table = { path = "../routing_table" }
 ic-registry-subnet-features = { path = "../subnet_features" }
 ic-types = { path = "../../types/types" }
 serde_cbor = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }

@@ -21,7 +21,11 @@ Coverage::
 
 end::catalog[] */
 
-use crate::{
+use ic_agent::export::Principal;
+use ic_agent::Agent;
+use ic_base_types::PrincipalId;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
@@ -29,10 +33,6 @@ use crate::{
     },
     util::{assert_malicious_from_topo, UniversalCanister},
 };
-use ic_agent::export::Principal;
-use ic_agent::Agent;
-use ic_base_types::PrincipalId;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;

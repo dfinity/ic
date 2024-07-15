@@ -19,6 +19,9 @@ mod autonomy;
 mod bad_input;
 
 #[cfg(test)]
+mod canister_playground;
+
+#[cfg(test)]
 mod copy_inactive_neurons_to_stable_memory;
 
 #[cfg(test)]
@@ -118,12 +121,6 @@ mod list_node_providers;
 mod network_economics;
 
 #[cfg(test)]
-mod sns_token_swap_proposal;
-
-#[cfg(test)]
-mod sns_wasm_allowed_principals;
-
-#[cfg(test)]
 mod neuron_following;
 
 #[cfg(test)]
@@ -134,3 +131,6 @@ mod uninstall_canister_by_proposal;
 
 #[cfg(test)]
 mod canister_upgrade;
+
+#[cfg(test)]
+mod subnet_rental_canister;

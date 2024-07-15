@@ -1,0 +1,14 @@
+[package]
+name = "ic-sns-swap-proto-library"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+candid = { workspace = true }
+comparable = { version = "0.5.1", features = ["derive"] }
+ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-utils = { path = "../../../utils" }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }

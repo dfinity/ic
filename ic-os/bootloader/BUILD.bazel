@@ -14,6 +14,7 @@ genrule(
         "bootloader-tree.tar",
     ],
     cmd = "$(location build-bootloader-tree.sh) -o $@",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -21,10 +22,11 @@ genrule(
 )
 
 vfat_image(
-    name = "partition-esp.tar",
+    name = "partition-esp.tzst",
     src = ":bootloader-tree.tar",
     partition_size = "100M",
     subdir = "boot/efi",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

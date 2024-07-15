@@ -1,7 +1,9 @@
+pub mod compatibility;
 pub mod global_reboot_test;
 pub mod malicious_slices;
 pub mod rejoin_test;
 pub mod rejoin_test_large_state;
+pub mod state_sync_malicious_chunk;
 pub mod xnet_slo_test;
 
 mod common {
@@ -12,7 +14,7 @@ mod common {
     use slog::info;
     use xnet_test::CanisterId;
 
-    use crate::driver::{test_env::TestEnv, test_env_api::HasDependencies};
+    use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::HasDependencies};
 
     /// Concurrently calls `start` on all canisters in `canisters` with the
     /// given parameters.

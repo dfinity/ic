@@ -39,11 +39,6 @@ pub struct Config {
     /// will be rejected. For valid IC delegation certificates this is never the case since the size is always constant.
     pub max_delegation_certificate_size_bytes: u64,
 
-    /// If the request body is not received/parsed within
-    /// `max_request_receive_seconds`, then the request will be rejected and
-    /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
-    pub max_request_receive_seconds: u64,
-
     /// Serving at most `max_read_state_concurrent_requests` requests concurrently for endpoint `/api/v2/read_state`.
     pub max_read_state_concurrent_requests: usize,
 
@@ -64,6 +59,12 @@ pub struct Config {
 
     /// Serving at most `max_pprof_concurrent_requests` requessts concurrently for all endpoints under `/_/pprof`.
     pub max_pprof_concurrent_requests: usize,
+
+    /// The maximum time the replica will wait for a message to be certified before timing out the requests and responding with `202`, for endpoint `/api/v3/call`.
+    pub ingress_message_certificate_timeout_seconds: u64,
+
+    /// Serving at most `max_tracing_flamegraph_concurrent_requests` requests concurrently for all endpoints under `/_/tracing/flamegraph`.
+    pub max_tracing_flamegraph_concurrent_requests: usize,
 }
 
 impl Default for Config {
@@ -79,7 +80,6 @@ impl Default for Config {
             http_max_concurrent_streams: 256,
             max_request_size_bytes: 5 * 1024 * 1024, // 5MB
             max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
-            max_request_receive_seconds: 300,        // 5 min
             max_read_state_concurrent_requests: 100,
             max_catch_up_package_concurrent_requests: 100,
             max_dashboard_concurrent_requests: 100,
@@ -87,6 +87,8 @@ impl Default for Config {
             max_call_concurrent_requests: 50,
             max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
             max_pprof_concurrent_requests: 5,
+            ingress_message_certificate_timeout_seconds: 10,
+            max_tracing_flamegraph_concurrent_requests: 10,
         }
     }
 }

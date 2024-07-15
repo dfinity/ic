@@ -1,27 +1,26 @@
 use crate::{
-    deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer},
-    init_config_file::{InitConfigFileArgs, SnsCliInitConfig, SnsInitialTokenDistributionConfig},
-    prepare_canisters::PrepareCanistersArgs,
-    propose::ProposeArgs,
+    deploy::DirectSnsDeployerForTests, init_config_file::InitConfigFileArgs,
+    neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
+    prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
 };
+use anyhow::{anyhow, Context};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{self, NeuronIdOrSubaccount},
-    manage_neuron_response::{self, MakeProposalResponse},
-    ManageNeuron, ManageNeuronResponse, Proposal,
+use ic_nns_governance::{
+    pb::v1::{
+        manage_neuron::{self, NeuronIdOrSubaccount},
+        manage_neuron_response::{self, MakeProposalResponse},
+        ManageNeuron, ManageNeuronResponse, Proposal,
+    },
+    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
-use ic_sns_init::pb::v1::{
-    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
-    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
-    TreasuryDistribution,
-};
+use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::{
     fmt::{Debug, Display},
     fs::File,
@@ -29,11 +28,14 @@ use std::{
     path::{Path, PathBuf},
     process::{exit, Command, Output},
     str::FromStr,
+    sync::Once,
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tempfile::NamedTempFile;
 
 pub mod deploy;
 pub mod init_config_file;
+pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
 pub mod unit_helpers;
@@ -59,87 +61,21 @@ pub struct CliArgs {
 
 #[derive(Debug, Parser)]
 pub enum SubCommand {
-    /// Deploy an sns through the sns-wasms canister.
-    Deploy(DeployArgs),
-    /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
-    /// For use in tests only.
-    DeploySkippingSnsWasmsForTests(DeployArgs),
     /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
     /// The SNS canisters remain controlled by the developer after deployment.
-    /// For use in tests only.
+    /// For testing purposes only.
     DeployTestflight(DeployTestflightArgs),
     /// Add a wasms for one of the SNS canisters, skipping the NNS proposal,
     /// for tests.
     AddSnsWasmForTests(AddSnsWasmForTestsArgs),
-    /// Display the balance of a given account.
-    AccountBalance(AccountBalanceArgs),
     /// Manage the config file where the initial sns parameters are set.
     InitConfigFile(InitConfigFileArgs),
     /// Make changes to canisters you own to prepare for SNS Decentralization
     PrepareCanisters(PrepareCanistersArgs),
     /// Submit an NNS proposal to create new SNS.
     Propose(ProposeArgs),
-}
-
-/// The arguments used to configure a SNS deployment
-#[derive(Debug, Parser)]
-pub struct DeployArgs {
-    /// Print all error and info messages.
-    #[structopt(long)]
-    verbose: bool,
-
-    /// The network to deploy to. This can be "local", "ic", or the URL of an IC network.
-    #[structopt(default_value = "local", long)]
-    network: String,
-
-    /// The initial config file, this file should have all the necessary parameters to deploy an SNS.
-    /// See command "init-config-file"
-    #[clap(long, parse(from_os_str))]
-    pub init_config_file: PathBuf,
-
-    /// The canister ID or name (via dfx.json) of SNS-WASMS to use instead of the default
-    ///
-    /// This is useful for testing CLI commands against local replicas without fully deployed NNS
-    #[clap(long)]
-    pub override_sns_wasm_canister_id_for_tests: Option<String>,
-
-    /// The canister ID of the wallet to use on this subnet.
-    ///
-    /// This is needed in testnet scenarios or if you want to use a different wallet than the one
-    /// currently set for your dfx identity.
-    #[clap(long)]
-    pub wallet_canister_override: Option<PrincipalId>,
-
-    /// The SNS-WASMS canister candid, used to parse canister IDs from the response.
-    ///
-    /// Corresponds to the dfx canister call --candid flag.
-    #[clap(long)]
-    pub candid: Option<String>,
-
-    /// The amount of cycles to initialize each SNS canister with. This can be omitted when
-    /// deploying locally.
-    #[structopt(long)]
-    initial_cycles_per_canister: Option<u64>,
-
-    /// Saves the returned canister IDs in the specified json file.
-    ///
-    /// Default: canister_ids.json
-    #[structopt(default_value = "canister_ids.json", long)]
-    save_to: PathBuf,
-
-    /// Saves the SNS canister IDs in the specified json file for sns-quill.
-    ///
-    /// Default: sns_canister_ids.json
-    #[structopt(default_value = "sns_canister_ids.json", long)]
-    sns_canister_ids_save_to: PathBuf,
-
-    /// The fee to provide
-    #[structopt(default_value = "180000000000000", long)]
-    with_cycles: u64,
-
-    /// The directory with SNS canister WASMs.
-    #[structopt(default_value = ".", long)]
-    wasms_dir: PathBuf,
+    /// Converts a Neuron ID to a blob for use in ManageNeuron.
+    NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
 }
 
 /// The arguments used to configure a SNS testflight deployment
@@ -155,7 +91,7 @@ pub struct DeployTestflightArgs {
 
     /// The initial config file, this file should have all the necessary parameters to deploy an SNS.
     /// See command "init-config-file"
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, value_parser = clap::value_parser!(std::path::PathBuf))]
     pub init_config_file: Option<PathBuf>,
 
     /// The canister ID of the wallet to use on this subnet.
@@ -181,118 +117,31 @@ pub struct DeployTestflightArgs {
     wasms_dir: PathBuf,
 }
 
-/// The arguments used to display the account balance of a user
-#[derive(Debug, Parser)]
-pub struct AccountBalanceArgs {
-    /// The principal ID of the account owner to display their main account balance (note that
-    /// subaccounts are not yet supported). If not specified, the principal of the current dfx
-    /// identity is used.
-    #[clap(long)]
-    pub principal_id: Option<String>,
-
-    /// The network to deploy to. This can be "local", "ic", or the URL of an IC network.
-    #[structopt(default_value = "local", long)]
-    network: String,
-}
-
 #[derive(Debug, Parser)]
 pub struct AddSnsWasmForTestsArgs {
-    #[clap(long, parse(from_os_str))]
-    wasm_file: PathBuf,
+    /// The wasm faile to be added to a test instance of SNS-WASM
+    #[clap(long, value_parser = clap::value_parser!(std::path::PathBuf))]
+    pub wasm_file: PathBuf,
 
-    canister_type: String,
+    /// The type of the canister that the wasm is for. Must be one of "archive", "root", "governance", "ledger", "swap", "index".
+    pub canister_type: String,
 
-    /// The canister ID of SNS-WASMS to use instead of the default
+    /// The canister ID of SNS-WASM to use instead of the default
     ///
     /// This is useful for testing CLI commands against local replicas without fully deployed NNS
     #[clap(long)]
     pub override_sns_wasm_canister_id_for_tests: Option<String>,
 
+    /// The network to deploy to. This can be "local", "ic", or the URL of an IC network.
     #[structopt(default_value = "local", long)]
-    network: String,
+    pub network: String,
 }
 
-impl DeployArgs {
-    pub fn generate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
-        generate_sns_init_payload(&self.init_config_file)
-    }
-}
-
-pub fn generate_sns_init_payload(path: &Path) -> Result<SnsInitPayload, std::string::String> {
-    // First, try format v1. If serde_yaml::Error occurred, try format v2.
-    generate_sns_init_payload_v1(path).or_else(|previous_err| {
-        use GenerateSnsInitPayloadV1Error as E;
-        match previous_err {
-            E::Misc(err) => Err(err),
-            E::Yaml(_) => generate_sns_init_payload_v2(path),
-        }
-    })
-}
-
-enum GenerateSnsInitPayloadV1Error {
-    Yaml(serde_yaml::Error),
-    Misc(String),
-}
-
-fn generate_sns_init_payload_v1(
+pub(crate) fn generate_sns_init_payload(
     path: &Path,
-) -> Result<SnsInitPayload, GenerateSnsInitPayloadV1Error> {
-    // Read the file.
-    let file = File::open(path).map_err(|err| {
-        GenerateSnsInitPayloadV1Error::Misc(format!("Unable to read {:?}: {}", path, err))
-    })?;
+) -> Result<SnsInitPayload, std::string::String> {
+    let configuration = read_create_service_nervous_system_from_init_yaml(path)?;
 
-    // Parse its contents.
-    let mut sns_cli_init_config: SnsCliInitConfig =
-        serde_yaml::from_reader(file).map_err(GenerateSnsInitPayloadV1Error::Yaml)?;
-
-    // Normalize logo path: if relative, convert it to absolute, using the
-    // directory where the configuration file lives as the base (as opposed to
-    // the current working directory of the runner).
-    sns_cli_init_config.sns_governance.logo =
-        sns_cli_init_config.sns_governance.logo.map(|logo_path| {
-            if logo_path.is_absolute() {
-                logo_path
-            } else {
-                path.parent().unwrap().join(logo_path)
-            }
-        });
-
-    // Convert.
-    let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config)
-        .map_err(GenerateSnsInitPayloadV1Error::Misc)?;
-
-    // Validate.
-    sns_init_payload
-        .validate_legacy_init()
-        .map_err(GenerateSnsInitPayloadV1Error::Misc)?;
-
-    // Ship it!
-    Ok(sns_init_payload)
-}
-
-fn generate_sns_init_payload_v2(path: &Path) -> Result<SnsInitPayload, String> {
-    // Read the file.
-    let contents = std::fs::read_to_string(path)
-        .map_err(|err| format!("Unable to read {:?}: {}", path, err))?;
-
-    // Parse its contents.
-    let configuration =
-        serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
-            .map_err(|err| format!("Unable to parse contents of {:?}: {}", path, err))?;
-
-    // Convert (to CreateServiceNervousSysytem).
-    let base_path = path.parent().ok_or_else(|| {
-        format!(
-            "Configuration file path ({:?}) has no parent, it seems.",
-            path,
-        )
-    })?;
-    let configuration = configuration
-        .try_convert_to_create_service_nervous_system(base_path)
-        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))?;
-
-    // Last step: more conversion (this time, to the desired type: SnsInitPayload).
     SnsInitPayload::try_from(configuration)
         // This shouldn't be possible -> we could just unwrap here, and there
         // should be no danger of panic, but we handle Err anyway, because if
@@ -304,57 +153,80 @@ fn generate_sns_init_payload_v2(path: &Path) -> Result<SnsInitPayload, String> {
         .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))
 }
 
+fn read_create_service_nervous_system_from_init_yaml(
+    path: &Path,
+) -> Result<ic_nns_governance::pb::v1::CreateServiceNervousSystem, String> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|err| format!("Unable to read {:?}: {}", path, err))?;
+    let configuration =
+        serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
+            .map_err(|err| format!("Unable to parse contents of {:?}: {}", path, err))?;
+    let base_path = path.parent().ok_or_else(|| {
+        format!(
+            "Configuration file path ({:?}) has no parent, it seems.",
+            path,
+        )
+    })?;
+    let configuration = configuration
+        .try_convert_to_create_service_nervous_system(base_path)
+        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))?;
+    Ok(configuration)
+}
+
 impl DeployTestflightArgs {
-    pub fn generate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
+    pub(crate) fn generate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
         match &self.init_config_file {
-            Some(init_config_file) => generate_sns_init_payload(init_config_file),
+            Some(init_config_file) => {
+                let mut create_service_nervous_system =
+                    read_create_service_nervous_system_from_init_yaml(init_config_file)?;
+
+                // disable neurons_fund_participation, if it's enabled
+                if create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .unwrap()
+                    .neurons_fund_participation()
+                {
+                    println!("Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.", init_config_file.display());
+                    create_service_nervous_system
+                        .swap_parameters
+                        .as_mut()
+                        .unwrap()
+                        .neurons_fund_participation = Some(false);
+                }
+
+                // convert to ExecutedCreateServiceNervousSystemProposal
+                let executed_create_service_nervous_system =
+                    ExecutedCreateServiceNervousSystemProposal {
+                        current_timestamp_seconds: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        create_service_nervous_system,
+                        random_swap_start_time: GlobalTimeOfDay {
+                            seconds_after_utc_midnight: Some(0),
+                        },
+                        neurons_fund_participation_constraints: None,
+                        // `proposal_id` only exists to be exposed to the user for audit purposes, which don't apply here.
+                        // But it's required, so we can just use any arbitrary value.
+                        proposal_id: 10,
+                    };
+
+                // Last step: more conversion (this time, to the desired type: SnsInitPayload).
+                SnsInitPayload::try_from(executed_create_service_nervous_system)
+                    // This shouldn't be possible -> we could just unwrap here, and there
+                    // should be no danger of panic, but we handle Err anyway, because if
+                    // err is returned, it still makes sense to just return that.
+                    //
+                    // The reason Err should be impossible is
+                    // try_convert_to_create_service_nervous_system itself call
+                    // SnsInitPayload::try_from as part of its validation.
+                    .map_err(|err| {
+                        format!("Invalid configuration in {:?}: {}", init_config_file, err)
+                    })
+            }
             None => {
-                let developer_identity = get_identity("get-principal", &self.network);
-                let developer_neuron = NeuronDistribution {
-                    controller: Some(developer_identity),
-                    stake_e8s: 1500000000,
-                    memo: 0,
-                    dissolve_delay_seconds: 15780000,
-                    vesting_period_seconds: None,
-                };
-                let developer_dist = DeveloperDistribution {
-                    developer_neurons: vec![developer_neuron],
-                };
-                let treasury_dist = TreasuryDistribution {
-                    total_e8s: 5000000000,
-                };
-                let swap_dist = SwapDistribution {
-                    total_e8s: 6000000000,
-                    initial_swap_amount_e8s: 3000000000,
-                };
-                let airdrop_dist = AirdropDistribution {
-                    airdrop_neurons: vec![],
-                };
-                let dists = FractionalDeveloperVotingPower {
-                    developer_distribution: Some(developer_dist),
-                    treasury_distribution: Some(treasury_dist),
-                    swap_distribution: Some(swap_dist),
-                    airdrop_distribution: Some(airdrop_dist),
-                };
-                let initial_token_distribution = SnsInitialTokenDistributionConfig {
-                    initial_token_distribution: Some(
-                        InitialTokenDistribution::FractionalDeveloperVotingPower(dists),
-                    ),
-                };
-                let mut sns_init_config = SnsCliInitConfig {
-                    initial_token_distribution,
-                    ..Default::default()
-                };
-                sns_init_config.sns_ledger.token_name = Some("MyTestToken".to_string());
-                sns_init_config.sns_ledger.token_symbol = Some("MTT".to_string());
-                sns_init_config
-                    .sns_governance
-                    .fallback_controller_principal_ids = vec![developer_identity.to_string()];
-                sns_init_config.sns_governance.url = Some("https://example.com".to_string());
-                sns_init_config.sns_governance.name = Some("My_Test_Token".to_string());
-                sns_init_config.sns_governance.description =
-                    Some("MyTestTokenDescription".to_string());
-                sns_init_config.try_into()
+                panic!("The init_config_file is required for the DeployTestflightArgs.");
             }
         }
     }
@@ -367,30 +239,6 @@ impl AddSnsWasmForTestsArgs {
         file.read_to_end(&mut buf).expect("Couldn't read wasm file");
         buf
     }
-}
-
-/// Deploy via SNS-WASM canister.
-pub fn deploy(args: DeployArgs) {
-    let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
-        eprintln!(
-            "Error encountered when generating the SnsInitPayload: {}",
-            err
-        );
-        exit(1);
-    });
-    SnsWasmSnsDeployer::new(args, sns_init_payload).deploy();
-}
-
-/// Deploy an SNS with the given DeployArgs, skipping sns-wasm.
-pub fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
-    let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
-        eprintln!(
-            "Error encountered when generating the SnsInitPayload: {}",
-            err,
-        );
-        exit(1);
-    });
-    DirectSnsDeployerForTests::new(args, sns_init_payload).deploy()
 }
 
 /// Deploy an SNS with the given DeployTestflightArgs, skipping sns-wasm.
@@ -428,6 +276,8 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
         wasm: Some(SnsWasm {
             wasm: sns_wasm_bytes,
             canister_type: sns_canister_type as i32,
+            // Will be filled in by SNS Governance
+            proposal_id: None,
         }),
         hash: sns_wasm_hash.to_vec(),
     };
@@ -457,36 +307,8 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
     ]);
 }
 
-/// Print the Ledger account balance of the principal in `AccountBalanceArgs` if given, else
-/// print the account balance of the principal of the current dfx identity.
-pub fn print_account_balance(args: AccountBalanceArgs) {
-    let principal_id = if let Some(principal_str) = args.principal_id {
-        PrincipalId::from_str(&principal_str)
-            .unwrap_or_else(|_| panic!("Could not parse {} as a PrincipalId", principal_str))
-    } else {
-        get_identity("get-principal", &args.network)
-    };
-
-    let account: AccountIdentifier = principal_id.into();
-    let account_balance_args = BinaryAccountBalanceArgs {
-        account: account.to_address(),
-    };
-
-    let idl = IDLArgs::from_bytes(&Encode!(&account_balance_args).unwrap()).unwrap();
-
-    call_dfx_or_panic(&[
-        "canister",
-        "--network",
-        &args.network,
-        "call",
-        "sns_ledger",
-        "account_balance",
-        &format!("{}", idl),
-    ]);
-}
-
 /// Return the `PrincipalId` of the given dfx identity
-pub fn get_identity(identity: &str, network: &str) -> PrincipalId {
+pub(crate) fn get_identity(identity: &str, network: &str) -> PrincipalId {
     println!("dfx identity {}", identity);
     let output = call_dfx(&["identity", "--network", network, identity]);
 
@@ -620,17 +442,9 @@ struct Canister {
     name: String,
 }
 
-#[derive(Debug)]
-enum CanisterCallError {
-    UnableToPrepareDfxCall(String),
-    UnableToCallDfx(std::io::Error),
-    DfxBadExit(std::process::Output),
-    ResponseDecodeFail(String),
-}
-
 impl Canister {
     /// Arguments are like those that are passed to `dfx canister`.
-    pub fn new(network: &str, name: &str) -> Self {
+    pub(crate) fn new(network: &str, name: &str) -> Self {
         // TODO: Validate arguments.
 
         let network = network.to_string();
@@ -639,40 +453,26 @@ impl Canister {
         Self { network, name }
     }
 
-    pub fn call<Req>(&self, request: &Req) -> Result<Req::Response, CanisterCallError>
+    pub(crate) fn call<Req>(&self, request: &Req) -> Result<Req::Response, anyhow::Error>
     where
         Req: Request + CandidType,
         <Req as Request>::Response: CandidType + for<'a> candid::Deserialize<'a>,
     {
         // Step 1: Write request to temporary argument file, which we'll later
         // pass to `dfx canister call --argument-file`.
-        let request = Encode!(&request).map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!(
-                "Unable to serialize request: {}",
-                err,
-            ))
-        })?;
-        let request = IDLArgs::from_bytes(&request).map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!("Unable to format request: {}", err,))
-        })?;
+        let request = Encode!(&request).context("Unable to serialize the request")?;
+        let request = IDLArgs::from_bytes(&request).context("Unable to format request")?;
         let request = format!("{}", request);
-        let mut argument_file = NamedTempFile::new().map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!(
-                "Could not create temporary argument file: {}",
-                err,
-            ))
-        })?;
-        argument_file.write_all(request.as_bytes()).map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!(
-                "Unable to write request to local file: {}",
-                err,
-            ))
-        })?;
-        let argument_file = argument_file.path().as_os_str().to_str().ok_or_else(|| {
-            CanisterCallError::UnableToPrepareDfxCall(
-                "Unable to determine the path of the argument file.".to_string(),
-            )
-        })?;
+        let mut argument_file =
+            NamedTempFile::new().context("Could not create temporary argument file.")?;
+        argument_file
+            .write_all(request.as_bytes())
+            .context("Unable to write request to local file")?;
+        let argument_file = argument_file
+            .path()
+            .as_os_str()
+            .to_str()
+            .ok_or_else(|| anyhow!("Unable to convert path of argument file to a string."))?;
 
         // Step 2: The real work of making the call takes place here.
         let command = [
@@ -692,27 +492,23 @@ impl Canister {
         // Step 3: Handle errors.
         let (stdout, _stderr) = result.map_err(|err| match err {
             RunCommandError::UnableToRunCommand { error, .. } => {
-                CanisterCallError::UnableToCallDfx(error)
+                anyhow::Error::from(error).context("Unable to run dfx command.")
             }
             RunCommandError::UnsuccessfulExit { output, .. } => {
-                CanisterCallError::DfxBadExit(output)
+                anyhow!("dfx command exited unsuccessfully. {:?}", output)
             }
         })?;
 
         // Step 4: Decode and return response (finally!).
 
         let response = stdout.trim_end();
-        let response = hex::decode(response).map_err(|err| {
-            CanisterCallError::ResponseDecodeFail(format!(
-                "Unable to hex decode the response. reason: {}. response:\n{:?}",
-                err, response,
-            ))
-        })?;
-        Decode!(&response, Req::Response).map_err(|err| {
-            CanisterCallError::ResponseDecodeFail(format!(
-                "Candid deserialization of response failed. reason: {}. response:\n{:?}",
-                err, response,
-            ))
+        let response = hex::decode(response)
+            .with_context(|| format!("Unable to hex decode the response:\n{:?}.", response,))?;
+        Decode!(&response, Req::Response).with_context(|| {
+            format!(
+                "Candid deserialization of response failed. Response:\n{:?}",
+                response,
+            )
         })
     }
 }
@@ -721,15 +517,8 @@ struct NnsGovernanceCanister {
     canister: Canister,
 }
 
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-enum MakeProposalError {
-    CanisterCallError(CanisterCallError),
-    InvalidResponse(ManageNeuronResponse),
-}
-
 impl NnsGovernanceCanister {
-    pub fn new(network: &str) -> Self {
+    pub(crate) fn new(network: &str) -> Self {
         let canister = Canister::new(network, &GOVERNANCE_CANISTER_ID.to_string());
 
         Self { canister }
@@ -737,11 +526,11 @@ impl NnsGovernanceCanister {
 
     /// Neuron used is the one whose subaccount is associated with the current dfx principal with nonce = 0.
     #[allow(clippy::result_large_err)]
-    pub fn make_proposal(
+    pub(crate) fn make_proposal(
         &self,
         proposer: &NeuronIdOrSubaccount,
         proposal: &Proposal,
-    ) -> Result<MakeProposalResponse, MakeProposalError> {
+    ) -> Result<MakeProposalResponse, anyhow::Error> {
         impl Request for ManageNeuron {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";
@@ -761,12 +550,15 @@ impl NnsGovernanceCanister {
         let manage_neuron_response = self
             .canister
             .call(&manage_neuron_request)
-            .map_err(MakeProposalError::CanisterCallError)?;
+            .context("Failed calling the canister")?;
 
         // Step 3: Unwrap the response.
         match manage_neuron_response.command {
             Some(manage_neuron_response::Command::MakeProposal(response)) => Ok(response),
-            _ => Err(MakeProposalError::InvalidResponse(manage_neuron_response)),
+            _ => Err(anyhow!(
+                "Received an invalid response: {:?}",
+                manage_neuron_response
+            )),
         }
     }
 }
@@ -894,9 +686,19 @@ impl<'a> RunCommandError<'a> {
 }
 
 fn run_command<'a>(command: &'a [&'a str]) -> Result<(String, String), RunCommandError<'a>> {
-    let output = std::process::Command::new(command[0])
+    let child = std::process::Command::new(command[0])
         .args(&command[1..command.len()])
-        .output()
+        // STDOUT contains data that needs to be processed by the parent.
+        .stdout(std::process::Stdio::piped())
+        // STDERR may contain information for the end user (e.g., password prompt).
+        .stderr(std::process::Stdio::inherit())
+        // STDIN may be required for the end user to type in their DFX identity password.
+        .stdin(std::process::Stdio::inherit())
+        .spawn()
+        .map_err(|error| RunCommandError::UnableToRunCommand { command, error })?;
+
+    let output = child
+        .wait_with_output()
         .map_err(|error| RunCommandError::UnableToRunCommand { command, error })?;
 
     let std::process::Output {
@@ -914,10 +716,28 @@ fn run_command<'a>(command: &'a [&'a str]) -> Result<(String, String), RunComman
     Ok((stdout, stderr))
 }
 
+static DFX_INIT: Once = Once::new();
+
 /// Calls `dfx` with the given args
 #[must_use]
 fn call_dfx(args: &[&str]) -> Output {
-    let output = Command::new("dfx")
+    let dfx_cmd = if Path::new("./dfx").exists() {
+        "./dfx"
+    } else {
+        "dfx"
+    };
+    DFX_INIT.call_once(|| {
+        let version_output = Command::new(dfx_cmd)
+            .args(["--version"])
+            .output()
+            .expect("Failed to execute dfx command");
+        println!(
+            "Invoking dfx with `{dfx_cmd}`. dfx version: {}",
+            String::from_utf8_lossy(&version_output.stdout).trim()
+        );
+    });
+
+    let output = Command::new(dfx_cmd)
         .args(args)
         .output()
         .unwrap_or_else(|e| panic!("dfx failed when called with args: {:?}: {}", args, e));
@@ -947,7 +767,35 @@ fn call_dfx_or_panic(args: &[&str]) {
 }
 
 /// Given a `CandidType`, return the hex encoding of this object.
-pub fn hex_encode_candid(candid: impl CandidType) -> String {
+pub(crate) fn hex_encode_candid(candid: impl CandidType) -> String {
     let bytes = Encode!(&candid).unwrap();
     hex::encode(bytes)
+}
+
+#[test]
+fn all_arguments_have_description() {
+    fn check_arg_descriptions(cmd: &clap::Command, path: &str) {
+        // Check arguments of the current command
+        for arg in cmd.get_arguments() {
+            if arg.get_help().is_none() && arg.get_long_help().is_none() {
+                let arg_name = arg.get_id().to_string();
+                panic!(
+                    "Argument '{}' in command '{}' doesn't have a description",
+                    arg_name, path
+                );
+            }
+        }
+
+        // Recursively check subcommands
+        for subcmd in cmd.get_subcommands() {
+            let subcmd_name = subcmd.get_name();
+            let new_path = if path.is_empty() {
+                subcmd_name.to_string()
+            } else {
+                format!("{} {}", path, subcmd_name)
+            };
+            check_arg_descriptions(subcmd, &new_path);
+        }
+    }
+    check_arg_descriptions(&<CliArgs as clap::CommandFactory>::command(), "")
 }

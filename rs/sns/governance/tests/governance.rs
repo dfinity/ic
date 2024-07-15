@@ -4,12 +4,13 @@ use crate::fixtures::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_sns_governance::{
+    governance::MATURITY_DISBURSEMENT_DELAY_SECONDS,
     neuron::NeuronState,
     pb::{
         sns_root_types::{
@@ -32,17 +33,15 @@ use ic_sns_governance::{
             neuron,
             neuron::{DissolveState, Followees},
             proposal::Action,
-            transfer_sns_treasury_funds::TransferFrom,
             Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
             ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse, MintSnsTokens,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
             MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
             NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
-            ProposalData, ProposalId, RegisterDappCanisters, TransferSnsTreasuryFunds, Vote,
-            WaitForQuietState,
+            ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
-    types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
+    types::native_action_ids,
 };
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -258,6 +257,10 @@ fn test_disburse_maturity_succeeds_to_self() {
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
     let in_progress = &neuron.disburse_maturity_in_progress[0];
+    assert_eq!(
+        in_progress.finalize_disbursement_timestamp_seconds,
+        Some(env.gov_fixture.now() + MATURITY_DISBURSEMENT_DELAY_SECONDS)
+    );
     let target_account_proto = in_progress
         .account_to_disburse_to
         .as_ref()
@@ -325,6 +328,7 @@ fn test_disburse_maturity_succeeds_to_other() {
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
+
     let controller_account = icrc_ledger_types::icrc1::account::Account {
         owner: env.controller.0,
         subaccount: None,
@@ -362,6 +366,10 @@ fn test_disburse_maturity_succeeds_to_other() {
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
     let in_progress = &neuron.disburse_maturity_in_progress[0];
+    assert_eq!(
+        in_progress.finalize_disbursement_timestamp_seconds,
+        Some(env.gov_fixture.now() + MATURITY_DISBURSEMENT_DELAY_SECONDS)
+    );
     let target_account_proto = in_progress
         .account_to_disburse_to
         .as_ref()
@@ -1425,104 +1433,6 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
         "Governance::list_nervous_system_functions is missing \
          native proposal actions in response {:?}",
         missing_actions
-    );
-}
-
-#[test]
-fn test_make_critical_proposal() {
-    // Step 1: Prepare the world: Construct governance, and populate it with one neuron.
-    let (mut canister_fixture, user_principal, neuron_id) =
-        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
-
-    // Step 2a: Call the code under test: make a "critical" proposal.
-    let proposal = TransferSnsTreasuryFunds {
-        from_treasury: TransferFrom::IcpTreasury as i32,
-        amount_e8s: 42 * E8,
-        memo: None,
-        to_principal: Some(PrincipalId::new_user_test_id(42)),
-        to_subaccount: None,
-    };
-    let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    // Step 3a: Inspect results. Critical proposals differ in their voting power thresholds, and
-    // duration parameters.
-
-    // Selects the fields that need to be inspected.
-    fn select_interesting_fields(proposal_data: &ProposalData) -> ProposalData {
-        let ProposalData {
-            minimum_yes_proportion_of_total,
-            minimum_yes_proportion_of_exercised,
-            initial_voting_period_seconds,
-            wait_for_quiet_deadline_increase_seconds,
-            ..
-        } = proposal_data.clone();
-
-        ProposalData {
-            minimum_yes_proportion_of_total,
-            minimum_yes_proportion_of_exercised,
-            initial_voting_period_seconds,
-            wait_for_quiet_deadline_increase_seconds,
-            ..Default::default()
-        }
-    }
-
-    assert_eq!(
-        select_interesting_fields(&proposal_data),
-        ProposalData {
-            minimum_yes_proportion_of_total: Some(
-                // 20%
-                Percentage {
-                    basis_points: Some(2000)
-                },
-            ),
-            minimum_yes_proportion_of_exercised: Some(
-                // 67%
-                Percentage {
-                    basis_points: Some(6700)
-                },
-            ),
-            initial_voting_period_seconds: 5 * SECONDS_PER_DAY,
-            wait_for_quiet_deadline_increase_seconds: 5 * SECONDS_PER_DAY / 2, // 2.5 days
-            ..Default::default()
-        },
-        "{:#?}",
-        proposal_data,
-    );
-
-    // Step 2b: Call the code under test: make a normal (non-critical) proposal.
-    let proposal = Motion {
-        motion_text: "Nothing to see here.".to_string(),
-    };
-    let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    // Step 3b: Inspect results. Look at the same fields as in 3b, but this time, the values are for
-    // normal proposals.
-
-    assert_eq!(
-        select_interesting_fields(&proposal_data),
-        ProposalData {
-            minimum_yes_proportion_of_total: Some(
-                // 3%
-                Percentage {
-                    basis_points: Some(300)
-                },
-            ),
-            minimum_yes_proportion_of_exercised: Some(
-                // 50%
-                Percentage {
-                    basis_points: Some(5000)
-                },
-            ),
-            initial_voting_period_seconds: 4 * SECONDS_PER_DAY,
-            wait_for_quiet_deadline_increase_seconds: SECONDS_PER_DAY,
-            ..Default::default()
-        },
-        "{:#?}",
-        proposal_data,
     );
 }
 
@@ -2744,7 +2654,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     let neuron = canister_fixture.get_neuron(&neuron_id);
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-    canister_fixture.advance_time_by(7 * SECONDS_PER_DAY + 1);
+    canister_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 1);
     canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
@@ -2851,7 +2761,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
 
     // Advancing time and triggering a heartbeat should force a query of the new modulation
-    canister_fixture.advance_time_by(2 * SECONDS_PER_DAY);
+    canister_fixture.advance_time_by(2 * ONE_DAY_SECONDS);
     canister_fixture.heartbeat();
     let current_basis_points = canister_fixture
         .get_maturity_modulation()
@@ -2871,7 +2781,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     assert_eq!(account_balance_before_disbursal, 0);
 
     // Advancing time and triggering a heartbeat should trigger the final disbursal
-    canister_fixture.advance_time_by(5 * SECONDS_PER_DAY + 1);
+    canister_fixture.advance_time_by(5 * ONE_DAY_SECONDS + 1);
     canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
@@ -3064,111 +2974,6 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
     let proposal = DeregisterDappCanisters {
         canister_ids: vec![user_principal],
         new_controllers: vec![user_principal],
-    };
-
-    // Create the proposal with neuron_id so it doesn't instantly pass
-    let (_, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    assert_eq!(
-        proposal_data.decided_timestamp_seconds, 0,
-        "proposal should not have been decided yet. ballots: {:?}",
-        proposal_data.ballots
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
-        Percentage::from_basis_points(6700)
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap(),
-        Percentage::from_basis_points(2000)
-    );
-}
-
-#[test]
-fn test_transfer_treasury_funds_has_higher_voting_thresholds() {
-    let user_principal = PrincipalId::new_user_test_id(1001);
-    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 42);
-
-    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
-        .add_neuron(
-            NeuronBuilder::new(
-                neuron_id_2.clone(),
-                E8 * 1000,
-                NeuronPermission::new(&user_principal, vec![]),
-            )
-            .set_dissolve_delay(15778801),
-        )
-        // Create with a test neuron so that the proposal doesn't instantly pass
-        .create_with_test_neuron();
-
-    let proposal = TransferSnsTreasuryFunds {
-        from_treasury: TransferFrom::SnsTokenTreasury as i32,
-        amount_e8s: 10_000,
-        memo: None,
-        to_principal: Some(user_principal),
-        to_subaccount: None,
-    };
-
-    // Create the proposal with neuron_id so it doesn't instantly pass
-    let (_, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    assert_eq!(
-        proposal_data.decided_timestamp_seconds, 0,
-        "proposal should not have been decided yet. ballots: {:?}",
-        proposal_data.ballots
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
-        Percentage::from_basis_points(6700)
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap(),
-        Percentage::from_basis_points(2000)
-    );
-}
-
-#[test]
-fn test_mint_sns_tokens_has_higher_voting_thresholds() {
-    let user_principal = PrincipalId::new_user_test_id(1000);
-    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 1);
-
-    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
-        .add_neuron(
-            NeuronBuilder::new(
-                neuron_id_2.clone(),
-                E8 * 1000,
-                NeuronPermission::all(&user_principal),
-            )
-            .set_dissolve_delay(15778801),
-        )
-        // Create with a test neuron so that the proposal doesn't instantly pass
-        .create_with_test_neuron();
-
-    let proposal = MintSnsTokens {
-        amount_e8s: Some(10_000),
-        memo: None,
-        to_principal: Some(user_principal),
-        to_subaccount: None,
     };
 
     // Create the proposal with neuron_id so it doesn't instantly pass

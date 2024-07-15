@@ -1,12 +1,9 @@
 //! Utilities to help with testing interleavings of calls to the governance
 //! canister
 use async_trait::async_trait;
-use futures::{
-    channel::{
-        mpsc::{UnboundedReceiver as UReceiver, UnboundedSender as USender},
-        oneshot::{self, Sender as OSender},
-    },
-    StreamExt,
+use futures::channel::{
+    mpsc::UnboundedSender as USender,
+    oneshot::{self, Sender as OSender},
 };
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
@@ -23,15 +20,9 @@ pub mod test_data;
 /// channel
 #[derive(Debug)]
 pub enum LedgerMessage {
-    Transfer {
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
-        memo: u64,
-    },
+    Transfer,
     TotalSupply,
-    BalanceQuery(AccountIdentifier),
+    BalanceQuery,
 }
 
 pub type LedgerControlMessage = (LedgerMessage, OSender<Result<(), NervousSystemError>>);
@@ -79,13 +70,7 @@ impl IcpLedger for InterleavingTestLedger {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
-        let msg = LedgerMessage::Transfer {
-            amount_e8s,
-            fee_e8s,
-            from_subaccount,
-            to,
-            memo,
-        };
+        let msg = LedgerMessage::Transfer;
         atomic::fence(AOrdering::SeqCst);
         self.notify(msg).await?;
         self.underlying
@@ -104,7 +89,7 @@ impl IcpLedger for InterleavingTestLedger {
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
         atomic::fence(AOrdering::SeqCst);
-        self.notify(LedgerMessage::BalanceQuery(account)).await?;
+        self.notify(LedgerMessage::BalanceQuery).await?;
         self.underlying.account_balance(account).await
     }
 
@@ -117,11 +102,7 @@ impl IcpLedger for InterleavingTestLedger {
 /// channel
 #[derive(Debug)]
 pub enum EnvironmentMessage {
-    CallCanisterMethod {
-        target: CanisterId,
-        method_name: String,
-        request: Vec<u8>,
-    },
+    CallCanisterMethod,
 }
 
 pub type EnvironmentControlMessage = (
@@ -131,37 +112,13 @@ pub type EnvironmentControlMessage = (
 
 pub type EnvironmentObserver = USender<EnvironmentControlMessage>;
 
-/// Drains an UnboundedReceiver channel by sending `Ok()` signals for all incoming
-/// EnvironmentControlMessage messages, ignoring the response.
-pub async fn drain_receiver_channel(receiver_channel: &mut UReceiver<EnvironmentControlMessage>) {
-    // Drain the channel to finish the test.
-    while let Some((_msg, environment_control_message)) = receiver_channel.next().await {
-        environment_control_message
-            .send(Ok(()))
-            .expect("Error draining the receiver_channel");
-    }
-}
-
 /// A mock environment to test interleavings of governance method calls.
 pub struct InterleavingTestEnvironment {
     underlying: Box<dyn Environment>,
     observer: EnvironmentObserver,
 }
-impl InterleavingTestEnvironment {
-    /// This environment intercepts calls to an underlying environment implementation,
-    /// sends the reified calls over the provided observer channel, and
-    /// blocks. The receiver side of the channel can then inspect the
-    /// results, and decide at what point to go ahead with the call to the
-    /// underlying environment, or, alternatively, return an error. This is done
-    /// through a one-shot channel, the sender side of which is sent to the
-    /// observer.
-    pub fn new(underlying: Box<dyn Environment>, observer: EnvironmentObserver) -> Self {
-        Self {
-            underlying,
-            observer,
-        }
-    }
 
+impl InterleavingTestEnvironment {
     /// Notifies the observer that an environment method has been called, and blocks until
     /// it receives a message to continue.
     async fn notify(&self, msg: EnvironmentMessage) -> Result<(), (Option<i32>, String)> {
@@ -218,11 +175,7 @@ impl Environment for InterleavingTestEnvironment {
         method_name: &str,
         request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        let msg = EnvironmentMessage::CallCanisterMethod {
-            target,
-            method_name: method_name.to_string(),
-            request: request.clone(),
-        };
+        let msg = EnvironmentMessage::CallCanisterMethod;
         atomic::fence(AOrdering::SeqCst);
         self.notify(msg).await?;
         self.underlying

@@ -42,13 +42,13 @@ Engineering
 
 
 
-=== Network Dashboards from the community
+=== ICP Dashboard
 
 You can observe the state of the Internet Computer's infrastructure (Nodes, data centers, subnets) and traditional blockchain metrics (blocks/second, Token Supply, etc)
 
-- https://dashboard.internetcomputer.org Network dashboard by the Internet Computer Association
-- https://www.dfinityexplorer.org/# by https://github.com/dylancm4[Dylan Miller]
+- https://dashboard.internetcomputer.org
 
+=== The community
 
 To interact with the community, check out the developer forum: https://forum.dfinity.org/
 

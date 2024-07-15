@@ -1,7 +1,7 @@
 use crate::canister_id_record::CanisterIdRecord;
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
-use ic_ic00_types::IC_00;
+use ic_management_canister_types::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use num_traits::cast::ToPrimitive;
 
@@ -19,16 +19,17 @@ impl TryFrom<PrincipalId> for CanisterIdRecord {
 }
 
 /// Copy-paste of ic-types::ic_00::CanisterStatusType.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType, Default)]
 pub enum CanisterStatusType {
     // The rename statements are mandatory to comply with the candid interface
     // of the IC management canister. For more details, see:
-    // https://sdk.dfinity.org/docs/interface-spec/index.html#ic-candid
+    // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-candid
     #[serde(rename = "running")]
     Running,
     #[serde(rename = "stopping")]
     Stopping,
     #[serde(rename = "stopped")]
+    #[default]
     Stopped,
 }
 
@@ -50,6 +51,10 @@ impl std::fmt::Display for CanisterStatusType {
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct DefiniteCanisterSettings {
     pub controllers: Vec<PrincipalId>,
+    pub compute_allocation: Option<candid::Nat>,
+    pub memory_allocation: Option<candid::Nat>,
+    pub freezing_threshold: Option<candid::Nat>,
+    pub reserved_cycles_limit: Option<candid::Nat>,
 }
 
 /// Partial copy-paste of ic-types::ic_00::CanisterStatusResult.
@@ -60,22 +65,25 @@ pub struct DefiniteCanisterSettings {
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct CanisterStatusResult {
     pub status: CanisterStatusType,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
     pub settings: DefiniteCanisterSettings,
     pub cycles: candid::Nat,
+    pub idle_cycles_burned_per_day: Option<candid::Nat>,
+    pub reserved_cycles: Option<candid::Nat>,
 }
 
 /// Copy-paste of ic-types::ic_00::CanisterStatusResult.
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone, Default)]
 pub struct CanisterStatusResultFromManagementCanister {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
     pub settings: DefiniteCanisterSettingsFromManagementCanister,
     pub cycles: candid::Nat,
-    // this is for compat with Spec 0.12/0.13
     pub idle_cycles_burned_per_day: candid::Nat,
+    pub reserved_cycles: candid::Nat,
 }
 
 /// Partial copy-paste of ic-types::ic_00::DefiniteCanisterSettings.
@@ -83,12 +91,13 @@ pub struct CanisterStatusResultFromManagementCanister {
 /// Only the fields that we need are copied.
 /// Candid deserialization is supposed to be tolerant to having data for unknown
 /// fields (which is simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone, Default)]
 pub struct DefiniteCanisterSettingsFromManagementCanister {
     pub controllers: Vec<PrincipalId>,
     pub compute_allocation: candid::Nat,
     pub memory_allocation: candid::Nat,
     pub freezing_threshold: candid::Nat,
+    pub reserved_cycles_limit: candid::Nat,
 }
 
 impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
@@ -99,19 +108,48 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
             memory_size,
             settings,
             cycles,
-
-            // Ignored.
-            idle_cycles_burned_per_day: _,
+            idle_cycles_burned_per_day,
+            reserved_cycles,
         } = value;
+
+        let settings = DefiniteCanisterSettings::from(settings);
+
+        let idle_cycles_burned_per_day = Some(idle_cycles_burned_per_day);
+        let reserved_cycles = Some(reserved_cycles);
 
         CanisterStatusResult {
             status,
             module_hash,
             memory_size,
-            settings: DefiniteCanisterSettings {
-                controllers: settings.controllers,
-            },
+            settings,
             cycles,
+            idle_cycles_burned_per_day,
+            reserved_cycles,
+        }
+    }
+}
+
+impl From<DefiniteCanisterSettingsFromManagementCanister> for DefiniteCanisterSettings {
+    fn from(value: DefiniteCanisterSettingsFromManagementCanister) -> Self {
+        let DefiniteCanisterSettingsFromManagementCanister {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+        } = value;
+
+        let compute_allocation = Some(compute_allocation);
+        let memory_allocation = Some(memory_allocation);
+        let freezing_threshold = Some(freezing_threshold);
+        let reserved_cycles_limit = Some(reserved_cycles_limit);
+
+        DefiniteCanisterSettings {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
         }
     }
 }
@@ -127,15 +165,17 @@ impl CanisterStatusResultFromManagementCanister {
         CanisterStatusResultFromManagementCanister {
             status: CanisterStatusType::Running,
             module_hash: None,
-            memory_size: candid::Nat::from(42),
+            memory_size: candid::Nat::from(42_u32),
             settings: DefiniteCanisterSettingsFromManagementCanister {
                 controllers,
-                compute_allocation: candid::Nat::from(44),
-                memory_allocation: candid::Nat::from(45),
-                freezing_threshold: candid::Nat::from(46),
+                compute_allocation: candid::Nat::from(44_u32),
+                memory_allocation: candid::Nat::from(45_u32),
+                freezing_threshold: candid::Nat::from(46_u32),
+                reserved_cycles_limit: candid::Nat::from(47_u32),
             },
-            cycles: candid::Nat::from(47),
-            idle_cycles_burned_per_day: candid::Nat::from(48),
+            cycles: candid::Nat::from(47_u32),
+            idle_cycles_burned_per_day: candid::Nat::from(48_u32),
+            reserved_cycles: candid::Nat::from(49_u32),
         }
     }
 }
@@ -151,7 +191,7 @@ where
         .map(|response: (CanisterStatusResultFromManagementCanister,)| response.0)
 }
 
-/// Copy-and-paste of types from ic00_types, without deprecated fields.
+/// Copy-and-paste of types from management_canister_types, without deprecated fields.
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct CanisterStatusResultV2 {
     pub status: CanisterStatusType,
@@ -263,7 +303,7 @@ impl DefiniteCanisterSettingsArgs {
         freezing_threshold: u64,
     ) -> Self {
         let memory_allocation = match memory_allocation {
-            None => candid::Nat::from(0),
+            None => candid::Nat::from(0_u32),
             Some(memory) => candid::Nat::from(memory),
         };
         Self {
@@ -324,25 +364,33 @@ mod tests {
         let m = CanisterStatusResultFromManagementCanister {
             status: CanisterStatusType::Running,
             module_hash: Some(vec![1, 2, 3]),
-            memory_size: candid::Nat::from(100),
+            memory_size: candid::Nat::from(100_u32),
             settings: DefiniteCanisterSettingsFromManagementCanister {
                 controllers: vec![test_principal],
-                compute_allocation: candid::Nat::from(100),
-                memory_allocation: candid::Nat::from(100),
-                freezing_threshold: candid::Nat::from(100),
+                compute_allocation: candid::Nat::from(99_u32),
+                memory_allocation: candid::Nat::from(98_u32),
+                freezing_threshold: candid::Nat::from(97_u32),
+                reserved_cycles_limit: candid::Nat::from(96_u32),
             },
-            cycles: candid::Nat::from(100),
-            idle_cycles_burned_per_day: candid::Nat::from(100),
+            cycles: candid::Nat::from(999_u32),
+            idle_cycles_burned_per_day: candid::Nat::from(998_u32),
+            reserved_cycles: candid::Nat::from(997_u32),
         };
 
         let expected_canister_status_result = CanisterStatusResult {
             status: CanisterStatusType::Running,
             module_hash: Some(vec![1, 2, 3]),
-            memory_size: candid::Nat::from(100),
+            memory_size: candid::Nat::from(100_u32),
             settings: DefiniteCanisterSettings {
                 controllers: vec![test_principal],
+                compute_allocation: Some(candid::Nat::from(99_u32)),
+                memory_allocation: Some(candid::Nat::from(98_u32)),
+                freezing_threshold: Some(candid::Nat::from(97_u32)),
+                reserved_cycles_limit: Some(candid::Nat::from(96_u32)),
             },
-            cycles: candid::Nat::from(100),
+            cycles: candid::Nat::from(999_u32),
+            idle_cycles_burned_per_day: Some(candid::Nat::from(998_u32)),
+            reserved_cycles: Some(candid::Nat::from(997_u32)),
         };
 
         let actual_canister_status_result = CanisterStatusResult::from(m);

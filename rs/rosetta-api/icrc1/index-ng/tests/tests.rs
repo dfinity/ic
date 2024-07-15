@@ -1,55 +1,35 @@
+use crate::common::{
+    default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
+    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed, ARCHIVE_TRIGGER_THRESHOLD,
+    FEE, MAX_BLOCKS_FROM_ARCHIVE,
+};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_icrc1::blocks::generic_block_to_encoded_block;
-use ic_icrc1::Block;
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, Log, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    ListSubaccountsArgs, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
-use ic_icrc1_ledger::{
-    ChangeFeeCollector, FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
-    UpgradeArgs as LedgerUpgradeArgs,
-};
+use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
 };
-use ic_icrc1_tokens_u64::U64;
-use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::BlockType;
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-const FEE: u64 = 10_000;
-const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
-const NUM_BLOCKS_TO_ARCHIVE: usize = 10;
-const MAX_BLOCKS_FROM_ARCHIVE: u64 = 10;
-
-// Metadata-related constants
-const TOKEN_NAME: &str = "Test Token";
-const TOKEN_SYMBOL: &str = "XTST";
-const TEXT_META_KEY: &str = "test:image";
-const TEXT_META_VALUE: &str = "grumpy_cat.png";
-const BLOB_META_KEY: &str = "test:blob";
-const BLOB_META_VALUE: &[u8] = b"\xca\xfe\xba\xbe";
-const NAT_META_KEY: &str = "test:nat";
-const NAT_META_VALUE: u128 = u128::MAX;
-const INT_META_KEY: &str = "test:int";
-const INT_META_VALUE: i128 = i128::MIN;
+mod common;
 
 fn index_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -57,67 +37,6 @@ fn index_wasm() -> Vec<u8> {
         "ic-icrc1-index",
         &[],
     )
-}
-
-fn index_ng_wasm() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ic-icrc1-index-ng",
-        &[],
-    )
-}
-
-fn ledger_wasm() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .parent()
-            .unwrap()
-            .join("ledger"),
-        "ic-icrc1-ledger",
-        &[],
-    )
-}
-
-fn default_archive_options() -> ArchiveOptions {
-    ArchiveOptions {
-        trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-        num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
-        node_max_memory_size_bytes: None,
-        max_message_size_bytes: None,
-        controller_id: PrincipalId::new_user_test_id(100),
-        cycles_for_archive_creation: None,
-        max_transactions_per_response: Some(MAX_BLOCKS_FROM_ARCHIVE),
-    }
-}
-
-fn install_ledger(
-    env: &StateMachine,
-    initial_balances: Vec<(Account, u64)>,
-    archive_options: ArchiveOptions,
-    fee_collector_account: Option<Account>,
-    minter_principal: Principal,
-) -> CanisterId {
-    let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
-        .with_minting_account(minter_principal)
-        .with_transfer_fee(FEE)
-        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
-        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
-        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
-        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
-        .with_archive_options(archive_options)
-        .with_feature_flags(FeatureFlags { icrc2: true });
-    if let Some(fee_collector_account) = fee_collector_account {
-        builder = builder.with_fee_collector_account(fee_collector_account);
-    }
-    for (account, amount) in initial_balances {
-        builder = builder.with_initial_balance(account, amount);
-    }
-    env.install_canister(
-        ledger_wasm(),
-        Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
-        None,
-    )
-    .unwrap()
 }
 
 fn upgrade_ledger(
@@ -137,17 +56,17 @@ fn upgrade_ledger(
         feature_flags: None,
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        change_archive_options: None,
     }));
     env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
         .unwrap()
 }
 
-fn install_index_ng(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = IndexArg::Init(IndexInitArg {
-        ledger_id: ledger_id.into(),
-    });
-    env.install_canister(index_ng_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
+fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
+    IndexInitArg {
+        ledger_id: Principal::from(ledger_id),
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    }
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
@@ -165,69 +84,6 @@ fn account(owner: u64, subaccount: u128) -> Account {
     }
 }
 
-fn status(env: &StateMachine, index_id: CanisterId) -> Status {
-    let res = env
-        .query(index_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to send status")
-        .bytes();
-    Decode!(&res, Status).expect("Failed to decode status response")
-}
-
-fn assert_reply(result: WasmResult) -> Vec<u8> {
-    match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
-        }
-    }
-}
-
-fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
-    let request = HttpRequest {
-        method: "".to_string(),
-        url: "/logs".to_string(),
-        headers: vec![],
-        body: serde_bytes::ByteBuf::new(),
-    };
-    let response = Decode!(
-        &assert_reply(
-            env.execute_ingress(index_id, "http_request", Encode!(&request).unwrap(),)
-                .expect("failed to get index-ng info")
-        ),
-        HttpResponse
-    )
-    .unwrap();
-    serde_json::from_slice(&response.body).expect("failed to parse index-ng log")
-}
-
-// Helper function that calls tick on env until either
-// the index canister has synced all the blocks up to the
-// last one in the ledger or enough attempts passed and therefore
-// it fails.
-fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
-    const MAX_ATTEMPTS: u8 = 100; // No reason for this number.
-    let mut num_blocks_synced = u64::MAX;
-    let mut chain_length = u64::MAX;
-    for _i in 0..MAX_ATTEMPTS {
-        env.advance_time(Duration::from_secs(60));
-        env.tick();
-        num_blocks_synced = status(env, index_id).num_blocks_synced.0.to_u64().unwrap();
-        chain_length = ledger_get_all_blocks(env, ledger_id, 0, 1).chain_length;
-        if num_blocks_synced == chain_length {
-            return;
-        }
-    }
-    let log = get_logs(env, index_id);
-    let mut log_lines = String::new();
-    for entry in log.entries {
-        log_lines.push_str(&format!(
-            "{} {}:{} {}\n",
-            entry.timestamp, entry.file, entry.line, entry.message
-        ));
-    }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}.\nLogs:\n{}", num_blocks_synced, chain_length, log_lines);
-}
-
 fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
     let res = env
         .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
@@ -240,54 +96,7 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .expect("Balance must be a u64!")
 }
 
-// Retrieves blocks from the Ledger and the Archives.
-fn ledger_get_all_blocks(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    start: u64,
-    length: u64,
-) -> icrc_ledger_types::icrc3::blocks::GetBlocksResponse {
-    let req = GetBlocksRequest {
-        start: start.into(),
-        length: length.into(),
-    };
-    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
-    let res = env
-        .query(ledger_id, "get_blocks", req)
-        .expect("Failed to send get_blocks request")
-        .bytes();
-    let res = Decode!(&res, icrc_ledger_types::icrc3::blocks::GetBlocksResponse)
-        .expect("Failed to decode GetBlocksResponse");
-    let mut blocks = vec![];
-    for archived in &res.archived_blocks {
-        // Archive nodes paginate their results. We need to fetch all the
-        // blocks and therefore we loop until all of them
-        // have been fetched.
-        let mut curr_start = archived.start.clone();
-        while curr_start < archived.length {
-            let req = GetBlocksRequest {
-                start: curr_start.clone(),
-                length: archived.length.clone() - (curr_start.clone() - archived.start.clone()),
-            };
-            let req = Encode!(&req).expect("Failed to encode GetBlocksRequest for archive node");
-            let canister_id = archived.callback.canister_id.as_ref().try_into().unwrap();
-            let res = env
-                .query(canister_id, archived.callback.method.clone(), req)
-                .expect("Failed to send get_blocks request to archive")
-                .bytes();
-            let res = Decode!(&res, BlockRange)
-                .expect("Failed to decode get_blocks response for archive node")
-                .blocks;
-            assert!(!res.is_empty());
-            curr_start += res.len();
-            blocks.extend(res);
-        }
-    }
-    blocks.extend(res.blocks);
-    icrc_ledger_types::icrc3::blocks::GetBlocksResponse { blocks, ..res }
-}
-
-fn get_blocks(
+fn index_get_blocks(
     env: &StateMachine,
     index_id: CanisterId,
     start: u64,
@@ -311,15 +120,20 @@ fn index_get_all_blocks(
     index_id: CanisterId,
     start: u64,
     length: u64,
-) -> Vec<GenericBlock> {
-    let length = length.min(get_blocks(env, index_id, 0, 0).chain_length);
-    let mut res = vec![];
-    let mut curr_start = start;
-    while length > res.len() as u64 {
-        let blocks = get_blocks(env, index_id, curr_start, length - (curr_start - start)).blocks;
-        assert!(!blocks.is_empty());
-        curr_start += blocks.len() as u64;
-        res.extend(blocks);
+) -> GetBlocksResponse {
+    let chain_length = index_get_blocks(env, index_id, 0, 0).chain_length;
+    let mut res = GetBlocksResponse {
+        blocks: vec![],
+        chain_length,
+    };
+    while length > res.blocks.len() as u64 {
+        let start = start + res.blocks.len() as u64;
+        let length = length - res.blocks.len() as u64;
+        let blocks = index_get_blocks(env, index_id, start, length).blocks;
+        if blocks.is_empty() {
+            return res;
+        }
+        res.blocks.extend(blocks);
     }
     res
 }
@@ -520,28 +334,66 @@ fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollec
 // Assert that the index canister contains the same blocks as the ledger.
 #[track_caller]
 fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
-    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX).blocks;
+    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
     let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
-    assert_eq!(ledger_blocks.len(), index_blocks.len());
+    assert_eq!(ledger_blocks.chain_length, index_blocks.chain_length);
+    assert_eq!(ledger_blocks.blocks.len(), index_blocks.blocks.len());
+    for (index, (ledger_block, index_block)) in ledger_blocks
+        .blocks
+        .into_iter()
+        .zip(index_blocks.blocks.into_iter())
+        .enumerate()
+    {
+        // If the hash matches then they are the same block.
+        // We use the hash because nat64 and nat are not equal
+        // but ICRC-3 doesn't have nat64.
+        if ledger_block.hash() != index_block.hash() {
+            panic!("Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}", index, ledger_block, index_block);
+        }
+    }
+}
 
-    for idx in 0..ledger_blocks.len() {
-        let generic_block_ledger = ledger_blocks[idx].clone();
-        let generic_block_index = index_blocks[idx].clone();
-        let encoded_block_ledger =
-            generic_block_to_encoded_block(generic_block_ledger.clone()).unwrap();
-        let encoded_block_index =
-            generic_block_to_encoded_block(generic_block_index.clone()).unwrap();
-        let block_ledger = Block::<U64>::decode(encoded_block_ledger.clone()).unwrap();
-        let block_index = Block::<U64>::decode(encoded_block_index.clone()).unwrap();
-
-        assert_eq!(
-            generic_block_ledger, generic_block_index,
-            "block_index: {}",
-            idx
-        );
-        assert_eq!(generic_block_ledger, generic_block_index);
-        assert_eq!(encoded_block_ledger, encoded_block_index);
-        assert_eq!(block_ledger, block_index);
+#[cfg(any(feature = "get_blocks_disabled", feature = "icrc3_disabled"))]
+#[test]
+fn sanity_check_ledger() {
+    // check that the endpoints are properly disabled in the Ledger
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![],
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
+    #[cfg(feature = "get_blocks_disabled")]
+    {
+        let req = Encode!(&GetBlocksRequest {
+            start: Nat::from(0u64),
+            length: Nat::from(0u64)
+        })
+        .unwrap();
+        match env
+            .query(ledger_id, "get_blocks", req)
+            .map_err(|err| err.code())
+        {
+            Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
+            r => panic!("get_blocks not disabled in the Ledger! (call result: {r:?})"),
+        }
+    }
+    #[cfg(feature = "icrc3_disabled")]
+    {
+        let req = Encode!(&vec![GetBlocksRequest {
+            start: Nat::from(0u64),
+            length: Nat::from(0u64)
+        }])
+        .unwrap();
+        match env
+            .query(ledger_id, "icrc3_get_blocks", req)
+            .map_err(|err| err.code())
+        {
+            Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
+            r => panic!("icrc3_get_blocks not disabled in the Ledger! (call result: {r:?})"),
+        }
     }
 }
 
@@ -558,7 +410,7 @@ fn test_ledger_growing() {
         None,
         minter_identity().sender().unwrap(),
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // Test initial mint block.
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -602,7 +454,7 @@ fn test_archive_indexing() {
     let env = &StateMachine::new();
     let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(env, vec![], default_archive_options(), None, minter);
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // Test indexing archive by forcing the ledger to archive some transactions
     // and by having enough transactions such that the index must use archive
@@ -672,12 +524,12 @@ fn test_get_account_transactions() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read.
     let tx0 = TransactionWithId {
-        id: 0.into(),
+        id: 0u8.into(),
         transaction: Transaction::mint(
             Mint {
                 to: account(1, 0),
@@ -689,13 +541,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx1 = TransactionWithId {
-        id: 1.into(),
+        id: 1u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
                 spender: None,
-                amount: 1_000_000.into(),
+                amount: 1_000_000u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -704,13 +556,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx2 = TransactionWithId {
-        id: 2.into(),
+        id: 2u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
                 spender: None,
-                amount: 2_000_000.into(),
+                amount: 2_000_000u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -719,13 +571,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx3 = TransactionWithId {
-        id: 3.into(),
+        id: 3u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(2, 0),
                 to: account(1, 1),
                 spender: None,
-                amount: 1_000_000.into(),
+                amount: 1_000_000u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -807,8 +659,8 @@ fn test_get_account_transactions_start_length() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
-    let expected_txs: Vec<_> = (0..10)
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    let expected_txs: Vec<_> = (0..10u32)
         .map(|i| TransactionWithId {
             id: i.into(),
             transaction: Transaction::mint(
@@ -865,7 +717,7 @@ fn test_get_account_transactions_pagination() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -931,7 +783,7 @@ fn test_icrc1_balance_of() {
     // 1 case only because the test is expensive to run.
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(
@@ -947,7 +799,7 @@ fn test_icrc1_balance_of() {
                     None,
                     minter_principal,
                 );
-                let index_id = install_index_ng(env, ledger_id);
+                let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
                 for arg_with_caller in &transactions {
                     apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
@@ -1012,7 +864,7 @@ fn test_list_subaccounts() {
         None,
         minter.sender().unwrap(),
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1045,7 +897,7 @@ fn test_list_subaccounts() {
     );
 
     // account_2.owner should have two batches of subaccounts.
-    let principal_2 = accounts_2.get(0).unwrap().owner;
+    let principal_2 = accounts_2.first().unwrap().owner;
     let batch_1 = list_subaccounts(env, index_id, PrincipalId(principal_2), None);
     let expected_batch_1: Vec<_> = accounts_2
         .iter()
@@ -1080,7 +932,7 @@ fn test_post_upgrade_start_timer() {
         None,
         minter.sender().unwrap(),
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1108,7 +960,7 @@ fn test_oldest_tx_id() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     env.advance_time(Duration::from_secs(60));
     env.tick();
@@ -1123,7 +975,7 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is 0, i.e. the mint at ledger init.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0.into()), oldest_tx_id);
+    assert_eq!(Some(0u8.into()), oldest_tx_id);
 
     ////
     // Add one block for account(1, 0) and account(2, 0).
@@ -1133,12 +985,12 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0.into()), oldest_tx_id);
+    assert_eq!(Some(0u8.into()), oldest_tx_id);
 
     // account(2, 0) oldest_tx_id is 1, i.e. the new transfer.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(1.into()), oldest_tx_id);
+    assert_eq!(Some(1u8.into()), oldest_tx_id);
 
     // account(3, 0) oldest_tx_id is still `None`.
     let oldest_tx_id =
@@ -1155,17 +1007,17 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0.into()), oldest_tx_id);
+    assert_eq!(Some(0u8.into()), oldest_tx_id);
 
     // account(2, 0) oldest_tx_id is still 1.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(1.into()), oldest_tx_id);
+    assert_eq!(Some(1u8.into()), oldest_tx_id);
 
     // account(3, 0) oldest_tx_id is 3, i.e. the last block index.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(3.into()), oldest_tx_id);
+    assert_eq!(Some(3u8.into()), oldest_tx_id);
 
     // There should be no fee collector.
     assert_eq!(get_fee_collectors_ranges(env, index_id).ranges, vec![]);
@@ -1191,7 +1043,7 @@ fn test_fee_collector() {
         Some(fee_collector),
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, fee_collector),
@@ -1211,7 +1063,7 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])],
+        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
     );
 
     // Remove the fee collector to burn some transactions fees.
@@ -1229,7 +1081,7 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])],
+        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
     );
 
     // Add a new fee collector different from the first one.
@@ -1250,8 +1102,8 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6.into(), 7.into())]),
-            (fee_collector, vec![(0.into(), 4.into())]),
+            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
+            (fee_collector, vec![(0u8.into(), 4u8.into())]),
         ],
     );
 
@@ -1273,10 +1125,10 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6.into(), 7.into())]),
+            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
             (
                 fee_collector,
-                vec![(0.into(), 4.into()), (7.into(), 9.into())],
+                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
             ),
         ],
     );
@@ -1286,7 +1138,7 @@ fn test_fee_collector() {
 fn test_get_account_transactions_vs_old_index() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(
@@ -1302,7 +1154,7 @@ fn test_get_account_transactions_vs_old_index() {
                     None,
                     minter_principal,
                 );
-                let index_ng_id = install_index_ng(env, ledger_id);
+                let index_ng_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
                 let index_id = install_index(env, ledger_id);
 
                 for arg_with_caller in &transactions {
@@ -1335,7 +1187,7 @@ fn test_upgrade_index_to_index_ng() {
         ..Default::default()
     });
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(
@@ -1351,7 +1203,7 @@ fn test_upgrade_index_to_index_ng() {
                     None,
                     minter_principal,
                 );
-                let index_ng_id = install_index_ng(env, ledger_id);
+                let index_ng_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
                 let index_id = install_index(env, ledger_id);
 
                 for arg_with_caller in &transactions {
@@ -1390,7 +1242,7 @@ fn test_upgrade_index_to_index_ng() {
 fn test_index_ledger_coherence() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(
@@ -1406,7 +1258,7 @@ fn test_index_ledger_coherence() {
                     None,
                     minter_principal,
                 );
-                let index_id = install_index_ng(env, ledger_id);
+                let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
                 for arg_with_caller in &transactions {
                     apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
@@ -1431,7 +1283,7 @@ fn test_principal_subaccounts() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // Test initial mint block.
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -1478,4 +1330,25 @@ fn test_principal_subaccounts() {
     assert_eq!(subaccounts.len(), 1);
     // The subaccount 1 should show up in a `list_subaccount` query although it has only been involved in an Approve transaction
     assert!(subaccounts.contains(&account(2, 1).subaccount.unwrap()));
+}
+
+mod metrics {
+    use crate::index_wasm;
+    use candid::Principal;
+    use ic_icrc1_index_ng::InitArg;
+
+    #[test]
+    fn should_export_total_memory_usage_bytes_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+            index_wasm(),
+            encode_init_args,
+        );
+    }
+
+    fn encode_init_args(ledger_id: Principal) -> InitArg {
+        InitArg {
+            ledger_id,
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        }
+    }
 }

@@ -15,10 +15,10 @@ ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-local-store = { path = "../local_store" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
-thiserror = "1.0"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
 ic-registry-local-store-artifacts = { path = "../local_store/artifacts" }
-tempfile = "3.0"
+tempfile = { workspace = true }

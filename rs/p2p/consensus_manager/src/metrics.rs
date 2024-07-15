@@ -1,5 +1,5 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_types::artifact::ArtifactKind;
+use ic_types::artifact::PbArtifact;
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntCounterVec, IntGauge};
 
 use crate::uri_prefix;
@@ -41,14 +41,16 @@ pub(crate) struct ConsensusManagerMetrics {
     pub send_view_consensus_dup_purge_total: IntCounter,
     pub send_view_send_to_peer_total: IntCounter,
     pub send_view_send_to_peer_delivered_total: IntCounter,
+    pub send_view_send_to_peer_cancelled_total: IntCounter,
+    pub send_view_resend_reconnect_total: IntCounter,
 
-    // Slot manager
-    pub slot_manager_used_slots: IntGauge,
-    pub slot_manager_maximum_slots_total: IntCounter,
+    // Available slot set
+    pub slot_set_in_use_slots: IntGauge,
+    pub slot_set_allocated_slots_total: IntCounter,
 }
 
 impl ConsensusManagerMetrics {
-    pub fn new<Artifact: ArtifactKind>(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new<Artifact: PbArtifact>(metrics_registry: &MetricsRegistry) -> Self {
         let prefix = uri_prefix::<Artifact>();
         let const_labels_string = labels! {"client".to_string() => prefix.clone()};
         let const_labels = labels! {"client" => prefix.as_str()};
@@ -101,7 +103,7 @@ impl ConsensusManagerMetrics {
                 Histogram::with_opts(histogram_opts!(
                     "ic_consensus_manager_download_task_artifact_download_duration",
                     "Download time for artifact.",
-                    decimal_buckets(-2, 0),
+                    decimal_buckets(-2, 1),
                     const_labels_string.clone(),
                 ))
                 .unwrap(),
@@ -240,18 +242,34 @@ impl ConsensusManagerMetrics {
                 ))
                 .unwrap(),
             ),
+            send_view_send_to_peer_cancelled_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_send_to_peer_cancelled_total",
+                    "Cancelled slot updates to peers.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_resend_reconnect_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_resend_reconnect_total",
+                    "Artifact was sent again due to reconnection.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
 
-            slot_manager_used_slots: metrics_registry.register(
+            slot_set_in_use_slots: metrics_registry.register(
                 IntGauge::with_opts(opts!(
-                    "ic_consensus_manager_slot_manager_used_slots",
+                    "ic_consensus_manager_slot_set_in_use_slots",
                     "Active slots in use.",
                     const_labels.clone(),
                 ))
                 .unwrap(),
             ),
-            slot_manager_maximum_slots_total: metrics_registry.register(
+            slot_set_allocated_slots_total: metrics_registry.register(
                 IntCounter::with_opts(opts!(
-                    "ic_consensus_manager_slot_manager_maximum_slots_total",
+                    "ic_consensus_manager_slot_set_allocated_slots_total",
                     "Maximum of slots simultaneously used.",
                     const_labels.clone(),
                 ))

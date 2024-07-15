@@ -5,15 +5,17 @@ use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
     CspTlsSignError, IDkgCreateDealingVaultError, PublicRandomSeedGeneratorError,
-    ValidatePksAndSksError,
+    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
 };
 use crate::vault::api::{
     CspPublicKeyStoreError, CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
 };
 use crate::vault::local_csp_vault::{LocalCspVault, ProdLocalCspVault};
+use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVault};
 use crate::vault::remote_csp_vault::{PksAndSksContainsErrors, FOUR_GIGA_BYTES};
 use crate::ExternalPublicKeys;
+use futures::StreamExt;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -110,7 +112,6 @@ impl<C: CspVault> Clone for TarpcCspVaultServerWorker<C> {
     }
 }
 
-#[tarpc::server]
 impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     // `BasicSignatureCspVault`-methods.
     async fn sign(
@@ -378,6 +379,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_load_transcript(
         self,
         _: context::Context,
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
@@ -387,6 +389,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.idkg_load_transcript(
+                algorithm_id,
                 dealings,
                 context_data.into_vec(),
                 receiver_index,
@@ -400,6 +403,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_load_transcript_with_openings(
         self,
         _: context::Context,
+        alg: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: ByteBuf,
@@ -410,6 +414,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.idkg_load_transcript_with_openings(
+                alg,
                 dealings,
                 openings,
                 context_data.into_vec(),
@@ -444,6 +449,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_open_dealing(
         self,
         _: context::Context,
+        alg: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: ByteBuf,
@@ -453,6 +459,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.idkg_open_dealing(
+                alg,
                 dealing,
                 dealer_index,
                 context_data.into_vec(),
@@ -488,6 +495,31 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 lambda_masked_raw,
                 kappa_times_lambda_raw,
                 key_times_lambda_raw,
+                algorithm_id,
+            )
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
+
+    // `ThresholdSchnorrSignerCspVault`-methods
+    async fn create_schnorr_sig_share(
+        self,
+        _: context::Context,
+        derivation_path: ExtendedDerivationPath,
+        message: ByteBuf,
+        nonce: Randomness,
+        key_raw: IDkgTranscriptInternalBytes,
+        presig_raw: IDkgTranscriptInternalBytes,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError> {
+        let vault = self.local_csp_vault;
+        let job = move || {
+            vault.create_schnorr_sig_share(
+                derivation_path,
+                message.into_vec(),
+                nonce,
+                key_raw,
+                presig_raw,
                 algorithm_id,
             )
         };
@@ -632,9 +664,13 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
                     local_csp_vault,
                     thread_pool,
                 };
-                let channel_executor =
-                    BaseChannel::with_defaults(transport).execute(worker.serve());
-                channel_executor.await;
+                let channel = BaseChannel::with_defaults(transport);
+                channel
+                    .execute(worker.serve())
+                    .for_each(|rpc| async {
+                        tokio::spawn(rpc);
+                    })
+                    .await;
             });
         }
     }

@@ -8,7 +8,6 @@ type CanisterStatusResult = record {
 type CanisterStatusType = variant { stopped; stopping; running };
 type DefiniteCanisterSettings = record { controllers : vec principal };
 service : {
-  canister_status: (record {canister_id: principal;}) -> (CanisterStatusResult);
   upgrade_root:
    (record {
       module_arg: blob;

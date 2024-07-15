@@ -7,9 +7,10 @@ rust_binary(
     srcs = ["src/main.rs"],
     crate_name = "deterministic_ips",
     deps = [
+        # Keep sorted.
         ":deterministic_ips",
         "@crate_index//:anyhow",
-        "@crate_index//:clap_4_0_0",
+        "@crate_index//:clap",
     ],
 )
 
@@ -22,6 +23,7 @@ rust_library(
     crate_name = "deterministic_ips",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/sha2",
         "@crate_index//:thiserror",
     ],
@@ -29,9 +31,5 @@ rust_library(
 
 rust_test(
     name = "tests",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["src/main.rs"],
-    ),
     crate = ":deterministic_ips",
 )

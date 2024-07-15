@@ -1,16 +1,16 @@
 use crate::{
+    neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
-        neuron::DissolveState as NeuronDissolveState, neuron::Followees, AbridgedNeuron,
-        BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer, Topic,
+        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::{BoundedStorable, StableBTreeMap, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::{StableBTreeMap, Storable};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use maplit::hashmap;
@@ -20,32 +20,6 @@ use std::{
     collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
     ops::RangeBounds,
 };
-
-impl From<AbridgedNeuronDissolveState> for NeuronDissolveState {
-    fn from(source: AbridgedNeuronDissolveState) -> Self {
-        use AbridgedNeuronDissolveState as S;
-        use NeuronDissolveState as D;
-        match source {
-            S::WhenDissolvedTimestampSeconds(timestamp) => {
-                D::WhenDissolvedTimestampSeconds(timestamp)
-            }
-            S::DissolveDelaySeconds(delay) => D::DissolveDelaySeconds(delay),
-        }
-    }
-}
-
-impl From<NeuronDissolveState> for AbridgedNeuronDissolveState {
-    fn from(source: NeuronDissolveState) -> Self {
-        use AbridgedNeuronDissolveState as D;
-        use NeuronDissolveState as S;
-        match source {
-            S::WhenDissolvedTimestampSeconds(timestamp) => {
-                D::WhenDissolvedTimestampSeconds(timestamp)
-            }
-            S::DissolveDelaySeconds(delay) => D::DissolveDelaySeconds(delay),
-        }
-    }
-}
 
 // Because many arguments are needed to construct a StableNeuronStore, there is
 // no natural argument order that StableNeuronStore::new would be able to
@@ -68,6 +42,29 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
     // Singletons
     pub known_neuron_data: Memory,
     pub transfer: Memory,
+}
+
+/// A section of a neuron represents a part of neuron that can potentially be large, and when a
+/// neuron is read, the caller can specify which sections of the neuron they want to read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct NeuronSections {
+    pub hot_keys: bool,
+    pub recent_ballots: bool,
+    pub followees: bool,
+    pub known_neuron_data: bool,
+    pub transfer: bool,
+}
+
+impl NeuronSections {
+    pub fn all() -> Self {
+        Self {
+            hot_keys: true,
+            recent_ballots: true,
+            followees: true,
+            known_neuron_data: true,
+            transfer: true,
+        }
+    }
 }
 
 impl<Memory> StableNeuronStoreBuilder<Memory>
@@ -110,7 +107,7 @@ where
     main: StableBTreeMap<NeuronId, AbridgedNeuron, Memory>,
 
     // Collections
-    hot_keys_map: StableBTreeMap<(NeuronId, /* index */ u64), PrincipalId, Memory>,
+    hot_keys_map: StableBTreeMap<(NeuronId, /* index */ u64), Principal, Memory>,
     recent_ballots_map: StableBTreeMap<(NeuronId, /* index */ u64), BallotInfo, Memory>,
     followees_map: StableBTreeMap<FolloweesKey, NeuronId, Memory>,
 
@@ -125,7 +122,7 @@ where
 /// operations via the following methods:
 ///
 ///   create(Neuron)
-///   read(NeuronId)
+///   read(NeuronId, NeuronSections)
 ///   update(Neuron)
 ///   delete(NeuronId)
 ///
@@ -138,6 +135,11 @@ where
 /// Additionally, there is upsert, which updates or inserts, depending on whether
 /// an entry with the same ID already exists. You can think of this as insert,
 /// but clobbering is allowed.
+///
+/// When a Neuron is read, the caller can specify which sections of the Neuron
+/// they want to read. This is done by passing a `NeuronSections` to the read
+/// method. When reading a neuron for modification, all sections should be read by
+/// passing `NeuronSections::all()`.
 ///
 /// Several `Memory`s are used instead of just one, because the size of
 /// serialized Neurons varies significantly, which leads to inefficient use of
@@ -192,7 +194,14 @@ where
         // Auxiliary Data
         // --------------
 
-        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+        update_repeated_field(
+            neuron_id,
+            hot_keys
+                .iter()
+                .map(|principal_id| Principal::from(*principal_id))
+                .collect(),
+            &mut self.hot_keys_map,
+        );
         update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
 
@@ -206,21 +215,29 @@ where
         Ok(())
     }
 
-    /// Retrieves an existing entry.
-    pub fn read(&self, neuron_id: NeuronId) -> Result<Neuron, NeuronStoreError> {
+    /// Reads an existing entry given the ID and the sections to read.
+    pub fn read(
+        &self,
+        neuron_id: NeuronId,
+        sections: NeuronSections,
+    ) -> Result<Neuron, NeuronStoreError> {
         let main_neuron_part = self
             .main
             .get(&neuron_id)
             // Deal with no entry by blaming it on the caller.
             .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
 
-        Ok(self.reconstitute_neuron(neuron_id, main_neuron_part))
+        Ok(self.reconstitute_neuron(neuron_id, main_neuron_part, sections))
     }
 
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
-    pub fn update(&mut self, neuron: Neuron) -> Result<(), NeuronStoreError> {
+    pub fn update(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: Neuron,
+    ) -> Result<(), NeuronStoreError> {
         let DecomposedNeuron {
             // The original neuron is consumed near the end of this
             // statement. This abridged one takes its place.
@@ -233,7 +250,7 @@ where
 
             known_neuron_data,
             transfer,
-        } = DecomposedNeuron::try_from(neuron)?;
+        } = DecomposedNeuron::try_from(new_neuron)?;
 
         validate_recent_ballots(&recent_ballots)?;
 
@@ -259,16 +276,33 @@ where
         // Auxiliary Data
         // --------------
 
-        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
-        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
-        self.update_followees(neuron_id, followees);
+        if hot_keys != old_neuron.hot_keys {
+            update_repeated_field(
+                neuron_id,
+                hot_keys
+                    .iter()
+                    .map(|principal_id| Principal::from(*principal_id))
+                    .collect(),
+                &mut self.hot_keys_map,
+            );
+        }
+        if recent_ballots != old_neuron.recent_ballots {
+            update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
+        }
+        if followees != old_neuron.followees {
+            self.update_followees(neuron_id, followees);
+        }
 
-        update_singleton_field(
-            neuron_id,
-            known_neuron_data,
-            &mut self.known_neuron_data_map,
-        );
-        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
+        if known_neuron_data != old_neuron.known_neuron_data {
+            update_singleton_field(
+                neuron_id,
+                known_neuron_data,
+                &mut self.known_neuron_data_map,
+            );
+        }
+        if transfer != old_neuron.transfer {
+            update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
+        }
 
         Ok(())
     }
@@ -312,9 +346,9 @@ where
     where
         R: RangeBounds<NeuronId>,
     {
-        self.main
-            .range(range)
-            .map(|(neuron_id, neuron)| self.reconstitute_neuron(neuron_id, neuron))
+        self.main.range(range).map(|(neuron_id, neuron)| {
+            self.reconstitute_neuron(neuron_id, neuron, NeuronSections::all())
+        })
     }
 
     /// Returns the number of entries for some of the storage sections.
@@ -339,26 +373,55 @@ where
 
     /// Internal function to take what's in the main map and fill in the remaining data from
     /// the other stable storage maps.
-    fn reconstitute_neuron(&self, neuron_id: NeuronId, main_neuron_part: AbridgedNeuron) -> Neuron {
-        let hot_keys = read_repeated_field(neuron_id, &self.hot_keys_map);
-        let recent_ballots = read_repeated_field(neuron_id, &self.recent_ballots_map);
-        let followees = self.read_followees(neuron_id);
+    fn reconstitute_neuron(
+        &self,
+        neuron_id: NeuronId,
+        main_neuron_part: AbridgedNeuron,
+        sections: NeuronSections,
+    ) -> Neuron {
+        let hot_keys = if sections.hot_keys {
+            read_repeated_field(neuron_id, &self.hot_keys_map)
+        } else {
+            Vec::new()
+        };
+        let recent_ballots = if sections.recent_ballots {
+            read_repeated_field(neuron_id, &self.recent_ballots_map)
+        } else {
+            Vec::new()
+        };
+        let followees = if sections.followees {
+            self.read_followees(neuron_id)
+        } else {
+            HashMap::new()
+        };
 
-        let known_neuron_data = self.known_neuron_data_map.get(&neuron_id);
-        let transfer = self.transfer_map.get(&neuron_id);
+        let known_neuron_data = if sections.known_neuron_data {
+            self.known_neuron_data_map.get(&neuron_id)
+        } else {
+            None
+        };
+        let transfer = if sections.transfer {
+            self.transfer_map.get(&neuron_id)
+        } else {
+            None
+        };
 
-        DecomposedNeuron {
+        let decomposed = DecomposedNeuron {
             id: neuron_id,
             main: main_neuron_part,
 
-            hot_keys,
+            hot_keys: hot_keys
+                .iter()
+                .map(|principal| PrincipalId::from(*principal))
+                .collect(),
             recent_ballots,
             followees,
 
             known_neuron_data,
             transfer,
-        }
-        .reconstitute()
+        };
+
+        Neuron::from(decomposed)
     }
 
     // Misc Private Helper(s)
@@ -474,7 +537,7 @@ pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
     .build()
 }
 
-// impl BoundedStorable for $ProtoMessage
+// impl Storable for $ProtoMessage
 // ======================================
 
 impl Storable for AbridgedNeuron {
@@ -488,15 +551,15 @@ impl Storable for AbridgedNeuron {
             // panic is unavoid able in the case of Err.)
             .expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for AbridgedNeuron {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: we constructed the largest abridged Neuron
-    // possible, and found that its serialized size was 190 bytes. This is 2x
-    // that, which seems to strike a good balance between comfortable room for
-    // growth vs. excessive wasted space.
-    const MAX_SIZE: u32 = 380;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: we constructed the largest abridged Neuron
+        // possible, and found that its serialized size was 190 bytes. This is 2x
+        // that, which seems to strike a good balance between comfortable room for
+        // growth vs. excessive wasted space.
+        max_size: 380,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for BallotInfo {
@@ -507,12 +570,12 @@ impl Storable for BallotInfo {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for BallotInfo {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-    const MAX_SIZE: u32 = 48;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+        max_size: 48,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for KnownNeuronData {
@@ -523,12 +586,12 @@ impl Storable for KnownNeuronData {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for KnownNeuronData {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-    const MAX_SIZE: u32 = 6412;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+        max_size: 6412,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for NeuronStakeTransfer {
@@ -539,12 +602,12 @@ impl Storable for NeuronStakeTransfer {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for NeuronStakeTransfer {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-    const MAX_SIZE: u32 = 290;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+        max_size: 290,
+        is_fixed_size: false,
+    };
 }
 
 // Private Helpers
@@ -564,166 +627,6 @@ lazy_static! {
     );
 }
 
-/// Breaks out "fat" fields from a Neuron.
-///
-/// Used like so:
-///
-///     let DecomposedNeuron {
-///         main: abridged_neuron,
-///
-///         hot_keys,
-///         recent_ballots,
-///         followees,
-///
-///         known_neuron_data,
-///         transfer,
-///     } = DecomposedNeuron::from(full_neuron);
-///
-/// Of course, a similar effect can be achieved "manually" by calling
-/// std::mem::take on each of the auxiliary fields, but that is error prone,
-/// because it is very easy to forget to take one of the auxiliary fields. By
-/// sticking to this, such mistakes can be avoided.
-///
-/// Notice that full_neuron in the above example gets consumed. It is "replaced"
-/// with abridged_neuron.
-struct DecomposedNeuron {
-    id: NeuronId,
-    main: AbridgedNeuron,
-
-    // Collections
-    hot_keys: Vec<PrincipalId>,
-    recent_ballots: Vec<BallotInfo>,
-    followees: HashMap</* topic ID */ i32, Followees>,
-
-    // Singletons
-    known_neuron_data: Option<KnownNeuronData>,
-    transfer: Option<NeuronStakeTransfer>,
-}
-
-impl TryFrom<Neuron> for DecomposedNeuron {
-    type Error = NeuronStoreError;
-
-    fn try_from(source: Neuron) -> Result<Self, NeuronStoreError> {
-        let Neuron {
-            id,
-            account,
-            controller,
-            hot_keys,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            followees,
-            recent_ballots,
-            kyc_verified,
-            transfer,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            known_neuron_data,
-            neuron_type,
-            dissolve_state,
-        } = source;
-
-        let id = id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
-
-        let main = AbridgedNeuron {
-            id: Some(id),
-            account,
-            controller,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            kyc_verified,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            neuron_type,
-            dissolve_state: dissolve_state.map(AbridgedNeuronDissolveState::from),
-        };
-
-        Ok(Self {
-            id,
-            main,
-
-            // Collections
-            hot_keys,
-            recent_ballots,
-            followees,
-
-            // Singletons
-            known_neuron_data,
-            transfer,
-        })
-    }
-}
-
-impl DecomposedNeuron {
-    fn reconstitute(self) -> Neuron {
-        let Self {
-            id,
-            main,
-
-            hot_keys,
-            recent_ballots,
-            followees,
-
-            known_neuron_data,
-            transfer,
-        } = self;
-
-        let AbridgedNeuron {
-            id: _,
-            account,
-            controller,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            kyc_verified,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            neuron_type,
-            dissolve_state,
-        } = main;
-
-        Neuron {
-            id: Some(id),
-            account,
-            controller,
-            hot_keys,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            followees,
-            recent_ballots,
-            kyc_verified,
-            transfer,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            known_neuron_data,
-            neuron_type,
-            dissolve_state: dissolve_state.map(NeuronDissolveState::from),
-        }
-    }
-}
-
 /// Replaces values in a StableBTreeMap corresponding to a repeated field in a Neuron.
 ///
 /// E.g. hot_keys, recent_ballots.
@@ -732,7 +635,7 @@ fn update_repeated_field<Element, Memory>(
     new_elements: Vec<Element>,
     map: &mut StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
 ) where
-    Element: BoundedStorable,
+    Element: Storable,
     Memory: ic_stable_structures::Memory,
 {
     let new_entries = new_elements
@@ -761,8 +664,8 @@ fn update_range<Key, Value, Memory>(
     range: impl RangeBounds<Key>,
     map: &mut StableBTreeMap<Key, Value, Memory>,
 ) where
-    Key: BoundedStorable + Ord + Clone,
-    Value: BoundedStorable,
+    Key: Storable + Ord + Clone,
+    Value: Storable,
     Memory: ic_stable_structures::Memory,
 {
     let new_keys = new_entries.keys().cloned().collect::<HeapBTreeSet<Key>>();
@@ -787,7 +690,7 @@ fn update_singleton_field<Element, Memory>(
     element: Option<Element>,
     map: &mut StableBTreeMap<NeuronId, Element, Memory>,
 ) where
-    Element: BoundedStorable,
+    Element: Storable,
     Memory: ic_stable_structures::Memory,
 {
     match element {
@@ -801,7 +704,7 @@ fn read_repeated_field<Element, Memory>(
     map: &StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
 ) -> Vec<Element>
 where
-    Element: BoundedStorable,
+    Element: Storable,
     Memory: ic_stable_structures::Memory,
 {
     let first = (neuron_id, u64::MIN);
@@ -877,10 +780,8 @@ impl Storable for FolloweesKey {
             index,
         }
     }
-}
-impl BoundedStorable for FolloweesKey {
-    const IS_FIXED_SIZE: bool = FolloweesKeyEquivalentTuple::IS_FIXED_SIZE;
-    const MAX_SIZE: u32 = FolloweesKeyEquivalentTuple::MAX_SIZE;
+
+    const BOUND: Bound = <FolloweesKeyEquivalentTuple as Storable>::BOUND;
 }
 
 #[cfg(test)]

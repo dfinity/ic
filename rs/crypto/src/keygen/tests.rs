@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use crate::common::test_utils::crypto_component::crypto_component_with_csp_and_vault;
 use assert_matches::assert_matches;
 use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, PrincipalId};
@@ -20,6 +21,7 @@ use ic_crypto_test_utils_keys::public_keys::{
     valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
     valid_tls_certificate_and_validation_time,
 };
+use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryClient;
@@ -33,9 +35,9 @@ use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{crypto::KeyPurpose, RegistryVersion};
 use slog::Level;
 use std::sync::Arc;
@@ -1272,7 +1274,6 @@ mod rotate_idkg_dealing_encryption_keys {
     fn should_return_transient_error_if_key_mismatch_then_latest_rotation_too_recent_with_retry() {
         use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
         use ic_interfaces::crypto::KeyManager;
-        use ic_logger::replica_logger::no_op_logger;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 
@@ -1339,8 +1340,9 @@ mod rotate_idkg_dealing_encryption_keys {
             .expect("Failed to add subnet list record key");
 
         let time_source = FastForwardTimeSource::new();
-        let crypto_component = CryptoComponentImpl::new_with_csp_and_fake_node_id(
+        let crypto_component = CryptoComponentImpl::new_for_test(
             csp,
+            Arc::new(MockLocalCspVault::new()),
             no_op_logger(),
             registry_client.clone(),
             node_id(),
@@ -1368,11 +1370,11 @@ mod rotate_idkg_dealing_encryption_keys {
     fn should_return_transient_error_if_key_mismatch_then_rotate_with_retry() {
         use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
         use ic_interfaces::crypto::KeyManager;
-        use ic_logger::replica_logger::no_op_logger;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 
         let mut csp = MockAllCryptoServiceProvider::new();
+        let mut vault = MockLocalCspVault::new();
         let mut counter = 0_u8;
         csp.expect_current_node_public_keys()
             .times(2)
@@ -1395,7 +1397,8 @@ mod rotate_idkg_dealing_encryption_keys {
         csp.expect_current_node_public_keys_with_timestamps()
             .times(2)
             .return_const(Ok(valid_current_node_public_keys_with_timestamps()));
-        csp.expect_idkg_gen_dealing_encryption_key_pair()
+        vault
+            .expect_idkg_gen_dealing_encryption_key_pair()
             .times(1)
             .return_const(Ok(MEGaPublicKey::deserialize(
                 EccCurveType::K256,
@@ -1438,14 +1441,9 @@ mod rotate_idkg_dealing_encryption_keys {
             )
             .expect("Failed to add subnet list record key");
 
-        let crypto_component = CryptoComponentImpl::new_with_csp_and_fake_node_id(
-            csp,
-            no_op_logger(),
-            registry_client.clone(),
-            node_id(),
-            Arc::new(CryptoMetrics::none()),
-            None,
-        );
+        let crypto_component =
+            crypto_component_with_csp_and_vault(csp, vault, registry_client.clone());
+
         registry_client.reload();
 
         let result = crypto_component.rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_1);
@@ -1858,6 +1856,7 @@ impl SetupBuilder {
 
     fn build(self) -> Setup {
         let mut mock_csp = MockAllCryptoServiceProvider::new();
+        let mut mock_vault = MockLocalCspVault::new();
 
         if let Some(csp_pks_and_sks_contains_result) = self.csp_pks_and_sks_contains_result {
             mock_csp
@@ -1891,7 +1890,7 @@ impl SetupBuilder {
         if let Some(csp_idkg_gen_dealing_encryption_key_pair_result) =
             self.csp_idkg_gen_dealing_encryption_key_pair_result
         {
-            mock_csp
+            mock_vault
                 .expect_idkg_gen_dealing_encryption_key_pair()
                 .times(1)
                 .return_const(csp_idkg_gen_dealing_encryption_key_pair_result);
@@ -1958,8 +1957,9 @@ impl SetupBuilder {
         );
 
         let time_source = FastForwardTimeSource::new();
-        let crypto = CryptoComponentImpl::new_with_csp_and_fake_node_id(
+        let crypto = CryptoComponentImpl::new_for_test(
             mock_csp,
+            Arc::new(mock_vault),
             self.logger.unwrap_or_else(no_op_logger),
             Arc::clone(&registry_client),
             node_id(),

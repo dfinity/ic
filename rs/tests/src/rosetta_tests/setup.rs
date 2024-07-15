@@ -15,9 +15,13 @@ use std::path::Path;
 use std::time::Duration;
 use url::Url;
 
-use crate::driver::test_env_api::{HasDependencies, SshSession};
-use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
-use crate::driver::{
+use crate::rosetta_tests::lib::hex2addr;
+use crate::rosetta_tests::rosetta_client::RosettaApiClient;
+use ic_system_test_driver::driver::test_env_api::{HasDependencies, SshSession};
+use ic_system_test_driver::driver::universal_vm::{
+    insert_file_to_config, UniversalVm, UniversalVms,
+};
+use ic_system_test_driver::driver::{
     ic::InternetComputer,
     resource::AllocatedVm,
     test_env::TestEnv,
@@ -25,9 +29,7 @@ use crate::driver::{
         HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
     },
 };
-use crate::rosetta_tests::lib::hex2addr;
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 
 /// Transfer fee on the ledger.
 pub const TRANSFER_FEE: u64 = 10_000;
@@ -190,6 +192,7 @@ fn create_ledger_canister(
             node_max_memory_size_bytes: Some(1024 + 512), // about 10 blocks
             max_message_size_bytes: Some(2 * 1024 * 1024),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };

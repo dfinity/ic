@@ -1,11 +1,11 @@
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterUpgradeOptions {
     #[prost(bool, optional, tag = "1")]
     pub skip_pre_upgrade: ::core::option::Option<bool>,
+    #[prost(enumeration = "WasmMemoryPersistence", optional, tag = "2")]
+    pub wasm_memory_persistence: ::core::option::Option<i32>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterInstallModeV2 {
@@ -18,7 +18,6 @@ pub struct CanisterInstallModeV2 {
 }
 /// Nested message and enum types in `CanisterInstallModeV2`.
 pub mod canister_install_mode_v2 {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum CanisterInstallModeV2 {
@@ -28,19 +27,7 @@ pub mod canister_install_mode_v2 {
         Mode2(super::CanisterUpgradeOptions),
     }
 }
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CanisterInstallMode {
     Unspecified = 0,
@@ -72,6 +59,35 @@ impl CanisterInstallMode {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum WasmMemoryPersistence {
+    Unspecified = 0,
+    Keep = 1,
+    Replace = 2,
+}
+impl WasmMemoryPersistence {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            WasmMemoryPersistence::Unspecified => "WASM_MEMORY_PERSISTENCE_UNSPECIFIED",
+            WasmMemoryPersistence::Keep => "WASM_MEMORY_PERSISTENCE_KEEP",
+            WasmMemoryPersistence::Replace => "WASM_MEMORY_PERSISTENCE_REPLACE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WASM_MEMORY_PERSISTENCE_UNSPECIFIED" => Some(Self::Unspecified),
+            "WASM_MEMORY_PERSISTENCE_KEEP" => Some(Self::Keep),
+            "WASM_MEMORY_PERSISTENCE_REPLACE" => Some(Self::Replace),
+            _ => None,
+        }
+    }
+}
 #[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -93,7 +109,6 @@ pub struct SubnetId {
     #[prost(message, optional, tag = "1")]
     pub principal_id: ::core::option::Option<PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserId {
@@ -121,7 +136,6 @@ pub struct NiDkgId {
     #[prost(message, optional, tag = "5")]
     pub remote_target_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NominalCycles {
@@ -131,19 +145,7 @@ pub struct NominalCycles {
     pub low: u64,
 }
 /// A non-interactive distributed key generation (NI-DKG) tag.
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NiDkgTag {
     Unspecified = 0,
@@ -172,7 +174,6 @@ impl NiDkgTag {
         }
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgMessage {
@@ -187,7 +188,6 @@ pub struct DkgMessage {
     #[prost(bytes = "vec", tag = "4")]
     pub dealing: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgPayload {
@@ -196,7 +196,6 @@ pub struct DkgPayload {
 }
 /// Nested message and enum types in `DkgPayload`.
 pub mod dkg_payload {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Val {
@@ -206,7 +205,6 @@ pub mod dkg_payload {
         Dealings(super::Dealings),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Dealings {
@@ -215,7 +213,6 @@ pub struct Dealings {
     #[prost(uint64, tag = "2")]
     pub summary_height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {
@@ -239,7 +236,6 @@ pub struct Summary {
     pub transcripts_for_new_subnets_with_callback_ids:
         ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TaggedNiDkgTranscript {
@@ -248,7 +244,6 @@ pub struct TaggedNiDkgTranscript {
     #[prost(enumeration = "NiDkgTag", tag = "2")]
     pub tag: i32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {
@@ -259,7 +254,6 @@ pub struct CallbackIdedNiDkgTranscript {
     #[prost(uint64, tag = "3")]
     pub callback_id: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NiDkgTranscriptResult {
@@ -268,7 +262,6 @@ pub struct NiDkgTranscriptResult {
 }
 /// Nested message and enum types in `NiDkgTranscriptResult`.
 pub mod ni_dkg_transcript_result {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Val {
@@ -279,7 +272,6 @@ pub mod ni_dkg_transcript_result {
     }
 }
 /// A transcript for non-interactive Distributed Key Generation (NI-DKG).
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NiDkgTranscript {
@@ -295,7 +287,6 @@ pub struct NiDkgTranscript {
     pub internal_csp_transcript: ::prost::alloc::vec::Vec<u8>,
 }
 /// A configuration for non-interactive Distributed Key Generation (NI-DKG).
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NiDkgConfig {
@@ -316,7 +307,6 @@ pub struct NiDkgConfig {
     #[prost(message, optional, tag = "8")]
     pub resharing_transcript: ::core::option::Option<NiDkgTranscript>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitialDkgAttemptCount {
@@ -325,7 +315,44 @@ pub struct InitialDkgAttemptCount {
     #[prost(uint32, tag = "2")]
     pub attempt_no: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RejectCode {
+    Unspecified = 0,
+    SysFatal = 1,
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    CanisterError = 5,
+}
+impl RejectCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            RejectCode::Unspecified => "REJECT_CODE_UNSPECIFIED",
+            RejectCode::SysFatal => "REJECT_CODE_SYS_FATAL",
+            RejectCode::SysTransient => "REJECT_CODE_SYS_TRANSIENT",
+            RejectCode::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
+            RejectCode::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
+            RejectCode::CanisterError => "REJECT_CODE_CANISTER_ERROR",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "REJECT_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "REJECT_CODE_SYS_FATAL" => Some(Self::SysFatal),
+            "REJECT_CODE_SYS_TRANSIENT" => Some(Self::SysTransient),
+            "REJECT_CODE_DESTINATION_INVALID" => Some(Self::DestinationInvalid),
+            "REJECT_CODE_CANISTER_REJECT" => Some(Self::CanisterReject),
+            "REJECT_CODE_CANISTER_ERROR" => Some(Self::CanisterError),
+            _ => None,
+        }
+    }
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BasicSignature {
@@ -352,18 +379,11 @@ pub struct ThresholdSignatureShare {
     #[prost(message, optional, tag = "2")]
     pub signer: ::core::option::Option<NodeId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaPayload {
+pub struct IDkgPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
-    #[prost(message, repeated, tag = "2")]
-    pub ongoing_signatures: ::prost::alloc::vec::Vec<OngoingSignature>,
-    #[prost(message, repeated, tag = "3")]
-    pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
-    #[prost(message, repeated, tag = "4")]
-    pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
     #[prost(message, optional, tag = "5")]
     pub next_unused_transcript_id:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
@@ -375,91 +395,89 @@ pub struct EcdsaPayload {
     #[prost(message, repeated, tag = "8")]
     pub xnet_reshare_agreements: ::prost::alloc::vec::Vec<XnetReshareAgreement>,
     #[prost(uint64, tag = "10")]
-    pub next_unused_quadruple_id: u64,
+    pub next_unused_pre_signature_id: u64,
     #[prost(message, repeated, tag = "13")]
-    pub key_transcripts: ::prost::alloc::vec::Vec<EcdsaKeyTranscript>,
-    /// TODO: retire these fields, once we start using `key_transcripts`.
-    #[prost(message, optional, tag = "9")]
-    pub current_key_transcript: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
-    #[prost(message, optional, tag = "11")]
-    pub next_key_in_creation: ::core::option::Option<KeyTranscriptCreation>,
-    #[prost(message, optional, tag = "12")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub key_transcripts: ::prost::alloc::vec::Vec<MasterKeyTranscript>,
+    #[prost(message, repeated, tag = "14")]
+    pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
+    #[prost(message, repeated, tag = "15")]
+    pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
+    /// TODO: retire these fields, once we start using `pre_signatures`.
+    #[prost(bool, tag = "16")]
+    pub generalized_pre_signatures: bool,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaKeyTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+pub struct ConsensusResponse {
+    #[prost(uint64, tag = "3")]
+    pub callback: u64,
+    #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
+    pub payload: ::core::option::Option<consensus_response::Payload>,
+}
+/// Nested message and enum types in `ConsensusResponse`.
+pub mod consensus_response {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Payload {
+        #[prost(bytes, tag = "5")]
+        Data(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "6")]
+        Reject(super::super::super::state::queues::v1::RejectContext),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MasterKeyTranscript {
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "3")]
     pub next_in_creation: ::core::option::Option<KeyTranscriptCreation>,
+    #[prost(message, optional, tag = "4")]
+    pub master_key_id:
+        ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OngoingSignature {
-    #[prost(message, optional, tag = "1")]
-    pub request_id: ::core::option::Option<RequestId>,
-    #[prost(message, optional, tag = "2")]
-    pub sig_inputs: ::core::option::Option<ThresholdEcdsaSigInputsRef>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AvailableQuadruple {
+pub struct AvailablePreSignature {
     #[prost(uint64, tag = "1")]
-    pub quadruple_id: u64,
+    pub pre_signature_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub quadruple: ::core::option::Option<PreSignatureQuadrupleRef>,
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub pre_signature: ::core::option::Option<PreSignatureRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QuadrupleInProgress {
+pub struct PreSignatureInProgress {
     #[prost(uint64, tag = "1")]
-    pub quadruple_id: u64,
+    pub pre_signature_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub quadruple: ::core::option::Option<QuadrupleInCreation>,
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub pre_signature: ::core::option::Option<PreSignatureInCreation>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OngoingXnetReshare {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<EcdsaReshareRequest>,
+    pub request: ::core::option::Option<IDkgReshareRequest>,
     #[prost(message, optional, tag = "2")]
     pub transcript: ::core::option::Option<ReshareOfUnmaskedParams>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<EcdsaReshareRequest>,
+    pub request: ::core::option::Option<IDkgReshareRequest>,
     #[prost(message, optional, tag = "4")]
-    pub initial_dealings: ::core::option::Option<super::super::state::queues::v1::Response>,
+    pub initial_dealings: ::core::option::Option<ConsensusResponse>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestId {
     #[prost(bytes = "vec", tag = "1")]
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "2")]
-    pub quadruple_id: u64,
+    pub pre_signature_id: u64,
     #[prost(uint64, tag = "3")]
     pub height: u64,
-    #[prost(message, optional, tag = "4")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TranscriptRef {
@@ -468,21 +486,18 @@ pub struct TranscriptRef {
     #[prost(message, optional, tag = "2")]
     pub transcript_id: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MaskedTranscript {
     #[prost(message, optional, tag = "1")]
     pub transcript_ref: ::core::option::Option<TranscriptRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UnmaskedTranscript {
     #[prost(message, optional, tag = "1")]
     pub transcript_ref: ::core::option::Option<TranscriptRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UnmaskedTranscriptWithAttributes {
@@ -491,7 +506,6 @@ pub struct UnmaskedTranscriptWithAttributes {
     #[prost(message, optional, tag = "2")]
     pub attributes: ::core::option::Option<IDkgTranscriptAttributes>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptOperationRef {
@@ -502,7 +516,6 @@ pub struct IDkgTranscriptOperationRef {
     #[prost(message, optional, tag = "3")]
     pub unmasked: ::core::option::Option<UnmaskedTranscript>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptAttributes {
@@ -513,7 +526,6 @@ pub struct IDkgTranscriptAttributes {
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptParamsRef {
@@ -530,48 +542,81 @@ pub struct IDkgTranscriptParamsRef {
     #[prost(message, optional, tag = "6")]
     pub operation_type_ref: ::core::option::Option<IDkgTranscriptOperationRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RandomTranscriptParams {
     #[prost(message, optional, tag = "1")]
     pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RandomUnmaskedTranscriptParams {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReshareOfMaskedParams {
     #[prost(message, optional, tag = "1")]
     pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReshareOfUnmaskedParams {
     #[prost(message, optional, tag = "1")]
     pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UnmaskedTimesMaskedParams {
     #[prost(message, optional, tag = "1")]
     pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureInCreation {
+    #[prost(oneof = "pre_signature_in_creation::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature_in_creation::Msg>,
+}
+/// Nested message and enum types in `PreSignatureInCreation`.
+pub mod pre_signature_in_creation {
+    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::QuadrupleInCreation),
+        #[prost(message, tag = "2")]
+        Schnorr(super::TranscriptInCreation),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureRef {
+    #[prost(oneof = "pre_signature_ref::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature_ref::Msg>,
+}
+/// Nested message and enum types in `PreSignatureRef`.
+pub mod pre_signature_ref {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::PreSignatureQuadrupleRef),
+        #[prost(message, tag = "2")]
+        Schnorr(super::PreSignatureTranscriptRef),
+    }
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
-    #[prost(message, optional, tag = "1")]
-    pub kappa_config: ::core::option::Option<RandomTranscriptParams>,
-    #[prost(message, optional, tag = "2")]
-    pub kappa_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
     #[prost(message, optional, tag = "4")]
     pub lambda_masked: ::core::option::Option<MaskedTranscript>,
-    #[prost(message, optional, tag = "5")]
-    pub unmask_kappa_config: ::core::option::Option<ReshareOfMaskedParams>,
+    #[prost(message, optional, tag = "11")]
+    pub kappa_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
     #[prost(message, optional, tag = "6")]
     pub kappa_unmasked: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "7")]
@@ -582,8 +627,9 @@ pub struct QuadrupleInCreation {
     pub kappa_times_lambda_config: ::core::option::Option<UnmaskedTimesMaskedParams>,
     #[prost(message, optional, tag = "10")]
     pub kappa_times_lambda: ::core::option::Option<MaskedTranscript>,
+    #[prost(message, optional, tag = "12")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreSignatureQuadrupleRef {
@@ -597,44 +643,48 @@ pub struct PreSignatureQuadrupleRef {
     pub key_times_lambda_ref: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "5")]
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
+    #[prost(message, optional, tag = "6")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ThresholdEcdsaSigInputsRef {
+pub struct TranscriptInCreation {
     #[prost(message, optional, tag = "1")]
-    pub derivation_path:
-        ::core::option::Option<super::super::registry::subnet::v1::ExtendedDerivationPath>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub hashed_message: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub nonce: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, optional, tag = "4")]
-    pub presig_quadruple_ref: ::core::option::Option<PreSignatureQuadrupleRef>,
-    #[prost(message, optional, tag = "5")]
-    pub key_transcript_ref: ::core::option::Option<UnmaskedTranscript>,
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub blinder_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
+    #[prost(message, optional, tag = "3")]
+    pub blinder_unmasked: ::core::option::Option<UnmaskedTranscript>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureTranscriptRef {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub blinder_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
+    #[prost(message, optional, tag = "3")]
+    pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CompletedSignature {
     #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<super::super::state::queues::v1::Response>,
+    pub unreported: ::core::option::Option<ConsensusResponse>,
     #[prost(bytes = "vec", tag = "4")]
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaReshareRequest {
+pub struct IDkgReshareRequest {
     #[prost(message, repeated, tag = "2")]
     pub receiving_node_ids: ::prost::alloc::vec::Vec<NodeId>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
-    #[prost(message, optional, tag = "4")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(message, optional, tag = "5")]
+    pub master_key_id:
+        ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyTranscriptCreation {
@@ -654,16 +704,14 @@ pub struct KeyTranscriptCreation {
     #[prost(message, optional, tag = "9")]
     pub created: ::core::option::Option<UnmaskedTranscript>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaMessage {
-    #[prost(oneof = "ecdsa_message::Msg", tags = "1, 2, 3, 4, 5")]
-    pub msg: ::core::option::Option<ecdsa_message::Msg>,
+pub struct IDkgMessage {
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
+    pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
-/// Nested message and enum types in `EcdsaMessage`.
-pub mod ecdsa_message {
-    #[derive(serde::Serialize, serde::Deserialize)]
+/// Nested message and enum types in `IDkgMessage`.
+pub mod i_dkg_message {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
@@ -672,14 +720,15 @@ pub mod ecdsa_message {
         #[prost(message, tag = "2")]
         DealingSupport(super::IDkgDealingSupport),
         #[prost(message, tag = "3")]
-        SigShare(super::EcdsaSigShare),
+        EcdsaSigShare(super::EcdsaSigShare),
         #[prost(message, tag = "4")]
-        Complaint(super::EcdsaComplaint),
+        Complaint(super::SignedIDkgComplaint),
         #[prost(message, tag = "5")]
-        Opening(super::EcdsaOpening),
+        Opening(super::SignedIDkgOpening),
+        #[prost(message, tag = "6")]
+        SchnorrSigShare(super::SchnorrSigShare),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaSigShare {
@@ -690,39 +739,44 @@ pub struct EcdsaSigShare {
     #[prost(bytes = "vec", tag = "3")]
     pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaComplaint {
+pub struct SchnorrSigShare {
     #[prost(message, optional, tag = "1")]
-    pub content: ::core::option::Option<EcdsaComplaintContent>,
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignedIDkgComplaint {
+    #[prost(message, optional, tag = "1")]
+    pub content: ::core::option::Option<IDkgComplaintContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaComplaintContent {
+pub struct IDkgComplaintContent {
     #[prost(message, optional, tag = "1")]
     pub idkg_complaint: ::core::option::Option<super::super::registry::subnet::v1::IDkgComplaint>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaOpening {
+pub struct SignedIDkgOpening {
     #[prost(message, optional, tag = "1")]
-    pub content: ::core::option::Option<EcdsaOpeningContent>,
+    pub content: ::core::option::Option<IDkgOpeningContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaOpeningContent {
+pub struct IDkgOpeningContent {
     #[prost(message, optional, tag = "1")]
     pub idkg_opening: ::core::option::Option<super::super::registry::subnet::v1::IDkgOpening>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgDealingSupport {
@@ -735,62 +789,74 @@ pub struct IDkgDealingSupport {
     #[prost(message, optional, tag = "4")]
     pub sig_share: ::core::option::Option<BasicSignature>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaPrefix {
+pub struct IDkgPrefix {
     #[prost(uint64, tag = "1")]
     pub group_tag: u64,
     #[prost(uint64, tag = "2")]
     pub meta_hash: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PrefixHashPair {
-    #[prost(message, optional, tag = "1")]
-    pub prefix: ::core::option::Option<EcdsaPrefix>,
+pub struct IDkgArtifactIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub subnet_id: ::core::option::Option<SubnetId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SigShareIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaArtifactId {
-    #[prost(oneof = "ecdsa_artifact_id::Kind", tags = "1, 2, 3, 4, 5")]
-    pub kind: ::core::option::Option<ecdsa_artifact_id::Kind>,
+pub struct PrefixPairIDkg {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<IDkgArtifactIdData>,
 }
-/// Nested message and enum types in `EcdsaArtifactId`.
-pub mod ecdsa_artifact_id {
-    #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrefixPairSigShare {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<SigShareIdData>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgArtifactId {
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
+}
+/// Nested message and enum types in `IDkgArtifactId`.
+pub mod i_dkg_artifact_id {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
         #[prost(message, tag = "1")]
-        Dealing(super::PrefixHashPair),
+        Dealing(super::PrefixPairIDkg),
         #[prost(message, tag = "2")]
-        DealingSupport(super::PrefixHashPair),
+        DealingSupport(super::PrefixPairIDkg),
         #[prost(message, tag = "3")]
-        SigShare(super::PrefixHashPair),
+        EcdsaSigShare(super::PrefixPairSigShare),
         #[prost(message, tag = "4")]
-        Complaint(super::PrefixHashPair),
+        Complaint(super::PrefixPairIDkg),
         #[prost(message, tag = "5")]
-        Opening(super::PrefixHashPair),
+        Opening(super::PrefixPairIDkg),
+        #[prost(message, tag = "6")]
+        SchnorrSigShare(super::PrefixPairSigShare),
     }
 }
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum KeyTranscriptCreationState {
     BeginUnspecified = 0,
@@ -846,7 +912,6 @@ impl KeyTranscriptCreationState {
         }
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationMessage {
@@ -855,7 +920,6 @@ pub struct CertificationMessage {
 }
 /// Nested message and enum types in `CertificationMessage`.
 pub mod certification_message {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
@@ -865,7 +929,6 @@ pub mod certification_message {
         CertificationShare(super::super::super::messaging::xnet::v1::CertificationShare),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ValidatedConsensusArtifact {
@@ -885,7 +948,6 @@ pub struct CatchUpPackage {
     #[prost(message, optional, tag = "3")]
     pub signer: ::core::option::Option<NiDkgId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackageShare {
@@ -903,8 +965,9 @@ pub struct CatchUpPackageShare {
     pub signature: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "7")]
     pub signer: ::core::option::Option<NodeId>,
+    #[prost(uint64, optional, tag = "8")]
+    pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpContent {
@@ -918,8 +981,9 @@ pub struct CatchUpContent {
     pub block_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "5")]
     pub random_beacon_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, optional, tag = "6")]
+    pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Block {
@@ -948,7 +1012,7 @@ pub struct Block {
     #[prost(message, optional, tag = "12")]
     pub self_validating_payload: ::core::option::Option<SelfValidatingPayload>,
     #[prost(message, optional, tag = "13")]
-    pub ecdsa_payload: ::core::option::Option<EcdsaPayload>,
+    pub idkg_payload: ::core::option::Option<IDkgPayload>,
     #[prost(bytes = "vec", tag = "15")]
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]
@@ -956,20 +1020,18 @@ pub struct Block {
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::large_enum_variant)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusMessage {
     #[prost(
         oneof = "consensus_message::Msg",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
     )]
     pub msg: ::core::option::Option<consensus_message::Msg>,
 }
 /// Nested message and enum types in `ConsensusMessage`.
 pub mod consensus_message {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::large_enum_variant)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -996,9 +1058,10 @@ pub mod consensus_message {
         Cup(super::CatchUpPackage),
         #[prost(message, tag = "11")]
         CupShare(super::CatchUpPackageShare),
+        #[prost(message, tag = "12")]
+        EquivocationProof(super::EquivocationProof),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockProposal {
@@ -1011,7 +1074,6 @@ pub struct BlockProposal {
     #[prost(message, optional, tag = "5")]
     pub signer: ::core::option::Option<NodeId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RandomBeacon {
@@ -1026,7 +1088,6 @@ pub struct RandomBeacon {
     #[prost(message, optional, tag = "5")]
     pub signer: ::core::option::Option<NiDkgId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RandomBeaconShare {
@@ -1041,7 +1102,6 @@ pub struct RandomBeaconShare {
     #[prost(message, optional, tag = "5")]
     pub signer: ::core::option::Option<NodeId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RandomTape {
@@ -1054,7 +1114,6 @@ pub struct RandomTape {
     #[prost(message, optional, tag = "4")]
     pub signer: ::core::option::Option<NiDkgId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RandomTapeShare {
@@ -1067,7 +1126,6 @@ pub struct RandomTapeShare {
     #[prost(message, optional, tag = "4")]
     pub signer: ::core::option::Option<NodeId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Finalization {
@@ -1082,7 +1140,6 @@ pub struct Finalization {
     #[prost(bytes = "vec", repeated, tag = "5")]
     pub signers: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FinalizationShare {
@@ -1097,7 +1154,6 @@ pub struct FinalizationShare {
     #[prost(message, optional, tag = "5")]
     pub signer: ::core::option::Option<NodeId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Notarization {
@@ -1112,7 +1168,6 @@ pub struct Notarization {
     #[prost(bytes = "vec", repeated, tag = "5")]
     pub signers: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NotarizationShare {
@@ -1127,7 +1182,28 @@ pub struct NotarizationShare {
     #[prost(message, optional, tag = "5")]
     pub signer: ::core::option::Option<NodeId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EquivocationProof {
+    #[prost(message, optional, tag = "1")]
+    pub signer: ::core::option::Option<NodeId>,
+    #[prost(string, tag = "2")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "3")]
+    pub height: u64,
+    #[prost(message, optional, tag = "4")]
+    pub subnet_id: ::core::option::Option<SubnetId>,
+    /// First equivocating block
+    #[prost(bytes = "vec", tag = "5")]
+    pub hash1: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub signature1: ::prost::alloc::vec::Vec<u8>,
+    /// Second equivocating block
+    #[prost(bytes = "vec", tag = "7")]
+    pub hash2: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "8")]
+    pub signature2: ::prost::alloc::vec::Vec<u8>,
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetStreamSlice {
@@ -1137,7 +1213,6 @@ pub struct SubnetStreamSlice {
     pub stream_slice:
         ::core::option::Option<super::super::messaging::xnet::v1::CertifiedStreamSlice>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SelfValidatingPayload {
@@ -1146,21 +1221,18 @@ pub struct SelfValidatingPayload {
     pub bitcoin_testnet_payload:
         ::prost::alloc::vec::Vec<super::super::bitcoin::v1::BitcoinAdapterResponse>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct XNetPayload {
     #[prost(message, repeated, tag = "1")]
     pub stream_slices: ::prost::alloc::vec::Vec<SubnetStreamSlice>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryStatsPayload {
     #[prost(message, repeated, tag = "2")]
     pub canister_stats: ::prost::alloc::vec::Vec<CanisterQueryStats>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueryStats {
@@ -1175,7 +1247,6 @@ pub struct CanisterQueryStats {
     #[prost(uint64, tag = "5")]
     pub egress_payload_size: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressIdOffset {
@@ -1186,7 +1257,6 @@ pub struct IngressIdOffset {
     #[prost(uint64, tag = "3")]
     pub offset: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressPayload {
@@ -1195,7 +1265,6 @@ pub struct IngressPayload {
     #[prost(bytes = "vec", tag = "2")]
     pub buffer: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
@@ -1204,7 +1273,6 @@ pub struct HttpHeader {
     #[prost(bytes = "vec", tag = "2")]
     pub value: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequest {
@@ -1215,7 +1283,6 @@ pub struct CanisterHttpRequest {
     #[prost(message, repeated, tag = "3")]
     pub headers: ::prost::alloc::vec::Vec<HttpHeader>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponse {
@@ -1228,7 +1295,6 @@ pub struct CanisterHttpResponse {
     #[prost(message, optional, tag = "3")]
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMetadata {
@@ -1241,7 +1307,6 @@ pub struct CanisterHttpResponseMetadata {
     #[prost(uint64, tag = "4")]
     pub registry_version: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -1250,7 +1315,6 @@ pub struct CanisterHttpResponseContent {
 }
 /// Nested message and enum types in `CanisterHttpResponseContent`.
 pub mod canister_http_response_content {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Status {
@@ -1260,16 +1324,14 @@ pub mod canister_http_response_content {
         Success(::prost::alloc::vec::Vec<u8>),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpReject {
-    #[prost(uint32, tag = "1")]
-    pub reject_code: u32,
+    #[prost(enumeration = "RejectCode", tag = "3")]
+    pub reject_code: i32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseSignature {
@@ -1278,7 +1340,6 @@ pub struct CanisterHttpResponseSignature {
     #[prost(bytes = "vec", tag = "2")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseWithConsensus {
@@ -1291,7 +1352,6 @@ pub struct CanisterHttpResponseWithConsensus {
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {
@@ -1300,14 +1360,12 @@ pub struct CanisterHttpShare {
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<CanisterHttpResponseSignature>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseDivergence {
     #[prost(message, repeated, tag = "1")]
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMessage {
@@ -1319,7 +1377,6 @@ pub struct CanisterHttpResponseMessage {
 }
 /// Nested message and enum types in `CanisterHttpResponseMessage`.
 pub mod canister_http_response_message {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum MessageType {
@@ -1331,72 +1388,14 @@ pub mod canister_http_response_message {
         DivergenceResponse(super::CanisterHttpResponseDivergence),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ArtifactAttribute {
-    #[prost(oneof = "artifact_attribute::Kind", tags = "1, 3, 5")]
-    pub kind: ::core::option::Option<artifact_attribute::Kind>,
+pub struct IDkgMessageAttribute {
+    #[prost(oneof = "i_dkg_message_attribute::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    pub kind: ::core::option::Option<i_dkg_message_attribute::Kind>,
 }
-/// Nested message and enum types in `ArtifactAttribute`.
-pub mod artifact_attribute {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        ConsensusMessage(super::ConsensusMessageAttribute),
-        #[prost(message, tag = "3")]
-        EcdsaMessage(super::EcdsaMessageAttribute),
-        #[prost(message, tag = "5")]
-        Empty(()),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageAttribute {
-    #[prost(oneof = "consensus_message_attribute::Kind", tags = "2, 3, 12")]
-    pub kind: ::core::option::Option<consensus_message_attribute::Kind>,
-}
-/// Nested message and enum types in `ConsensusMessageAttribute`.
-pub mod consensus_message_attribute {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "2")]
-        Finalization(super::FinalizationAttribute),
-        #[prost(message, tag = "3")]
-        Notarization(super::NotarizationAttribute),
-        #[prost(message, tag = "12")]
-        Empty(()),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FinalizationAttribute {
-    #[prost(bytes = "vec", tag = "1")]
-    pub block_hash: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NotarizationAttribute {
-    #[prost(bytes = "vec", tag = "1")]
-    pub block_hash: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaMessageAttribute {
-    #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5")]
-    pub kind: ::core::option::Option<ecdsa_message_attribute::Kind>,
-}
-/// Nested message and enum types in `EcdsaMessageAttribute`.
-pub mod ecdsa_message_attribute {
-    #[derive(serde::Serialize, serde::Deserialize)]
+/// Nested message and enum types in `IDkgMessageAttribute`.
+pub mod i_dkg_message_attribute {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
@@ -1405,43 +1404,15 @@ pub mod ecdsa_message_attribute {
         #[prost(message, tag = "2")]
         DealingSupport(super::super::super::registry::subnet::v1::IDkgTranscriptId),
         #[prost(message, tag = "3")]
-        SigShare(super::RequestId),
+        EcdsaSigShare(super::RequestId),
         #[prost(message, tag = "4")]
         Complaint(super::super::super::registry::subnet::v1::IDkgTranscriptId),
         #[prost(message, tag = "5")]
         Opening(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ArtifactId {
-    #[prost(oneof = "artifact_id::Kind", tags = "1, 2, 3, 11, 10, 6, 7")]
-    pub kind: ::core::option::Option<artifact_id::Kind>,
-}
-/// Nested message and enum types in `ArtifactId`.
-pub mod artifact_id {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        Consensus(super::ConsensusMessageId),
-        #[prost(message, tag = "2")]
-        Ingress(super::IngressMessageId),
-        #[prost(message, tag = "3")]
-        Certification(super::CertificationMessageId),
-        #[prost(message, tag = "11")]
-        CanisterHttp(super::CanisterHttpShare),
-        #[prost(message, tag = "10")]
-        DkgMessage(super::DkgMessageId),
         #[prost(message, tag = "6")]
-        Ecdsa(super::EcdsaArtifactId),
-        #[prost(string, tag = "7")]
-        FileTreeSync(::prost::alloc::string::String),
+        SchnorrSigShare(super::RequestId),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgMessageId {
@@ -1450,7 +1421,6 @@ pub struct DkgMessageId {
     #[prost(uint64, tag = "2")]
     pub height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusMessageId {
@@ -1459,19 +1429,17 @@ pub struct ConsensusMessageId {
     #[prost(uint64, tag = "2")]
     pub height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusMessageHash {
     #[prost(
         oneof = "consensus_message_hash::Kind",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
     )]
     pub kind: ::core::option::Option<consensus_message_hash::Kind>,
 }
 /// Nested message and enum types in `ConsensusMessageHash`.
 pub mod consensus_message_hash {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
@@ -1497,9 +1465,10 @@ pub mod consensus_message_hash {
         CatchUpPackage(::prost::alloc::vec::Vec<u8>),
         #[prost(bytes, tag = "11")]
         CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "12")]
+        EquivocationProof(::prost::alloc::vec::Vec<u8>),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressMessageId {
@@ -1508,7 +1477,6 @@ pub struct IngressMessageId {
     #[prost(bytes = "vec", tag = "2")]
     pub message_id: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationMessageId {
@@ -1517,7 +1485,6 @@ pub struct CertificationMessageId {
     #[prost(uint64, tag = "2")]
     pub height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationMessageHash {
@@ -1526,7 +1493,6 @@ pub struct CertificationMessageHash {
 }
 /// Nested message and enum types in `CertificationMessageHash`.
 pub mod certification_message_hash {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
@@ -1534,180 +1500,5 @@ pub mod certification_message_hash {
         Certification(::prost::alloc::vec::Vec<u8>),
         #[prost(bytes, tag = "2")]
         CertificationShare(::prost::alloc::vec::Vec<u8>),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::large_enum_variant)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipMessage {
-    #[prost(oneof = "gossip_message::Body", tags = "1, 2, 3, 5")]
-    pub body: ::core::option::Option<gossip_message::Body>,
-}
-/// Nested message and enum types in `GossipMessage`.
-pub mod gossip_message {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::large_enum_variant)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Body {
-        #[prost(message, tag = "1")]
-        Advert(super::GossipAdvert),
-        #[prost(message, tag = "2")]
-        ChunkRequest(super::GossipChunkRequest),
-        #[prost(message, tag = "3")]
-        Chunk(super::GossipChunk),
-        #[prost(message, tag = "5")]
-        RetransmissionRequest(super::ArtifactFilter),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipAdvert {
-    #[prost(message, optional, tag = "5")]
-    pub attribute: ::core::option::Option<ArtifactAttribute>,
-    #[prost(uint64, tag = "2")]
-    pub size: u64,
-    #[prost(message, optional, tag = "6")]
-    pub artifact_id: ::core::option::Option<ArtifactId>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipChunkRequest {
-    #[prost(message, optional, tag = "4")]
-    pub artifact_id: ::core::option::Option<ArtifactId>,
-    #[prost(uint32, tag = "2")]
-    pub chunk_id: u32,
-    #[prost(bytes = "vec", tag = "3")]
-    pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::large_enum_variant)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipChunk {
-    #[prost(message, optional, tag = "6")]
-    pub request: ::core::option::Option<GossipChunkRequest>,
-    #[prost(oneof = "gossip_chunk::Response", tags = "7, 4")]
-    pub response: ::core::option::Option<gossip_chunk::Response>,
-}
-/// Nested message and enum types in `GossipChunk`.
-pub mod gossip_chunk {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::large_enum_variant)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Response {
-        #[prost(message, tag = "7")]
-        Artifact(super::Artifact),
-        #[prost(enumeration = "super::P2pError", tag = "4")]
-        Error(i32),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ArtifactFilter {
-    #[prost(message, optional, tag = "6")]
-    pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
-    #[prost(message, optional, tag = "7")]
-    pub certification_message_filter: ::core::option::Option<CertificationMessageFilter>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CertificationMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FileTreeSyncArtifact {
-    /// UNIX-compatible path
-    #[prost(bytes = "vec", tag = "1")]
-    pub absolute_path: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "2")]
-    pub id: ::prost::alloc::string::String,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::large_enum_variant)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Artifact {
-    #[prost(oneof = "artifact::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
-    pub kind: ::core::option::Option<artifact::Kind>,
-}
-/// Nested message and enum types in `Artifact`.
-pub mod artifact {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::large_enum_variant)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        Consensus(super::ConsensusMessage),
-        /// CBOR-encoded signed ingress message
-        #[prost(bytes, tag = "2")]
-        SignedIngress(::prost::alloc::vec::Vec<u8>),
-        #[prost(message, tag = "3")]
-        Certification(super::CertificationMessage),
-        #[prost(message, tag = "4")]
-        Dkg(super::DkgMessage),
-        #[prost(message, tag = "5")]
-        Ecdsa(super::EcdsaMessage),
-        #[prost(message, tag = "6")]
-        HttpShare(super::CanisterHttpShare),
-        #[prost(message, tag = "7")]
-        FileTreeSync(super::FileTreeSyncArtifact),
-    }
-}
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
-#[repr(i32)]
-pub enum P2pError {
-    Unspecified = 0,
-    NotFound = 1,
-}
-impl P2pError {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            P2pError::Unspecified => "P2P_ERROR_UNSPECIFIED",
-            P2pError::NotFound => "P2P_ERROR_NOT_FOUND",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "P2P_ERROR_UNSPECIFIED" => Some(Self::Unspecified),
-            "P2P_ERROR_NOT_FOUND" => Some(Self::NotFound),
-            _ => None,
-        }
     }
 }

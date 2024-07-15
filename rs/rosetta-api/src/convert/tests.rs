@@ -12,7 +12,7 @@ impl OperationBuilder {
     fn new(idx: u64, _type: OperationType) -> Self {
         Self(Operation {
             operation_identifier: OperationIdentifier::new(idx),
-            _type: _type.to_string(),
+            type_: _type.to_string(),
             status: None,
             account: None,
             amount: None,

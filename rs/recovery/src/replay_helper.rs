@@ -1,16 +1,15 @@
 //! Helper functions calling the `ic-replay` library.
 use crate::RecoveryResult;
-use ic_base_types::CanisterId;
-use ic_base_types::SubnetId;
+use crate::{
+    error::RecoveryError,
+    file_sync_helper::{read_file, write_file},
+};
+use ic_base_types::{CanisterId, SubnetId};
 use ic_replay::{
     cmd::{ClapSubnetId, ReplayToolArgs, SubCommand},
     player::{ReplayError, StateParams},
 };
-use std::path::PathBuf;
-use std::str::FromStr;
-
-use crate::error::RecoveryError;
-use crate::file_sync_helper::{read_file, write_file};
+use std::{path::PathBuf, str::FromStr};
 
 pub const OUTPUT_FILE_NAME: &str = "replay_result.txt";
 
@@ -22,13 +21,14 @@ pub async fn replay(
     canister_caller_id: Option<CanisterId>,
     data_root: PathBuf,
     subcmd: Option<SubCommand>,
+    replay_until_height: Option<u64>,
     output: PathBuf,
 ) -> RecoveryResult<StateParams> {
     let args = ReplayToolArgs {
         subnet_id: Some(ClapSubnetId::from_str(&subnet_id.to_string()).unwrap()),
         config: Some(config),
         canister_caller_id,
-        replay_until_height: None,
+        replay_until_height,
         subcmd,
         data_root: Some(data_root),
     };

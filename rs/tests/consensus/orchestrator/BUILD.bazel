@@ -4,18 +4,24 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 SUBNET_RECOVERY_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/tests:recovery/binaries",
 ]
 
 ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = ["//rs/tests:src/orchestrator/orchestrator_universal_vm_activation.sh"]
 
-STATIC_FILE_SERVER_IMAGE_RUNTIME_DEP = [
+STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/tests:static-file-server_image",
 ]
 
 system_test(
     name = "node_assign_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -23,7 +29,11 @@ system_test(
 
 system_test(
     name = "node_reassignment_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -31,17 +41,33 @@ system_test(
 
 system_test(
     name = "node_registration_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
+    name = "cup_compatibility_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = MAINNET_REVISION_RUNTIME_DEPS + [
+        "//rs/tests:cup_compatibility/binaries",
+    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
     name = "sr_app_same_nodes_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -52,9 +78,11 @@ system_test(
 
 system_test(
     name = "sr_app_same_nodes_enable_tecdsa_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -67,9 +95,11 @@ system_test(
 
 system_test(
     name = "sr_app_same_nodes_with_tecdsa_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -82,9 +112,11 @@ system_test(
 
 system_test(
     name = "sr_app_failover_nodes_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -95,9 +127,11 @@ system_test(
 
 system_test(
     name = "sr_app_failover_nodes_enable_tecdsa_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -111,9 +145,11 @@ system_test(
 
 system_test(
     name = "sr_app_failover_nodes_with_tecdsa_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -127,9 +163,11 @@ system_test(
 
 system_test(
     name = "sr_app_no_upgrade_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -140,9 +178,11 @@ system_test(
 
 system_test(
     name = "sr_app_no_upgrade_enable_tecdsa_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -156,9 +196,11 @@ system_test(
 
 system_test(
     name = "sr_app_no_upgrade_with_tecdsa_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -172,6 +214,7 @@ system_test(
 
 system_test(
     name = "sr_app_large_with_tecdsa_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
@@ -189,9 +232,11 @@ system_test(
 
 system_test(
     name = "sr_nns_same_nodes_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -206,6 +251,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -213,13 +259,20 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
-        SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEP,
-    deps = DEPENDENCIES + ["//rs/tests"],
+        SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [
+        "//rs/tests",
+        "//rs/tests/networking/canister_http",
+    ],
 )
 
 system_test(
     name = "ssh_access_to_nodes_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -227,8 +280,10 @@ system_test(
 
 system_test(
     name = "unstuck_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -240,6 +295,48 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_app_subnet_test",
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "experimental_system_test_colocation",
+        "system_test_hourly",
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "upgrade_downgrade_nns_subnet_test",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "upgrade_app_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -252,7 +349,8 @@ system_test(
 )
 
 system_test(
-    name = "upgrade_downgrade_nns_subnet_test",
+    name = "downgrade_app_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -266,8 +364,10 @@ system_test(
 
 system_test(
     name = "upgrade_with_alternative_urls",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -280,8 +380,10 @@ system_test(
 
 system_test(
     name = "unassigned_node_upgrade_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -294,7 +396,11 @@ system_test(
 
 system_test(
     name = "rotate_ecdsa_idkg_key_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],

@@ -17,29 +17,32 @@ Runbook::
 . Assert that `update` messages can still be sent to the canister (as the consensus rule holds: N>=3*f+1, f=floor(X/3)).
 . Kill one more node in the Application subnet.
 . Assert that `update` messages can no longer be sent (as the consensus rule breaks: N<3*f+1, f=floor(X/3)+1).
+. Restart the last node again.
+. Assert that `update` messages can be sent to the canister again.
 
 Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
-use crate::{
+use crate::consensus::catch_up_test::{await_node_certified_height, get_certified_height};
+use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
+use canister_test;
+use ic_base_types::NodeId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm},
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
-    orchestrator::utils::rw_message::install_nns_and_check_progress,
     util::{
         assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
         MessageCanister,
     },
 };
-use canister_test;
-use ic_base_types::NodeId;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::info;
@@ -47,18 +50,20 @@ use slog::info;
 const UPDATE_MSG_1: &str = "This beautiful prose should be persisted for future generations";
 const UPDATE_MSG_2: &str = "And this beautiful prose should be persisted for future generations";
 const UPDATE_MSG_3: &str = "However this prose will NOT be persisted for future generations";
+const UPDATE_MSG_4: &str = "UPDATE_MSG_4";
 const UNASSIGNED_NODES_COUNT: usize = 3; // must be >= 3, currently tested for X=3, f=1 and N=4
+const DKG_INTERVAL_LENGTH: u64 = 14;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(19))
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
                 .add_nodes(1),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(19))
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
                 .add_nodes(1),
         )
         .with_unassigned_nodes(UNASSIGNED_NODES_COUNT)
@@ -131,10 +136,18 @@ pub fn test(env: TestEnv) {
         n.await_status_is_healthy().unwrap();
     }
 
+    // Wait for 3 DKG intervals to ensure that added nodes have actually joined consensus.
+    let target_height =
+        get_certified_height(&app_node, logger.clone()).get() + DKG_INTERVAL_LENGTH * 3;
+    for n in newly_assigned_nodes.iter() {
+        await_node_certified_height(n, Height::from(target_height), logger.clone());
+    }
+
     // Install a canister in the Application subnet for testing consensus (sending
     // `update` messages).
+    let last_assigned = newly_assigned_nodes.last().unwrap();
     info!(logger, "Creating a canister using selected app node");
-    let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
+    let agent = block_on(assert_create_agent(last_assigned.get_public_url().as_str()));
     let message_canister = block_on(MessageCanister::new(
         &agent,
         app_node.effective_canister_id(),
@@ -191,4 +204,23 @@ pub fn test(env: TestEnv) {
     }) {
         panic!("expected the update to fail, got {:?}", result);
     };
+
+    // Restart node to start consensus.
+    info!(logger, "Restart node to start consensus");
+    newly_assigned_nodes[kill_nodes_count].vm().start();
+    info!(logger, "Wait for subnet to restart");
+    // Wait for 1 DKG interval to ensure that subnet makes progress again.
+    let target_height = get_certified_height(&app_node, logger.clone()).get() + DKG_INTERVAL_LENGTH;
+    await_node_certified_height(&app_node, Height::from(target_height), logger.clone());
+
+    // Assert that `update` call to the canister succeeds again.
+    info!(
+        logger,
+        "Assert that update call to the canister succeeds again"
+    );
+    block_on(message_canister.try_store_msg(UPDATE_MSG_4)).expect("Update canister call failed.");
+    assert_eq!(
+        block_on(message_canister.try_read_msg()),
+        Ok(Some(UPDATE_MSG_4.to_string()))
+    );
 }

@@ -1,29 +1,26 @@
-use crate::{
-    driver::test_env_api::*,
-    nns::{
-        get_governance_canister, submit_update_elected_replica_versions_proposal,
-        submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed,
-    },
-    util::runtime_from_url,
-};
 use anyhow::{bail, Result};
 use ic_canister_client::Sender;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_system_test_driver::{
+    driver::test_env_api::*,
+    nns::{
+        get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
+        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
+    },
+    util::runtime_from_url,
+};
 use ic_types::{messages::ReplicaHealthStatus, ReplicaVersion, SubnetId};
 use prost::Message;
 use slog::{info, Logger};
-use std::fs;
-use std::path::Path;
-use std::{convert::TryFrom, io::Read};
+use std::{convert::TryFrom, fs, io::Read, path::Path};
 
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) enum UpdateImageType {
+pub enum UpdateImageType {
     Image,
     ImageTest,
     Sha256,
@@ -57,12 +54,18 @@ pub(crate) async fn fetch_update_file_sha256_with_retry(
     version_str: &str,
     is_test_img: bool,
 ) -> String {
-    retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-        match fetch_update_file_sha256(version_str, is_test_img).await {
-            Err(err) => bail!(err),
-            Ok(sha) => Ok(sha),
+    ic_system_test_driver::retry_with_msg_async!(
+        format!("fetch update file sha256 of version {}", version_str),
+        log,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            match fetch_update_file_sha256(version_str, is_test_img).await {
+                Err(err) => bail!(err),
+                Ok(sha) => Ok(sha),
+            }
         }
-    })
+    )
     .await
     .expect("Failed to fetch sha256 file.")
 }
@@ -123,8 +126,7 @@ pub(crate) fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result
 
 /// Waits until the node is healthy and running the given replica version.
 /// Panics if the timeout is reached while waiting.
-#[allow(dead_code)]
-pub(crate) fn assert_assigned_replica_version(
+pub fn assert_assigned_replica_version(
     node: &IcNodeSnapshot,
     expected_version: &str,
     logger: Logger,
@@ -145,7 +147,12 @@ pub(crate) fn assert_assigned_replica_version(
         Finished,
     }
     let mut state = State::Uninitialized;
-    let result = retry(
+    let result = ic_system_test_driver::retry_with_msg!(
+        format!(
+            "Check if node {} is healthy and running replica version {}",
+            node.get_ip_addr(),
+            expected_version
+        ),
         logger.clone(),
         secs(600),
         secs(10),
@@ -170,7 +177,7 @@ pub(crate) fn assert_assigned_replica_version(
                 state = State::Reboot;
                 bail!("Error reading replica version: {:?}", err)
             }
-        },
+        }
     );
     if let Err(error) = result {
         info!(logger, "Error: {}", error);
@@ -187,7 +194,7 @@ pub(crate) fn assert_assigned_replica_version(
 }
 
 /// Gets the replica version from the node if it is healthy.
-pub(crate) fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
+pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
         Ok(status) => return Err(format!("Replica is not healthy: {:?}", status)),
@@ -266,7 +273,7 @@ pub(crate) async fn bless_replica_version(
     .await;
 }
 
-pub(crate) async fn bless_public_replica_version(
+pub async fn bless_public_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     image_type: UpdateImageType,
@@ -335,7 +342,7 @@ pub(crate) async fn bless_replica_version_with_urls(
     info!(logger, "Updated: {:?}", blessed_versions);
 }
 
-pub(crate) async fn update_subnet_replica_version(
+pub async fn deploy_guestos_to_all_subnet_nodes(
     nns_node: &IcNodeSnapshot,
     new_replica_version: &ReplicaVersion,
     subnet_id: SubnetId,
@@ -344,7 +351,7 @@ pub(crate) async fn update_subnet_replica_version(
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    let proposal_id = submit_update_subnet_replica_version_proposal(
+    let proposal_id = submit_deploy_guestos_to_all_subnet_nodes_proposal(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,

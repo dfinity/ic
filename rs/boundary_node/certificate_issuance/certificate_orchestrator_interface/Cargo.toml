@@ -12,4 +12,4 @@ candid = { workspace = true }
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-thiserror = "1.0.37"
+thiserror = { workspace = true }

@@ -1,9 +1,9 @@
 use std::fs::{create_dir_all, write};
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
@@ -11,39 +11,12 @@ use crate::mac_address::FormattedMacAddress;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
-pub fn generate_ipv6_nameserver_list<'a, I>(nameservers: I) -> Result<String>
-where
-    I: IntoIterator<Item = &'a str>,
-{
-    let mut result = String::new();
-    for nameserver in nameservers {
-        if nameserver.parse::<Ipv6Addr>().is_err() {
-            bail!(
-                "Invalid nameserver found in deployment config: {}",
-                nameserver
-            );
-        }
-        result.push_str(&format!("DNS={nameserver}\n"));
-    }
-    Ok(result)
-}
-
-pub fn generate_ipv4_nameserver_list<'a, I>(nameservers: I) -> Result<String>
-where
-    I: IntoIterator<Item = &'a str>,
-{
-    let mut result = String::new();
-    for nameserver in nameservers {
-        if nameserver.parse::<Ipv4Addr>().is_err() {
-            bail!(
-                "Invalid nameserver found in deployment config: {}",
-                nameserver
-            );
-        }
-        result.push_str(&format!("DNS={nameserver}\n"));
-    }
-    Ok(result)
-}
+pub const IPV6_NAME_SERVER_NETWORKD_CONTENTS: &str = r#"
+DNS=2606:4700:4700::1111
+DNS=2606:4700:4700::1001
+DNS=2001:4860:4860::8888
+DNS=2001:4860:4860::8844
+"#;
 
 fn generate_network_interface_content(interface_name: &str) -> String {
     format!(
@@ -126,7 +99,6 @@ pub fn restart_systemd_networkd() {
 
 fn generate_and_write_systemd_files(
     output_directory: &Path,
-    dns_nameservers: Option<&str>,
     interface: &Interface,
     generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &str,
@@ -164,15 +136,11 @@ fn generate_and_write_systemd_files(
     let bridge6_filename = "20-br6.network";
     let bridge6_path = output_directory.join(bridge6_filename);
 
-    let nameserver_content = match dns_nameservers {
-        Some(nameservers) => {
-            let nameservers = nameservers.split(' ');
-            generate_ipv6_nameserver_list(nameservers)?
-        }
-        None => String::new(),
-    };
-    let bridge6_content =
-        generate_bridge6_network_content(ipv6_address, ipv6_gateway, &nameserver_content);
+    let bridge6_content = generate_bridge6_network_content(
+        ipv6_address,
+        ipv6_gateway,
+        IPV6_NAME_SERVER_NETWORKD_CONTENTS,
+    );
     eprintln!("Writing {}", bridge6_path.to_string_lossy());
     write(bridge6_path, bridge6_content)?;
 
@@ -181,7 +149,6 @@ fn generate_and_write_systemd_files(
 
 pub fn generate_systemd_config_files(
     output_directory: &Path,
-    dns_nameservers: Option<&str>,
     network_info: &NetworkInfo,
     generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &Ipv6Addr,
@@ -191,6 +158,8 @@ pub fn generate_systemd_config_files(
     eprintln!("Interfaces sorted by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
+    // old nodes are still configured with a local IPv4 interface connection
+    // local IPv4 interfaces must be filtered out
     let ipv6_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| {
@@ -217,7 +186,6 @@ pub fn generate_systemd_config_files(
     let ipv6_address = format!("{}/{}", &ipv6_address.to_string(), network_info.ipv6_subnet);
     generate_and_write_systemd_files(
         output_directory,
-        dns_nameservers,
         fastest_interface,
         generated_mac,
         &ipv6_address,

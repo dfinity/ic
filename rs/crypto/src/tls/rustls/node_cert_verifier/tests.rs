@@ -8,16 +8,17 @@ use ic_crypto_test_utils_tls::x509_certificates::{x509_public_key_cert, CertWith
 use ic_crypto_tls_interfaces::SomeOrAllNodes;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use maplit::btreeset;
-use std::time::SystemTime;
-use tokio_rustls::rustls::{
-    client::ServerCertVerifier, server::ClientCertVerifier, Certificate, Error as TLSError,
+use rustls::{
+    client::danger::ServerCertVerifier,
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    server::danger::ClientCertVerifier,
+    CertificateError, Error as TLSError,
 };
+use std::collections::BTreeSet;
+use std::time::Duration;
 
 mod client_cert_verifier_tests {
-    use tokio_rustls::rustls::CertificateError;
-
     use super::*;
-    use std::{collections::BTreeSet, time::UNIX_EPOCH};
 
     #[test]
     fn should_return_ok_if_node_allowed_and_certificate_in_registry() {
@@ -32,9 +33,9 @@ mod client_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_client_cert(
-            &Certificate(node_1_cert.cert_der()),
+            &CertificateDer::from(node_1_cert.cert_der()),
             &[],
-            SystemTime::now(),
+            UnixTime::now(),
         );
 
         assert_matches!(result, Ok(_));
@@ -57,9 +58,9 @@ mod client_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_client_cert(
-            &Certificate(node_1_cert.cert_der()),
+            &CertificateDer::from(node_1_cert.cert_der()),
             &[],
-            SystemTime::now(),
+            UnixTime::now(),
         );
 
         assert_matches!(result, Ok(_));
@@ -68,7 +69,7 @@ mod client_cert_verifier_tests {
     #[test]
     fn should_return_error_if_validation_time_is_before_notbefore_variable() {
         let rng = &mut reproducible_rng();
-        const VALIDATION_TIME: SystemTime = UNIX_EPOCH;
+        const VALIDATION_TIME_SINCE_UNIX_EPOCH: Duration = Duration::ZERO;
         /// One second after now/validation time (`=UNIX_EPOCH`).
         const NOT_BEFORE: i64 = 1;
 
@@ -82,8 +83,11 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
 
-        let result =
-            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], VALIDATION_TIME);
+        let result = verifier.verify_client_cert(
+            &CertificateDer::from(node_1_cert.cert_der()),
+            &[],
+            UnixTime::since_unix_epoch(VALIDATION_TIME_SINCE_UNIX_EPOCH),
+        );
 
         assert_matches!(
             result, Err(TLSError::General(e)) if
@@ -109,9 +113,9 @@ mod client_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_client_cert(
-            &Certificate(untrusted_node_cert.cert_der()),
+            &CertificateDer::from(untrusted_node_cert.cert_der()),
             &[],
-            UNIX_EPOCH,
+            UnixTime::now(),
         );
 
         assert_eq!(
@@ -147,9 +151,9 @@ mod client_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_client_cert(
-            &Certificate(presented_node_1_cert.cert_der()),
+            &CertificateDer::from(presented_node_1_cert.cert_der()),
             &[],
-            UNIX_EPOCH,
+            UnixTime::now(),
         );
 
         assert_eq!(
@@ -170,17 +174,14 @@ mod client_cert_verifier_tests {
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
 
         let result = verifier.verify_client_cert(
-            &Certificate(cert_with_no_node_id_as_cn.cert_der()),
+            &CertificateDer::from(cert_with_no_node_id_as_cn.cert_der()),
             &[],
-            UNIX_EPOCH,
+            UnixTime::now(),
         );
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::General(
-                "The presented certificate subject CN could not be parsed as node ID: MalformedPeerCertificateError \
-                { internal_error: \"Principal ID parse error: Text must be in valid Base32 encoding.\" }".to_string(),
-            ))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::Other(_)))
         );
     }
 
@@ -195,17 +196,14 @@ mod client_cert_verifier_tests {
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
 
         let result = verifier.verify_client_cert(
-            &Certificate(cert_with_duplicate_cn.cert_der()),
+            &CertificateDer::from(cert_with_duplicate_cn.cert_der()),
             &[],
-            std::time::UNIX_EPOCH,
+            UnixTime::now(),
         );
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::General(
-                "The presented certificate subject CN could not be parsed as node ID: MalformedPeerCertificateError \
-                { internal_error: \"invalid subject common name (CN): found second common name (CN) entry, but expected a single one\" }".to_string(),
-            ))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::Other(_)))
         );
     }
 
@@ -221,9 +219,9 @@ mod client_cert_verifier_tests {
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
 
         let result = verifier.verify_client_cert(
-            &Certificate(node_1_cert_1.cert_der()),
-            &[Certificate(node_1_cert_2.cert_der())],
-            std::time::UNIX_EPOCH,
+            &CertificateDer::from(node_1_cert_1.cert_der()),
+            &[CertificateDer::from(node_1_cert_2.cert_der())],
+            UnixTime::now(),
         );
 
         assert_eq!(
@@ -244,8 +242,11 @@ mod client_cert_verifier_tests {
         let empty_registry = TlsRegistry::new();
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &empty_registry);
 
-        let result =
-            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
+        let result = verifier.verify_client_cert(
+            &CertificateDer::from(node_1_cert.cert_der()),
+            &[],
+            UnixTime::now(),
+        );
 
         assert_eq!(
             result.err(),
@@ -272,8 +273,11 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_2, x509_public_key_cert(&node_2_cert.x509()))
             .update();
 
-        let result =
-            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
+        let result = verifier.verify_client_cert(
+            &CertificateDer::from(node_1_cert.cert_der()),
+            &[],
+            UnixTime::now(),
+        );
 
         assert_eq!(
             result.err(),
@@ -307,14 +311,13 @@ mod client_cert_verifier_tests {
     }
 
     #[test]
-    fn should_return_empty_client_auth_root_subjects() {
+    fn should_return_empty_root_hint_subjects() {
         let verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
             SomeOrAllNodes::All,
             TlsRegistry::new().get(),
             REG_V1,
         );
-
-        assert!(verifier.client_auth_root_subjects().is_empty());
+        assert!(verifier.root_hint_subjects().is_empty())
     }
 
     #[test]
@@ -334,11 +337,15 @@ mod client_cert_verifier_tests {
             der
         };
 
-        let result = verifier.verify_client_cert(&Certificate(invalid_cert_der), &[], UNIX_EPOCH);
+        let result = verifier.verify_client_cert(
+            &CertificateDer::from(invalid_cert_der),
+            &[],
+            UnixTime::now(),
+        );
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::InvalidCertificate(CertificateError::BadEncoding))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::BadEncoding))
         );
     }
 
@@ -359,9 +366,6 @@ mod client_cert_verifier_tests {
 /// the implementation calls the same method as the `ClientCertVerifier`.
 mod server_cert_verifier_tests {
     use super::*;
-    use assert_matches::assert_matches;
-    use std::{collections::BTreeSet, time::UNIX_EPOCH};
-    use tokio_rustls::rustls::{CertificateError, ServerName};
 
     #[test]
     fn should_return_ok_if_node_allowed_and_certificate_in_registry() {
@@ -376,12 +380,11 @@ mod server_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_server_cert(
-            &Certificate(node_1_cert.cert_der()),
+            &CertificateDer::from(node_1_cert.cert_der()),
             &[],
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
-            &mut [].iter().copied(),
             &[],
-            SystemTime::now(),
+            UnixTime::now(),
         );
 
         assert_matches!(result, Ok(_));
@@ -390,7 +393,7 @@ mod server_cert_verifier_tests {
     #[test]
     fn should_return_error_if_validation_time_is_before_not_before_variable() {
         let rng = &mut reproducible_rng();
-        const VALIDATION_TIME: SystemTime = UNIX_EPOCH;
+        const VALIDATION_TIME_SINCE_UNIX_EPOCH: Duration = Duration::ZERO;
         /// One second after now/validation time (`=UNIX_EPOCH`).
         const NOT_BEFORE: i64 = 1;
         let node_1_cert = CertWithPrivateKey::builder()
@@ -404,12 +407,11 @@ mod server_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_server_cert(
-            &Certificate(node_1_cert.cert_der()),
+            &CertificateDer::from(node_1_cert.cert_der()),
             &[],
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
-            &mut [].iter().copied(),
             &[],
-            VALIDATION_TIME,
+            UnixTime::since_unix_epoch(VALIDATION_TIME_SINCE_UNIX_EPOCH),
         );
 
         assert_matches!(
@@ -436,12 +438,11 @@ mod server_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_server_cert(
-            &Certificate(untrusted_node_cert.cert_der()),
+            &CertificateDer::from(untrusted_node_cert.cert_der()),
             &[],
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
-            &mut [].iter().copied(),
             &[],
-            UNIX_EPOCH,
+            UnixTime::now(),
         );
 
         assert_eq!(
@@ -466,20 +467,16 @@ mod server_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_server_cert(
-            &Certificate(node_1_cert.cert_der()),
-            &[Certificate(node_1_cert.cert_der())],
+            &CertificateDer::from(node_1_cert.cert_der()),
+            &[CertificateDer::from(node_1_cert.cert_der())],
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
-            &mut [].iter().copied(),
             &[],
-            UNIX_EPOCH,
+            UnixTime::now(),
         );
 
         assert_eq!(
             result.err(),
-            Some(TLSError::General(
-                "The peer must send exactly one self signed certificate, but it sent 2 certificates."
-                    .to_string(),
-            ))
+            Some(TLSError::General("The peer must send exactly one self signed certificate, but it sent 2 certificates.".to_string()))
         );
     }
 
@@ -501,17 +498,16 @@ mod server_cert_verifier_tests {
         };
 
         let result = verifier.verify_server_cert(
-            &Certificate(invalid_cert_der),
+            &CertificateDer::from(invalid_cert_der),
             &[],
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
-            &mut [].iter().copied(),
             &[],
-            UNIX_EPOCH,
+            UnixTime::now(),
         );
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::InvalidCertificate(CertificateError::BadEncoding))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::BadEncoding))
         );
     }
 

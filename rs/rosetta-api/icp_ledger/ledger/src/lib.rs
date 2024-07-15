@@ -244,7 +244,7 @@ impl Ledger {
         operation: Operation,
         created_at_time: Option<TimeStamp>,
     ) -> Result<(BlockIndex, HashOf<EncodedBlock>), PaymentError> {
-        let now = dfn_core::api::now().into();
+        let now = TimeStamp::from(dfn_core::api::now());
         self.add_payment_with_timestamp(memo, operation, created_at_time, now)
     }
 
@@ -469,6 +469,6 @@ pub fn change_notification_state(
         height,
         block_timestamp,
         new_state,
-        now().into(),
+        TimeStamp::from(now()),
     )
 }

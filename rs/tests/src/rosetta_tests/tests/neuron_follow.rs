@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
@@ -7,7 +6,6 @@ use crate::rosetta_tests::lib::{
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use assert_json_diff::assert_json_eq;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
@@ -18,13 +16,15 @@ use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, Follow, PublicKeyOrPrincipal};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const PORT: u32 = 8108;
-const VM_NAME: &str = "rosetta-test-neuron-follow";
+const VM_NAME: &str = "rosetta-neuron-follow";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -67,7 +67,7 @@ async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info
 
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let _expected_type = "FOLLOW".to_string();
     let res = do_multiple_txn_external(
         ros,
@@ -94,7 +94,7 @@ async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info
                 .first()
                 .expect("Expected one follow operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));
@@ -105,7 +105,7 @@ async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info
     assert_eq!(1, res.operations.len());
     let status = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .status
         .as_ref()
@@ -125,7 +125,7 @@ async fn test_follow_with_hotkey(
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let neuron_controller = neuron_info.principal_id;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
 
     // Add hotkey.
     let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user_ed25519(5010);
@@ -185,7 +185,7 @@ async fn test_follow_with_hotkey(
                 .first()
                 .expect("Expected one follow operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));
@@ -196,7 +196,7 @@ async fn test_follow_with_hotkey(
     assert_eq!(1, res.operations.len());
     let status = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .status
         .as_ref()
@@ -217,7 +217,7 @@ async fn test_follow_with_hotkey_raw(
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let neuron_controller = neuron_info.principal_id;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
 
     // Add hotkey.
     let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user_ed25519(5010);
@@ -469,7 +469,7 @@ async fn test_follow_too_many(
 ) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let _expected_type = "FOLLOW".to_string();
     let mut followees = Vec::new();
     for i in 0..16 {

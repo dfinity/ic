@@ -2,6 +2,7 @@
 
 use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
 use crate::{
+    artifact::{IdentifiableArtifact, IngressMessageId, PbArtifact},
     messages::{
         http::{representation_independent_hash_call_or_query, CallOrQuery},
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
@@ -10,10 +11,10 @@ use crate::{
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method, Payload, StoredChunksArgs, UpdateSettingsArgs, UploadChunkArgs,
-    IC_00,
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, FetchCanisterLogsRequest,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, Method, Payload, StoredChunksArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -23,7 +24,7 @@ use ic_protobuf::{
 };
 use prost::bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{convert::Infallible, str::FromStr};
 use std::{
     convert::{From, TryFrom, TryInto},
     mem::size_of,
@@ -157,6 +158,25 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
 pub struct SignedIngress {
     signed: HttpRequest<SignedIngressContent>,
     binary: SignedRequestBytes,
+}
+
+impl IdentifiableArtifact for SignedIngress {
+    const NAME: &'static str = "ingress";
+    type Id = IngressMessageId;
+    type Attribute = ();
+    fn id(&self) -> Self::Id {
+        self.into()
+    }
+    fn attribute(&self) -> Self::Attribute {}
+}
+
+impl PbArtifact for SignedIngress {
+    type PbId = ic_protobuf::types::v1::IngressMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = Bytes;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
 }
 
 impl PartialEq for SignedIngress {
@@ -511,6 +531,10 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
+        Ok(Method::FetchCanisterLogs) => match FetchCanisterLogsRequest::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
         Ok(Method::DeleteChunks)
         | Ok(Method::TakeCanisterSnapshot)
         | Ok(Method::LoadCanisterSnapshot)
@@ -524,7 +548,9 @@ pub fn extract_effective_canister_id(
         | Ok(Method::RawRand)
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)
-        | Ok(Method::ComputeInitialEcdsaDealings)
+        | Ok(Method::ComputeInitialIDkgDealings)
+        | Ok(Method::SchnorrPublicKey)
+        | Ok(Method::SignWithSchnorr)
         | Ok(Method::BitcoinGetBalance)
         | Ok(Method::BitcoinGetUtxos)
         | Ok(Method::BitcoinSendTransaction)
@@ -539,6 +565,11 @@ pub fn extract_effective_canister_id(
     }
 }
 
+/// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
+pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
+    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
+}
+
 #[cfg(test)]
 mod test {
     use crate::messages::ingress_messages::{
@@ -546,7 +577,7 @@ mod test {
     };
     use crate::{CanisterId, SubnetId, UserId};
     use ic_base_types::PrincipalId;
-    use ic_ic00_types::IC_00;
+    use ic_management_canister_types::IC_00;
     use std::convert::From;
 
     #[test]
@@ -588,9 +619,4 @@ mod test {
             );
         }
     }
-}
-
-/// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
-pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
-    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
 }

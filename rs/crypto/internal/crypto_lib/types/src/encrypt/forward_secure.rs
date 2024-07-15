@@ -22,7 +22,6 @@ pub enum CspFsEncryptionPublicKey {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoStaticStr, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum CspFsEncryptionPop {
-    Groth20_Bls12_381(groth20_bls12_381::FsEncryptionPok),
     Groth20WithPop_Bls12_381(groth20_bls12_381::FsEncryptionPop),
 }
 
@@ -161,14 +160,6 @@ pub mod groth20_bls12_381 {
         pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
             self.0.as_bytes()
         }
-    }
-
-    //CRP-900: remove the following once the new POP is used
-    /// Old proof of knowledge
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-    pub struct FsEncryptionPok {
-        pub blinder: G1Bytes,
-        pub response: FrBytes,
     }
 
     /// Forward secure encryption proof of possession.

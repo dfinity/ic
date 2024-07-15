@@ -3,13 +3,10 @@ load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
-    "//rs/crypto/tree_hash",
-    "//rs/types/base_types",
+    # Keep sorted.
     "//rs/types/types",
+    "//rs/validator/http_request_arbitrary",
     "//rs/validator/ingress_message",
-    "@crate_index//:arbitrary",
-    "@crate_index//:assert_matches",
-    "@crate_index//:lazy_static",
     "@crate_index//:libfuzzer-sys",
 ]
 

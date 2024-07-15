@@ -177,7 +177,7 @@ async fn main() {
             Arg::new("updates")
                 .short('u')
                 .conflicts_with("method")
-                .help("Issue counter update calls (alias for --method QueryCounter)"),
+                .help("Issue counter update calls (alias for --method UpdateCounter)"),
         )
         .arg(
             Arg::new("no-status-check")
@@ -368,14 +368,12 @@ async fn main() {
                 ),
                 ..Default::default()
             };
-            Some(
-                ic_http_endpoints_metrics::MetricsHttpEndpoint::new_insecure(
-                    tokio::runtime::Handle::current(),
-                    config,
-                    ic_metrics::MetricsRegistry::global(),
-                    &logger,
-                ),
-            )
+            Some(ic_http_endpoints_metrics::MetricsHttpEndpoint::new(
+                tokio::runtime::Handle::current(),
+                config,
+                ic_metrics::MetricsRegistry::global(),
+                &logger,
+            ))
         }
         None => {
             println!("⚠️  Printed rates are completion rates, not rates at which requests are issued. Recommending to use Prometheus metrics (-p) to verify rate at which workload generator issues requests");

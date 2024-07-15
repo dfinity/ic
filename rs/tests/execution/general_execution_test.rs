@@ -2,8 +2,9 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::group::SystemTestSubGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestSubGroup;
+use ic_system_test_driver::systest;
 use ic_tests::execution::api_tests::node_metrics_history_another_subnet_succeeds;
 use ic_tests::execution::api_tests::node_metrics_history_ingress_query_fails;
 use ic_tests::execution::api_tests::node_metrics_history_ingress_update_fails;
@@ -23,7 +24,7 @@ use ic_tests::execution::ingress_rate_limiting::*;
 use ic_tests::execution::malicious_input::malicious_input_test;
 use ic_tests::execution::nns_shielding::*;
 use ic_tests::execution::queries::query_reply_sizes;
-use ic_tests::systest;
+use ic_tests::execution::wasm_chunk_store::*;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -103,13 +104,12 @@ fn main() -> Result<()> {
                     canister_heartbeat_can_call_multiple_canisters_xnet
                 ))
                 .add_test(systest!(canister_heartbeat_can_stop))
-                .add_test(systest!(canister_heartbeat_cannot_reply)),
-            // Enable tests when feature is enabled.
-            // .add_test(systest!(install_large_wasm))
-            // .add_test(systest!(install_large_wasm_with_other_store))
-            // .add_test(systest!(
-            //     install_large_wasm_with_other_store_fails_cross_subnet
-            // )),
+                .add_test(systest!(canister_heartbeat_cannot_reply))
+                .add_test(systest!(install_large_wasm))
+                .add_test(systest!(install_large_wasm_with_other_store))
+                .add_test(systest!(
+                    install_large_wasm_with_other_store_fails_cross_subnet
+                )),
         )
         .execute_from_args()?;
 

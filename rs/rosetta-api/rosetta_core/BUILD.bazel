@@ -1,16 +1,21 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_client",
-    "//rs/canister_client/sender",
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/ed25519",
     "//rs/types/types",
-    "@crate_index//:serde",
-    "@crate_index//:rand",
-    "@crate_index//:serde_cbor",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
     "@crate_index//:hex",
+    "@crate_index//:ic-agent",
+    "@crate_index//:num-bigint",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
 ]
@@ -20,6 +25,17 @@ MACRO_DEPENDENCIES = [
 
 ALIASES = {
 }
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:proptest",
+]
+
+rust_test(
+    name = "rosetta_core_unit_tests",
+    crate = ":rosetta-core",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
 
 rust_library(
     name = "rosetta-core",

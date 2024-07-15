@@ -2,12 +2,12 @@
 use crate::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
 };
+
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
     },
-    ledger::ICRC1Ledger,
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -15,6 +15,7 @@ use crate::{
     },
     pb::{
         sns_root_types::{
+            ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
             RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
             SetDappControllersResponse,
         },
@@ -38,6 +39,7 @@ use crate::{
             },
             neuron::{DissolveState, Followees},
             proposal::Action,
+            proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
             Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
             ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
@@ -49,15 +51,17 @@ use crate::{
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageLedgerParameters, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
-            MintSnsTokens, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, WaitForQuietState,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
     proposal::{
+        get_action_auxiliary,
+        transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
@@ -75,23 +79,27 @@ use dfn_core::api::{spawn, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-use ic_ic00_types::{
+use ic_ledger_core::Tokens;
+use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
-use ic_ledger_core::Tokens;
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, SECONDS_PER_DAY,
+    NervousSystemError, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
+use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
+use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
@@ -131,8 +139,7 @@ pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 100
 
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-const SEVEN_DAYS_IN_SECONDS: u64 = 7 * 24 * 3600;
+pub const MATURITY_DISBURSEMENT_DELAY_SECONDS: u64 = 7 * 24 * 3600;
 
 /// The max number of wasm32 pages for the heap after which we consider that there
 /// is a risk to the ability to grow the heap.
@@ -1617,10 +1624,14 @@ impl Governance {
             ));
         }
 
+        let now_seconds = self.env.now();
         let disbursement_in_progress = DisburseMaturityInProgress {
             amount_e8s: maturity_to_deduct,
-            timestamp_of_disbursement_seconds: self.env.now(),
+            timestamp_of_disbursement_seconds: now_seconds,
             account_to_disburse_to: Some(to_account_proto),
+            finalize_disbursement_timestamp_seconds: Some(
+                now_seconds + MATURITY_DISBURSEMENT_DELAY_SECONDS,
+            ),
         };
 
         // Re-borrow the neuron mutably to update now that the maturity has been
@@ -1634,7 +1645,8 @@ impl Governance {
             .push(disbursement_in_progress);
 
         Ok(DisburseMaturityResponse {
-            // TODO(NNS1-2576) - deprecate amount_disbursed_e8s
+            // We still populate this field even though it's deprecated, since we cannot remove
+            // required fields yet.
             amount_disbursed_e8s: maturity_to_deduct,
             amount_deducted_e8s: Some(maturity_to_deduct),
         })
@@ -1713,41 +1725,11 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 "No proposal for given ProposalId.",
             )),
-            Some(pd) => get_proposal_response::Result::Proposal(pd.strip_large_fields()),
+            Some(pd) => get_proposal_response::Result::Proposal(pd.limited_for_get_proposal()),
         };
 
         GetProposalResponse {
             result: Some(proposal_data),
-        }
-    }
-
-    /// Removes some data from a given proposal data and returns it.
-    ///
-    /// Specifically, remove the ballots in the proposal data and possibly the proposal's payload.
-    /// The payload is removed if the proposal is an ExecuteNervousSystemFunction or if it's
-    /// a UpgradeSnsControlledCanister. The text rendering should include displayable information about
-    /// the payload contents already.
-    fn limit_proposal_data(&self, data: &ProposalData) -> ProposalData {
-        let mut new_proposal = data.proposal.clone();
-        if let Some(proposal) = &mut new_proposal {
-            // We can't understand the payloads of nervous system functions, as well as the wasm
-            // for upgrades, so just omit them when listing proposals.
-            match &mut proposal.action {
-                Some(Action::ExecuteGenericNervousSystemFunction(m)) => {
-                    m.payload.clear();
-                }
-                Some(Action::UpgradeSnsControlledCanister(m)) => {
-                    m.new_canister_wasm.clear();
-                }
-                _ => (),
-            }
-        }
-
-        ProposalData {
-            proposal: new_proposal,
-            proposal_creation_timestamp_seconds: data.proposal_creation_timestamp_seconds,
-            ballots: BTreeMap::new(), // To reduce size of payload, exclude ballots
-            ..data.clone()
         }
     }
 
@@ -1778,11 +1760,20 @@ impl Governance {
     ///
     /// The caller can retrieve dropped payloads and ballots by calling `get_proposal`
     /// for each proposal of interest.
-    pub fn list_proposals(&self, req: &ListProposals) -> ListProposalsResponse {
-        let exclude_type: HashSet<u64> = req.exclude_type.iter().cloned().collect();
+    pub fn list_proposals(
+        &self,
+        request: &ListProposals,
+        caller: &PrincipalId,
+    ) -> ListProposalsResponse {
+        let caller_neurons_set: HashSet<_> = self
+            .get_neuron_ids_by_principal(caller)
+            .into_iter()
+            .map(|neuron_id| neuron_id.to_string())
+            .collect();
+        let exclude_type: HashSet<u64> = request.exclude_type.iter().cloned().collect();
         let include_reward_status: HashSet<i32> =
-            req.include_reward_status.iter().cloned().collect();
-        let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
+            request.include_reward_status.iter().cloned().collect();
+        let include_status: HashSet<i32> = request.include_status.iter().cloned().collect();
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
@@ -1803,31 +1794,36 @@ impl Governance {
 
             true
         };
-        let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
+        let limit = if request.limit == 0 || request.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS
         } else {
-            req.limit
+            request.limit
         } as usize;
         let props = &self.proto.proposals;
         // Proposals are stored in a sorted map. If 'before_proposal'
         // is provided, grab all proposals before that, else grab the
         // whole range.
-        let rng = if let Some(n) = req.before_proposal {
+        let rng = if let Some(n) = request.before_proposal {
             props.range(..(n.id))
         } else {
             props.range(..)
         };
         // Now reverse the range, filter, and restrict to 'limit'.
-        let limited_rng = rng.rev().filter(|(_, x)| filter_all(x)).take(limit);
+        let limited_rng = rng
+            .rev()
+            .filter(|(_, proposal)| filter_all(proposal))
+            .take(limit);
 
         let proposal_info = limited_rng
-            .map(|(_, y)| y)
-            .map(|pd| self.limit_proposal_data(pd))
+            .map(|(_id, proposal_data)| {
+                proposal_data.limited_for_list_proposals(&caller_neurons_set)
+            })
             .collect();
 
         // Ignore the keys and clone to a vector.
         ListProposalsResponse {
             proposals: proposal_info,
+            include_ballots_by_caller: Some(true),
         }
     }
 
@@ -1915,7 +1911,7 @@ impl Governance {
             }
         }
 
-        // A yes decision as been made, execute the proposal!
+        // A yes decision has been made, execute the proposal!
         // Safely unwrap action.
         let action = proposal_data
             .proposal
@@ -2059,11 +2055,21 @@ impl Governance {
                 self.perform_manage_sns_metadata(manage_sns_metadata)
             }
             Action::TransferSnsTreasuryFunds(transfer) => {
-                self.perform_transfer_sns_treasury_funds(transfer).await
+                let valuation =
+                    get_action_auxiliary(&self.proto.proposals, ProposalId { id: proposal_id })
+                        .and_then(|action_auxiliary| {
+                            action_auxiliary.unwrap_transfer_sns_treasury_funds_or_err()
+                        });
+                self.perform_transfer_sns_treasury_funds(proposal_id, valuation, &transfer)
+                    .await
             }
             Action::MintSnsTokens(mint) => self.perform_mint_sns_tokens(mint).await,
             Action::ManageLedgerParameters(manage_ledger_parameters) => {
                 self.perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
+                    .await
+            }
+            Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
+                self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
                     .await
             }
             // This should not be possible, because Proposal validation is performed when
@@ -2419,16 +2425,15 @@ impl Governance {
             ));
         }
 
+        let mode = upgrade.mode_or_upgrade() as i32;
+
         self.upgrade_non_root_canister(
             target_canister_id,
             upgrade.new_canister_wasm,
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
-            upgrade
-                .mode
-                .unwrap_or(CanisterInstallMode::Upgrade as i32)
-                .try_into()?,
+            CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(mode)?)?,
         )
         .await
     }
@@ -2562,8 +2567,32 @@ impl Governance {
 
     async fn perform_transfer_sns_treasury_funds(
         &mut self,
-        transfer: TransferSnsTreasuryFunds,
+        proposal_id: u64, // This is just to control concurrency.
+        valuation: Result<Valuation, GovernanceError>,
+        transfer: &TransferSnsTreasuryFunds,
     ) -> Result<(), GovernanceError> {
+        // Only execute one proposal of this type at a time.
+        thread_local! {
+            static IN_PROGRESS_PROPOSAL_ID: RefCell<Option<u64>> = const { RefCell::new(None) };
+        }
+        let release_on_drop = acquire(&IN_PROGRESS_PROPOSAL_ID, proposal_id);
+        if let Err(already_in_progress_proposal_id) = release_on_drop {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Another TransferSnsTreasuryFunds proposal (ID = {}) is already in progress.",
+                    already_in_progress_proposal_id,
+                ),
+            ));
+        }
+
+        transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err(
+            transfer,
+            valuation?,
+            self.proto.proposals.values(),
+            self.env.now(),
+        )?;
+
         let to = Account {
             owner: transfer
                 .to_principal
@@ -2703,12 +2732,10 @@ impl Governance {
         .wasm;
 
         use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs};
-        let ledger_upgrade_arg =
-            candid::encode_one(Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
-                transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
-                ..UpgradeArgs::default()
-            }))))
-            .unwrap();
+        let ledger_upgrade_arg = candid::encode_one(Some(LedgerArgument::Upgrade(Some(
+            UpgradeArgs::from(manage_ledger_parameters.clone()),
+        ))))
+        .unwrap();
 
         self.upgrade_non_root_canister(
             ledger_canister_id,
@@ -2718,6 +2745,8 @@ impl Governance {
         )
         .await?;
 
+        // If this operation takes 5 minutes, there is very likely a real failure, and other intervention will
+        // be required
         let mark_failed_at_seconds = self.env.now() + 5 * 60;
 
         loop {
@@ -2728,7 +2757,7 @@ impl Governance {
                     candid::encode_one(
                         CanisterInfoRequest::new(
                             ledger_canister_id,
-                            Some(20),
+                            Some(20), // Get enough to ensure we did not miss the relevant change
                         )
                     ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error encoding canister_info request.\n{}", e)))?
                 )
@@ -2781,6 +2810,49 @@ impl Governance {
                 ));
             }
         }
+    }
+
+    async fn perform_manage_dapp_canister_settings(
+        &self,
+        manage_dapp_canister_settings: ManageDappCanisterSettings,
+    ) -> Result<(), GovernanceError> {
+        let request = ManageDappCanisterSettingsRequest::from(manage_dapp_canister_settings);
+        let payload = candid::Encode!(&request).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Could not encode ManageDappCanisterSettings: {err:?}"),
+            )
+        })?;
+        self.env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "manage_dapp_canister_settings",
+                payload,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })
+            .and_then(
+                |reply| match candid::Decode!(&reply, ManageDappCanisterSettingsResponse) {
+                    Ok(ManageDappCanisterSettingsResponse { failure_reason }) => failure_reason
+                        .map_or(Ok(()), |failure_reason| {
+                            Err(GovernanceError::new_with_message(
+                                ErrorType::InvalidProposal,
+                                format!(
+                                    "Failed to manage dapp canister settings: {failure_reason}"
+                                ),
+                            ))
+                        }),
+                    Err(error) => Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Could not decode ManageDappCanisterSettingsResponse: {error}"),
+                    )),
+                },
+            )
     }
 
     // Returns an option with the NervousSystemParameters
@@ -2867,7 +2939,7 @@ impl Governance {
     async fn validate_and_render_proposal(
         &mut self,
         proposal: &Proposal,
-    ) -> Result<String, GovernanceError> {
+    ) -> Result<(String, Option<ActionAuxiliaryPb>), GovernanceError> {
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
         }
@@ -2907,7 +2979,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
-        let rendering = self.validate_and_render_proposal(proposal).await?;
+        let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
 
         // This should not panic, because the proposal was just validated.
         let action = proposal.action.as_ref().expect("No action.");
@@ -3113,6 +3185,7 @@ impl Governance {
             // is positive, but that was a mistake. That's why we are getting rid of this.
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
+            action_auxiliary,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -3881,7 +3954,7 @@ impl Governance {
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
     ///   (permission `ManagePrincipals`), or the caller has the permission to
-    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   manage voting-related permissions (permission `ManageVotingPermission`)
     ///   and the permissions being added are voting-related.
     /// - the permissions provided in the request are a subset of neuron_grantable_permissions
     ///   as defined in the nervous system parameters. To see what the current parameters are
@@ -3975,7 +4048,7 @@ impl Governance {
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
     ///   (permission `ManagePrincipals`), or the caller has the permission to
-    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   manage voting-related permissions (permission `ManageVotingPermission`)
     ///   and the permissions being removed are voting-related.
     /// - the PrincipalId exists within the neuron's permissions
     /// - the PrincipalId's NeuronPermission contains the permission_types that are to be removed
@@ -4256,7 +4329,6 @@ impl Governance {
 
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
-        let disbursal_delay_elapsed_seconds = now_seconds - SEVEN_DAYS_IN_SECONDS;
         // Filter all the neurons that have some disbursing maturity in progress.
         let neurons_with_disbursal: Vec<Neuron> = self
             .proto
@@ -4266,113 +4338,128 @@ impl Governance {
             .cloned()
             .collect();
         for neuron in neurons_with_disbursal {
-            if !neuron.disburse_maturity_in_progress.is_empty() {
-                // The first entry is the oldest one, check whether it can be completed.
-                let d = neuron.disburse_maturity_in_progress[0].clone();
-                if d.timestamp_of_disbursement_seconds < disbursal_delay_elapsed_seconds {
-                    let neuron_id = match neuron.id.as_ref() {
-                        None => {
-                            log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
-                            continue;
-                        }
-                        Some(id) => id,
-                    };
+            // The first entry is the oldest one, check whether it can be completed.
+            let disbursement = match neuron.disburse_maturity_in_progress.first() {
+                Some(disbursement) => disbursement.clone(),
+                None => continue,
+            };
 
-                    let maturity_to_disburse_after_modulation_e8s: u64 =
-                        match apply_maturity_modulation(
-                            d.amount_e8s,
-                            maturity_modulation_basis_points,
-                        ) {
-                            Ok(maturity_to_disburse_after_modulation_e8s) => {
-                                maturity_to_disburse_after_modulation_e8s
-                            }
-                            Err(err) => {
-                                log!(
+            match disbursement.finalize_disbursement_timestamp_seconds {
+                Some(finalize_disbursement_timestamp_seconds) => {
+                    if now_seconds < finalize_disbursement_timestamp_seconds {
+                        // It's not time to disbuse yet
+                        continue;
+                    }
+                }
+                None => {
+                    log!(
+                        ERROR,
+                        "Finalize disbursement timestamp is not set. Cannot disburse."
+                    );
+                    continue;
+                }
+            }
+
+            let neuron_id = match neuron.id.as_ref() {
+                None => {
+                    log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
+                    continue;
+                }
+                Some(id) => id,
+            };
+
+            let maturity_to_disburse_after_modulation_e8s: u64 = match apply_maturity_modulation(
+                disbursement.amount_e8s,
+                maturity_modulation_basis_points,
+            ) {
+                Ok(maturity_to_disburse_after_modulation_e8s) => {
+                    maturity_to_disburse_after_modulation_e8s
+                }
+                Err(err) => {
+                    log!(
                                     ERROR,
                                     "Could not apply maturity modulation to {:?} for neuron {} due to {:?}, skipping",
-                                    d, neuron_id, err
+                                    disbursement, neuron_id, err
                                 );
-                                continue;
-                            }
-                        };
+                    continue;
+                }
+            };
 
-                    let fdm = FinalizeDisburseMaturity {
-                        amount_to_be_disbursed_e8s: maturity_to_disburse_after_modulation_e8s,
-                        to_account: d.account_to_disburse_to.clone(),
-                    };
-                    let in_flight_command = NeuronInFlightCommand {
-                        timestamp: self.env.now(),
-                        command: Some(neuron_in_flight_command::Command::FinalizeDisburseMaturity(
-                            fdm,
-                        )),
-                    };
-                    let _neuron_lock =
-                        match self.lock_neuron_for_command(neuron_id, in_flight_command) {
-                            Ok(neuron_lock) => neuron_lock,
-                            Err(_) => continue, // if locking fails, try next neuron
-                        };
-                    // Do the transfer, this is a minting transfer, from the governance canister's
-                    // main account (which is also the minting account) to the provided account.
-                    let account_proto = match d.account_to_disburse_to {
-                        Some(ref proto) => proto.clone(),
-                        None => {
-                            log!(
-                                ERROR,
-                                "Invalid DisburseMaturityInProgress-entry {:?} for neuron {}, skipping.",
-                                d, neuron_id
-                            );
-                            continue;
-                        }
-                    };
-                    let to_account = match Account::try_from(account_proto) {
-                        Ok(account) => account,
-                        Err(e) => {
-                            log!(
+            let fdm = FinalizeDisburseMaturity {
+                amount_to_be_disbursed_e8s: maturity_to_disburse_after_modulation_e8s,
+                to_account: disbursement.account_to_disburse_to.clone(),
+            };
+            let in_flight_command = NeuronInFlightCommand {
+                timestamp: self.env.now(),
+                command: Some(neuron_in_flight_command::Command::FinalizeDisburseMaturity(
+                    fdm,
+                )),
+            };
+            let _neuron_lock = match self.lock_neuron_for_command(neuron_id, in_flight_command) {
+                Ok(neuron_lock) => neuron_lock,
+                Err(_) => continue, // if locking fails, try next neuron
+            };
+            // Do the transfer, this is a minting transfer, from the governance canister's
+            // main account (which is also the minting account) to the provided account.
+            let account_proto = match disbursement.account_to_disburse_to {
+                Some(ref proto) => proto.clone(),
+                None => {
+                    log!(
+                        ERROR,
+                        "Invalid DisburseMaturityInProgress-entry {:?} for neuron {}, skipping.",
+                        disbursement,
+                        neuron_id
+                    );
+                    continue;
+                }
+            };
+            let to_account = match Account::try_from(account_proto) {
+                Ok(account) => account,
+                Err(e) => {
+                    log!(
                                 ERROR,
                                 "Failure parsing account of DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                d, neuron_id, e
+                                disbursement, neuron_id, e
                             );
+                    continue;
+                }
+            };
+            let transfer_result = self
+                .ledger
+                .transfer_funds(
+                    maturity_to_disburse_after_modulation_e8s,
+                    0,    // Minting transfers don't pay a fee.
+                    None, // This is a minting transfer, no 'from' account is needed
+                    to_account,
+                    self.env.now(), // The memo(nonce) for the ledger's transaction
+                )
+                .await;
+            match transfer_result {
+                Ok(block_index) => {
+                    log!(
+                                INFO,
+                                "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
+                                disbursement, neuron_id, block_index
+                            );
+                    let neuron = match self.get_neuron_result_mut(neuron_id) {
+                        Ok(neuron) => neuron,
+                        Err(e) => {
+                            log!(
+                                        ERROR,
+                                        "Failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                        disbursement, neuron_id, e
+                                    );
                             continue;
                         }
                     };
-                    let transfer_result = self
-                        .ledger
-                        .transfer_funds(
-                            maturity_to_disburse_after_modulation_e8s,
-                            0,    // Minting transfers don't pay a fee.
-                            None, // This is a minting transfer, no 'from' account is needed
-                            to_account,
-                            self.env.now(), // The memo(nonce) for the ledger's transaction
-                        )
-                        .await;
-                    match transfer_result {
-                        Ok(block_index) => {
-                            log!(
-                                INFO,
-                                "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
-                                d, neuron_id, block_index
-                            );
-                            let neuron = match self.get_neuron_result_mut(neuron_id) {
-                                Ok(neuron) => neuron,
-                                Err(e) => {
-                                    log!(
-                                        ERROR,
-                                        "Failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                        d, neuron_id, e
-                                    );
-                                    continue;
-                                }
-                            };
-                            neuron.disburse_maturity_in_progress.remove(0);
-                        }
-                        Err(e) => {
-                            log!(
+                    neuron.disburse_maturity_in_progress.remove(0);
+                }
+                Err(e) => {
+                    log!(
                                 ERROR,
                                 "Failed transferring funds for DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                d, neuron_id, e
+                                disbursement, neuron_id, e
                             );
-                        }
-                    }
                 }
             }
         }
@@ -4524,7 +4611,7 @@ impl Governance {
             .unwrap_or_default();
 
         let age_seconds = self.env.now() - updated_at_timestamp_seconds;
-        age_seconds >= SECONDS_PER_DAY
+        age_seconds >= ONE_DAY_SECONDS
     }
 
     async fn update_maturity_modulation(&mut self) {
@@ -4742,7 +4829,7 @@ impl Governance {
         for proposal_id in &considered_proposals {
             if let Some(proposal) = self.get_proposal_data(*proposal_id) {
                 for (voter, ballot) in &proposal.ballots {
-                    #[allow(clippy::blocks_in_if_conditions)]
+                    #[allow(clippy::blocks_in_conditions)]
                     if !Vote::try_from(ballot.vote)
                         .unwrap_or_else(|_| {
                             println!(
@@ -5054,7 +5141,9 @@ impl Governance {
         // In this case, we do not have a running archive, so we just clone the value so the check
         // does not fail on that account.
         if running_version.archive_wasm_hash.is_empty() {
-            running_version.archive_wasm_hash = target_version.archive_wasm_hash.clone();
+            running_version
+                .archive_wasm_hash
+                .clone_from(&target_version.archive_wasm_hash);
         }
 
         let deployed_version = match self.proto.deployed_version.clone() {
@@ -5357,6 +5446,11 @@ impl Governance {
     }
 }
 
+// TODO(NNS1-2835): Remove this const after changes published.
+thread_local! {
+    static ATTEMPTED_FIXING_MEMORY_ALLOCATIONS: RefCell<bool> = const { RefCell::new(false) };
+}
+
 fn err_if_another_upgrade_is_in_progress(
     id_to_proposal_data: &BTreeMap</* proposal ID */ u64, ProposalData>,
     executing_proposal_id: u64,
@@ -5459,32 +5553,37 @@ mod tests {
             GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
             GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
         },
-        types::{test_helpers::NativeEnvironment, ONE_DAY_SECONDS},
+        types::test_helpers::NativeEnvironment,
     };
     use assert_matches::assert_matches;
     use async_trait::async_trait;
-    use futures::FutureExt;
-    use ic_base_types::NumBytes;
+    use candid::Principal;
+    use futures::{join, FutureExt};
     use ic_canister_client_sender::Sender;
     use ic_nervous_system_clients::{
         canister_id_record::CanisterIdRecord,
-        canister_status::{CanisterStatusResultV2, CanisterStatusType},
+        canister_status::{
+            CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+        },
     };
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes,
-        E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
+        E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
     };
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
-    use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
+    use ic_sns_governance_token_valuation::{Token, ValuationFactors};
     use ic_sns_test_utils::itest_helpers::UserInfo;
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use maplit::{btreemap, btreeset};
     use pretty_assertions::assert_eq;
     use proptest::prelude::{prop_assert, proptest};
-    use std::sync::{Arc, Mutex};
+    use std::{
+        sync::{Arc, Mutex},
+        time::{Duration, SystemTime},
+    };
 
     mod fail_stuck_upgrade_in_progress_tests;
 
@@ -5585,7 +5684,7 @@ mod tests {
             }],
             cached_neuron_stake_e8s: 100 * E8,
             aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * ONE_DAY_SECONDS)),
             voting_power_percentage_multiplier: 100,
             ..Default::default()
         };
@@ -5639,6 +5738,139 @@ mod tests {
             "{:#?}",
             g
         );
+    }
+
+    #[tokio::test]
+    async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_call_is_in_progress(
+    ) {
+        // Step 0: Define helpers.
+
+        // This expects a transfer_funds call. That call takes 10 ms to complete. This allows us to
+        // make concurrent calls to code under test.
+        struct StubLedger {}
+
+        #[async_trait]
+        impl ICRC1Ledger for StubLedger {
+            async fn transfer_funds(
+                &self,
+                _amount_e8s: u64,
+                _fee_e8s: u64,
+                _from_subaccount: Option<Subaccount>,
+                _to: Account,
+                _memo: u64,
+            ) -> Result<u64, NervousSystemError> {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                Ok(1)
+            }
+
+            // The rest are unimplemented.
+
+            async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+                unimplemented!()
+            }
+
+            async fn account_balance(
+                &self,
+                _account: Account,
+            ) -> Result<Tokens, NervousSystemError> {
+                unimplemented!()
+            }
+
+            fn canister_id(&self) -> CanisterId {
+                unimplemented!()
+            }
+        }
+
+        let governance_proto = basic_governance_proto();
+        let mut governance = Governance::new(
+            ValidGovernanceProto::try_from(governance_proto).unwrap(),
+            Box::new(NativeEnvironment::new(None)),
+            Box::new(DoNothingLedger {}), // SNS token ledger.
+            Box::new(StubLedger {}),      // ICP ledger.
+            Box::new(FakeCmc::new()),
+        );
+
+        // Step 2: Run code under test.
+
+        // No need to be aware of the particular values in here; they should not affect the outcome
+        // of this test.
+        let transfer_sns_treasury_funds = TransferSnsTreasuryFunds {
+            amount_e8s: 272,
+            from_treasury: TransferFrom::IcpTreasury as i32,
+            to_principal: Some(PrincipalId::new_user_test_id(181_931_560)),
+            to_subaccount: None,
+            memo: None,
+        };
+        let valuation = Valuation {
+            token: Token::Icp,
+            account: Account {
+                owner: Principal::from(PrincipalId::new_user_test_id(104_622_969)),
+                subaccount: None,
+            },
+            timestamp: SystemTime::now(),
+            valuation_factors: ValuationFactors {
+                tokens: Decimal::from(314),
+                icps_per_token: Decimal::from(2),
+                xdrs_per_icp: Decimal::from(5),
+            },
+        };
+
+        // This lets us (later) make a second manage_neuron method call
+        // while one is in flight, which is essential for this test.
+        let raw_governance = &mut governance as *mut Governance;
+
+        let (result_1, result_2) = join! {
+            // Call the code under test with 0 delay.
+            governance.perform_transfer_sns_treasury_funds(
+                7, // proposal_id,
+                Ok(valuation),
+                &transfer_sns_treasury_funds,
+            ),
+
+            // Make the same call, except this one is delayed by 5 ms. Later, we assert that this
+            // fails with the right Err.
+            async {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                unsafe {
+                    raw_governance.as_mut().unwrap().perform_transfer_sns_treasury_funds(
+                        7, // proposal_id,
+                        Ok(valuation),
+                        &transfer_sns_treasury_funds,
+                    )
+                    .await
+                }
+            }
+        };
+
+        // Step 3: Inspect results.
+
+        // First call works.
+        assert_eq!(result_1, Ok(()));
+
+        // Second call fails.
+        let err = result_2.unwrap_err();
+        let GovernanceError {
+            error_type,
+            error_message,
+        } = &err;
+
+        assert_eq!(
+            ErrorType::try_from(*error_type),
+            Ok(ErrorType::PreconditionFailed),
+            "{:#?}",
+            err
+        );
+
+        let error_message = error_message.to_lowercase();
+        for term in [
+            "another",
+            "transfersnstreasuryfunds",
+            "7",
+            "already",
+            "in progress",
+        ] {
+            assert!(error_message.contains(term), "{:#?}", err);
+        }
     }
 
     #[tokio::test]
@@ -6116,17 +6348,23 @@ mod tests {
         module_hash: Vec<u8>,
         status: CanisterStatusType,
     ) -> CanisterStatusResultV2 {
-        CanisterStatusResultV2::new(
+        CanisterStatusResultV2::from(canister_status_from_management_canister_for_test(
+            module_hash,
             status,
-            Some(module_hash),
-            vec![],
-            NumBytes::new(0),
-            0,
-            0,
-            Some(0),
-            0,
-            0,
-        )
+        ))
+    }
+
+    fn canister_status_from_management_canister_for_test(
+        module_hash: Vec<u8>,
+        status: CanisterStatusType,
+    ) -> CanisterStatusResultFromManagementCanister {
+        let module_hash = Some(module_hash);
+
+        CanisterStatusResultFromManagementCanister {
+            status,
+            module_hash,
+            ..Default::default()
+        }
     }
 
     #[should_panic]
@@ -6291,7 +6529,7 @@ mod tests {
             .as_mut()
             .unwrap();
         *voting_rewards_parameters = VotingRewardsParameters {
-            round_duration_seconds: Some(SECONDS_PER_DAY),
+            round_duration_seconds: Some(ONE_DAY_SECONDS),
             reward_rate_transition_duration_seconds: Some(1),
             initial_reward_rate_basis_points: Some(101),
             final_reward_rate_basis_points: Some(100),
@@ -6354,7 +6592,7 @@ mod tests {
         // Step 4.1: Advance time so that the proposal we made earlier becomes
         // ready to settle.
         let wait_days = 9;
-        *now.lock().unwrap() += SECONDS_PER_DAY * wait_days;
+        *now.lock().unwrap() += ONE_DAY_SECONDS * wait_days;
         assert_eq!(
             governance
                 .ready_to_be_settled_proposal_ids()
@@ -6834,7 +7072,8 @@ mod tests {
             Ok(Encode!(&GetWasmResponse {
                 wasm: Some(SnsWasm {
                     wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into() // Governance
+                    canister_type: expected_canister_to_be_upgraded.into(), // Governance
+                    proposal_id: None,
                 })
             })
             .unwrap()),
@@ -6889,7 +7128,7 @@ mod tests {
                     CanisterId::ic_00(),
                     "canister_status",
                     Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
-                    Ok(Encode!(&canister_status_for_test(
+                    Ok(Encode!(&canister_status_from_management_canister_for_test(
                         vec![],
                         CanisterStatusType::Stopped,
                     ))
@@ -6905,14 +7144,13 @@ mod tests {
                 env.require_call_canister_invocation(
                     CanisterId::ic_00(),
                     "install_code",
-                    Encode!(&ic_ic00_types::InstallCodeArgs {
-                        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+                    Encode!(&ic_management_canister_types::InstallCodeArgs {
+                        mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
                         canister_id: canister_id.get(),
                         wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                         arg: Encode!().unwrap(),
                         compute_allocation: None,
-                        memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
-                        query_allocation: None,
+                        memory_allocation: None, // local const in install_code()
                         sender_canister_version: None,
                     })
                     .unwrap(),

@@ -10,11 +10,14 @@ rust_library(
     ),
     crate_name = "orchestrator",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:async-trait",
+        "@crate_index//:indoc",
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/async_utils",
         "//rs/canister_client",
         "//rs/canister_client/sender",
@@ -22,10 +25,8 @@ rust_library(
         "//rs/consensus",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
-        "//rs/crypto/tls_interfaces",
         "//rs/http_endpoints/metrics",
         "//rs/http_utils",
-        "//rs/ic_os/sev",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/monitoring/logger",
@@ -39,14 +40,13 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/local_store",
-        "//rs/registry/proto_data_provider",
         "//rs/sys",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/utils",
         "@crate_index//:candid",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:exec",
+        "@crate_index//:get_if_addrs",
         "@crate_index//:hex",
         "@crate_index//:nix",
         "@crate_index//:prometheus",
@@ -68,9 +68,10 @@ rust_binary(
     srcs = ["src/main.rs"],
     crate_name = "ic_state_tool",
     deps = [
+        # Keep sorted.
         ":lib",
         "//rs/async_utils",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:tokio",
     ],
 )
@@ -78,14 +79,25 @@ rust_binary(
 rust_test(
     name = "orchestrator_test",
     crate = ":lib",
+    data = [
+        "testdata/nftables_assigned_replica.conf.golden",
+        "testdata/nftables_boundary_node.conf.golden",
+        "//ic-os/components:ic/ic.json5.template",
+    ],
     deps = [
+        # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
         "//rs/test_utilities",
+        "//rs/test_utilities/consensus",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
         "@crate_index//:mockall",
     ],
 )

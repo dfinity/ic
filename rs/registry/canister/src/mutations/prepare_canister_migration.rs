@@ -26,7 +26,7 @@ pub struct PrepareCanisterMigrationPayload {
 pub enum PrepareCanisterMigrationError {
     SubnetRecordError(String),
     DisallowedSubnetType(SubnetId, Option<SubnetType>),
-    SubnetIsEcdsaSubnet(SubnetId),
+    SubnetIsSigningSubnet(SubnetId),
     SubnetSizesMismatch(
         /*source size=*/ usize,
         /*destination size=*/ usize,
@@ -119,7 +119,7 @@ impl Registry {
 /// Validates that the subnets satisfy the following conditions:
 /// 1. Both subnets have the same size,
 /// 2. Both subnets have the same type,
-/// 3. Neither of the subnets is an ECDSA subnet, and
+/// 3. Neither of the subnets is a signing subnet, and
 /// 4. Both subnets are Application subnets.
 fn validate_subnets(
     source_subnet_id: SubnetId,
@@ -149,11 +149,11 @@ fn validate_subnet(
     }
 
     if subnet_record
-        .ecdsa_config
+        .chain_key_config
         .as_ref()
-        .is_some_and(|ecdsa_config| !ecdsa_config.key_ids.is_empty())
+        .is_some_and(|chain_key_config| !chain_key_config.key_configs.is_empty())
     {
-        return Err(PrepareCanisterMigrationError::SubnetIsEcdsaSubnet(
+        return Err(PrepareCanisterMigrationError::SubnetIsSigningSubnet(
             subnet_id,
         ));
     }
@@ -193,10 +193,10 @@ impl fmt::Display for PrepareCanisterMigrationError {
                     subnet_type, subnet_id, SUPPORTED_SUBNET_TYPES
                 )
             }
-            PrepareCanisterMigrationError::SubnetIsEcdsaSubnet(subnet_id) => {
+            PrepareCanisterMigrationError::SubnetIsSigningSubnet(subnet_id) => {
                 write!(
                     f,
-                    "Subnet with id {} should not be an ECDSA subnet",
+                    "Subnet with id {} should not be a signing subnet",
                     subnet_id
                 )
             }
@@ -245,7 +245,7 @@ mod tests {
     use ic_base_types::CanisterId;
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_transport::pb::v1::registry_mutation;
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
 
     use crate::{
         common::test_helpers::{
@@ -272,25 +272,29 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add nodes to the registry
-        let (mutate_request, source_node_ids) =
+        let (mutate_request, source_node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(1, source_subnet.nodes_count);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let (mutate_request, destination_node_ids) =
+        let (mutate_request, destination_node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(2, destination_subnet.nodes_count);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add subnets to the registry
         let mut subnet_list_record = registry.get_subnet_list_record();
-        let mut source_subnet_record = get_invariant_compliant_subnet_record(source_node_ids);
+        let mut source_subnet_record = get_invariant_compliant_subnet_record(
+            source_node_ids_and_dkg_pks.keys().copied().collect(),
+        );
         source_subnet_record.subnet_type = source_subnet.subnet_type as i32;
-        let mut destination_subnet_record =
-            get_invariant_compliant_subnet_record(destination_node_ids);
+        let mut destination_subnet_record = get_invariant_compliant_subnet_record(
+            destination_node_ids_and_dkg_pks.keys().copied().collect(),
+        );
         destination_subnet_record.subnet_type = destination_subnet.subnet_type as i32;
 
         let subnet_mutation = add_fake_subnet(
             source_subnet.subnet_id,
             &mut subnet_list_record,
             source_subnet_record,
+            &source_node_ids_and_dkg_pks,
         );
         registry.maybe_apply_mutation_internal(subnet_mutation);
 
@@ -298,6 +302,7 @@ mod tests {
             destination_subnet.subnet_id,
             &mut subnet_list_record,
             destination_subnet_record,
+            &destination_node_ids_and_dkg_pks,
         );
         registry.maybe_apply_mutation_internal(subnet_mutation);
 

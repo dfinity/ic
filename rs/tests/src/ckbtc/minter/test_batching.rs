@@ -1,20 +1,12 @@
 use crate::ckbtc::lib::install_bitcoin_canister;
+use crate::ckbtc::lib::{
+    activate_ecdsa_signature, create_canister_at_id, install_kyt, install_ledger, install_minter,
+    set_kyt_api_key, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
+};
 use crate::ckbtc::minter::utils::{
     ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
     send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
     wait_for_update_balance,
-};
-use crate::{
-    ckbtc::lib::{
-        activate_ecdsa_signature, create_canister_at_id, install_kyt, install_ledger,
-        install_minter, set_kyt_api_key, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE,
-        TEST_KEY_LOCAL, TRANSFER_FEE,
-    },
-    driver::{
-        test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, IcNodeContainer},
-    },
-    util::{assert_create_agent, block_on, runtime_from_url},
 };
 use bitcoincore_rpc::{
     bitcoin::{hashes::Hash, Txid},
@@ -26,6 +18,13 @@ use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
+use ic_system_test_driver::{
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{HasPublicApiUrl, IcNodeContainer},
+    },
+    util::{assert_create_agent, block_on, runtime_from_url},
+};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use serde::Serialize;

@@ -8,7 +8,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
-use ic_ic00_types::CanisterStatusType;
+use ic_management_canister_types::{CanisterStatusType, LogVisibility};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
@@ -16,8 +16,8 @@ use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
-    AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    PrincipalId, Time,
+    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
+    MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
 use phantom_newtype::AmountOf;
@@ -52,7 +52,6 @@ pub struct SchedulerState {
     /// During the long execution, the Canister is temporarily credited with priority
     /// to slightly boost the long execution priority. Only when the long execution
     /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
-    /// TODO(RUN-305): store priority credit and long execution mode across checkpoints
     pub priority_credit: AccumulatedPriority,
 
     /// Long execution mode: Opportunistic (default) or Prioritized
@@ -154,6 +153,10 @@ impl CanisterState {
         &self.system_state.controllers
     }
 
+    pub fn log_visibility(&self) -> LogVisibility {
+        self.system_state.log_visibility
+    }
+
     /// Returns the difference in time since the canister was last charged for resource allocations.
     pub fn duration_since_last_allocation_charge(&self, current_time: Time) -> Duration {
         debug_assert!(
@@ -168,6 +171,10 @@ impl CanisterState {
                     .as_nanos_since_unix_epoch(),
             ),
         )
+    }
+
+    pub fn new_local_snapshot_id(&mut self) -> u64 {
+        self.system_state.new_local_snapshot_id()
     }
 
     /// See `SystemState::push_input` for documentation.
@@ -211,7 +218,7 @@ impl CanisterState {
             (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
             (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
             (Some(ExecutionTask::AbortedExecution { .. }), _)
-            | (Some(ExecutionTask::PausedExecution(..)), _) => NextExecution::ContinueLong,
+            | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
             (Some(ExecutionTask::AbortedInstallCode { .. }), _)
             | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
         }
@@ -229,7 +236,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
         }
@@ -238,7 +245,7 @@ impl CanisterState {
     /// Returns true if the canister has a paused execution.
     pub fn has_paused_execution(&self) -> bool {
         match self.system_state.task_queue.front() {
-            Some(ExecutionTask::PausedExecution(..)) => true,
+            Some(ExecutionTask::PausedExecution { .. }) => true,
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
@@ -255,7 +262,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
         }
@@ -268,7 +275,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. }) => false,
         }
@@ -298,7 +305,7 @@ impl CanisterState {
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
     pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
-        self.system_state.output_into_iter(self.canister_id())
+        self.system_state.output_into_iter()
     }
 
     /// Unconditionally pushes an ingress message into the ingress pool of the
@@ -317,8 +324,9 @@ impl CanisterState {
     /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
     /// have all the data necessary to compute it itself).
     ///
-    /// `subnet_available_memory` is updated to reflect the change in memory
-    /// usage due to inducting the messages.
+    /// `subnet_available_memory` (the subnet's available guaranteed response
+    /// message memory) is updated to reflect the change in memory usage due to
+    /// inducting the messages.
     pub fn induct_messages_to_self(
         &mut self,
         subnet_available_memory: &mut i64,
@@ -338,46 +346,20 @@ impl CanisterState {
 
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
-    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), StateError> {
+    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), String> {
         let memory_used = self.memory_usage();
         let memory_limit = self.memory_limit(default_limit);
 
         if memory_used > memory_limit {
-            return Err(StateError::InvariantBroken(format!(
-                "Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+            return Err(format!(
+                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
                 self.canister_id(),
                 memory_used,
                 memory_limit
-            )));
+            ));
         }
 
-        let num_callbacks = self
-            .system_state
-            .call_context_manager()
-            .map(|ccm| ccm.callbacks().len())
-            .unwrap_or(0);
-        let num_responses = self.system_state.queues().input_queues_response_count();
-        let num_reservations = self.system_state.queues().input_queues_reservation_count();
-        let is_callback_invariant_broken = if num_callbacks == num_reservations + num_responses {
-            false
-        } else if !self.has_paused_execution() && !self.has_aborted_execution() {
-            true
-        } else {
-            // With a pending DTS execution, the response callback is accounted
-            // in `num_callbacks` until the execution finishes. Note that there
-            // can be at most one pending DTS execution per canister.
-            num_callbacks - 1 != num_reservations + num_responses
-        };
-        if is_callback_invariant_broken {
-            return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of callbacks ({}) is different than the accumulated number of reservations and responses ({})",
-                self.canister_id(),
-                num_callbacks,
-                num_reservations + num_responses
-            )));
-        }
-
-        Ok(())
+        self.system_state.check_invariants()
     }
 
     /// The amount of memory currently being used by the canister.
@@ -398,9 +380,10 @@ impl CanisterState {
             .map_or(NumBytes::from(0), |es| es.memory_usage())
     }
 
-    /// Returns the amount of canister message memory used by the canister in bytes.
+    /// Returns the amount memory used by or reserved for guaranteed response
+    /// canister messages, in bytes.
     pub fn message_memory_usage(&self) -> NumBytes {
-        self.system_state.message_memory_usage()
+        self.system_state.guaranteed_response_message_memory_usage()
     }
 
     /// Returns the amount of memory used by canisters that have custom Wasm
@@ -419,6 +402,20 @@ impl CanisterState {
     /// Returns the memory usage of the wasm chunk store in bytes.
     pub(super) fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
         self.system_state.wasm_chunk_store.memory_usage()
+    }
+
+    /// Returns the memory usage of a snapshot created based on the current canister's state.
+    pub fn snapshot_memory_usage(&self) -> NumBytes {
+        let execution_usage = self
+            .execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |execution_snapshot| {
+                execution_snapshot.memory_usage()
+            });
+
+        execution_usage
+            + self.wasm_chunk_store_memory_usage()
+            + NumBytes::from(self.system_state.certified_data.len() as u64)
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -440,6 +437,11 @@ impl CanisterState {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => default_limit,
         }
+    }
+
+    /// Returns the Wasm memory limit from the canister settings.
+    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
+        self.system_state.wasm_memory_limit
     }
 
     /// Returns the current compute allocation for the canister.
@@ -525,7 +527,7 @@ impl CanisterState {
             ExecutionTask::AbortedInstallCode { .. } => false,
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => true,
         });
@@ -544,6 +546,21 @@ impl CanisterState {
                 }
             }
         }
+    }
+
+    /// Appends the given log to the canister log.
+    pub fn append_log(&mut self, other: &mut CanisterLog) {
+        self.system_state.canister_log.append(other);
+    }
+
+    /// Clears the canister log.
+    pub fn clear_log(&mut self) {
+        self.system_state.canister_log.clear();
+    }
+
+    /// Sets the new canister log.
+    pub fn set_log(&mut self, other: CanisterLog) {
+        self.system_state.canister_log = other;
     }
 }
 

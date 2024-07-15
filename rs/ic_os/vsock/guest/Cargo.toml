@@ -7,4 +7,4 @@ edition = "2021"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 vsock_lib = { path = "../vsock_lib" }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }

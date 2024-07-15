@@ -1,6 +1,4 @@
 use std::{
-    fs::File,
-    io::{self, BufRead},
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -14,23 +12,22 @@ use axum::{
     handler::Handler,
     http::{Response, StatusCode},
     routing::get,
-    Extension, Router, Server,
+    Extension, Router,
 };
 use clap::Parser;
-use futures::future::TryFutureExt;
-use hyper::Uri;
-use hyper_rustls::HttpsConnectorBuilder;
 use import::Import;
 use nix::sys::signal::Signal;
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
+use opentelemetry::{metrics::MeterProvider, KeyValue};
 use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
 use persist::Persist;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
-use tokio::task;
+use reqwest::{redirect::Policy, Url};
+use tokio::{net::TcpListener, task};
 use tracing::info;
 
 use crate::{
-    http::HyperClient,
+    http::ReqwestClient,
     import::CertificatesImporter,
     metrics::{MetricParams, WithMetrics},
     persist::{Persister, WithDedup},
@@ -56,7 +53,7 @@ struct Cli {
     pid_path: PathBuf,
 
     #[clap(long, default_value = "http://127.0.0.1:3000/certificates")]
-    certificates_exporter_uri: Uri,
+    certificates_exporter_uri: Url,
 
     #[clap(long, default_value = "certs")]
     local_certificates_path: PathBuf,
@@ -65,13 +62,7 @@ struct Cli {
     local_configuration_path: PathBuf,
 
     #[clap(long, default_value = "servers.conf.tmpl")]
-    configuration_template_sw_path: PathBuf,
-
-    #[clap(long, default_value = "servers.conf.tmpl")]
-    configuration_template_no_sw_path: PathBuf,
-
-    #[clap(long)]
-    no_sw_domains_path: Option<PathBuf>,
+    configuration_template_path: PathBuf,
 
     #[clap(long, default_value = "mappings.js")]
     domain_mappings_path: PathBuf,
@@ -103,21 +94,24 @@ async fn main() -> Result<(), Error> {
     )
     .unwrap();
     let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
     let meter = provider.meter(SERVICE_NAME);
 
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     // HTTP
-    let http_client = hyper::Client::builder().build(
-        HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build(),
-    );
-    let http_client = HyperClient::new(http_client);
+    let http_client = reqwest::ClientBuilder::new()
+        .use_rustls_tls()
+        .http1_only()
+        .redirect(Policy::none())
+        .referer(false)
+        .build()
+        .unwrap();
+
+    let http_client = ReqwestClient::new(http_client);
     let http_client = WithMetrics(
         http_client,
         MetricParams::new(&meter, SERVICE_NAME, "http_request"),
@@ -135,27 +129,10 @@ async fn main() -> Result<(), Error> {
     let reloader = WithMetrics(reloader, MetricParams::new(&meter, SERVICE_NAME, "reload"));
 
     // Persistence
-    let configuration_template_sw = std::fs::read_to_string(&cli.configuration_template_sw_path)
-        .context("failed to read configuration template for using the service worker")?;
+    let configuration_template = std::fs::read_to_string(&cli.configuration_template_path)
+        .context("failed to read configuration template")?;
 
-    let configuration_template_no_sw =
-        std::fs::read_to_string(&cli.configuration_template_no_sw_path)
-            .context("failed to read configuration template for using icx-proxy")?;
-
-    let no_sw_domains: Vec<String> = match &cli.no_sw_domains_path {
-        Some(no_sw_domains_path) => {
-            let file = File::open(no_sw_domains_path)?;
-            let reader = io::BufReader::new(file);
-            reader.lines().map(|line| line.unwrap()).collect()
-        }
-        None => Vec::new(),
-    };
-
-    let renderer = Renderer::new(
-        &configuration_template_sw,
-        &configuration_template_no_sw,
-        no_sw_domains,
-    );
+    let renderer = Renderer::new(&configuration_template);
     let renderer = WithMetrics(renderer, MetricParams::new(&meter, SERVICE_NAME, "render"));
     let renderer = Arc::new(renderer);
 
@@ -163,7 +140,6 @@ async fn main() -> Result<(), Error> {
         renderer,
         cli.local_certificates_path,
         cli.local_configuration_path,
-        cli.domain_mappings_path,
     );
     let persister = WithReload(persister, reloader);
     let persister = WithDedup(persister, Arc::new(RwLock::new(None)));
@@ -194,11 +170,12 @@ async fn main() -> Result<(), Error> {
                 let _ = runner.run().await;
             }
         }),
-        task::spawn(
-            Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
+        }),
     )
     .context(format!("{SERVICE_NAME} failed to run"))?;
 

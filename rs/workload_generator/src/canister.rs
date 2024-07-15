@@ -1,7 +1,7 @@
 //! Module for managing the canisters in test.
 
 use ic_canister_client::{Agent, HttpClient, Sender as AgentSender};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
@@ -72,7 +72,7 @@ pub(crate) async fn create_canister(
         .execute_update(
             &IC_00, // TODO(RUN-496): replace with a proper effective canister id
             &IC_00,
-            ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles,
+            ic_management_canister_types::Method::ProvisionalCreateCanisterWithCycles,
             ProvisionalCreateCanisterWithCyclesArgs::new(Some(u64::MAX as u128), None).encode(),
             vec![],
         )
@@ -144,7 +144,6 @@ pub(crate) async fn install_canister(
         vec![],
         None,
         REQUESTED_MEMORY_ALLOCATION,
-        None,
     );
 
     agent.install_canister(install_args).await?;

@@ -1,5 +1,5 @@
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_ic00_types::{CanisterIdRecord, EmptyBlob, Method, Payload, IC_00};
+use ic_management_canister_types::{CanisterIdRecord, EmptyBlob, Method, Payload, IC_00};
 use ic_replica_tests as utils;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::{call_args, wasm};

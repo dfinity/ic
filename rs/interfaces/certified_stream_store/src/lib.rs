@@ -48,7 +48,7 @@ impl fmt::Display for EncodeStreamError {
 impl std::error::Error for EncodeStreamError {}
 
 /// Describes errors that can happen when decoding a certified stream slice.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DecodeStreamError {
     InvalidSignature(SubnetId),
     InvalidDestination {

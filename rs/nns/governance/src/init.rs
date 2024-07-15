@@ -11,10 +11,14 @@ use rand_chacha::ChaCha20Rng;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
+use crate::pb::v1::{
+    Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,
+};
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
 
+// To update or add more, add print statements to `with_test_neurons` to print
+// the generated neuron IDs and copy the printed IDs here.
 #[allow(dead_code)]
 pub struct GovernanceCanisterInitPayloadBuilder {
     pub proto: Governance,
@@ -32,6 +36,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 wait_for_quiet_threshold_seconds: 60 * 60 * 24 * 4, // 4 days
                 short_voting_period_seconds: 60 * 60 * 12,          // 12 hours
                 neuron_management_voting_period_seconds: Some(60 * 60 * 48), // 48 hours
+                xdr_conversion_rate: Some(XdrConversionRatePb::with_default_values()),
                 ..Default::default()
             },
             voters_to_add_to_all_neurons: Vec::new(),
@@ -89,8 +94,8 @@ impl GovernanceCanisterInitPayloadBuilder {
 
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
         use ic_nervous_system_common_test_keys::{
-            TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
-            TEST_NEURON_3_OWNER_PRINCIPAL,
+            TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+            TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
         };
 
         let mut neuron1 = {
@@ -107,10 +112,14 @@ impl GovernanceCanisterInitPayloadBuilder {
                 ..Default::default()
             }
         };
+        assert_eq!(neuron1.id.as_ref().unwrap().id, TEST_NEURON_1_ID);
 
         if let Some(maturity_equivalent_icp_e8s) = maturity_equivalent_icp_e8s {
             neuron1.maturity_e8s_equivalent = maturity_equivalent_icp_e8s;
             neuron1.joined_community_fund_timestamp_seconds = Some(1);
+            // Setting `auto_stake_maturity` makes simplifies testing, as maturity accumulated
+            // over time does not need to be taken into account.
+            neuron1.auto_stake_maturity = Some(true);
         }
 
         let neuron2 = {
@@ -129,6 +138,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 ..Default::default()
             }
         };
+        assert_eq!(neuron2.id.as_ref().unwrap().id, TEST_NEURON_2_ID);
 
         let neuron3 = {
             let neuron_id = NeuronIdProto::from(self.new_neuron_id());
@@ -146,6 +156,8 @@ impl GovernanceCanisterInitPayloadBuilder {
                 ..Default::default()
             }
         };
+        assert_eq!(neuron3.id.as_ref().unwrap().id, TEST_NEURON_3_ID);
+
         self.with_additional_neurons(vec![neuron1, neuron2, neuron3])
     }
 
@@ -180,6 +192,13 @@ impl GovernanceCanisterInitPayloadBuilder {
         self
     }
 
+    /// Initializes the governance canister with the given network economics.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_network_economics(&mut self, network_economics: NetworkEconomics) -> &mut Self {
+        self.proto.economics = Some(network_economics);
+        self
+    }
+
     /// Adds all the neurons from the specified CSV file.
     ///
     /// This obviously can only work when compiled to x86 so the wasm
@@ -205,51 +224,17 @@ impl GovernanceCanisterInitPayloadBuilder {
                 .map(|f| f.parse::<String>().expect("couldn't read column header"))
                 .collect::<Vec<String>>();
 
-            if headers.len() == 7 {
-                assert_eq!(
-                    headers,
-                    vec![
-                        "neuron_id",
-                        "owner_id",
-                        "created_ts_ns",
-                        "duration_to_dissolution_ns",
-                        "staked_icpt",
-                        "earnings",
-                        "follows",
-                    ]
-                );
-            } else if headers.len() == 8 {
-                assert_eq!(
-                    headers,
-                    vec![
-                        "neuron_id",
-                        "owner_id",
-                        "created_ts_ns",
-                        "duration_to_dissolution_ns",
-                        "staked_icpt",
-                        "earnings",
-                        "follows",
-                        "not_for_profit"
-                    ]
-                );
-            } else {
-                assert_eq!(
-                    headers,
-                    vec![
-                        "neuron_id",
-                        "owner_id",
-                        "created_ts_ns",
-                        "duration_to_dissolution_ns",
-                        "staked_icpt",
-                        "earnings",
-                        "follows",
-                        "not_for_profit",
-                        "memo",
-                        "maturity_e8s_equivalent",
-                        "kyc_verified"
-                    ]
-                );
-            }
+            assert_eq!(
+                headers,
+                vec![
+                    "neuron_id",
+                    "owner_id",
+                    "created_ts_ns",
+                    "staked_icpt",
+                    "follows",
+                    "not_for_profit"
+                ]
+            );
         }
 
         for result in reader.records() {
@@ -268,14 +253,10 @@ impl GovernanceCanisterInitPayloadBuilder {
             let creation_ts_ns = record[2]
                 .parse::<u64>()
                 .expect("couldn't read the neuron's creation time");
-            let duration_to_dissolution_ns = record[3]
-                .parse::<u64>()
-                .expect("couldn't read the neuron's duration to dissolution time");
-            let staked_icpt = record[4]
+            let staked_icpt = record[3]
                 .parse::<u64>()
                 .expect("couldn't read the neuron's staked icpt amount");
-
-            let followees: Vec<NeuronIdProto> = record[6]
+            let followees: Vec<NeuronIdProto> = record[4]
                 .split_terminator(',')
                 .map(|x| NeuronIdProto {
                     id: x.parse::<u64>().expect("could not parse followee"),
@@ -287,30 +268,26 @@ impl GovernanceCanisterInitPayloadBuilder {
 
             let neuron_id = NeuronIdProto::from(neuron_id);
 
-            let not_for_profit = if record.len() < 8 {
-                false
-            } else {
-                record[7]
-                    .parse::<bool>()
-                    .expect("couldn't read the neuron's not-for-profit flag")
-            };
+            let not_for_profit = record[5]
+                .parse::<bool>()
+                .expect("couldn't read the neuron's not-for-profit flag");
 
             let memo = if record.len() < 9 {
                 self.rng.next_u64()
             } else {
-                record[8].parse::<u64>().expect("could not parse memo")
+                record[6].parse::<u64>().expect("could not parse memo")
             };
 
             let maturity_e8s_equivalent = if record.len() < 10 {
                 0
             } else {
-                record[9].parse::<u64>().expect("could not parse maturity")
+                record[7].parse::<u64>().expect("could not parse maturity")
             };
 
             let kyc_verified = if record.len() < 11 {
                 false
             } else {
-                record[10]
+                record[8]
                     .parse::<bool>()
                     .expect("could not parse kyc_verified")
             };
@@ -326,9 +303,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 kyc_verified,
                 maturity_e8s_equivalent,
                 not_for_profit,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    duration_to_dissolution_ns / (1_000_000_000),
-                )), // to sec
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
                 followees: [(Topic::Unspecified as i32, Followees { followees })]
                     .iter()
                     .cloned()

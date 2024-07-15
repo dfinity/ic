@@ -1,1 +1,0 @@
-For information on Ubuntu base OS development, see link:../../docs/Rootfs.adoc#[here]

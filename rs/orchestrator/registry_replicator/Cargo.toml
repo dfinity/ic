@@ -4,9 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../../config" }
-ic-crypto-for-verification-only = { path = "../../crypto/for_verification_only" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -23,7 +22,7 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
 

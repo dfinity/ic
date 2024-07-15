@@ -4,11 +4,10 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/config",
+    # Keep sorted.
     "//rs/monitoring/logger",
     "//rs/replicated_state",
     "//rs/sys",
-    "//rs/utils",
     "@crate_index//:bit-vec",
     "@crate_index//:lazy_static",
     "@crate_index//:libc",
@@ -28,6 +27,7 @@ rust_test(
     name = "memory_tracker_test",
     crate = ":memory_tracker",
     deps = [
+        # Keep sorted.
         "//rs/types/types",
         "@crate_index//:proptest",
         "@crate_index//:tempfile",
@@ -39,6 +39,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/traps.rs"],
     deps = [
+        # Keep sorted.
         ":memory_tracker",
         "@crate_index//:criterion",
     ] + DEPENDENCIES,

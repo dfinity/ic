@@ -1,16 +1,27 @@
 use anyhow::{bail, Context};
-use common::storage::{storage_client::StorageClient, types::MetadataEntry};
+use common::storage::storage_client::StorageClient;
+use common::storage::types::MetadataEntry;
 use ic_base_types::CanisterId;
+use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use num_traits::ToPrimitive;
-use std::{collections::HashMap, sync::Arc};
+use rosetta_core::objects::Currency;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+use tokio::sync::Mutex as AsyncMutex;
 pub mod common;
 pub mod construction_api;
 pub mod data_api;
 pub mod ledger_blocks_synchronization;
 
 pub struct AppState {
+    pub icrc1_agent: Arc<Icrc1Agent>,
     pub ledger_id: CanisterId,
+    pub synched: Arc<Mutex<Option<bool>>>,
+    pub archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     pub storage: Arc<StorageClient>,
     pub metadata: Metadata,
 }
@@ -19,6 +30,16 @@ pub struct AppState {
 pub struct Metadata {
     pub symbol: String,
     pub decimals: u8,
+}
+
+impl From<Metadata> for Currency {
+    fn from(value: Metadata) -> Self {
+        Currency {
+            symbol: value.symbol,
+            decimals: value.decimals as u32,
+            metadata: None,
+        }
+    }
 }
 
 impl Metadata {

@@ -30,25 +30,25 @@
 //! can be used to fetch newer CUPs. This way a node does not rely on the P2P protocol to catch up
 //! with its subnet and allows us to upgrade the protocol with breaking changes on any protocol layer.
 
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::registry_helper::RegistryHelper;
-use ic_canister_client::Sender;
-use ic_canister_client::{Agent, HttpClient};
-use ic_crypto::CryptoComponentForNonReplicaProcess;
-use ic_logger::{info, warn, ReplicaLogger};
-use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_protobuf::types::v1 as pb;
-use ic_types::NodeId;
-use ic_types::{
-    consensus::catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
-    consensus::HasHeight,
-    crypto::*,
-    RegistryVersion, SubnetId,
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    registry_helper::RegistryHelper,
+    utils::http_endpoint_to_url,
 };
-use ic_utils::fs::write_protobuf_using_tmp_file;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::{fs::File, path::PathBuf};
+use ic_canister_client::{Agent, HttpClient, Sender};
+use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
+use ic_logger::{info, warn, ReplicaLogger};
+use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
+use ic_sys::fs::write_protobuf_using_tmp_file;
+use ic_types::{
+    consensus::{
+        catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
+        HasHeight,
+    },
+    crypto::*,
+    NodeId, RegistryVersion, SubnetId,
+};
+use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
 use url::Url;
 
 /// Fetches catch-up packages from peers and local storage.
@@ -60,7 +60,7 @@ pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
     client: HttpClient,
-    crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
+    crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
 }
@@ -70,7 +70,7 @@ impl CatchUpPackageProvider {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
-        crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
+        crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {
@@ -173,15 +173,7 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let url_str = format!("http://[{}]:{}", http.ip_addr, http.port);
-        let url = Url::parse(&url_str)
-            .map_err(|err| {
-                warn!(
-                    self.logger,
-                    "Unable to parse the peer url {}: {:?}", url_str, err
-                );
-            })
-            .ok()?;
+        let url = http_endpoint_to_url(&http, &self.logger)?;
 
         let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
         let cup = CatchUpPackage::try_from(&protobuf)

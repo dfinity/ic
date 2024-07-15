@@ -12,7 +12,6 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use maplit::btreemap;
-use std::sync::{Arc, Mutex};
 
 #[test]
 fn test_stake_maturity() {
@@ -36,10 +35,7 @@ fn test_stake_maturity() {
             },
             ..GovernanceProto::default()
         },
-        Box::new(MockEnvironment {
-            expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-            now: Arc::new(Mutex::new(0)),
-        }),
+        Box::new(MockEnvironment::new(vec![], 0)),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );

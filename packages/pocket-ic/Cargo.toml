@@ -1,9 +1,10 @@
 [package]
 name = "pocket-ic"
-version = "2.0.1"
+version = "3.1.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
+documentation = "https://docs.rs/pocket-ic/latest/pocket_ic/"
 readme = "README.md"
 categories = ["emulators", "development-tools::testing", "wasm"]
 keywords = ["icp", "canister", "testing", "smart-contract", "internet-computer"]
@@ -17,25 +18,29 @@ include = [
 ]
 authors.workspace = true
 edition.workspace = true
-documentation.workspace = true
 
 [dependencies]
-candid = { workspace = true }
+candid = "^0.10.2"
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }
-ic-cdk = "0.10"
-base64 = { workspace = true }
-hex = "^0.4.2"
-async-trait = "^0.1.73"
-tracing = "0.1"
-tracing-appender = "^0.2.2"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ic-cdk = "0.13.2"
+base64 = "^0.13.1"
+hex = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
 schemars = "0.8.16"
+sha2 = "0.10.8"
+tokio = { workspace = true }
 
 [dev-dependencies]
-flate2 = "1.0.27"
+candid_parser = { workspace = true }
+flate2 = { workspace = true }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 ic-base-types = { path = "../../rs/types/base_types" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }
+k256 = { workspace = true }
+lazy_static = "1.4.0"
+wat = "1.0.57"

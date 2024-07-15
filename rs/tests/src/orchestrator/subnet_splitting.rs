@@ -25,20 +25,20 @@ Success::
 
 end::catalog[] */
 
-use crate::{
+use crate::orchestrator::utils::{
+    rw_message::{
+        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+        store_message,
+    },
+    subnet_recovery::*,
+};
+use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{IcNodeSnapshot, SubnetSnapshot, *},
-    },
-    orchestrator::utils::{
-        rw_message::{
-            can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-            store_message,
-        },
-        subnet_recovery::*,
     },
     util::*,
 };
@@ -403,7 +403,7 @@ fn get_subnets(env: &TestEnv) -> (SubnetSnapshot, SubnetSnapshot) {
         .filter(|subnet| subnet.subnet_type() == SubnetType::Application)
         .collect::<Vec<_>>();
 
-    let source_subnet = app_subnets.get(0).expect("there is no application subnet");
+    let source_subnet = app_subnets.first().expect("there is no application subnet");
     let destination_subnet = app_subnets.get(1).expect("there is no application subnet");
 
     (source_subnet.clone(), destination_subnet.clone())

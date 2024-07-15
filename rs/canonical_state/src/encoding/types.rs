@@ -13,13 +13,20 @@
 use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{xnet::StreamIndex, Time};
+use ic_types::{
+    messages::NO_DEADLINE,
+    time::CoarseTime,
+    xnet::{RejectReason, RejectSignal, StreamIndex},
+    Time,
+};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, HashMap, VecDeque},
     convert::{From, Into, TryFrom, TryInto},
     sync::Arc,
 };
+use strum::EnumCount;
+use strum_macros::EnumIter;
 
 pub(crate) type Bytes = Vec<u8>;
 
@@ -37,7 +44,48 @@ pub struct StreamHeader {
     ///
     /// Note that `signals_end` is NOT part of the reject signals.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reject_signal_deltas: Vec<u64>,
+    pub deprecated_reject_signal_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub flags: u64,
+    #[serde(default, skip_serializing_if = "RejectSignals::is_empty")]
+    pub reject_signals: RejectSignals,
+}
+
+/// Delta encoded reject signals: the last signal is encoded as the delta
+/// between `signals_end` and the stream index of the rejected message; all
+/// other signals are encoded as the delta between the next stream index and
+/// the current one.
+///
+/// Note that `signals_end` is NOT part of the reject signals.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RejectSignals {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_migrating_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_not_found_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_stopped_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_stopping_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queue_full_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub out_of_memory_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unknown_deltas: Vec<u64>,
+}
+
+impl RejectSignals {
+    pub fn is_empty(&self) -> bool {
+        self.canister_migrating_deltas.is_empty()
+            && self.canister_not_found_deltas.is_empty()
+            && self.canister_stopped_deltas.is_empty()
+            && self.canister_stopping_deltas.is_empty()
+            && self.queue_full_deltas.is_empty()
+            && self.out_of_memory_deltas.is_empty()
+            && self.unknown_deltas.is_empty()
+    }
 }
 
 /// Canonical representation of `ic_types::messages::RequestOrResponse`.
@@ -55,9 +103,9 @@ pub struct RequestMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call_tree_depth: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub call_tree_start_time: Option<Time>,
+    pub call_tree_start_time_u64: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub call_subtree_deadline: Option<Time>,
+    pub call_subtree_deadline_u64: Option<u64>,
 }
 
 /// Canonical representation of `ic_types::messages::Request`.
@@ -77,6 +125,8 @@ pub struct Request {
     pub cycles_payment: Option<Cycles>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<RequestMetadata>,
+    #[serde(skip_serializing_if = "is_zero", default)]
+    pub deadline: u32,
 }
 
 /// Canonical representation of `ic_types::messages::Response`.
@@ -92,6 +142,8 @@ pub struct Response {
     pub response_payload: Payload,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_refund: Option<Cycles>,
+    #[serde(skip_serializing_if = "is_zero", default)]
+    pub deadline: u32,
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
@@ -113,8 +165,11 @@ pub struct Funds {
     pub icp: u64,
 }
 
-pub fn is_zero(v: &u64) -> bool {
-    *v == 0
+pub fn is_zero<T>(v: &T) -> bool
+where
+    T: Into<u64> + Copy,
+{
+    (*v).into() == 0
 }
 
 /// Canonical representation of `ic_types::messages::Payload`.
@@ -159,6 +214,21 @@ pub struct SubnetMetrics {
     pub update_transactions_total: u64,
 }
 
+/// Bits used for encoding `ic_types::xnet::StreamFlags`.
+#[derive(EnumCount, EnumIter)]
+#[repr(u64)]
+pub enum StreamFlagBits {
+    DeprecatedResponsesOnly = 1,
+}
+
+/// Constant version of `ic_types::xnet::StreamFlags::default()`.
+pub const STREAM_DEFAULT_FLAGS: ic_types::xnet::StreamFlags = ic_types::xnet::StreamFlags {
+    deprecated_responses_only: false,
+};
+
+/// A mask containing the supported bits.
+pub const STREAM_SUPPORTED_FLAGS: u64 = (1 << StreamFlagBits::COUNT) - 1;
+
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeader {
     fn from(
         (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
@@ -167,23 +237,57 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
         // includes replicas with certification version 8, but they may "inherit" reject
         // signals from a replica with certification version 9 after a downgrade.
         assert!(
-            header.reject_signals.is_empty() || certification_version >= CertificationVersion::V8,
+            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
             "Replicas with certification version < 9 should not be producing reject signals"
         );
+        // Replicas with certification version < 17 should not have flags set.
+        assert!(
+            *header.flags() == STREAM_DEFAULT_FLAGS
+                || certification_version >= CertificationVersion::V17
+        );
 
-        let mut next_index = header.signals_end;
-        let mut reject_signal_deltas = vec![0; header.reject_signals.len()];
-        for (i, stream_index) in header.reject_signals.iter().enumerate().rev() {
-            assert!(next_index > *stream_index);
-            reject_signal_deltas[i] = next_index.get() - stream_index.get();
-            next_index = *stream_index;
+        let mut flags = 0;
+        let ic_types::xnet::StreamFlags {
+            deprecated_responses_only,
+        } = *header.flags();
+        if deprecated_responses_only {
+            flags |= StreamFlagBits::DeprecatedResponsesOnly as u64;
         }
 
+        // Generate deltas representation based on `certification_version` to ensure unique
+        // encoding.
+        let (reject_signals, deprecated_reject_signal_deltas) =
+            if certification_version >= CertificationVersion::V19 {
+                (
+                    into_deltas_v19(
+                        header.reject_signals(),
+                        header.signals_end(),
+                        certification_version,
+                    ),
+                    Default::default(),
+                )
+            } else {
+                (
+                    Default::default(),
+                    into_deltas(
+                        header.reject_signals().iter().map(|signal| {
+                            // Reject signals at certification version < 19 may not produce signals other than
+                            // `CanisterMigrating`.
+                            assert_eq!(signal.reason, RejectReason::CanisterMigrating);
+                            signal.index
+                        }),
+                        header.signals_end(),
+                    ),
+                )
+            };
+
         Self {
-            begin: header.begin.get(),
-            end: header.end.get(),
-            signals_end: header.signals_end.get(),
-            reject_signal_deltas,
+            begin: header.begin().get(),
+            end: header.end().get(),
+            signals_end: header.signals_end().get(),
+            deprecated_reject_signal_deltas,
+            flags,
+            reject_signals,
         }
     }
 }
@@ -191,28 +295,159 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
 impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
     type Error = ProxyDecodeError;
     fn try_from(header: StreamHeader) -> Result<Self, Self::Error> {
-        let mut reject_signals = VecDeque::with_capacity(header.reject_signal_deltas.len());
-        let mut stream_index = StreamIndex::new(header.signals_end);
-        for delta in header.reject_signal_deltas.iter().rev() {
-            if stream_index < StreamIndex::new(*delta) {
-                // Reject signal deltas are invalid.
+        if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
+                header.flags, STREAM_SUPPORTED_FLAGS,
+            )));
+        }
+        let flags = ic_types::xnet::StreamFlags {
+            deprecated_responses_only: header.flags
+                & StreamFlagBits::DeprecatedResponsesOnly as u64
+                != 0,
+        };
+
+        // Decode from contemporary delta representation unless the deprecated
+        // deltas are not empty.
+        let reject_signals = if header.deprecated_reject_signal_deltas.is_empty() {
+            try_from_deltas_v19(&header.reject_signals, header.signals_end)?
+        } else {
+            if !header.reject_signals.is_empty() {
                 return Err(ProxyDecodeError::Other(format!(
-                    "StreamHeader: reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
-                    header.signals_end,
-                    header.reject_signal_deltas,
+                    "StreamHeader: both deprecated and contemporary reject signals are populated: got \
+                    `deprecated_reject_signal_deltas` {:?}, `reject_signals` {:?}",
+                    header.deprecated_reject_signal_deltas,
+                    header.reject_signals,
                 )));
             }
-            stream_index -= StreamIndex::new(*delta);
-            reject_signals.push_front(stream_index);
-        }
+            try_from_deltas(
+                &header.deprecated_reject_signal_deltas,
+                header.signals_end,
+                RejectReason::CanisterMigrating,
+            )?
+        };
 
-        Ok(Self {
-            begin: header.begin.into(),
-            end: header.end.into(),
-            signals_end: header.signals_end.into(),
+        Ok(Self::new(
+            header.begin.into(),
+            header.end.into(),
+            header.signals_end.into(),
             reject_signals,
-        })
+            flags,
+        ))
     }
+}
+
+/// Converts reject signals into delta representation from certification versions 9 to version 18.
+fn into_deltas(
+    iter: impl ExactSizeIterator<Item = StreamIndex> + ExactSizeIterator + DoubleEndedIterator,
+    signals_end: StreamIndex,
+) -> Vec<u64> {
+    let mut next_index = signals_end;
+    let mut reject_signal_deltas = vec![0; iter.len()];
+    for (i, stream_index) in iter.enumerate().rev() {
+        assert!(next_index > stream_index);
+        reject_signal_deltas[i] = next_index.get() - stream_index.get();
+        next_index = stream_index;
+    }
+    reject_signal_deltas
+}
+
+/// Converts reject signals into delta representation from certification versions 19 and up.
+fn into_deltas_v19(
+    reject_signals: &VecDeque<RejectSignal>,
+    signals_end: StreamIndex,
+    certification_version: CertificationVersion,
+) -> RejectSignals {
+    // Demux `reject_signals` into vectors of `StreamIndex`.
+    let mut demuxed = HashMap::<RejectReason, Vec<StreamIndex>>::new();
+    for RejectSignal { reason, index } in reject_signals.iter() {
+        assert!(
+            *reason == RejectReason::CanisterMigrating || certification_version >= CertificationVersion::V19,
+            "Replicas with certification version < 19 should not be producing reject signals other than `CanisterMigrating`"
+        );
+        demuxed.entry(*reason).or_default().push(*index)
+    }
+    let mut deltas_for = |reason| -> Vec<u64> {
+        demuxed
+            .remove(&reason)
+            .map(|signals| into_deltas(signals.into_iter(), signals_end))
+            .unwrap_or_default()
+    };
+
+    RejectSignals {
+        canister_migrating_deltas: deltas_for(RejectReason::CanisterMigrating),
+        canister_not_found_deltas: deltas_for(RejectReason::CanisterNotFound),
+        canister_stopped_deltas: deltas_for(RejectReason::CanisterStopped),
+        canister_stopping_deltas: deltas_for(RejectReason::CanisterStopping),
+        queue_full_deltas: deltas_for(RejectReason::QueueFull),
+        out_of_memory_deltas: deltas_for(RejectReason::OutOfMemory),
+        unknown_deltas: deltas_for(RejectReason::Unknown),
+    }
+}
+
+/// Converts delta representation into reject signals from certification versions 9 to version 18.
+fn try_from_deltas(
+    reject_signal_deltas: &Vec<u64>,
+    signals_end: u64,
+    reason: RejectReason,
+) -> Result<VecDeque<RejectSignal>, ProxyDecodeError> {
+    let mut reject_signals = VecDeque::with_capacity(reject_signal_deltas.len());
+    let mut stream_index = StreamIndex::new(signals_end);
+    for delta in reject_signal_deltas.iter().rev() {
+        if *delta == 0 {
+            // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
+            // lead to duplicates or a stream_index of `signals_end`.
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
+                reason,
+                reject_signal_deltas,
+            )));
+        }
+        if stream_index < StreamIndex::new(*delta) {
+            // Reject signal deltas are invalid.
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
+                reason,
+                signals_end,
+                reject_signal_deltas,
+            )));
+        }
+        stream_index -= StreamIndex::new(*delta);
+        reject_signals.push_front(RejectSignal::new(reason, stream_index));
+    }
+    Ok(reject_signals)
+}
+
+/// Converts delta representation into reject signals from certification versions 19 and up.
+fn try_from_deltas_v19(
+    reject_signals: &RejectSignals,
+    signals_end: u64,
+) -> Result<VecDeque<RejectSignal>, ProxyDecodeError> {
+    use RejectReason::*;
+
+    let mut reject_signals_map = BTreeMap::<StreamIndex, RejectReason>::new();
+    for (reason, deltas) in [
+        (CanisterMigrating, &reject_signals.canister_migrating_deltas),
+        (CanisterNotFound, &reject_signals.canister_not_found_deltas),
+        (CanisterStopped, &reject_signals.canister_stopped_deltas),
+        (CanisterStopping, &reject_signals.canister_stopping_deltas),
+        (QueueFull, &reject_signals.queue_full_deltas),
+        (OutOfMemory, &reject_signals.out_of_memory_deltas),
+        (Unknown, &reject_signals.unknown_deltas),
+    ] {
+        for RejectSignal { reason, index } in try_from_deltas(deltas, signals_end, reason)? {
+            if reject_signals_map.insert(index, reason).is_some() {
+                return Err(ProxyDecodeError::Other(
+                    "StreamHeader: reject signals are invalid, got duplicates".to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(reject_signals_map
+        .iter()
+        .map(|(index, reason)| RejectSignal::new(*reason, *index))
+        .collect())
 }
 
 impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponse {
@@ -260,10 +495,21 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
 impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
     fn from(metadata: &ic_types::messages::RequestMetadata) -> Self {
         RequestMetadata {
-            call_tree_depth: metadata.call_tree_depth,
-            call_tree_start_time: metadata.call_tree_start_time,
-            call_subtree_deadline: metadata.call_subtree_deadline,
+            call_tree_depth: Some(*metadata.call_tree_depth()),
+            call_tree_start_time_u64: Some(
+                metadata.call_tree_start_time().as_nanos_since_unix_epoch(),
+            ),
+            call_subtree_deadline_u64: None,
         }
+    }
+}
+
+impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
+    fn from(metadata: RequestMetadata) -> Self {
+        ic_types::messages::RequestMetadata::new(
+            metadata.call_tree_depth.unwrap_or(0),
+            Time::from_nanos_since_unix_epoch(metadata.call_tree_start_time_u64.unwrap_or(0)),
+        )
     }
 }
 
@@ -271,20 +517,14 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
     ) -> Self {
+        // Replicas with certification version < 18 should not apply request deadlines.
+        debug_assert!(
+            request.deadline == NO_DEADLINE || certification_version >= CertificationVersion::V18
+        );
+
         let funds = Funds {
             cycles: (&request.payment, certification_version).into(),
             icp: 0,
-        };
-        let metadata = match request.metadata.as_ref() {
-            Some(ic_types::messages::RequestMetadata {
-                call_tree_depth: None,
-                call_tree_start_time: None,
-                call_subtree_deadline: None,
-            })
-            | None => None,
-            Some(metadata) => {
-                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
-            }
         };
 
         Self {
@@ -295,17 +535,10 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
-            metadata,
-        }
-    }
-}
-
-impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
-    fn from(metadata: RequestMetadata) -> Self {
-        ic_types::messages::RequestMetadata {
-            call_tree_depth: metadata.call_tree_depth,
-            call_tree_start_time: metadata.call_tree_start_time,
-            call_subtree_deadline: metadata.call_subtree_deadline,
+            metadata: request.metadata.as_ref().and_then(|metadata| {
+                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
+            }),
+            deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -332,6 +565,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             method_name: request.method_name,
             method_payload: request.method_payload,
             metadata: request.metadata.map(From::from),
+            deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
         })
     }
 }
@@ -340,10 +574,16 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
     fn from(
         (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
     ) -> Self {
+        // Replicas with certification version < 18 should not apply response deadlines.
+        debug_assert!(
+            response.deadline == NO_DEADLINE || certification_version >= CertificationVersion::V18
+        );
+
         let funds = Funds {
             cycles: (&response.refund, certification_version).into(),
             icp: 0,
         };
+
         Self {
             originator: response.originator.get().to_vec(),
             respondent: response.respondent.get().to_vec(),
@@ -351,6 +591,7 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
             refund: funds,
             response_payload: (&response.response_payload, certification_version).into(),
             cycles_refund: None,
+            deadline: response.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -375,6 +616,7 @@ impl TryFrom<Response> for ic_types::messages::Response {
             originator_reply_callback: response.originator_reply_callback.into(),
             refund,
             response_payload: response.response_payload.try_into()?,
+            deadline: CoarseTime::from_secs_since_unix_epoch(response.deadline),
         })
     }
 }

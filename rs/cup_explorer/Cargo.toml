@@ -9,7 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hex = "0.4"
+hex = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }

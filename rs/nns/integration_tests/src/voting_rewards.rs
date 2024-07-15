@@ -1,6 +1,7 @@
+use canister_test::Runtime;
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::{
     governance::REWARD_DISTRIBUTION_PERIOD_SECONDS,
@@ -11,8 +12,7 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 use std::{
     iter::once,
@@ -36,7 +36,7 @@ use std::{
 /// can be tested.
 #[test]
 fn test_increase_maturity_just_after_init() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // Set up the governance proto to simulate:
         // - genesis 1.5 voting reward period in the past
         // - one proposal that have been voted on by one neuron and is ready to be
@@ -95,7 +95,15 @@ fn test_increase_maturity_just_after_init() {
             .unwrap();
         eprintln!("{:?}", latest_reward_event);
         while latest_reward_event.day_after_genesis == 0 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            match &runtime {
+                Runtime::Remote(_) | Runtime::Local(_) => {
+                    std::thread::sleep(std::time::Duration::from_millis(100))
+                }
+                Runtime::StateMachine(sm) => {
+                    sm.advance_time(Duration::from_millis(100));
+                    sm.tick();
+                }
+            }
             latest_reward_event = dbg!(nns_canisters
                 .governance
                 .query_("get_latest_reward_event", candid, ())

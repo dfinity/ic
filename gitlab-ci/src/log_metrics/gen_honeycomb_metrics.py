@@ -45,6 +45,7 @@ def main():
         "PIPELINE_START_TIME",
         "job_status",
         "DISKIMG_BRANCH",
+        "NODE_NAME",
         "CI_MERGE_REQUEST_APPROVED",
         "CI_MERGE_REQUEST_ASSIGNEES",
         "CI_MERGE_REQUEST_ID",

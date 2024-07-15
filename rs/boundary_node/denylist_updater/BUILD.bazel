@@ -3,10 +3,11 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:chacha20poly1305",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:httptest",
@@ -14,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:nix",
     "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:prometheus",
     "@crate_index//:reqwest",
     "@crate_index//:rsa",
@@ -21,16 +23,16 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:sha2",
     "@crate_index//:tar",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
 ]
 
 DENYLIST_ENCODER_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:chacha20poly1305",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:flate2",
     "@crate_index//:rsa",
     "@crate_index//:sha2",
@@ -39,14 +41,21 @@ DENYLIST_ENCODER_DEPENDENCIES = [
 ]
 
 GENERATE_KEY_PAIR_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:rsa",
     "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tempfile",
 ]
 
 rust_binary(
@@ -79,5 +88,5 @@ rust_test(
     srcs = glob(["src/**"]),
     crate_root = "src/main.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

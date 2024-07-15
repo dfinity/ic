@@ -4,9 +4,9 @@
 //
 // There are tests that use this library. Run them using either:
 //
-// * rm -rf test_tmpdir; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_tmpdir=test_tmpdir
+// * test_tmpdir="/tmp/$(whoami)/test_tmpdir"; echo "test_tmpdir=$test_tmpdir"; rm -rf "$test_tmpdir"; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_tmpdir="$test_tmpdir"
 //
-// * rm -rf test_tmpdir; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_tmpdir=test_tmpdir --flaky_test_attempts=1
+// * test_tmpdir="/tmp/$(whoami)/test_tmpdir"; echo "test_tmpdir=$test_tmpdir"; rm -rf "$test_tmpdir"; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_tmpdir="$test_tmpdir" --flaky_test_attempts=1
 
 use candid::CandidType;
 use canister_test::Canister;
@@ -23,7 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_sns_wasm::pb::v1::{
     GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateSnsSubnetListRequest,
 };
-use ic_tests::{
+use ic_system_test_driver::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         constants::SSH_USERNAME,
@@ -32,7 +32,7 @@ use ic_tests::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            retry, HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
+            HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
             IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
             SshSession, TopologySnapshot,
         },
@@ -42,11 +42,11 @@ use ic_tests::{
         await_proposal_execution, get_canister, get_governance_canister,
         submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
     },
-    orchestrator::utils::{
-        rw_message::install_nns_with_customizations_and_check_progress,
-        subnet_recovery::set_sandbox_env_vars,
-    },
     util::{block_on, runtime_from_url},
+};
+use ic_tests::orchestrator::utils::{
+    rw_message::install_nns_with_customizations_and_check_progress,
+    subnet_recovery::set_sandbox_env_vars,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use icp_ledger::AccountIdentifier;
@@ -65,8 +65,8 @@ use std::{
 };
 use url::Url;
 
-pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 60);
-pub const PER_TEST_TIMEOUT: Duration = Duration::from_secs(50 * 60);
+pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(80 * 60);
+pub const PER_TEST_TIMEOUT: Duration = Duration::from_secs(70 * 60);
 
 // TODO: move this to an environment variable and set this on the CLI using --test_env=NNS_BACKUP_POD=zh1-pyr07.zh1.dfinity.network
 const NNS_BACKUP_POD: &str = "zh1-pyr07.zh1.dfinity.network";
@@ -192,7 +192,7 @@ pub fn setup(env: TestEnv) {
         .unwrap_or_else(|e| std::panic::resume_unwind(e));
 
     prometheus_thread.join().unwrap();
-    env.sync_with_prometheus_by_name(RECOVERED_NNS);
+    env.sync_with_prometheus_by_name(RECOVERED_NNS, None);
 }
 
 fn setup_recovered_nns(
@@ -494,15 +494,17 @@ fn setup_boundary_node(
         .get_snapshot()
         .unwrap();
 
-    let recovered_nns_node_id = recovered_nns_node.node_id;
+    let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
     boundary_node.block_on_bash_script(&format!(r#"
         set -e
-        cp /etc/nginx/conf.d/002-mainnet-nginx.conf /tmp/
-        sed 's/set $subnet_id "$random_route_subnet_id";/set $subnet_id "{ORIGINAL_NNS_ID}";/' -i /tmp/002-mainnet-nginx.conf
-        sed 's/set $subnet_type "$random_route_subnet_type";/set $subnet_type "system";/' -i /tmp/002-mainnet-nginx.conf
-        sed 's/set $node_id "$random_route_node_id";/set $node_id "{recovered_nns_node_id}";/' -i /tmp/002-mainnet-nginx.conf
-        sudo mount --bind /tmp/002-mainnet-nginx.conf /etc/nginx/conf.d/002-mainnet-nginx.conf
-        sudo systemctl reload nginx
+        cp /etc/systemd/system/ic-boundary.service /tmp/
+        sed -i '/--nns-urls/d' /tmp/ic-boundary.service
+        sed -i '/--local-store-path/d' /tmp/ic-boundary.service
+        sed -i '/--nns-pub-key-pem/a\        --stub-replica [{recovered_nns_node_ipv6}]:8080 \\' /tmp/ic-boundary.service
+        sed -i '/--stub-replica/a\        --skip-replica-tls-verification \\' /tmp/ic-boundary.service
+        sudo mount --bind /tmp/ic-boundary.service /etc/systemd/system/ic-boundary.service
+        sudo systemctl daemon-reload
+        sudo systemctl restart ic-boundary
     "#)).unwrap_or_else(|e| {
         panic!("Could not reconfigure nginx on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
     });
@@ -717,6 +719,7 @@ fn fetch_mainnet_ic_replay(env: TestEnv) {
     let mut gz = GzDecoder::new(&ic_replay_gz_file);
     let mut ic_replay_file = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .write(true)
         .mode(0o755)
         .open(ic_replay_path.clone())
@@ -769,6 +772,7 @@ fn fetch_mainnet_ic_recovery(env: TestEnv) {
     let mut gz = GzDecoder::new(&ic_recovery_gz_file);
     let mut ic_recovery_file = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .write(true)
         .mode(0o755)
         .open(ic_recovery_path.clone())
@@ -869,11 +873,12 @@ fn wait_until_ready_for_interaction(logger: Logger, node: IcNodeSnapshot) {
         logger.clone(),
         "Waiting until node {node_ip:?} is ready for interaction ..."
     );
-    retry(
+    ic_system_test_driver::retry_with_msg!(
+        format!("Check if node {node_ip:?} is ready for interaction"),
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
-        || node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'"),
+        || node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'")
     )
     .unwrap_or_else(|e| {
         panic!("Node {node_ip:?} didn't become ready for interaction in time because {e:?}")
@@ -917,7 +922,8 @@ fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapsho
 }
 
 fn package_registry_local_store(logger: Logger, recovered_nns_node: IcNodeSnapshot) {
-    retry(
+    ic_system_test_driver::retry_with_msg!(
+        "package registry local store",
         logger,
         Duration::from_secs(120),
         Duration::from_secs(5),
@@ -930,7 +936,7 @@ fn package_registry_local_store(logger: Logger, recovered_nns_node: IcNodeSnapsh
                         ic_registry_local_store
                 "#
             ))
-        },
+        }
     )
     .unwrap_or_else(|e| panic!("Could not create ic_registry_local_store.tar.zst because {e:?}",));
 }
@@ -1073,7 +1079,8 @@ fn create_subnet(
         logger,
         "Waiting until the new subnet with node {new_subnet_node_id} appears in the registry local store ..."
     );
-    retry(
+    ic_system_test_driver::retry_with_msg!(
+        "checl if the new subnet with node {new_subnet_node_id} appears in the registry local store",
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
@@ -1087,7 +1094,7 @@ fn create_subnet(
                     done
                 "#
             )
-        ),
+        )
     )
     .unwrap_or_else(|e| {
         panic!("Node {new_subnet_node_id} did not become a member of a new subnet in time. Error: {e:?}")
@@ -1327,6 +1334,7 @@ fn create_cycles_wallet(
 
     let mut cmd = Command::new(dfx_path);
     cmd.env("HOME", home)
+        .env("DFX_DISABLE_QUERY_VERIFICATION", "1")
         .arg("-q")
         .arg("identity")
         .arg("--network")
@@ -1416,6 +1424,8 @@ fn write_sh_lib(
     let sns_quill =
         fs::canonicalize(env.get_dependency_path("external/sns_quill/sns-quill")).unwrap();
     let idl2json = fs::canonicalize(env.get_dependency_path("external/idl2json/idl2json")).unwrap();
+    let ic_wasm =
+        fs::canonicalize(env.get_dependency_path("rs/tests/recovery/binaries/ic-wasm")).unwrap();
     let dfx_home = fs::canonicalize(env.base_path()).unwrap();
     let didc_dir = fs::canonicalize(env.get_dependency_path("external/candid"))
         .unwrap()
@@ -1439,6 +1449,7 @@ fn write_sh_lib(
              export SNS_QUILL={sns_quill:?};\n\
              export IDL2JSON={idl2json:?};\n\
              export DFX_HOME={dfx_home:?};\n\
+             export IC_WASM={ic_wasm:?};\n\
              export PATH=\"{didc_dir}:{dfx_dir}:$PATH\";\n\
             "
         ),

@@ -314,7 +314,7 @@ thread_local! {
     static RETRIES: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
     // Rate limiting for CREATOR
-    static AVAILABLE_TOKENS: RefCell<BTreeMap<String, u32>> = RefCell::new(BTreeMap::new());
+    static AVAILABLE_TOKENS: RefCell<BTreeMap<String, u32>> = const { RefCell::new(BTreeMap::new()) };
 
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
         let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
@@ -475,6 +475,7 @@ fn init_timers_fn() {
 // Init / Upgrade
 
 #[init]
+#[candid_method(init)]
 fn init_fn(
     InitArg {
         root_principals,
@@ -933,12 +934,12 @@ mod tests {
 
     #[test]
     fn check_candid_interface() {
-        use candid::utils::{service_compatible, CandidSource};
+        use candid_parser::utils::{service_equal, CandidSource};
 
         candid::export_service!();
         let new_interface = __export_service();
 
-        service_compatible(
+        service_equal(
             CandidSource::Text(&new_interface),
             CandidSource::Text(include_str!("../interface.did")),
         )

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 mod tls_public_key_cert {
-    use crate::{TlsPublicKeyCert, TlsPublicKeyCertCreationError};
+    use crate::TlsPublicKeyCert;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
@@ -57,10 +57,7 @@ mod tls_public_key_cert {
         let empty_der = Vec::new();
 
         let error = TlsPublicKeyCert::new_from_der(empty_der).unwrap_err();
-
-        assert_matches!(error, TlsPublicKeyCertCreationError { internal_error }
-                if internal_error.contains("Error parsing DER")
-        );
+        assert!(format!("{}", error).contains("Error parsing DER"));
     }
 
     #[test]
@@ -69,9 +66,7 @@ mod tls_public_key_cert {
 
         let error = TlsPublicKeyCert::new_from_der(malformed_der).unwrap_err();
 
-        assert_matches!(error, TlsPublicKeyCertCreationError { internal_error }
-            if internal_error.contains("Error parsing DER")
-        );
+        assert!(format!("{}", error).contains("Error parsing DER"));
     }
 
     #[test]
@@ -118,7 +113,7 @@ mod tls_public_key_cert {
 
         let error: Result<TlsPublicKeyCert, json5::Error> = json5::from_str(bad_serialized);
         assert_matches!(error, Err(json5::Error::Message { msg, .. } )
-            if msg.contains("TlsPublicKeyCertCreationError")
+            if msg.contains("Error parsing DER")
         );
     }
 

@@ -317,6 +317,20 @@ pub fn execute_update_bench(c: &mut Criterion) {
             Module::Test.from_ic0("cycles_burn128", Params3(1_i64, 2_i64, 3_i32), Result::No),
             19000006,
         ),
+        common::Benchmark(
+            "ic0_call_with_best_effort_response()".into(),
+            Module::CallNewLoop.from_ic0(
+                "call_with_best_effort_response",
+                Param1(1_i32),
+                Result::No,
+            ),
+            2058000006,
+        ),
+        common::Benchmark(
+            "ic0_msg_deadline()".into(),
+            Module::Test.from_ic0("msg_deadline", NoParams, Result::I64),
+            517000006,
+        ),
     ];
     common::run_benchmarks(
         c,
@@ -358,16 +372,14 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 ExecuteMessageResult::Finished { response, .. } => response,
                 ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused execution"),
             };
-            match response {
-                ExecutionResponse::Ingress((_, status)) => match status {
-                    IngressStatus::Known { state, .. } => {
-                        if let IngressState::Failed(err) = state {
-                            assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
-                        }
-                    }
-                    _ => panic!("Unexpected ingress status"),
-                },
-                _ => panic!("Expected ingress result"),
+            let ExecutionResponse::Ingress((_, status)) = response else {
+                panic!("Expected ingress result");
+            };
+            let IngressStatus::Known { state, .. } = status else {
+                panic!("Unexpected ingress status");
+            };
+            if let IngressState::Failed(err) = state {
+                assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
             }
             assert_eq!(
                 expected_instructions,

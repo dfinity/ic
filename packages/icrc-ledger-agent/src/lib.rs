@@ -39,6 +39,14 @@ impl From<candid::Error> for Icrc1AgentError {
     }
 }
 
+impl std::fmt::Display for Icrc1AgentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for Icrc1AgentError {}
+
 pub enum CallMode {
     Query,
     Update,

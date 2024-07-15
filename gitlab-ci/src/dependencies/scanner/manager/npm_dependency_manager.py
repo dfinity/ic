@@ -14,6 +14,7 @@ from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 
 NPM_URL = "https://www.npmjs.com/package/"
+DEFAULT_PACKAGE_VERSION = "0.0.0"
 
 
 class NPMDependencyManager(DependencyManager):
@@ -107,11 +108,25 @@ class NPMDependencyManager(DependencyManager):
             if not vulnerable_dependency_used:
                 continue
 
+            # A dependency would not have a version here if they are private
+            # For ex,
+            # {
+            #     "resolved":"file:../../demos/test-app",
+            #     "name": "@dfinity/internet-identity-test-app",
+            #     "overridden":false,
+            #     "dependencies":{...}
+            # }
+            # In this case, we add a dummy version to make the model happy.
+
+            first_level_dependency_version = DEFAULT_PACKAGE_VERSION
+            if "version" in dependencies:
+                first_level_dependency_version = dependencies["version"]
+
             first_level_dependencies.append(
                 Dependency(
-                    id=f"{NPM_URL}{dependency_name}/v/{dependencies['version']}",
+                    id=f"{NPM_URL}{dependency_name}/v/{first_level_dependency_version}",
                     name=dependency_name,
-                    version=dependencies["version"],
+                    version=first_level_dependency_version,
                 )
             )
         return first_level_dependencies

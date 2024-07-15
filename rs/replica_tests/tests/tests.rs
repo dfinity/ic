@@ -1,18 +1,19 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_replica_tests as utils;
 use ic_replica_tests::{assert_reply, install_universal_canister};
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_state_machine_tests::StateMachine;
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities::types::ids::canister_test_id;
 use ic_test_utilities::universal_canister::{call_args, wasm};
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
     CanisterId, NumBytes, RegistryVersion,
 };
+use std::sync::Arc;
 
 const WASM_PAGE_SIZE: usize = 65536;
 
@@ -369,18 +370,21 @@ fn test_query_trap_recovery() {
 #[test]
 /// Tests that a canister correctly initializes itself
 fn test_memory_persistence() {
-    utils::canister_test(|test| {
+    utils::canister_test_async(|test| async {
         let (canister_id, _) = test.create_and_install_canister(TEST_MEMORY, vec![]);
+        let test = Arc::new(test);
         // helper to make a query that writes some data to a given address
-        let write_data_query = |addr: i32, data: Vec<u8>| {
-            // payload[0;4] is the address: beginning of the last Wasm page
-            let mut payload = addr.to_le_bytes().to_vec();
-            // payload[4;8] is the data: [1, 2, .., 8]
-            payload.extend(data);
-            test.query(canister_id, "query_data", payload)
-                .unwrap()
-                .bytes()
-        };
+        let write_data_query =
+            |addr: i32, data: Vec<u8>, test: Arc<ic_replica_tests::LocalTestRuntime>| async move {
+                // payload[0;4] is the address: beginning of the last Wasm page
+                let mut payload = addr.to_le_bytes().to_vec();
+                // payload[4;8] is the data: [1, 2, .., 8]
+                payload.extend(data);
+                test.query(canister_id, "query_data", payload)
+                    .await
+                    .unwrap()
+                    .bytes()
+            };
 
         let write_data_ingress = |addr: i32, data: Vec<u8>| {
             // payload[0;4] is the address: beginning of the last Wasm page
@@ -406,7 +410,12 @@ fn test_memory_persistence() {
         // 2) Write some data to the last page. The `target` address is written to
         //    heap[0;4] and the remainder of the payload is written where the `target`
         //    points to.
-        write_data_query(199 * WASM_PAGE_SIZE as i32, (1u8..9).collect());
+        write_data_query(
+            199 * WASM_PAGE_SIZE as i32,
+            (1u8..9).collect(),
+            test.clone(),
+        )
+        .await;
         // Query does *not* modify the memory file
         assert_eq!(
             display_page_map(
@@ -442,7 +451,12 @@ fn test_memory_persistence() {
         );
 
         // 4) Another query. Does not modify the memory file.
-        write_data_query(100 * WASM_PAGE_SIZE as i32, (1u8..17).collect());
+        write_data_query(
+            100 * WASM_PAGE_SIZE as i32,
+            (1u8..17).collect(),
+            test.clone(),
+        )
+        .await;
         assert_eq!(
             display_page_map(
                 test.canister_state(&canister_id)
@@ -519,7 +533,8 @@ const TEST_MEMORY: &str = r#"
 
 #[test]
 fn test_heap_initialized_from_data_section_only_once() {
-    let wat = r#"
+    utils::canister_test_async(|test| async move {
+        let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
           (import "ic0" "msg_reply_data_append"
@@ -550,7 +565,6 @@ fn test_heap_initialized_from_data_section_only_once() {
           (export "canister_update write" (func $write))
           (export "canister_query read" (func $read))
         )"#;
-    utils::canister_test(move |test| {
         let (canister_id, _) = test.create_and_install_canister(wat, vec![]);
 
         let num_pages = (WASM_PAGE_SIZE / PAGE_SIZE) as u64;
@@ -567,7 +581,11 @@ fn test_heap_initialized_from_data_section_only_once() {
             ),
             "[1×78 65535×00]"
         );
-        let result = test.query(canister_id, "read", vec![]).unwrap().bytes();
+        let result = test
+            .query(canister_id, "read", vec![])
+            .await
+            .unwrap()
+            .bytes();
         let val = i32::from_le_bytes(std::convert::TryInto::try_into(&result[0..4]).unwrap());
         assert_eq!(val, 120);
 
@@ -588,7 +606,11 @@ fn test_heap_initialized_from_data_section_only_once() {
 
         // When we instantiate the canister for subsequent operations we don't set the
         // heap contents from data section anymore. Hence heap[0;4] stays 0xbeef
-        let result = test.query(canister_id, "read", vec![]).unwrap().bytes();
+        let result = test
+            .query(canister_id, "read", vec![])
+            .await
+            .unwrap()
+            .bytes();
         let val = i32::from_le_bytes(std::convert::TryInto::try_into(&result[0..4]).unwrap());
         assert_eq!(val, 0xbeef);
     })
@@ -720,7 +742,7 @@ fn test_memory_access_between_min_and_max_ingress() {
 #[should_panic(expected = "heap out of bounds")]
 // Grow memory beyond the maximum limit. Should throw an exception
 // when attempting to write to it.
-fn test_update_available_memory_1() {
+fn test_try_grow_wasm_memory_1() {
     let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
@@ -744,7 +766,7 @@ fn test_update_available_memory_1() {
 // Grow memory beyond the maximum limit. Should throw an exception when
 // attempting to read from it.
 #[should_panic(expected = "heap out of bounds")]
-fn test_update_available_memory_2() {
+fn test_try_grow_wasm_memory_2() {
     let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
@@ -766,8 +788,9 @@ fn test_update_available_memory_2() {
 
 #[test]
 // Grow memory multiple times, including beyond limit.
-fn test_update_available_memory_3() {
-    let wat = r#"
+fn test_try_grow_wasm_memory_3() {
+    utils::canister_test_async(|test| async move {
+        let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
           (import "ic0" "msg_reply_data_append"
@@ -811,9 +834,8 @@ fn test_update_available_memory_3() {
           (export "canister_update grow_by_one" (func $grow_by_one))
           (export "canister_query grow_by_one_query" (func $grow_by_one))
           (export "canister_query read_byte" (func $read_byte)))"#;
-    // installs a canister that uses debug.log from canister_init
-    // and check the received value
-    utils::canister_test(move |test| {
+        // installs a canister that uses debug.log from canister_init
+        // and check the received value
         // 1. After install the memory size is equal to the declared memory minimum
         // size.
         let (canister_id, _) = test.create_and_install_canister(wat, vec![]);
@@ -853,6 +875,7 @@ fn test_update_available_memory_3() {
         println!("> read_byte(page_num=1)");
         let val = test
             .query(canister_id, "read_byte", i32::to_le_bytes(1).to_vec())
+            .await
             .unwrap()
             .bytes()[0];
         assert_eq!(val, 0xa, "query result");
@@ -873,6 +896,7 @@ fn test_update_available_memory_3() {
         // 4. Queries grow the memory but it does not modify the persisted memory.
         println!("> grow_by_one()");
         test.query(canister_id, "grow_by_one_query", vec![])
+            .await
             .unwrap();
 
         // memory.size = 2
@@ -1056,7 +1080,7 @@ fn test_inter_canister_messaging_full_queues() {
                     )
                     (call $ic0_call_data_append
                         (i32.const 10) (i32.const 1)    ;; refers to byte copied from the payload
-                    ) 
+                    )
                     (i32.store
                       (i32.const 30)
                       (call $ic0_call_perform)
@@ -1416,7 +1440,7 @@ fn test_inter_canister_message_exchange_2() {
 // - canister B multiplies it by 3 and returns to A
 // - canister A multiplies it by 5 and stores on the heap
 fn test_inter_canister_message_exchange_3() {
-    utils::canister_test(|test| {
+    utils::canister_test_async(|test| async move {
         let (canister_c, _) = test.create_and_install_canister(
                 r#"(module
               (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
@@ -1560,7 +1584,11 @@ fn test_inter_canister_message_exchange_3() {
 
         for num in &[7, 5, 1] {
             test.ingress(canister_a, "mul", vec![*num]).unwrap();
-            let val = test.query(canister_a, "read", vec![]).unwrap().bytes();
+            let val = test
+                .query(canister_a, "read", vec![])
+                .await
+                .unwrap()
+                .bytes();
             assert_eq!(
                 val[0],
                 2 * 3 * 5 * num,

@@ -14,6 +14,7 @@ use std::{
     str::FromStr,
 };
 
+use prost::Message;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
@@ -23,7 +24,6 @@ use x509_cert::spki; // re-export of spki crate
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
@@ -257,12 +257,13 @@ pub struct IcConfig {
     /// run with --use_specified_ids_allocation_range flag.
     use_specified_ids_allocation_range: bool,
 
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    initial_guest_launch_measurement_sha256_hex: Option<String>,
-
     /// Whitelisted firewall prefixes for initial registry state, separated by
     /// commas.
     whitelisted_prefixes: Option<String>,
+
+    /// Whitelisted ports for the firewall prefixes, separated by
+    /// commas. Port 8080 is always included.
+    whitelisted_ports: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -327,6 +328,10 @@ impl IcConfig {
         self.whitelisted_prefixes = whitelisted_prefixes;
     }
 
+    pub fn set_whitelisted_ports(&mut self, whitelisted_ports: Option<String>) {
+        self.whitelisted_ports = whitelisted_ports;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
@@ -340,7 +345,6 @@ impl IcConfig {
         initial_node_operator: Option<PrincipalId>,
         initial_node_provider: Option<PrincipalId>,
         ssh_readonly_access_to_unassigned_nodes: Vec<String>,
-        initial_guest_launch_measurement_sha256_hex: Option<String>,
     ) -> Self {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
@@ -357,8 +361,8 @@ impl IcConfig {
             initial_node_provider,
             ssh_readonly_access_to_unassigned_nodes,
             use_specified_ids_allocation_range: false,
-            initial_guest_launch_measurement_sha256_hex,
             whitelisted_prefixes: None,
+            whitelisted_ports: None,
         }
     }
 
@@ -379,19 +383,30 @@ impl IcConfig {
         let mut mutations = self.initial_mutations.clone();
 
         if let Some(prefixes) = self.whitelisted_prefixes {
+            let ports = if let Some(ports) = self.whitelisted_ports {
+                ports
+                    .split(',')
+                    .map(|port| port.parse::<u32>().unwrap())
+                    .chain(std::iter::once(8080))
+                    .collect()
+            } else {
+                vec![8080]
+            };
+
             mutations.extend(vec![insert(
                 make_firewall_rules_record_key(&FirewallRulesScope::Global),
-                encode_or_panic(&FirewallRuleSet {
+                FirewallRuleSet {
                     entries: vec![FirewallRule {
                         ipv4_prefixes: Vec::new(),
                         ipv6_prefixes: prefixes.split(',').map(|v| v.to_string()).collect(),
-                        ports: vec![8080],
+                        ports,
                         action: FirewallAction::Allow as i32,
                         comment: "Globally allow provided prefixes for testing".to_string(),
                         user: None,
                         direction: Some(FirewallRuleDirection::Inbound as i32),
                     }],
-                }),
+                }
+                .encode_to_vec(),
             )]);
         }
 
@@ -521,7 +536,7 @@ impl IcConfig {
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
-            guest_launch_measurement_sha256_hex: self.initial_guest_launch_measurement_sha256_hex,
+            guest_launch_measurement_sha256_hex: None,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
@@ -623,16 +638,6 @@ impl IcConfig {
             let v = ZERO_REGISTRY_VERSION + RegistryVersion::from(i as u64 + 1);
             registry_store.store(v, cle)
         })?;
-
-        // Set certified time.
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Could not get system time");
-        let nanos = now.as_nanos() as u64;
-        registry_store
-            .update_certified_time(nanos)
-            .expect("Could not update certified time.");
 
         Ok(InitializedIc {
             target_dir: self.target_dir,

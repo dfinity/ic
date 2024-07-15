@@ -122,7 +122,7 @@ pub fn load_testnet_topology(
         if node_ids.is_empty() {
             return Err(format!("subnet {} has no nodes", subnet_id));
         }
-        subnet.node_ids = node_ids.clone();
+        subnet.node_ids.clone_from(&node_ids);
         for node_id in node_ids {
             let node_record = registry_client
                 .get_node_record(node_id, registry_version)
@@ -204,7 +204,7 @@ impl TestnetT for Testnet {
                     .filter(|(_, sub_id)| sub_id.get() == sub.get())
                     .map(|(ran, _)| *ran)
                     .collect();
-                match canister_ranges.get(0) {
+                match canister_ranges.first() {
                     Some(range) => range.start.get(),
                     None => PrincipalId::default(),
                 }

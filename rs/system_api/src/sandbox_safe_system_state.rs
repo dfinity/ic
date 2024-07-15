@@ -1,18 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{routing::ResolveDestinationError, ApiType};
-use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{
-    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
-};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
+use ic_management_canister_types::{
+    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
+    Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
+};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -20,9 +21,10 @@ use ic_replicated_state::{
     CallOrigin, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, Request},
+    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
     methods::Callback,
-    CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
+    time::CoarseTime,
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -65,10 +67,11 @@ pub struct SystemStateChanges {
     // `CyclesBalanceChange::Removed(reserved_cycles)`.
     reserved_cycles: Cycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
-    call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
+    call_context_balance_taken: Option<(CallContextId, Cycles)>,
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
+    canister_log: CanisterLog,
 }
 
 impl Default for SystemStateChanges {
@@ -79,10 +82,11 @@ impl Default for SystemStateChanges {
             cycles_balance_change: CyclesBalanceChange::zero(),
             reserved_cycles: Cycles::zero(),
             consumed_cycles_by_use_case: BTreeMap::new(),
-            call_context_balance_taken: BTreeMap::new(),
+            call_context_balance_taken: None,
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
+            canister_log: Default::default(),
         }
     }
 }
@@ -93,8 +97,9 @@ impl SystemStateChanges {
     fn validate_cycle_change(&self, is_cmc_canister: bool) -> HypervisorResult<()> {
         let mut expected_change = CyclesBalanceChange::zero();
 
-        for accepted in self.call_context_balance_taken.values() {
-            expected_change = expected_change + CyclesBalanceChange::added(*accepted);
+        if let Some((_, call_context_balance_taken)) = self.call_context_balance_taken {
+            expected_change =
+                expected_change + CyclesBalanceChange::added(call_context_balance_taken);
         }
 
         for req in self.requests.iter() {
@@ -223,6 +228,8 @@ impl SystemStateChanges {
                 ProvisionalCreateCanisterWithCyclesArgs::decode(payload)
                     .map(|record| record.get_sender_canister_version())
             }
+            Ok(Ic00Method::LoadCanisterSnapshot) => LoadCanisterSnapshotArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -234,7 +241,9 @@ impl SystemStateChanges {
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
-            | Ok(Ic00Method::ComputeInitialEcdsaDealings)
+            | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::SchnorrPublicKey)
+            | Ok(Ic00Method::SignWithSchnorr)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)
@@ -243,14 +252,14 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
             | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
-            | Ok(Ic00Method::DeleteCanisterSnapshot)
-            | Ok(Ic00Method::LoadCanisterSnapshot) => Ok(None),
+            | Ok(Ic00Method::DeleteCanisterSnapshot) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),
@@ -286,35 +295,40 @@ impl SystemStateChanges {
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         logger: &ReplicaLogger,
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<RequestMetadataStats> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
-        // Verify we don't accept more cycles than are available from each call
-        // context and update each call context balance
-        if !self.call_context_balance_taken.is_empty() {
-            let own_canister_id = system_state.canister_id;
-            let call_context_manager = system_state
-                .call_context_manager_mut()
-                .ok_or_else(|| Self::error("Call context manager does not exist"))?;
-            for (context_id, amount_taken) in &self.call_context_balance_taken {
+        // Verify we don't accept more cycles than are available from call
+        // context and update the call context balance.
+        if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken {
+            if call_context_balance_taken != Cycles::zero() {
+                let own_canister_id = system_state.canister_id;
+                let call_context_manager = system_state
+                    .call_context_manager_mut()
+                    .ok_or_else(|| Self::error("Call context manager does not exist"))?;
+
                 let call_context = call_context_manager
-                    .call_context_mut(*context_id)
+                    .call_context_mut(context_id)
                     .ok_or_else(|| {
                         Self::error("Canister accepted cycles from invalid call context")
                     })?;
-                call_context.withdraw_cycles(*amount_taken).map_err(|_| {
-                    Self::error("Canister accepted more cycles than available from call context")
-                })?;
-                if (*amount_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                call_context
+                    .withdraw_cycles(call_context_balance_taken)
+                    .map_err(|()| {
+                        Self::error(
+                            "Canister accepted more cycles than available from call context",
+                        )
+                    })?;
+                if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     match call_context.call_origin() {
-                        CallOrigin::CanisterUpdate(origin_canister_id, _)
+                        CallOrigin::CanisterUpdate(origin_canister_id, _, _)
                         | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
                             logger,
                             "Canister {} accepted {} cycles from canister {}.",
                             own_canister_id,
-                            *amount_taken,
+                            call_context_balance_taken,
                             origin_canister_id
                         ),
                         _ => (),
@@ -322,6 +336,16 @@ impl SystemStateChanges {
                 }
             }
         }
+
+        // Get a clone of the request metadata of outgoing requests (they are all equivalent)
+        // and their number. This will be used for call tree metrics.
+        let request_stats = RequestMetadataStats {
+            metadata: self
+                .requests
+                .first()
+                .and_then(|request| request.metadata.clone()),
+            count: self.requests.len() as u64,
+        };
 
         // Push outgoing messages.
         let mut callback_changes = BTreeMap::new();
@@ -402,15 +426,18 @@ impl SystemStateChanges {
             }
         }
 
-        // Verify callback ids and register new callbacks.
+        // Register and unregister callbacks.
         for update in self.callback_updates {
+            // Only retrieve the CCM if there are callbacks to register / unregister.
+            // `apply_changes` also gets called on stopped canisters (with no callbacks to
+            // register / unregister) and the call would fail in that case.
             let call_context_manager = system_state
                 .call_context_manager_mut()
                 .ok_or_else(|| Self::error("Call context manager does not exist"))?;
             match update {
                 CallbackUpdate::Register(expected_id, mut callback) => {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
-                        callback.respondent = Some(*receiver);
+                        callback.respondent = *receiver;
                     }
                     let id = call_context_manager.register_callback(callback);
                     if id != expected_id {
@@ -418,21 +445,21 @@ impl SystemStateChanges {
                     }
                 }
                 CallbackUpdate::Unregister(callback_id) => {
-                    let _callback = call_context_manager
+                    call_context_manager
                         .unregister_callback(callback_id)
                         .ok_or_else(|| {
-                            Self::error("Tried to unregister callback with an id that isn't in use")
-                        });
+                            Self::error("Tried to unregister callback with an ID that isn't in use")
+                        })?;
                 }
             }
         }
 
         // Verify new certified data isn't too long and set it.
         if let Some(certified_data) = self.new_certified_data.as_ref() {
-            if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH as usize {
+            if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH {
                 return Err(Self::error("Certified data is too large"));
             }
-            system_state.certified_data = certified_data.clone();
+            system_state.certified_data.clone_from(certified_data);
         }
 
         // Update canister global timer
@@ -440,7 +467,7 @@ impl SystemStateChanges {
             system_state.global_timer = new_global_timer;
         }
 
-        Ok(())
+        Ok(request_stats)
     }
 
     /// Applies the balance change to the given state.
@@ -534,7 +561,8 @@ pub struct SandboxSafeSystemState {
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
     reserved_balance_limit: Option<Cycles>,
-    call_context_balances: BTreeMap<CallContextId, Cycles>,
+    call_context_balance: Option<Cycles>,
+    call_context_deadline: Option<CoarseTime>,
     cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
     // register callbacks (e.g. running the `start` method when installing a
@@ -546,6 +574,8 @@ pub struct SandboxSafeSystemState {
     global_timer: CanisterTimer,
     canister_version: u64,
     controllers: BTreeSet<PrincipalId>,
+    pub(super) request_metadata: RequestMetadata,
+    caller: Option<PrincipalId>,
 }
 
 impl SandboxSafeSystemState {
@@ -561,7 +591,9 @@ impl SandboxSafeSystemState {
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        call_context_balances: BTreeMap<CallContextId, Cycles>,
+        call_context_id: Option<CallContextId>,
+        call_context_balance: Option<Cycles>,
+        call_context_deadline: Option<CoarseTime>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
         available_request_slots: BTreeMap<CanisterId, usize>,
@@ -572,6 +604,9 @@ impl SandboxSafeSystemState {
         global_timer: CanisterTimer,
         canister_version: u64,
         controllers: BTreeSet<PrincipalId>,
+        request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
+        next_canister_log_record_idx: u64,
     ) -> Self {
         Self {
             canister_id,
@@ -582,11 +617,18 @@ impl SandboxSafeSystemState {
             freeze_threshold,
             memory_allocation,
             compute_allocation,
-            system_state_changes: SystemStateChanges::default(),
+            system_state_changes: SystemStateChanges {
+                // Start indexing new batch of canister log records from the given index.
+                canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
+                call_context_balance_taken: call_context_id
+                    .map(|call_context_id| (call_context_id, Cycles::zero())),
+                ..SystemStateChanges::default()
+            },
             initial_cycles_balance,
             initial_reserved_balance,
             reserved_balance_limit,
-            call_context_balances,
+            call_context_balance,
+            call_context_deadline,
             cycles_account_manager,
             next_callback_id,
             available_request_slots,
@@ -595,6 +637,8 @@ impl SandboxSafeSystemState {
             global_timer,
             canister_version,
             controllers,
+            request_metadata,
+            caller,
         }
     }
 
@@ -604,25 +648,39 @@ impl SandboxSafeSystemState {
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
+        request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
+        call_context_id: Option<CallContextId>,
     ) -> Self {
-        let call_context_balances = match system_state.call_context_manager() {
-            Some(call_context_manager) => call_context_manager
-                .call_contexts()
-                .iter()
-                .map(|(id, context)| (*id, context.available_cycles()))
-                .collect(),
-            None => BTreeMap::new(),
-        };
+        let call_context = call_context_id.and_then(|call_context_id| {
+            system_state
+                .call_context_manager()
+                .and_then(|call_context_manager| {
+                    call_context_manager.call_contexts().get(&call_context_id)
+                })
+        });
+
+        let call_context_balance = call_context.map(|call_context| call_context.available_cycles());
+
+        let call_context_deadline = call_context.and_then(|call_context| call_context.deadline());
+
         let available_request_slots = system_state.available_output_request_slots();
 
         // Compute the available slots for IC_00 requests as the minimum of available
-        // slots across any queue to a subnet explicitly or IC_00 itself.
+        // slots across any queue to a subnet explicitly, the bitcoin canisters or
+        // IC_00 itself.
         let mut ic00_aliases: BTreeSet<CanisterId> = network_topology
             .subnets
             .keys()
             .map(|id| CanisterId::unchecked_from_principal(id.get()))
             .collect();
         ic00_aliases.insert(CanisterId::ic_00());
+        if let Some(bitcoin_testnet_canister_id) = network_topology.bitcoin_testnet_canister_id {
+            ic00_aliases.insert(bitcoin_testnet_canister_id);
+        }
+        if let Some(bitcoin_mainnet_canister_id) = network_topology.bitcoin_mainnet_canister_id {
+            ic00_aliases.insert(bitcoin_mainnet_canister_id);
+        }
         let ic00_available_request_slots = ic00_aliases
             .iter()
             .map(|id| {
@@ -646,7 +704,9 @@ impl SandboxSafeSystemState {
             system_state.balance(),
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),
-            call_context_balances,
+            call_context_id,
+            call_context_balance,
+            call_context_deadline,
             cycles_account_manager,
             system_state
                 .call_context_manager()
@@ -659,6 +719,9 @@ impl SandboxSafeSystemState {
             system_state.global_timer,
             system_state.canister_version,
             system_state.controllers.clone(),
+            request_metadata,
+            caller,
+            system_state.canister_log.next_idx(),
         )
     }
 
@@ -680,10 +743,6 @@ impl SandboxSafeSystemState {
         self.global_timer = timer;
     }
 
-    pub fn changes(self) -> SystemStateChanges {
-        self.system_state_changes
-    }
-
     pub fn take_changes(&mut self) -> SystemStateChanges {
         std::mem::take(&mut self.system_state_changes)
     }
@@ -700,9 +759,10 @@ impl SandboxSafeSystemState {
                     .push(CallbackUpdate::Register(id, callback));
                 Ok(id)
             }
-            None => Err(HypervisorError::ContractViolation(
-                "Tried to register a callback in a context where it isn't allowed.".to_string(),
-            )),
+            None => Err(HypervisorError::ToolchainContractViolation {
+                error: "Tried to register a callback in a context where it isn't allowed."
+                    .to_string(),
+            }),
         }
     }
 
@@ -727,17 +787,20 @@ impl SandboxSafeSystemState {
         self.initial_reserved_balance + self.system_state_changes.reserved_cycles
     }
 
-    pub(super) fn msg_cycles_available(&self, call_context_id: CallContextId) -> Cycles {
-        let initial_available = *self
-            .call_context_balances
-            .get(&call_context_id)
-            .unwrap_or(&Cycles::zero());
-        let already_taken = *self
+    pub(super) fn msg_cycles_available(&self) -> Cycles {
+        let initial_available = self.call_context_balance.unwrap_or(Cycles::zero());
+
+        let already_taken = self
             .system_state_changes
             .call_context_balance_taken
-            .get(&call_context_id)
-            .unwrap_or(&Cycles::zero());
+            .map_or(Cycles::zero(), |(_, balance_taken)| balance_taken);
+
         initial_available - already_taken
+    }
+
+    /// Returns the deadline of `CallContext`.
+    pub fn msg_deadline(&self) -> CoarseTime {
+        self.call_context_deadline.unwrap_or(NO_DEADLINE)
     }
 
     fn update_balance_change(&mut self, new_balance: Cycles) {
@@ -772,7 +835,7 @@ impl SandboxSafeSystemState {
             .cycles_account_manager
             .mint_cycles(self.canister_id, &mut new_balance, amount_to_mint)
             .map_err(|CyclesAccountManagerError::ContractViolation(msg)| {
-                HypervisorError::ContractViolation(msg)
+                HypervisorError::ToolchainContractViolation { error: msg }
             });
         self.update_balance_change(new_balance);
         result
@@ -811,37 +874,39 @@ impl SandboxSafeSystemState {
         self.update_balance_change(new_balance);
     }
 
-    pub(super) fn msg_cycles_accept(
-        &mut self,
-        call_context_id: CallContextId,
-        amount_to_accept: Cycles,
-    ) -> Cycles {
+    pub(super) fn msg_cycles_accept(&mut self, amount_to_accept: Cycles) -> Cycles {
         let mut new_balance = self.cycles_balance();
+
+        // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
+        // available only forApiType::{Update, RepyCallback, RejectCallBack} and all of
+        // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
+        // will never be `None`.
+        debug_assert!(self
+            .system_state_changes
+            .call_context_balance_taken
+            .is_some());
+
+        let balance_taken = &mut self
+            .system_state_changes
+            .call_context_balance_taken
+            .as_mut()
+            .unwrap()
+            .1;
 
         // Scale amount that can be accepted by what is actually available on
         // the call context.
         let amount_available = Cycles::from(
-            self.call_context_balances
-                .get(&call_context_id)
+            self.call_context_balance
                 .unwrap()
                 .get()
-                .checked_sub(
-                    self.system_state_changes
-                        .call_context_balance_taken
-                        .get(&call_context_id)
-                        .unwrap_or(&Cycles::zero())
-                        .get(),
-                )
+                .checked_sub(balance_taken.get())
                 .unwrap(),
         );
+
         let amount_to_accept = std::cmp::min(amount_available, amount_to_accept);
 
         // Withdraw and accept the cycles
-        *self
-            .system_state_changes
-            .call_context_balance_taken
-            .entry(call_context_id)
-            .or_insert_with(Cycles::zero) += amount_to_accept;
+        *balance_taken += amount_to_accept;
 
         new_balance += amount_to_accept;
 
@@ -864,6 +929,7 @@ impl SandboxSafeSystemState {
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
         amount: Cycles,
+        reveal_top_up: bool,
     ) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
         let result = self
@@ -879,6 +945,7 @@ impl SandboxSafeSystemState {
                 amount,
                 self.subnet_size,
                 self.reserved_balance(),
+                reveal_top_up,
             )
             .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
@@ -908,12 +975,16 @@ impl SandboxSafeSystemState {
             prepayment_for_response_transmission,
             self.subnet_size,
             self.reserved_balance(),
+            // if the canister is frozen, the controller should call canister_status
+            // to learn the top up balance instead of getting it from an error
+            // message to a canister method making downstream call
+            false,
         ) {
             Ok(consumed_cycles) => consumed_cycles,
             Err(_) => return Err(msg),
         };
 
-        // If the request is targeted to IC_00 or one of the known subnets
+        // If the request is targeted to any of the known aliases of IC_00,
         // count it towards the available slots for IC_00 requests.
         if self.ic00_aliases.contains(&msg.receiver) {
             if self.ic00_available_request_slots == 0 {
@@ -941,12 +1012,12 @@ impl SandboxSafeSystemState {
     }
 
     /// Calculate the cost for newly created dirty pages.
-    pub fn dirty_page_cost(&self, dirty_pages: NumPages) -> HypervisorResult<NumInstructions> {
+    pub fn dirty_page_cost(&self, dirty_pages: NumOsPages) -> HypervisorResult<NumInstructions> {
         let (inst, overflow) = dirty_pages
             .get()
             .overflowing_mul(self.dirty_page_overhead.get());
         if overflow {
-            Err(HypervisorError::ContractViolation(format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages)))
+            Err(HypervisorError::ToolchainContractViolation{error: format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages)})
         } else {
             Ok(NumInstructions::from(inst))
         }
@@ -999,6 +1070,7 @@ impl SandboxSafeSystemState {
                         bytes: new_memory_usage - old_memory_usage,
                         available: self.cycles_balance(),
                         threshold,
+                        reveal_top_up: self.caller_is_controller(),
                     })
                 }
             }
@@ -1042,6 +1114,7 @@ impl SandboxSafeSystemState {
                 bytes: new_message_memory_usage - old_message_memory_usage,
                 available: self.cycles_balance(),
                 threshold,
+                reveal_top_up: self.caller_is_controller(),
             })
         }
     }
@@ -1121,6 +1194,7 @@ impl SandboxSafeSystemState {
                         bytes: allocated_bytes,
                         available: old_balance,
                         threshold: cycles_to_reserve,
+                        reveal_top_up: self.caller_is_controller(),
                     });
                 }
                 let new_balance = old_balance - cycles_to_reserve;
@@ -1156,19 +1230,67 @@ impl SandboxSafeSystemState {
             }
         }
     }
+
+    /// Appends a log record to the system state changes.
+    pub fn append_canister_log(&mut self, is_enabled: bool, time: &Time, content: Vec<u8>) {
+        self.system_state_changes.canister_log.add_record(
+            is_enabled,
+            time.as_nanos_since_unix_epoch(),
+            content,
+        );
+    }
+
+    /// Takes collected canister log records.
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        std::mem::take(&mut self.system_state_changes.canister_log)
+    }
+
+    /// Returns collected canister log records.
+    pub fn canister_log(&self) -> &CanisterLog {
+        &self.system_state_changes.canister_log
+    }
+
+    fn caller_is_controller(&self) -> bool {
+        if let Some(caller) = self.caller {
+            self.controllers.contains(&caller)
+        } else {
+            false
+        }
+    }
+}
+
+/// Holds the metadata and the number of downstream requests. Requests created during the same
+/// execution have the same metadata. This fact is reflected by the use of a counter, rather than
+/// a list of identical metadata.
+///
+/// This is used for call tree metrics.
+pub struct RequestMetadataStats {
+    pub metadata: Option<RequestMetadata>,
+    pub count: u64,
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+    use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
-    use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
-    use ic_types::Cycles;
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_types::{
+        messages::{RequestMetadata, NO_DEADLINE},
+        time::CoarseTime,
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    };
 
     use crate::{
-        cycles_balance_change::CyclesBalanceChange, sandbox_safe_system_state::SystemStateChanges,
+        cycles_balance_change::CyclesBalanceChange,
+        sandbox_safe_system_state::{
+            CanisterStatusView, SandboxSafeSystemState, SystemStateChanges,
+        },
     };
 
     #[test]
@@ -1231,5 +1353,51 @@ mod tests {
         system_state_changes.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
+    }
+
+    fn helper_msg_deadline(call_context_deadline: Option<CoarseTime>) -> CoarseTime {
+        let sandbox_state = SandboxSafeSystemState::new_internal(
+            canister_test_id(0),
+            CanisterStatusView::Running,
+            NumSeconds::from(3600),
+            MemoryAllocation::BestEffort,
+            ComputeAllocation::default(),
+            Cycles::new(1_000_000),
+            Cycles::zero(),
+            None,
+            None,
+            None,
+            call_context_deadline,
+            CyclesAccountManager::new(
+                NumInstructions::from(1_000_000_000),
+                SubnetType::Application,
+                subnet_test_id(0),
+                CyclesAccountManagerConfig::application_subnet(),
+            ),
+            Some(0),
+            BTreeMap::new(),
+            0,
+            BTreeSet::new(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            SchedulerConfig::application_subnet().dirty_page_overhead,
+            CanisterTimer::Inactive,
+            0,
+            BTreeSet::new(),
+            RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
+            None,
+            0,
+        );
+        sandbox_state.msg_deadline()
+    }
+
+    #[test]
+    fn test_msg_deadline() {
+        // `NO_DEADLINE` is returned when CallContext does not have `deadline` set.
+        assert_eq!(helper_msg_deadline(None), NO_DEADLINE);
+
+        let deadline = CoarseTime::from_secs_since_unix_epoch(100);
+
+        // Otherwise the correct `deadline` is returned.
+        assert_eq!(helper_msg_deadline(Some(deadline)), deadline);
     }
 }

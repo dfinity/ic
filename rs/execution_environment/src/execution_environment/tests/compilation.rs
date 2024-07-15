@@ -557,7 +557,7 @@ mod state_machine_tests {
             expected_compilation_instructions.get() as f64,
         );
 
-        // Installing another canister with the same WASM doesn't take instructions.
+        // Installing another canister with the same Wasm doesn't take instructions.
         let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
@@ -583,7 +583,7 @@ mod state_machine_tests {
             expected_compilation_instructions,
         );
 
-        // Installing another canister with the same WASM uses instructions because
+        // Installing another canister with the same Wasm uses instructions because
         // there was a checkpoint since the last install.
         let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(

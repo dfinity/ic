@@ -6,16 +6,17 @@ use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager
 use crate::CanisterQueues;
 use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
 use ic_base_types::CanisterId;
-use ic_btc_types_internal::BlockBlob;
+use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{EcdsaKeyId, NodeMetrics, NodeMetricsHistoryResponse};
+use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
+use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
     state::{
-        canister_state_bits::v1::ConsumedCyclesByUseCase,
+        canister_state_bits::v1::{ConsumedCyclesByUseCase, CyclesUseCase as pbCyclesUseCase},
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
         system_metadata::v1::{self as pb_metadata},
@@ -40,7 +41,10 @@ use ic_types::{
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
     subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{
+        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+        StreamSlice,
+    },
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use ic_wasm_types::WasmHash;
@@ -96,6 +100,8 @@ pub struct SystemMetadata {
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
+
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
     /// `None` otherwise.
@@ -146,12 +152,12 @@ pub struct SystemMetadata {
 
     pub subnet_metrics: SubnetMetrics,
 
-    /// The set of WASM modules we expect to be present in the [`Hypervisor`]'s
+    /// The set of Wasm modules we expect to be present in the [`Hypervisor`]'s
     /// compilation cache. This allows us to deterministically decide when we
     /// expect a compilation to be fast and ignore the compilation cost when
     /// considering the round instruction limit.
     ///
-    /// Each time a canister is installed, its WASM is inserted and the set is
+    /// Each time a canister is installed, its Wasm is inserted and the set is
     /// cleared at each checkpoint.
     pub expected_compiled_wasms: BTreeSet<WasmHash>,
 
@@ -180,15 +186,31 @@ pub struct NetworkTopology {
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub canister_migrations: Arc<CanisterMigrations>,
     pub nns_subnet_id: SubnetId,
-    /// Mapping from ECDSA key_id to a list of subnets which can sign with the
+
+    /// Mapping from iDKG key_id to a list of subnets which can sign with the
     /// given key. Keys without any signing subnets are not included in the map.
-    pub ecdsa_signing_subnets: BTreeMap<EcdsaKeyId, Vec<SubnetId>>,
+    pub idkg_signing_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
 
     /// The ID of the canister to forward bitcoin testnet requests to.
     pub bitcoin_testnet_canister_id: Option<CanisterId>,
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+}
+
+/// Full description of the API Boundary Node, which is saved in the metadata.
+/// This entry is formed from two registry records - ApiBoundaryNodeRecord and NodeRecord.
+/// If an ApiBoundaryNodeRecord exists, then a corresponding NodeRecord must exist.
+/// The converse statement is not true.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApiBoundaryNodeEntry {
+    /// Domain name, required field from NodeRecord
+    pub domain: String,
+    /// Ipv4, optional field from NodeRecord
+    pub ipv4_address: Option<String>,
+    /// Ipv6, required field from NodeRecord
+    pub ipv6_address: String,
+    pub pubkey: Option<Vec<u8>>,
 }
 
 impl Default for NetworkTopology {
@@ -198,7 +220,7 @@ impl Default for NetworkTopology {
             routing_table: Default::default(),
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
-            ecdsa_signing_subnets: Default::default(),
+            idkg_signing_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
         }
@@ -206,12 +228,11 @@ impl Default for NetworkTopology {
 }
 
 impl NetworkTopology {
-    /// Returns a list of subnets where the ecdsa feature is enabled.
-    pub fn ecdsa_signing_subnets(&self, key_id: &EcdsaKeyId) -> &[SubnetId] {
-        self.ecdsa_signing_subnets
+    /// Returns a list of subnets where the iDKG feature is enabled.
+    pub fn idkg_signing_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
+        self.idkg_signing_subnets
             .get(key_id)
-            .map(|ids| &ids[..])
-            .unwrap_or(&[])
+            .map_or(&[], |ids| &ids[..])
     }
 
     /// Returns the size of the given subnet.
@@ -236,20 +257,6 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
             canister_migrations: Some(item.canister_migrations.as_ref().into()),
-            ecdsa_signing_subnets: item
-                .ecdsa_signing_subnets
-                .iter()
-                .map(|(key_id, subnet_ids)| {
-                    let subnet_ids = subnet_ids
-                        .iter()
-                        .map(|id| subnet_id_into_protobuf(*id))
-                        .collect();
-                    pb_metadata::EcdsaKeyEntry {
-                        key_id: Some(key_id.into()),
-                        subnet_ids,
-                    }
-                })
-                .collect(),
             bitcoin_testnet_canister_ids: match item.bitcoin_testnet_canister_id {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
@@ -258,6 +265,20 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
             },
+            idkg_signing_subnets: item
+                .idkg_signing_subnets
+                .iter()
+                .map(|(key_id, subnet_ids)| {
+                    let subnet_ids = subnet_ids
+                        .iter()
+                        .map(|id| subnet_id_into_protobuf(*id))
+                        .collect();
+                    pb_metadata::IDkgKeyEntry {
+                        key_id: Some(key_id.into()),
+                        subnet_ids,
+                    }
+                })
+                .collect(),
         }
     }
 }
@@ -281,14 +302,14 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             "NetworkTopology::nns_subnet_id",
         )?)?;
 
-        let mut ecdsa_signing_subnets = BTreeMap::new();
-        for entry in item.ecdsa_signing_subnets {
+        let mut idkg_signing_subnets = BTreeMap::new();
+        for entry in item.idkg_signing_subnets {
             let mut subnet_ids = vec![];
             for subnet_id in entry.subnet_ids {
                 subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
             }
-            ecdsa_signing_subnets.insert(
-                try_from_option_field(entry.key_id, "EcdsaKeyEntry::key_id")?,
+            idkg_signing_subnets.insert(
+                try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
                 subnet_ids,
             );
         }
@@ -318,7 +339,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .unwrap_or_default()
                 .into(),
             nns_subnet_id,
-            ecdsa_signing_subnets,
+            idkg_signing_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
         })
@@ -328,17 +349,17 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
-    /// https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
+    /// https://internetcomputer.org/docs/current/references/ic-interface-spec#certification)
     pub public_key: Vec<u8>,
     pub nodes: BTreeSet<NodeId>,
     pub subnet_type: SubnetType,
     pub subnet_features: SubnetFeatures,
-    /// ECDSA keys held by this subnet. Just because a subnet holds an ECDSA key
+    /// iDKG keys held by this subnet. Just because a subnet holds an iDKG key
     /// doesn't mean the subnet has been enabled to sign with that key. This
     /// will happen when a key is shared with a second subnet which holds it as
     /// a backup. An additional NNS proposal will be needed to allow the subnet
     /// holding the key as backup to actually produce signatures.
-    pub ecdsa_keys_held: BTreeSet<EcdsaKeyId>,
+    pub idkg_keys_held: BTreeSet<MasterPublicKeyId>,
 }
 
 impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
@@ -354,7 +375,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
-            ecdsa_keys_held: item.ecdsa_keys_held.iter().map(|k| k.into()).collect(),
+            idkg_keys_held: item.idkg_keys_held.iter().map(|k| k.into()).collect(),
         }
     }
 }
@@ -367,9 +388,9 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             nodes.insert(node_id_try_from_option(entry.node_id)?);
         }
 
-        let mut ecdsa_keys_held = BTreeSet::new();
-        for key in item.ecdsa_keys_held {
-            ecdsa_keys_held.insert(EcdsaKeyId::try_from(key)?);
+        let mut idkg_keys_held = BTreeSet::new();
+        for key in item.idkg_keys_held {
+            idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
         }
 
         Ok(Self {
@@ -383,7 +404,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .subnet_features
                 .map(SubnetFeatures::from)
                 .unwrap_or_default(),
-            ecdsa_keys_held,
+            idkg_keys_held,
         })
     }
 }
@@ -394,7 +415,9 @@ pub struct SubnetMetrics {
     pub consumed_cycles_http_outcalls: NominalCycles,
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
+    // TODO(CON-1302): Remove once `threshold_signature_agreements` is rolled out.
     pub ecdsa_signature_agreements: u64,
+    pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
     /// The total size of the state taken by canisters on this subnet in bytes.
@@ -446,6 +469,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::RequestAndResponseTransmission
                 | CyclesUseCase::Uninstall
                 | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }
@@ -463,13 +487,21 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
             consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
             ecdsa_signature_agreements: Some(item.ecdsa_signature_agreements),
+            threshold_signature_agreements: item
+                .threshold_signature_agreements
+                .iter()
+                .map(|(key_id, &count)| ThresholdSignatureAgreementsEntry {
+                    key_id: Some(key_id.into()),
+                    count,
+                })
+                .collect(),
             consumed_cycles_by_use_case: item
                 .consumed_cycles_by_use_case
                 .clone()
                 .into_iter()
-                .map(|entry| ConsumedCyclesByUseCase {
-                    use_case: entry.0.into(),
-                    cycles: Some((&entry.1).into()),
+                .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
+                    use_case: pbCyclesUseCase::from(use_case).into(),
+                    cycles: Some((&cycles).into()),
                 })
                 .collect(),
             num_canisters: Some(item.num_canisters),
@@ -482,6 +514,28 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
 impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_metadata::SubnetMetrics) -> Result<Self, Self::Error> {
+        let mut consumed_cycles_by_use_case = BTreeMap::new();
+        for x in item.consumed_cycles_by_use_case.into_iter() {
+            consumed_cycles_by_use_case.insert(
+                CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "CyclesUseCase",
+                        err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                    }
+                })?)?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
+        let mut threshold_signature_agreements = BTreeMap::new();
+        for x in item.threshold_signature_agreements.into_iter() {
+            threshold_signature_agreements.insert(
+                try_from_option_field(
+                    x.key_id,
+                    "SubnetMetrics::threshold_signature_agreements:key_id",
+                )?,
+                x.count,
+            );
+        }
         Ok(Self {
             consumed_cycles_by_deleted_canisters: try_from_option_field(
                 item.consumed_cycles_by_deleted_canisters,
@@ -498,16 +552,8 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             )
             .unwrap_or_else(|_| NominalCycles::from(0_u128)),
             ecdsa_signature_agreements: item.ecdsa_signature_agreements.unwrap_or_default(),
-            consumed_cycles_by_use_case: item
-                .consumed_cycles_by_use_case
-                .into_iter()
-                .map(|ConsumedCyclesByUseCase { use_case, cycles }| {
-                    (
-                        CyclesUseCase::from(use_case),
-                        NominalCycles::try_from(cycles.unwrap_or_default()).unwrap_or_default(),
-                    )
-                })
-                .collect(),
+            threshold_signature_agreements,
+            consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
@@ -570,6 +616,19 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     node_id: Some(node_id_into_protobuf(*node_id)),
                     public_key: public_key.clone(),
                 })
+                .collect(),
+            api_boundary_nodes: item
+                .api_boundary_nodes
+                .iter()
+                .map(
+                    |(node_id, api_boundary_node_entry)| pb_metadata::ApiBoundaryNodeEntry {
+                        node_id: Some(node_id_into_protobuf(*node_id)),
+                        domain: api_boundary_node_entry.domain.clone(),
+                        ipv4_address: api_boundary_node_entry.ipv4_address.clone(),
+                        ipv6_address: api_boundary_node_entry.ipv6_address.clone(),
+                        pubkey: api_boundary_node_entry.pubkey.clone(),
+                    },
+                )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
         }
@@ -635,6 +694,19 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
         }
 
+        let mut api_boundary_nodes = BTreeMap::<NodeId, ApiBoundaryNodeEntry>::new();
+        for entry in item.api_boundary_nodes {
+            api_boundary_nodes.insert(
+                node_id_try_from_option(entry.node_id)?,
+                ApiBoundaryNodeEntry {
+                    domain: entry.domain,
+                    ipv4_address: entry.ipv4_address,
+                    ipv6_address: entry.ipv6_address,
+                    pubkey: entry.pubkey,
+                },
+            );
+        }
+
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -646,6 +718,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
             node_public_keys,
+            api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
@@ -706,6 +779,7 @@ impl SystemMetadata {
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
             node_public_keys: Default::default(),
+            api_boundary_nodes: Default::default(),
             split_from: None,
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -980,6 +1054,7 @@ impl SystemMetadata {
             own_subnet_features: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             node_public_keys: _,
+            api_boundary_nodes: _,
             ref mut split_from,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
@@ -1096,6 +1171,7 @@ impl SystemMetadata {
                         RejectCode::SysTransient,
                         format!("Canister {} migrated during a subnet split", canister_id),
                     )),
+                    deadline: request.deadline,
                 };
                 subnet_queues.push_output_response(response.into());
             }
@@ -1137,7 +1213,7 @@ impl SystemMetadata {
 /// Conceptually we use a gap-free queue containing one signal for each inducted
 /// message; but because most signals are `Accept` we represent that queue as a
 /// combination of `signals_end` (pointing just beyond the last signal) plus a
-/// collection of `reject_signals`.
+/// collection of exceptions, i.e. `reject_signals`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
@@ -1151,11 +1227,14 @@ pub struct Stream {
     /// represented by its end index (pointing just beyond the last signal).
     signals_end: StreamIndex,
 
-    /// Stream indices of rejected messages, in ascending order.
-    reject_signals: VecDeque<StreamIndex>,
+    /// Reject signals, in ascending stream index order.
+    reject_signals: VecDeque<RejectSignal>,
 
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
+
+    /// Stream flags observed in the header of the reverse stream.
+    reverse_stream_flags: StreamFlags,
 }
 
 impl Default for Stream {
@@ -1164,18 +1243,30 @@ impl Default for Stream {
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::size_bytes(&messages);
+        let reverse_stream_flags = StreamFlags {
+            deprecated_responses_only: false,
+        };
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags,
         }
     }
 }
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        let reject_signals = item.reject_signals.iter().map(|i| i.get()).collect();
+        // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
+        let reject_signals = item
+            .reject_signals()
+            .iter()
+            .map(|signal| pb_queues::RejectSignal {
+                reason: pb_queues::RejectReason::from(signal.reason).into(),
+                index: signal.index.get(),
+            })
+            .collect();
         Self {
             messages_begin: item.messages.begin().get(),
             messages: item
@@ -1184,7 +1275,11 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
+            deprecated_reject_signals: Vec::new(),
             reject_signals,
+            reverse_stream_flags: Some(pb_queues::StreamFlags {
+                deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
+            }),
         }
     }
 }
@@ -1199,17 +1294,69 @@ impl TryFrom<pb_queues::Stream> for Stream {
         }
         let messages_size_bytes = Self::size_bytes(&messages);
 
-        let reject_signals = item
-            .reject_signals
-            .iter()
-            .map(|i| StreamIndex::new(*i))
-            .collect();
+        let signals_end = item.signals_end.into();
+        // TODO: MR-577 Remove `deprecated_reject_signals` cases once all replicas are updated.
+        let reject_signals = match (
+            item.reject_signals.as_slice(),
+            item.deprecated_reject_signals.as_slice(),
+        ) {
+            // No reject signals.
+            ([], []) => VecDeque::new(),
+
+            // Only contemporary reject signals.
+            (reject_signals, []) => reject_signals
+                .iter()
+                .map(|signal| {
+                    Ok(RejectSignal {
+                        reason: pb_queues::RejectReason::try_from(signal.reason)
+                            .map_err(ProxyDecodeError::DecodeError)?
+                            .try_into()?,
+                        index: signal.index.into(),
+                    })
+                })
+                .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?,
+
+            // Only deprecated reject signals.
+            ([], deprecated_reject_signals) => deprecated_reject_signals
+                .iter()
+                .map(|index| RejectSignal::new(RejectReason::CanisterMigrating, (*index).into()))
+                .collect(),
+
+            // Both contemporary and deprecated reject signals.
+            ([_, ..], [_, ..]) => {
+                return Err(ProxyDecodeError::Other(format!(
+                    "both contemporary and deprecated signals are populated \
+                    got `reject_signals` {:?}, `deprecated_reject_signals` {:?}",
+                    item.reject_signals, item.deprecated_reject_signals,
+                )));
+            }
+        };
+
+        // Check reject signals are sorted and below `signals_end`.
+        let iter = reject_signals.iter().map(|signal| signal.index);
+        for (index, next_index) in iter
+            .clone()
+            .zip(iter.skip(1).chain(std::iter::once(item.signals_end.into())))
+        {
+            if index >= next_index {
+                return Err(ProxyDecodeError::Other(format!(
+                    "reject signals not strictly sorted, received [{:?}, {:?}]",
+                    index, next_index,
+                )));
+            }
+        }
 
         Ok(Self {
             messages,
-            signals_end: item.signals_end.into(),
+            signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags: item
+                .reverse_stream_flags
+                .map(|flags| StreamFlags {
+                    deprecated_responses_only: flags.deprecated_responses_only,
+                })
+                .unwrap_or_default(),
         })
     }
 }
@@ -1223,14 +1370,15 @@ impl Stream {
             signals_end,
             reject_signals: VecDeque::new(),
             messages_size_bytes,
+            reverse_stream_flags: Default::default(),
         }
     }
 
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
         messages: StreamIndexedQueue<RequestOrResponse>,
         signals_end: StreamIndex,
-        reject_signals: VecDeque<StreamIndex>,
+        reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
         Self {
@@ -1238,6 +1386,7 @@ impl Stream {
             signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags: Default::default(),
         }
     }
 
@@ -1250,12 +1399,13 @@ impl Stream {
 
     /// Creates a header for this stream.
     pub fn header(&self) -> StreamHeader {
-        StreamHeader {
-            begin: self.messages.begin(),
-            end: self.messages.end(),
-            signals_end: self.signals_end,
-            reject_signals: self.reject_signals.clone(),
-        }
+        StreamHeader::new(
+            self.messages.begin(),
+            self.messages.end(),
+            self.signals_end,
+            self.reject_signals.clone(),
+            StreamFlags::default(),
+        )
     }
 
     /// Returns a reference to the message queue.
@@ -1285,8 +1435,8 @@ impl Stream {
     pub fn discard_messages_before(
         &mut self,
         new_begin: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+        reject_signals: &VecDeque<RejectSignal>,
+    ) -> Vec<(RejectReason, RequestOrResponse)> {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -1307,8 +1457,8 @@ impl Stream {
         let messages_begin = self.messages.begin();
         let mut reject_signals = reject_signals
             .iter()
-            .skip_while(|&reject_signal| reject_signal < &messages_begin);
-        let mut next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            .skip_while(|reject_signal| reject_signal.index < messages_begin)
+            .peekable();
 
         // Garbage collect all messages up to `new_begin`.
         let mut rejected_messages = Vec::new();
@@ -1321,9 +1471,11 @@ impl Stream {
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
-            if next_reject_signal == &index {
-                rejected_messages.push(msg);
-                next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            if let Some(reject_signal) = reject_signals.peek() {
+                if reject_signal.index == index {
+                    rejected_messages.push((reject_signal.reason, msg));
+                    reject_signals.next();
+                }
             }
         }
         rejected_messages
@@ -1331,8 +1483,8 @@ impl Stream {
 
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
-        while let Some(signal_index) = self.reject_signals.front() {
-            if *signal_index < new_signals_begin {
+        while let Some(reject_signal) = self.reject_signals.front() {
+            if reject_signal.index < new_signals_begin {
                 self.reject_signals.pop_front();
             } else {
                 break;
@@ -1341,7 +1493,7 @@ impl Stream {
     }
 
     /// Returns a reference to the reject signals.
-    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         &self.reject_signals
     }
 
@@ -1350,28 +1502,33 @@ impl Stream {
         self.signals_end
     }
 
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
+    /// Pushes an accept signal. Since these are not explicitly encoded, this
+    /// just increments `signals_end`.
+    pub fn push_accept_signal(&mut self) {
         self.signals_end.inc_assign()
     }
 
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        assert_eq!(index, self.signals_end);
-        if let Some(&last_signal) = self.reject_signals.back() {
-            assert!(
-                last_signal < index,
-                "The signal to be pushed ({}) should be larger than the last signal ({})",
-                index,
-                last_signal
-            );
-        }
-        self.reject_signals.push_back(index)
+    /// Appends a reject signal (the current `signals_end`) to the tail of the
+    /// reject signals; and then increments `signals_end`.
+    pub fn push_reject_signal(&mut self, reason: RejectReason) {
+        self.reject_signals
+            .push_back(RejectSignal::new(reason, self.signals_end));
+        self.signals_end.inc_assign();
     }
 
     /// Calculates the estimated byte size of the given messages.
     fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
+    }
+
+    /// Returns a reference to the reverse stream flags.
+    pub fn reverse_stream_flags(&self) -> &StreamFlags {
+        &self.reverse_stream_flags
+    }
+
+    /// Sets the reverse stream flags.
+    pub fn set_reverse_stream_flags(&mut self, flags: StreamFlags) {
+        self.reverse_stream_flags = flags;
     }
 }
 
@@ -1384,15 +1541,7 @@ impl CountBytes for Stream {
 
 impl From<Stream> for StreamSlice {
     fn from(val: Stream) -> Self {
-        StreamSlice::new(
-            StreamHeader {
-                begin: val.messages.begin(),
-                end: val.messages.end(),
-                signals_end: val.signals_end,
-                reject_signals: val.reject_signals,
-            },
-            val.messages,
-        )
+        StreamSlice::new(val.header(), val.messages)
     }
 }
 
@@ -1440,7 +1589,9 @@ impl Streams {
                 .entry(response.respondent)
                 .or_default() += msg.count_bytes();
         }
+
         self.streams.entry(destination).or_default().push(msg);
+
         #[cfg(debug_assertions)]
         self.debug_validate_stats();
     }
@@ -1551,7 +1702,7 @@ impl<'a> StreamHandle<'a> {
     }
 
     /// Returns a reference to the reject signals.
-    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         self.stream.reject_signals()
     }
 
@@ -1575,14 +1726,16 @@ impl<'a> StreamHandle<'a> {
         size_bytes
     }
 
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
-        self.stream.increment_signals_end();
+    /// Pushes an accept signal. Since these are not explicitly encoded, this
+    /// just increments `signals_end`.
+    pub fn push_accept_signal(&mut self) {
+        self.stream.push_accept_signal();
     }
 
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        self.stream.push_reject_signal(index)
+    /// Appends a reject signal (the current `signals_end`) to the tail of the
+    /// reject signals; and then increments `signals_end`.
+    pub fn push_reject_signal(&mut self, reason: RejectReason) {
+        self.stream.push_reject_signal(reason);
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all
@@ -1590,8 +1743,8 @@ impl<'a> StreamHandle<'a> {
     pub fn discard_messages_before(
         &mut self,
         new_begin: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+        reject_signals: &VecDeque<RejectSignal>,
+    ) -> Vec<(RejectReason, RequestOrResponse)> {
         // Update stats for each discarded message.
         for (index, msg) in self.stream.messages().iter() {
             if index >= new_begin {
@@ -1613,6 +1766,16 @@ impl<'a> StreamHandle<'a> {
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
         self.stream.discard_signals_before(new_signals_begin);
+    }
+
+    /// Returns a reference to the reverse stream flags.
+    pub fn reverse_stream_flags(&self) -> &StreamFlags {
+        &self.stream.reverse_stream_flags
+    }
+
+    /// Sets the reverse stream flags.
+    pub fn set_reverse_stream_flags(&mut self, flags: StreamFlags) {
+        self.stream.set_reverse_stream_flags(flags);
     }
 }
 
@@ -2099,7 +2262,7 @@ impl BlockmakerMetricsTimeSeries {
                     .iter()
                     .map(|(node_id, stats)| NodeMetrics {
                         node_id: node_id.get(),
-                        num_blocks_total: stats.blocks_proposed_total,
+                        num_blocks_proposed_total: stats.blocks_proposed_total,
                         num_block_failures_total: stats.blocks_not_proposed_total,
                     })
                     .collect();
@@ -2266,6 +2429,7 @@ pub(crate) mod testing {
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
             node_public_keys: Default::default(),
+            api_boundary_nodes: Default::default(),
             split_from: None,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,

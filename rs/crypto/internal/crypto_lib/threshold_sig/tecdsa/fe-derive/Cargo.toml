@@ -14,5 +14,5 @@ syn = { workspace = true }
 quote = "1.0"
 proc-macro2 = "1.0"
 num-bigint-dig = { version = "0.8", features = ["prime"] }
-num-traits = "0.2"
-hex = "0.4"
+num-traits = { workspace = true }
+hex = { workspace = true }

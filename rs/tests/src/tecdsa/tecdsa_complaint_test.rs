@@ -1,19 +1,17 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use super::{enable_ecdsa_signing, DKG_INTERVAL};
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-};
-use crate::tecdsa::{
-    get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
-};
-use crate::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
-use canister_test::{Canister, Cycles};
+use super::{enable_chain_key_signing, DKG_INTERVAL};
+use crate::tecdsa::{get_public_key_and_test_signature, make_key_ids_for_all_schemes};
+use canister_test::Canister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+};
+use ic_system_test_driver::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;
@@ -32,8 +30,8 @@ pub fn config(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-/// Tests whether a call to `sign_with_ecdsa` is responded with a signature
-/// that is verifiable with the result from `ecdsa_public_key`. This is done
+/// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` is responded with a signature
+/// that is verifiable with the result from `ecdsa_public_key`/`schnorr_public_key`. This is done
 /// in the presence of corrupted dealings/complaints.
 pub fn test(env: TestEnv) {
     let log = env.logger();
@@ -68,30 +66,16 @@ pub fn test(env: TestEnv) {
             nns_honest_node.effective_canister_id(),
         );
         let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(
-            &governance,
-            nns_subnet.subnet_id,
-            vec![make_key(KEY_ID1)],
-            &log,
-        )
-        .await;
+        let key_ids = make_key_ids_for_all_schemes();
+        enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
 
         let msg_can =
             MessageCanister::new(&nns_agent, nns_honest_node.effective_canister_id()).await;
-        let message_hash = [0xabu8; 32];
-        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
-            .await
-            .unwrap();
-        let signature = get_signature_with_logger(
-            &message_hash,
-            Cycles::zero(),
-            make_key(KEY_ID1),
-            &msg_can,
-            &log,
-        )
-        .await
-        .unwrap();
-        verify_signature(&message_hash, &public_key, &signature);
+        for key_id in &key_ids {
+            let _public_key = get_public_key_and_test_signature(key_id, &msg_can, true, &log)
+                .await
+                .unwrap();
+        }
     });
 
     info!(logger, "Checking for malicious logs...");

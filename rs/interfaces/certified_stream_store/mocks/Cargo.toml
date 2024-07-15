@@ -9,4 +9,4 @@ documentation.workspace = true
 [dependencies]
 ic-interfaces-certified-stream-store = { path = "../" }
 ic-types = { path = "../../../types/types" }
-mockall = "0.11.2"
+mockall = { workspace = true }

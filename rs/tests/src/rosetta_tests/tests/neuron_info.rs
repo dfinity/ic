@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
@@ -7,7 +6,6 @@ use crate::rosetta_tests::lib::{
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use assert_json_diff::assert_json_eq;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
@@ -18,13 +16,15 @@ use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, NeuronInfo, PublicKeyOrPrincipal};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 const PORT: u32 = 8107;
-const VM_NAME: &str = "rosetta-test-neuron-info";
+const VM_NAME: &str = "rosetta-neuron-info";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -35,9 +35,14 @@ pub fn test(env: TestEnv) {
 
     // Create neurons.
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
 
     let neuron1 = neurons.create(|neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(2 * 365 * 24 * 60 * 60));
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 345_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -65,6 +70,7 @@ pub fn test(env: TestEnv) {
                 3 * 365 * 24 * 60 * 60,
             ),
         );
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 678_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -92,6 +98,7 @@ pub fn test(env: TestEnv) {
                 3 * 365 * 24 * 60 * 60,
             ),
         );
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 679_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -129,7 +136,7 @@ async fn test_neuron_info(
 ) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let _expected_type = "NEURON_INFO".to_string();
     let res = do_multiple_txn_external(
         ros,
@@ -154,7 +161,7 @@ async fn test_neuron_info(
                 .first()
                 .expect("Expected one neuron info operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));
@@ -165,7 +172,7 @@ async fn test_neuron_info(
     assert_eq!(1, res.operations.len());
     let metadata: &ObjectMap = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .metadata
         .as_ref()
@@ -203,7 +210,7 @@ async fn test_neuron_info_with_hotkey(
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
 ) {
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let neuron_controller = neuron_info.principal_id;
@@ -265,7 +272,7 @@ async fn test_neuron_info_with_hotkey(
         assert_eq!(
             ic_rosetta_api::models::operation::OperationType::NeuronInfo,
             results.operations[0]
-                ._type
+                .type_
                 .parse::<OperationType>()
                 .unwrap(),
             "Expecting one neuron info operation."
@@ -277,7 +284,7 @@ async fn test_neuron_info_with_hotkey(
     assert_eq!(1, res.operations.len());
     let metadata: &ObjectMap = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .metadata
         .as_ref()
@@ -315,7 +322,7 @@ async fn test_neuron_info_with_hotkey_raw(
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
 ) {
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let neuron_controller = neuron_info.principal_id;
@@ -549,7 +556,7 @@ async fn test_neuron_info_with_hotkey_raw(
     }
     assert_eq!(2, operations.len());
     let metadata = operations
-        .get(0)
+        .first()
         .unwrap()
         .get("metadata")
         .expect("No metadata found.");

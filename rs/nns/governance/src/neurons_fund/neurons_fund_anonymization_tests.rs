@@ -20,16 +20,22 @@ fn test_neurons_fund_participation_anonymization() {
     let maturity_equivalent_icp_e8s = 100_000_000_000;
     let controller = PrincipalId::default();
     let is_capped = false;
+    #[allow(deprecated)] // TODO(NNS1-3199): Remove this when hotkey_principal is removed
     let n1: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id1),
         amount_icp_e8s: Some(amount_icp_e8s),
         maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
-        hotkey_principal: Some(controller),
+        controller: Some(controller),
+        // TODO(NNS1-3199): populate this field if that is necessary for this test
+        hotkeys: vec![],
         is_capped: Some(is_capped),
+
+        // TODO(NNS1-3199): Remove this deprecated field
+        hotkey_principal: Some(controller),
     };
     let n2 = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id2),
-        ..n1
+        ..n1.clone()
     };
     let neurons = vec![n1, n2];
     let snapshot = NeuronsFundSnapshotPb {
@@ -38,9 +44,17 @@ fn test_neurons_fund_participation_anonymization() {
     let participation = NeuronsFundParticipationPb {
         ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionPb {
             serialized_representation: Some(
-                PolynomialMatchingFunction::new(1_000_000_000_000_000)
-                    .unwrap()
-                    .serialize(),
+                PolynomialMatchingFunction::new(
+                    1_000_000_000_000_000,
+                    NeuronsFundParticipationLimits {
+                        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+                        contribution_threshold_icp: dec!(33_000.0),
+                        one_third_participation_milestone_icp: dec!(100_000.0),
+                        full_participation_milestone_icp: dec!(167_000.0),
+                    },
+                )
+                .unwrap()
+                .serialize(),
             ),
         }),
         neurons_fund_reserves: Some(snapshot.clone()),
@@ -91,16 +105,21 @@ fn test_neurons_fund_snapshot_anonymization() {
     let maturity_equivalent_icp_e8s = 100_000_000_000;
     let controller = PrincipalId::default();
     let is_capped = false;
+    #[allow(deprecated)] // TODO(NNS1-3198): remove hotkey_principal
     let n1: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id1),
         amount_icp_e8s: Some(amount_icp_e8s),
         maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
-        hotkey_principal: Some(controller),
+        controller: Some(controller),
+        // TODO(NNS1-3199): populate this field if that is necessary for this test
+        hotkeys: vec![],
         is_capped: Some(is_capped),
+        // TODO(NNS1-3198): Remove this deprecated field
+        hotkey_principal: Some(controller),
     };
     let n2 = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id2),
-        ..n1
+        ..n1.clone()
     };
     let neurons = vec![n1, n2];
     let snapshot = NeuronsFundSnapshotPb {
@@ -140,12 +159,18 @@ fn test_neurons_fund_neuron_portion_anonymization() {
     let maturity_equivalent_icp_e8s = 100_000_000_000;
     let controller = PrincipalId::default();
     let is_capped = false;
+
+    #[allow(deprecated)] // TODO(NNS1-3198): remove hotkey_principal
     let neuron: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id),
         amount_icp_e8s: Some(amount_icp_e8s),
         maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
-        hotkey_principal: Some(controller),
+        controller: Some(controller),
+        // TODO(NNS1-3199): populate this field if that is necessary for this test
+        hotkeys: vec![],
         is_capped: Some(is_capped),
+        // TODO(NNS1-3198): Remove this deprecated field
+        hotkey_principal: Some(controller),
     };
     assert_eq!(
         neuron.validate(),

@@ -2,19 +2,21 @@
 //!
 //! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
 //!
-//! It consists of the PocketIC-server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
+//! It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
 //!
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
-//! ```rust
-//! use candid;
-//! use pocket_ic;
+//! ```rust,no_run
+//! use candid::encode_one;
+//! use pocket_ic::PocketIc;
 //!
 //!  #[test]
 //!  fn test_counter_canister() {
 //!     let pic = PocketIc::new();
-//!     // Create an empty canister as the anonymous principal.
-//!     let canister_id = pic.create_canister(None);
+//!     // Create an empty canister as the anonymous principal and add cycles.
+//!     let canister_id = pic.create_canister();
+//!     pic.add_cycles(canister_id, 2_000_000_000_000);
+//!  
 //!     let wasm_bytes = load_counter_wasm(...);
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
@@ -32,130 +34,244 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, InstanceId, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory,
-    RawStableMemory, RawTime, RawWasmResult,
+    BlobCompression, BlobId, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig, InstanceId,
+    RawEffectivePrincipal, RawMessageId, SubnetId, SubnetSpec, Topology,
 };
+use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    CandidType, Nat, Principal,
+    Principal,
 };
-use common::rest::{
-    RawEffectivePrincipal, RawSubnetId, RawVerifyCanisterSigArg, SubnetConfigSet, SubnetId,
-    Topology,
-};
-use ic_cdk::api::management_canister::{
-    main::{CanisterInstallMode, InstallCodeArgument, UpdateSettingsArgument},
-    provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
-};
+pub use ic_cdk::api::management_canister::main::CanisterSettings;
+use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse};
 use reqwest::Url;
 use schemars::JsonSchema;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
+use std::sync::mpsc::channel;
+use std::thread;
+use std::thread::JoinHandle;
 use std::{
     path::{Path, PathBuf},
     process::Command,
+    sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
-use tracing::{debug, instrument};
-use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::EnvFilter;
-pub mod common;
+use tracing::{instrument, warn};
 
-const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
-const PROCESSING_TIME_VALUE_MS: u64 = 300_000;
+pub mod common;
+pub mod nonblocking;
+
+// the default timeout of a PocketIC operation
+const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
+
 const LOCALHOST: &str = "127.0.0.1";
 
-const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
-const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
-
 pub struct PocketIcBuilder {
-    pub config: SubnetConfigSet,
+    config: ExtendedSubnetConfigSet,
+    server_url: Option<Url>,
+    max_request_time_ms: Option<u64>,
+    state_dir: Option<PathBuf>,
+    nonmainnet_features: bool,
 }
 
 #[allow(clippy::new_without_default)]
 impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
-            config: SubnetConfigSet::default(),
+            config: ExtendedSubnetConfigSet::default(),
+            server_url: None,
+            max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            state_dir: None,
+            nonmainnet_features: false,
         }
     }
 
     pub fn build(self) -> PocketIc {
-        PocketIc::from_config(self.config)
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
+        PocketIc::from_components(
+            self.config,
+            server_url,
+            self.max_request_time_ms,
+            self.state_dir,
+            self.nonmainnet_features,
+        )
     }
 
+    pub async fn build_async(self) -> PocketIcAsync {
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
+        PocketIcAsync::from_components(
+            self.config,
+            server_url,
+            self.max_request_time_ms,
+            self.state_dir,
+            self.nonmainnet_features,
+        )
+        .await
+    }
+
+    pub fn with_server_url(self, server_url: Url) -> Self {
+        Self {
+            server_url: Some(server_url),
+            ..self
+        }
+    }
+
+    pub fn with_max_request_time_ms(self, max_request_time_ms: Option<u64>) -> Self {
+        Self {
+            max_request_time_ms,
+            ..self
+        }
+    }
+
+    pub fn with_state_dir(self, state_dir: PathBuf) -> Self {
+        Self {
+            state_dir: Some(state_dir),
+            ..self
+        }
+    }
+
+    pub fn with_nonmainnet_features(self, nonmainnet_features: bool) -> Self {
+        Self {
+            nonmainnet_features,
+            ..self
+        }
+    }
+
+    /// Add an empty NNS subnet
     pub fn with_nns_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                nns: true,
+            config: ExtendedSubnetConfigSet {
+                nns: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
+    /// Add an NNS subnet loaded form the given state directory. Note that the provided path must
+    /// be accessible for the PocketIC server process.
+    ///
+    /// `path_to_nns_state` should lead to the `ic_state` directory which is expected to have
+    /// the following structure:
+    ///
+    /// ic_state/
+    ///  |-- backups
+    ///  |-- checkpoints
+    ///  |-- diverged_checkpoints
+    ///  |-- diverged_state_markers
+    ///  |-- fs_tmp
+    ///  |-- page_deltas
+    ///  |-- states_metadata.pbuf
+    ///  |-- tip
+    ///  `-- tmp
+    ///
+    /// `nns_subnet_id` should be the subnet ID of the NNS subnet in the state under
+    /// `path_to_state`, e.g.:
+    /// ```rust
+    /// PrincipalId(
+    ///     candid::Principal::from_text(
+    ///         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ///     )
+    ///     .unwrap(),
+    /// )
+    /// .into();
+    /// ```
+    ///
+    /// The value can be obtained, e.g., via the following command:
+    /// ```sh
+    /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
+    /// ```
+    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+        Self {
+            config: ExtendedSubnetConfigSet {
+                nns: Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id)),
+                ..self.config
+            },
+            ..self
+        }
+    }
+
+    /// Add an empty sns subnet
     pub fn with_sns_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                sns: true,
+            config: ExtendedSubnetConfigSet {
+                sns: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
-
+    /// Add an empty internet identity subnet
     pub fn with_ii_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                ii: true,
+            config: ExtendedSubnetConfigSet {
+                ii: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
+    /// Add an empty fiduciary subnet
     pub fn with_fiduciary_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                fiduciary: true,
+            config: ExtendedSubnetConfigSet {
+                fiduciary: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
+    /// Add an empty bitcoin subnet
     pub fn with_bitcoin_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                bitcoin: true,
+            config: ExtendedSubnetConfigSet {
+                bitcoin: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
-    pub fn with_system_subnet(self) -> Self {
-        Self {
-            config: SubnetConfigSet {
-                system: self.config.system + 1,
-                ..self.config
-            },
-        }
+    /// Add an empty generic system subnet
+    pub fn with_system_subnet(mut self) -> Self {
+        self.config.system.push(SubnetSpec::default());
+        self
     }
 
-    pub fn with_application_subnet(self) -> Self {
-        Self {
-            config: SubnetConfigSet {
-                application: self.config.application + 1,
-                ..self.config
-            },
-        }
+    /// Add an empty generic application subnet
+    pub fn with_application_subnet(mut self) -> Self {
+        self.config.application.push(SubnetSpec::default());
+        self
+    }
+
+    pub fn with_benchmarking_application_subnet(mut self) -> Self {
+        self.config
+            .application
+            .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self
+    }
+
+    pub fn with_benchmarking_system_subnet(mut self) -> Self {
+        self.config
+            .system
+            .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self
+    }
+
+    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
+        self.config = self.config.with_dts_flag(dts_flag);
+        self
     }
 }
+
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
-    /// The unique ID of this PocketIC instance.
-    pub instance_id: InstanceId,
-    topology: Topology,
-    server_url: Url,
-    reqwest_client: reqwest::blocking::Client,
-    _log_guard: Option<WorkerGuard>,
+    pocket_ic: PocketIcAsync,
+    runtime: Arc<tokio::runtime::Runtime>,
+    thread: Option<JoinHandle<()>>,
 }
 
 impl PocketIc {
@@ -165,97 +281,120 @@ impl PocketIc {
         PocketIcBuilder::new().with_application_subnet().build()
     }
 
+    /// Returns the instance ID.
+    pub fn instance_id(&self) -> InstanceId {
+        self.pocket_ic.instance_id
+    }
+
     /// Creates a new PocketIC instance with the specified subnet config.
     /// The server is started if it's not already running.
-    pub fn from_config(config: SubnetConfigSet) -> Self {
-        config.validate().unwrap();
-
-        let parent_pid = std::os::unix::process::parent_id();
-        let log_guard = setup_tracing(parent_pid);
-
+    pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        let reqwest_client = reqwest::blocking::Client::new();
-        let (instance_id, topology) = match reqwest_client
-            .post(server_url.join("instances").unwrap())
-            .json(&config)
-            .send()
-            .expect("Failed to get result")
-            .json::<CreateInstanceResponse>()
-            .expect("Could not parse response for create instance request")
-        {
-            CreateInstanceResponse::Created {
-                instance_id,
-                topology,
-            } => (instance_id, topology),
-            CreateInstanceResponse::Error { message } => panic!("{}", message),
-        };
-        debug!("instance_id={} New instance created.", instance_id);
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
+    }
+
+    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
+    /// (`None` means that there is no timeout).
+    /// The server is started if it's not already running.
+    pub fn from_config_and_max_request_time(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let server_url = crate::start_or_reuse_server();
+        Self::from_components(config, server_url, max_request_time_ms, None, false)
+    }
+
+    /// Creates a new PocketIC instance with the specified subnet config and server url.
+    /// This function is intended for advanced users who start the server manually.
+    pub fn from_config_and_server_url(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        server_url: Url,
+    ) -> Self {
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
+    }
+
+    pub(crate) fn from_components(
+        subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
+        server_url: Url,
+        max_request_time_ms: Option<u64>,
+        state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
+    ) -> Self {
+        let (tx, rx) = channel();
+        let thread = thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            tx.send(rt).unwrap();
+        });
+        let runtime = rx.recv().unwrap();
+
+        let pocket_ic = runtime.block_on(async {
+            PocketIcAsync::from_components(
+                subnet_config_set,
+                server_url,
+                max_request_time_ms,
+                state_dir,
+                nonmainnet_features,
+            )
+            .await
+        });
 
         Self {
-            instance_id,
-            topology,
-            server_url,
-            reqwest_client,
-            _log_guard: log_guard,
+            pocket_ic,
+            runtime: Arc::new(runtime),
+            thread: Some(thread),
         }
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.
     pub fn topology(&self) -> Topology {
-        self.topology.clone()
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.topology().await })
     }
 
     /// Upload and store a binary blob to the PocketIC server.
-    #[instrument(ret(Display), skip(self, blob), fields(instance_id=self.instance_id, blob_len = %blob.len(), compression = ?compression))]
+    #[instrument(ret(Display), skip(self, blob), fields(instance_id=self.pocket_ic.instance_id, blob_len = %blob.len(), compression = ?compression))]
     pub fn upload_blob(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
-        let mut request = self
-            .reqwest_client
-            .post(self.server_url.join("blobstore/").unwrap())
-            .body(blob);
-        if compression == BlobCompression::Gzip {
-            request = request.header(reqwest::header::CONTENT_ENCODING, "gzip");
-        }
-        let blob_id = request
-            .send()
-            .expect("Failed to get response")
-            .text()
-            .expect("Failed to get text");
-
-        let hash_vec = hex::decode(blob_id).expect("Failed to decode hex");
-        BlobId(hash_vec)
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.upload_blob(blob, compression).await })
     }
 
     /// Set stable memory of a canister. Optional GZIP compression can be used for reduced
     /// data traffic.
-    #[instrument(skip(self, data), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), data_len = %data.len(), compression = ?compression))]
+    #[instrument(skip(self, data), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), data_len = %data.len(), compression = ?compression))]
     pub fn set_stable_memory(
         &self,
         canister_id: CanisterId,
         data: Vec<u8>,
         compression: BlobCompression,
     ) {
-        let blob_id = self.upload_blob(data, compression);
-        let endpoint = "update/set_stable_memory";
-        self.post::<(), _>(
-            endpoint,
-            RawSetStableMemory {
-                canister_id: canister_id.as_slice().to_vec(),
-                blob_id,
-            },
-        );
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .set_stable_memory(canister_id, data, compression)
+                .await
+        })
     }
 
     /// Get stable memory of a canister.
-    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn get_stable_memory(&self, canister_id: CanisterId) -> Vec<u8> {
-        let endpoint = "read/get_stable_memory";
-        let RawStableMemory { blob } = self.post(
-            endpoint,
-            RawCanisterId {
-                canister_id: canister_id.as_slice().to_vec(),
-            },
-        );
-        blob
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_stable_memory(canister_id).await })
     }
 
     /// List all instances and their status.
@@ -272,7 +411,7 @@ impl PocketIc {
     }
 
     /// Verify a canister signature.
-    #[instrument(skip_all, fields(instance_id=self.instance_id))]
+    #[instrument(skip_all, fields(instance_id=self.pocket_ic.instance_id))]
     pub fn verify_canister_signature(
         &self,
         msg: Vec<u8>,
@@ -280,97 +419,189 @@ impl PocketIc {
         pubkey: Vec<u8>,
         root_pubkey: Vec<u8>,
     ) -> Result<(), String> {
-        let url = self.server_url.join("verify_signature").unwrap();
-        reqwest::blocking::Client::new()
-            .post(url)
-            .json(&RawVerifyCanisterSigArg {
-                msg,
-                sig,
-                pubkey,
-                root_pubkey,
-            })
-            .send()
-            .expect("Failed to get result")
-            .json()
-            .expect("Failed to get json")
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .verify_canister_signature(msg, sig, pubkey, root_pubkey)
+                .await
+        })
     }
 
     /// Make the IC produce and progress by one block.
-    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    /// Note that multiple ticks might be necessary to observe
+    /// an expected effect, e.g., if the effect depends on
+    /// inter-canister calls or heartbeats.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn tick(&self) {
-        let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, "");
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.tick().await })
+    }
+
+    /// Configures the IC to make progress automatically,
+    /// i.e., periodically update the time of the IC
+    /// to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn auto_progress(&self) -> Url {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.auto_progress().await })
+    }
+
+    /// Stops automatic progress (see `auto_progress`) on the IC.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn stop_progress(&self) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.stop_progress().await })
+    }
+
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made if the HTTP
+    /// gateway has been started.
+    pub fn url(&self) -> Option<Url> {
+        self.pocket_ic.url()
+    }
+
+    /// Creates an HTTP gateway for this IC instance
+    /// listening on an optionally specified port
+    /// and configures the IC instance to make progress
+    /// automatically, i.e., periodically update the time
+    /// of the IC to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
+    }
+
+    /// Creates an HTTP gateway for this PocketIC instance listening
+    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// and optionally specified domains (default to `localhost`)
+    /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub async fn make_live_with_params(
+        &mut self,
+        listen_at: Option<u16>,
+        domains: Option<Vec<String>>,
+        https_config: Option<HttpsConfig>,
+    ) -> Url {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .make_live_with_params(listen_at, domains, https_config)
+                .await
+        })
+    }
+
+    /// Stops auto progress (automatic time updates and round executions)
+    /// and the HTTP gateway for this IC instance.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn stop_live(&mut self) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.stop_live().await })
+    }
+
+    #[deprecated(note = "Use `stop_live` instead.")]
+    /// Use `stop_live` instead.
+    pub fn make_deterministic(&mut self) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.stop_live().await })
     }
 
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
-    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn root_key(&self) -> Option<Vec<u8>> {
-        let subnet_id = self.topology.get_nns()?;
-        let subnet_id: RawSubnetId = subnet_id.into();
-        let endpoint = "read/pub_key";
-        let res = self.post::<Vec<u8>, _>(endpoint, subnet_id);
-        Some(res)
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.root_key().await })
     }
 
     /// Get the current time of the IC.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn get_time(&self) -> SystemTime {
-        let endpoint = "read/get_time";
-        let result: RawTime = self.get(endpoint);
-        SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_time().await })
     }
 
     /// Set the current time of the IC, on all subnets.
-    #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
     pub fn set_time(&self, time: SystemTime) {
-        let endpoint = "update/set_time";
-        self.post::<(), _>(
-            endpoint,
-            RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
-            },
-        );
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
     /// Advance the time on the IC on all subnets by some nanoseconds.
-    #[instrument(skip(self), fields(instance_id=self.instance_id, duration = ?duration))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, duration = ?duration))]
     pub fn advance_time(&self, duration: Duration) {
-        let now = self.get_time();
-        self.set_time(now + duration);
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.advance_time(duration).await })
     }
 
     /// Get the current cycles balance of a canister.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn cycle_balance(&self, canister_id: CanisterId) -> u128 {
-        let endpoint = "read/get_cycles";
-        let result: RawCycles = self.post(
-            endpoint,
-            RawCanisterId {
-                canister_id: canister_id.as_slice().to_vec(),
-            },
-        );
-        result.cycles
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.cycle_balance(canister_id).await })
     }
 
     /// Add cycles to a canister. Returns the new balance.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), amount = %amount))]
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), amount = %amount))]
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
-        let endpoint = "update/add_cycles";
-        let result: RawCycles = self.post(
-            endpoint,
-            RawAddCycles {
-                canister_id: canister_id.as_slice().to_vec(),
-                amount,
-            },
-        );
-        result.cycles
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.add_cycles(canister_id, amount).await })
+    }
+
+    /// Submit an update call (without executing it immediately).
+    pub fn submit_call(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<RawMessageId, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .submit_call(canister_id, sender, method, payload)
+                .await
+        })
+    }
+
+    /// Submit an update call with a provided effective principal (without executing it immediately).
+    pub fn submit_call_with_effective_principal(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<RawMessageId, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .submit_call_with_effective_principal(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                )
+                .await
+        })
+    }
+
+    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
     }
 
     /// Execute an update call on a canister.
-    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn update_call(
         &self,
         canister_id: CanisterId,
@@ -378,19 +609,16 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let endpoint = "update/execute_ingress_message";
-        self.canister_call(
-            endpoint,
-            RawEffectivePrincipal::None,
-            canister_id,
-            sender,
-            method,
-            payload,
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .update_call(canister_id, sender, method, payload)
+                .await
+        })
     }
 
     /// Execute a query call on a canister.
-    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn query_call(
         &self,
         canister_id: CanisterId,
@@ -398,123 +626,87 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let endpoint = "read/query";
-        self.canister_call(
-            endpoint,
-            RawEffectivePrincipal::None,
-            canister_id,
-            sender,
-            method,
-            payload,
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .query_call(canister_id, sender, method, payload)
+                .await
+        })
+    }
+
+    /// Request a canister's status.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn canister_status(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<CanisterStatusResponse, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.canister_status(canister_id, sender).await })
     }
 
     /// Create a canister with default settings as the anonymous principal.
-    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id))]
+    #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn create_canister(&self) -> CanisterId {
-        let CanisterIdRecord { canister_id } = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::None,
-            Principal::anonymous(),
-            "provisional_create_canister_with_cycles",
-            (ProvisionalCreateCanisterArgument {
-                settings: None,
-                amount: Some(0_u64.into()),
-                specified_id: None,
-            },),
-        )
-        .map(|(x,)| x)
-        .unwrap();
-        canister_id
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.create_canister().await })
     }
 
     /// Create a canister with optional custom settings and a sender.
-    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn create_canister_with_settings(
         &self,
         sender: Option<Principal>,
         settings: Option<CanisterSettings>,
     ) -> CanisterId {
-        let CanisterIdRecord { canister_id } = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::None,
-            sender.unwrap_or(Principal::anonymous()),
-            "provisional_create_canister_with_cycles",
-            (ProvisionalCreateCanisterArgument {
-                settings,
-                amount: Some(0_u64.into()),
-                specified_id: None,
-            },),
-        )
-        .map(|(x,)| x)
-        .unwrap();
-        canister_id
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .create_canister_with_settings(sender, settings)
+                .await
+        })
     }
 
     /// Creates a canister with a specific canister ID and optional custom settings.
     /// Returns an error if the canister ID is already in use.
-    /// Panics if the canister ID is not contained in any of the subnets.
+    /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
-    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS
-    /// subnet range, it is not intended to be used on regular app or system subnets,
-    /// where it can lead to conflicts on which the function panics.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
+    /// The canister ID must be an IC mainnet canister ID that does not belong to the NNS or II subnet,
+    /// otherwise the function might panic (for NNS and II canister IDs,
+    /// the PocketIC instance should already be created with those subnets).
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
     pub fn create_canister_with_id(
         &self,
         sender: Option<Principal>,
         settings: Option<CanisterSettings>,
         canister_id: CanisterId,
     ) -> Result<CanisterId, String> {
-        let res = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "provisional_create_canister_with_cycles",
-            (ProvisionalCreateCanisterArgument {
-                settings,
-                specified_id: Some(canister_id),
-                amount: Some(0_u64.into()),
-            },),
-        )
-        .map(|(x,)| x);
-        match res {
-            Ok(CanisterIdRecord {
-                canister_id: actual_canister_id,
-            }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{:?}", e)),
-        }
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .create_canister_with_id(sender, settings, canister_id)
+                .await
+        })
     }
 
     /// Create a canister on a specific subnet with optional custom settings.
-    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, subnet_id = %subnet_id.to_string()))]
+    #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, subnet_id = %subnet_id.to_string()))]
     pub fn create_canister_on_subnet(
         &self,
         sender: Option<Principal>,
         settings: Option<CanisterSettings>,
         subnet_id: SubnetId,
     ) -> CanisterId {
-        let CanisterIdRecord { canister_id } = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::SubnetId(subnet_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "provisional_create_canister_with_cycles",
-            (ProvisionalCreateCanisterArgument {
-                settings,
-                amount: Some(0_u64.into()),
-                specified_id: None,
-            },),
-        )
-        .map(|(x,)| x)
-        .unwrap();
-        canister_id
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .create_canister_on_subnet(sender, settings, subnet_id)
+                .await
+        })
     }
 
     /// Install a WASM module on an existing canister.
-    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn install_canister(
         &self,
         canister_id: CanisterId,
@@ -522,24 +714,16 @@ impl PocketIc {
         arg: Vec<u8>,
         sender: Option<Principal>,
     ) {
-        call_candid_as::<(InstallCodeArgument,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "install_code",
-            (InstallCodeArgument {
-                mode: CanisterInstallMode::Install,
-                canister_id,
-                wasm_module,
-                arg,
-            },),
-        )
-        .unwrap();
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .install_canister(canister_id, wasm_module, arg, sender)
+                .await
+        })
     }
 
     /// Upgrade a canister with a new WASM module.
-    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn upgrade_canister(
         &self,
         canister_id: CanisterId,
@@ -547,23 +731,16 @@ impl PocketIc {
         arg: Vec<u8>,
         sender: Option<Principal>,
     ) -> Result<(), CallError> {
-        call_candid_as::<(InstallCodeArgument,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "install_code",
-            (InstallCodeArgument {
-                mode: CanisterInstallMode::Upgrade,
-                canister_id,
-                wasm_module,
-                arg,
-            },),
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .upgrade_canister(canister_id, wasm_module, arg, sender)
+                .await
+        })
     }
 
     /// Reinstall a canister WASM module.
-    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn reinstall_canister(
         &self,
         canister_id: CanisterId,
@@ -571,185 +748,102 @@ impl PocketIc {
         arg: Vec<u8>,
         sender: Option<Principal>,
     ) -> Result<(), CallError> {
-        call_candid_as::<(InstallCodeArgument,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "install_code",
-            (InstallCodeArgument {
-                mode: CanisterInstallMode::Reinstall,
-                canister_id,
-                wasm_module,
-                arg,
-            },),
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .reinstall_canister(canister_id, wasm_module, arg, sender)
+                .await
+        })
+    }
+
+    /// Uninstall a canister.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn uninstall_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
+    }
+
+    /// Update canister settings.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn update_canister_settings(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        settings: CanisterSettings,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .update_canister_settings(canister_id, sender, settings)
+                .await
+        })
     }
 
     /// Set canister's controllers.
-    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn set_controllers(
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
         new_controllers: Vec<Principal>,
     ) -> Result<(), CallError> {
-        let settings = CanisterSettings {
-            controllers: Some(new_controllers),
-            compute_allocation: None,
-            memory_allocation: None,
-            freezing_threshold: None,
-        };
-        call_candid_as::<(UpdateSettingsArgument,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "update_settings",
-            (UpdateSettingsArgument {
-                canister_id,
-                settings,
-            },),
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .set_controllers(canister_id, sender, new_controllers)
+                .await
+        })
     }
 
     /// Start a canister.
-    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn start_canister(
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
     ) -> Result<(), CallError> {
-        call_candid_as::<(CanisterIdRecord,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "start_canister",
-            (CanisterIdRecord { canister_id },),
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.start_canister(canister_id, sender).await })
     }
 
     /// Stop a canister.
-    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn stop_canister(
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
     ) -> Result<(), CallError> {
-        call_candid_as::<(CanisterIdRecord,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "stop_canister",
-            (CanisterIdRecord { canister_id },),
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.stop_canister(canister_id, sender).await })
     }
 
     /// Delete a canister.
-    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn delete_canister(
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
     ) -> Result<(), CallError> {
-        call_candid_as::<(CanisterIdRecord,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "delete_canister",
-            (CanisterIdRecord { canister_id },),
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.delete_canister(canister_id, sender).await })
     }
 
     /// Checks whether the provided canister exists.
-    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
+    #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn canister_exists(&self, canister_id: CanisterId) -> bool {
-        self.get_subnet(canister_id).is_some()
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.canister_exists(canister_id).await })
     }
 
     /// Returns the subnet ID of the canister if the canister exists.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn get_subnet(&self, canister_id: CanisterId) -> Option<SubnetId> {
-        let endpoint = "read/get_subnet";
-        let result: Option<RawSubnetId> = self.post(
-            endpoint,
-            RawCanisterId {
-                canister_id: canister_id.as_slice().to_vec(),
-            },
-        );
-        result.map(|RawSubnetId { subnet_id }| SubnetId::from_slice(&subnet_id))
-    }
-
-    fn instance_url(&self) -> Url {
-        self.server_url
-            .join("/instances/")
-            .unwrap()
-            .join(&format!("{}/", self.instance_id))
-            .unwrap()
-    }
-
-    fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
-        let result = self
-            .reqwest_client
-            .get(self.instance_url().join(endpoint).unwrap())
-            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
-            .send()
-            .expect("HTTP failure");
-        Self::check_response(result)
-    }
-
-    fn post<T: DeserializeOwned, B: Serialize>(&self, endpoint: &str, body: B) -> T {
-        let result = self
-            .reqwest_client
-            .post(self.instance_url().join(endpoint).unwrap())
-            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
-            .json(&body)
-            .send()
-            .expect("HTTP failure");
-        Self::check_response(result)
-    }
-
-    fn check_response<T: DeserializeOwned>(result: reqwest::blocking::Response) -> T {
-        match result.into() {
-            ApiResponse::Success(t) => t,
-            ApiResponse::Error { message } => panic!("{}", message),
-            ApiResponse::Busy { state_label, op_id } => {
-                panic!("Busy: state_label: {}, op_id: {}", state_label, op_id)
-            }
-            ApiResponse::Started { state_label, op_id } => {
-                panic!("Started: state_label: {}, op_id: {}", state_label, op_id)
-            }
-        }
-    }
-
-    fn canister_call(
-        &self,
-        endpoint: &str,
-        effective_principal: RawEffectivePrincipal,
-        canister_id: CanisterId,
-        sender: Principal,
-        method: &str,
-        payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
-        let raw_canister_call = RawCanisterCall {
-            sender: sender.as_slice().to_vec(),
-            canister_id: canister_id.as_slice().to_vec(),
-            method: method.to_string(),
-            payload,
-            effective_principal,
-        };
-
-        let result: RawCanisterResult = self.post(endpoint, raw_canister_call);
-        match result {
-            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-            },
-            RawCanisterResult::Err(user_error) => Err(user_error),
-        }
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_subnet(canister_id).await })
     }
 
     fn update_call_with_effective_principal(
@@ -760,15 +854,18 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let endpoint = "update/execute_ingress_message";
-        self.canister_call(
-            endpoint,
-            effective_principal,
-            canister_id,
-            sender,
-            method,
-            payload,
-        )
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .update_call_with_effective_principal(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                )
+                .await
+        })
     }
 }
 
@@ -780,10 +877,12 @@ impl Default for PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        self.reqwest_client
-            .delete(self.instance_url())
-            .send()
-            .expect("Failed to send delete request");
+        self.runtime.block_on(async {
+            self.pocket_ic.do_drop().await;
+        });
+        if let Some(thread) = self.thread.take() {
+            thread.join().unwrap();
+        }
     }
 }
 
@@ -926,41 +1025,6 @@ where
     }
 }
 
-fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
-    use tracing_subscriber::prelude::*;
-    match std::env::var(LOG_DIR_PATH_ENV_NAME).map(std::path::PathBuf::from) {
-        Ok(p) => {
-            std::fs::create_dir_all(&p).expect("Could not create directory");
-
-            let file_name = format!("pocket_ic_client_{pid}.log");
-            let appender = tracing_appender::rolling::never(&p, file_name);
-            let (non_blocking_appender, guard) = tracing_appender::non_blocking(appender);
-            let log_dir_filter: EnvFilter =
-                tracing_subscriber::EnvFilter::try_from_env(LOG_DIR_LEVELS_ENV_NAME)
-                    .unwrap_or_else(|_| "trace".parse().unwrap());
-
-            let layers = vec![tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking_appender)
-                // disable color escape codes in files
-                .with_ansi(false)
-                .with_filter(log_dir_filter)
-                .boxed()];
-            let _ = tracing_subscriber::registry().with(layers).try_init();
-            Some(guard)
-        }
-        _ => None,
-    }
-}
-
-#[derive(
-    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
-)]
-struct ProvisionalCreateCanisterArgument {
-    pub settings: Option<CanisterSettings>,
-    pub specified_id: Option<Principal>,
-    pub amount: Option<Nat>,
-}
-
 /// Error type for [`TryFrom<u64>`].
 #[derive(Clone, Copy, Debug)]
 pub enum TryFromError {
@@ -977,22 +1041,35 @@ pub enum TryFromError {
     PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
 )]
 pub enum ErrorCode {
+    // 1xx -- `RejectCode::SysFatal`
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
+    // 2xx -- `RejectCode::SysTransient`
     CanisterQueueFull = 201,
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
     CanisterIdAlreadyExists = 205,
+    StopCanisterRequestTimeout = 206,
+    CanisterOutOfCycles = 207,
+    CertifiedStateUnavailable = 208,
+    CanisterInstallCodeRateLimited = 209,
+    // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
-    CanisterMethodNotFound = 302,
-    CanisterAlreadyInstalled = 303,
-    CanisterWasmModuleNotFound = 304,
+    // 302 (previously `CanisterMethodNotFound`)
+    // 303 (previously `CanisterAlreadyInstalled`)
+    // 304 (previously `CanisterWasmModuleNotFound`)
+    // 4xx -- `RejectCode::CanisterReject`
+    // 401
     InsufficientMemoryAllocation = 402,
     InsufficientCyclesForCreateCanister = 403,
     SubnetNotFound = 404,
     CanisterNotHostedBySubnet = 405,
-    CanisterOutOfCycles = 501,
+    CanisterRejectedMessage = 406,
+    UnknownManagementMessage = 407,
+    InvalidManagementPayload = 408,
+    // 5xx -- `RejectCode::CanisterError`
+    // 501 (previously `CanisterOutOfCycles`)
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -1006,15 +1083,15 @@ pub enum ErrorCode {
     CanisterInvalidController = 512,
     CanisterFunctionNotFound = 513,
     CanisterNonEmpty = 514,
-    CertifiedStateUnavailable = 515,
-    CanisterRejectedMessage = 516,
+    // 515 (previously `CertifiedStateUnavailable`)
+    // 516 (previously `CanisterRejectedMessage`)
     QueryCallGraphLoopDetected = 517,
-    UnknownManagementMessage = 518,
-    InvalidManagementPayload = 519,
+    // 518 (previously `UnknownManagementMessage`)
+    // 519 (previously `InvalidManagementPayload`)
     InsufficientCyclesInCall = 520,
     CanisterWasmEngineError = 521,
     CanisterInstructionLimitExceeded = 522,
-    CanisterInstallCodeRateLimited = 523,
+    // 523 (previously `CanisterInstallCodeRateLimited`)
     CanisterMemoryAccessLimitExceeded = 524,
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
@@ -1027,28 +1104,45 @@ pub enum ErrorCode {
     ReservedCyclesLimitExceededInMemoryAllocation = 533,
     ReservedCyclesLimitExceededInMemoryGrow = 534,
     InsufficientCyclesInMessageMemoryGrow = 535,
+    CanisterMethodNotFound = 536,
+    CanisterWasmModuleNotFound = 537,
+    CanisterAlreadyInstalled = 538,
 }
 
 impl TryFrom<u64> for ErrorCode {
     type Error = TryFromError;
     fn try_from(err: u64) -> Result<ErrorCode, Self::Error> {
         match err {
+            // 1xx -- `RejectCode::SysFatal`
             101 => Ok(ErrorCode::SubnetOversubscribed),
             102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
+            // 2xx -- `RejectCode::SysTransient`
             201 => Ok(ErrorCode::CanisterQueueFull),
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
             205 => Ok(ErrorCode::CanisterIdAlreadyExists),
+            206 => Ok(ErrorCode::StopCanisterRequestTimeout),
+            207 => Ok(ErrorCode::CanisterOutOfCycles),
+            208 => Ok(ErrorCode::CertifiedStateUnavailable),
+            209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
+            // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
+            // TODO: RUN-948: Backward compatibility
             302 => Ok(ErrorCode::CanisterMethodNotFound),
             303 => Ok(ErrorCode::CanisterAlreadyInstalled),
             304 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            // 4xx -- `RejectCode::CanisterReject`
+            // 401
             402 => Ok(ErrorCode::InsufficientMemoryAllocation),
             403 => Ok(ErrorCode::InsufficientCyclesForCreateCanister),
             404 => Ok(ErrorCode::SubnetNotFound),
             405 => Ok(ErrorCode::CanisterNotHostedBySubnet),
-            501 => Ok(ErrorCode::CanisterOutOfCycles),
+            406 => Ok(ErrorCode::CanisterRejectedMessage),
+            407 => Ok(ErrorCode::UnknownManagementMessage),
+            408 => Ok(ErrorCode::InvalidManagementPayload),
+            // 5xx -- `RejectCode::CanisterError`
+            // 501 (previously `CanisterOutOfCycles`)
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
             504 => Ok(ErrorCode::CanisterContractViolation),
@@ -1062,6 +1156,7 @@ impl TryFrom<u64> for ErrorCode {
             512 => Ok(ErrorCode::CanisterInvalidController),
             513 => Ok(ErrorCode::CanisterFunctionNotFound),
             514 => Ok(ErrorCode::CanisterNonEmpty),
+            // TODO: RUN-948: Backward compatibility
             515 => Ok(ErrorCode::CertifiedStateUnavailable),
             516 => Ok(ErrorCode::CanisterRejectedMessage),
             517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
@@ -1083,6 +1178,9 @@ impl TryFrom<u64> for ErrorCode {
             533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
             534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
             535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
+            536 => Ok(ErrorCode::CanisterMethodNotFound),
+            537 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            538 => Ok(ErrorCode::CanisterAlreadyInstalled),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }

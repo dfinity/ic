@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{cmc::CMC, NervousSystemError, E8};
 use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
-    ledger::ICRC1Ledger,
     pb::v1::{
         get_neuron_response, get_proposal_response,
         governance::{MaturityModulation, Mode, SnsMetadata},

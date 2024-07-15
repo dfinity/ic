@@ -16,7 +16,7 @@ pub struct SubnetTopology {
     #[prost(message, repeated, tag = "1")]
     pub nodes: ::prost::alloc::vec::Vec<SubnetTopologyEntry>,
     /// The public key of the subnet (a DER-encoded BLS key, see
-    /// <https://sdk.dfinity.org/docs/interface-spec/index.html#certification>)
+    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec#certification>)
     #[prost(bytes = "vec", tag = "2")]
     pub public_key: ::prost::alloc::vec::Vec<u8>,
     #[prost(
@@ -27,9 +27,9 @@ pub struct SubnetTopology {
     #[prost(message, optional, tag = "4")]
     pub subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
-    #[prost(message, repeated, tag = "5")]
-    pub ecdsa_keys_held:
-        ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(message, repeated, tag = "6")]
+    pub idkg_keys_held:
+        ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -41,9 +41,10 @@ pub struct SubnetsEntry {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaKeyEntry {
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+pub struct IDkgKeyEntry {
+    #[prost(message, optional, tag = "1")]
+    pub key_id:
+        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
     #[prost(message, repeated, tag = "2")]
     pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
@@ -61,14 +62,14 @@ pub struct NetworkTopology {
     pub canister_migrations: ::core::option::Option<
         super::super::super::registry::routing_table::v1::CanisterMigrations,
     >,
-    #[prost(message, repeated, tag = "5")]
-    pub ecdsa_signing_subnets: ::prost::alloc::vec::Vec<EcdsaKeyEntry>,
     #[prost(message, repeated, tag = "6")]
     pub bitcoin_testnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "7")]
     pub bitcoin_mainnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    #[prost(message, repeated, tag = "8")]
+    pub idkg_signing_subnets: ::prost::alloc::vec::Vec<IDkgKeyEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -94,27 +95,64 @@ pub struct SetupInitialDkgContextTree {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignWithEcdsaContext {
+pub struct EcdsaArguments {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<super::super::queues::v1::Request>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub message_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "5")]
-    pub batch_time: u64,
-    #[prost(bytes = "vec", repeated, tag = "6")]
-    pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(message, optional, tag = "7")]
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub message_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignWithEcdsaContextTree {
+pub struct SchnorrArguments {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::SchnorrKeyId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub message: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ThresholdArguments {
+    #[prost(oneof = "threshold_arguments::ThresholdScheme", tags = "1, 2")]
+    pub threshold_scheme: ::core::option::Option<threshold_arguments::ThresholdScheme>,
+}
+/// Nested message and enum types in `ThresholdArguments`.
+pub mod threshold_arguments {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ThresholdScheme {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::EcdsaArguments),
+        #[prost(message, tag = "2")]
+        Schnorr(super::SchnorrArguments),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignWithThresholdContext {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<super::super::queues::v1::Request>,
+    #[prost(message, optional, tag = "2")]
+    pub args: ::core::option::Option<ThresholdArguments>,
+    #[prost(bytes = "vec", repeated, tag = "3")]
+    pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "5")]
+    pub batch_time: u64,
+    #[prost(uint64, optional, tag = "6")]
+    pub pre_signature_id: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "7")]
+    pub height: ::core::option::Option<u64>,
+    #[prost(bytes = "vec", optional, tag = "8")]
+    pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignWithThresholdContextTree {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<SignWithEcdsaContext>,
+    pub context: ::core::option::Option<SignWithThresholdContext>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -156,25 +194,26 @@ pub struct CanisterHttpRequestContextTree {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaDealingsContext {
+pub struct IDkgDealingsContext {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
+    #[prost(message, optional, tag = "2")]
+    pub key_id:
+        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
     #[prost(message, repeated, tag = "3")]
     pub nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
     #[prost(uint64, tag = "4")]
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
-    #[prost(message, optional, tag = "6")]
     pub time: ::core::option::Option<Time>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaDealingsContextTree {
+pub struct IDkgDealingsContextTree {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<EcdsaDealingsContext>,
+    pub context: ::core::option::Option<IDkgDealingsContext>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -308,12 +347,8 @@ pub struct SubnetCallContextManager {
     pub next_callback_id: u64,
     #[prost(message, repeated, tag = "3")]
     pub setup_initial_dkg_contexts: ::prost::alloc::vec::Vec<SetupInitialDkgContextTree>,
-    #[prost(message, repeated, tag = "4")]
-    pub sign_with_ecdsa_contexts: ::prost::alloc::vec::Vec<SignWithEcdsaContextTree>,
     #[prost(message, repeated, tag = "6")]
     pub canister_http_request_contexts: ::prost::alloc::vec::Vec<CanisterHttpRequestContextTree>,
-    #[prost(message, repeated, tag = "7")]
-    pub ecdsa_dealings_contexts: ::prost::alloc::vec::Vec<EcdsaDealingsContextTree>,
     #[prost(message, repeated, tag = "8")]
     pub bitcoin_get_successors_contexts: ::prost::alloc::vec::Vec<BitcoinGetSuccessorsContextTree>,
     #[prost(message, repeated, tag = "9")]
@@ -332,6 +367,10 @@ pub struct SubnetCallContextManager {
     pub stop_canister_calls: ::prost::alloc::vec::Vec<StopCanisterCallTree>,
     #[prost(message, repeated, tag = "16")]
     pub raw_rand_contexts: ::prost::alloc::vec::Vec<RawRandContext>,
+    #[prost(message, repeated, tag = "17")]
+    pub idkg_dealings_contexts: ::prost::alloc::vec::Vec<IDkgDealingsContextTree>,
+    #[prost(message, repeated, tag = "18")]
+    pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -356,6 +395,8 @@ pub struct SubnetMetrics {
     pub canister_state_bytes: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "10")]
     pub update_transactions_total: ::core::option::Option<u64>,
+    #[prost(message, repeated, tag = "11")]
+    pub threshold_signature_agreements: ::prost::alloc::vec::Vec<ThresholdSignatureAgreementsEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -372,6 +413,29 @@ pub struct NodePublicKeyEntry {
     pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
     #[prost(bytes = "vec", tag = "2")]
     pub public_key: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ApiBoundaryNodeEntry {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(string, tag = "2")]
+    pub domain: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "3")]
+    pub ipv4_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "4")]
+    pub ipv6_address: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", optional, tag = "5")]
+    pub pubkey: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ThresholdSignatureAgreementsEntry {
+    #[prost(message, optional, tag = "1")]
+    pub key_id:
+        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    #[prost(uint64, tag = "2")]
+    pub count: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -449,6 +513,8 @@ pub struct SystemMetadata {
     pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
     #[prost(message, optional, tag = "20")]
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
+    #[prost(message, repeated, tag = "21")]
+    pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

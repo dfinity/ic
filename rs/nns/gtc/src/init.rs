@@ -1,16 +1,12 @@
 use crate::pb::v1::{AccountState, Gtc};
 use ic_crypto_sha2::Sha256;
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use icp_ledger::Tokens;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::{collections::HashMap, time::SystemTime};
-
-/// A few helper constants for durations.
-const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 // The age that GTC neurons will be created with
 const GTC_NEURON_PRE_AGE_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
@@ -245,12 +241,24 @@ fn make_neuron(
         state.finish()
     };
 
+    let (dissolve_state, aging_since_timestamp_seconds) = if dissolve_delay_seconds == 0 {
+        (
+            Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            u64::MAX,
+        )
+    } else {
+        (
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+            aging_since_timestamp_seconds,
+        )
+    };
+
     Neuron {
         id: Some(NeuronId::from_subaccount(&subaccount)),
         account: subaccount.to_vec(),
         controller: Some(GENESIS_TOKEN_CANISTER_ID.get()),
         cached_neuron_stake_e8s: stake_e8s,
-        dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+        dissolve_state,
         aging_since_timestamp_seconds,
         ..Default::default()
     }
@@ -342,23 +350,23 @@ mod tests {
 
         // The first neuron (for each account) should have dissolve delay 0
         assert_eq!(
-            account_a_neurons.get(0).unwrap().dissolve_delay_seconds(0),
+            account_a_neurons.first().unwrap().dissolve_delay_seconds(0),
             0
         );
         assert_eq!(
-            account_b_neurons.get(0).unwrap().dissolve_delay_seconds(0),
+            account_b_neurons.first().unwrap().dissolve_delay_seconds(0),
             0
         );
         assert_eq!(
             account_a_neurons
-                .get(0)
+                .last()
                 .unwrap()
                 .aging_since_timestamp_seconds,
             12345678
         );
         assert_eq!(
             account_b_neurons
-                .get(0)
+                .last()
                 .unwrap()
                 .aging_since_timestamp_seconds,
             87654321

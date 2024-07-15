@@ -14,7 +14,7 @@
 //! * Floating point makes code easier since the reward pool is specified as a
 //!   fraction of the total Token supply.
 
-use crate::{pb::v1::VotingRewardsParameters, types::ONE_DAY_SECONDS};
+use crate::pb::v1::VotingRewardsParameters;
 use ic_nervous_system_common::i2d;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
@@ -25,8 +25,8 @@ use std::{
 };
 
 lazy_static! {
-    pub static ref SECONDS_PER_DAY: Decimal = Decimal::new(24 * 60 * 60, 0);
-    pub static ref DAYS_PER_SECOND: Decimal = dec!(1) / *SECONDS_PER_DAY;
+    pub static ref ONE_DAY_SECONDS: Decimal = Decimal::new(ic_nervous_system_common::ONE_DAY_SECONDS as i64, 0);
+    pub static ref DAYS_PER_SECOND: Decimal = dec!(1) / *ONE_DAY_SECONDS;
 
     // Astronomers, avert your eyes!
     pub static ref NOMINAL_DAYS_PER_YEAR: Decimal = dec!(365.25);
@@ -41,7 +41,7 @@ lazy_static! {
     // The corresponding minimum is 1 s. (As with the maximum, just because a
     // value does not violate this limit does not mean it is advisable.)
     pub static ref MAX_REWARD_ROUND_DURATION_SECONDS: u64 =
-        u64::try_from(*NOMINAL_DAYS_PER_YEAR * *SECONDS_PER_DAY)
+        u64::try_from(*NOMINAL_DAYS_PER_YEAR * *ONE_DAY_SECONDS)
             .expect("Unable to convert a Decimal into a u64.");
 }
 
@@ -89,7 +89,7 @@ impl Duration {
     }
 
     pub fn as_secs(&self) -> Decimal {
-        self.days * *SECONDS_PER_DAY
+        self.days * *ONE_DAY_SECONDS
     }
 }
 
@@ -338,7 +338,7 @@ impl VotingRewardsParameters {
 
     pub fn with_default_values() -> Self {
         Self {
-            round_duration_seconds: Some(ONE_DAY_SECONDS),
+            round_duration_seconds: Some(ic_nervous_system_common::ONE_DAY_SECONDS),
             reward_rate_transition_duration_seconds: Some(0),
             initial_reward_rate_basis_points: Some(0),
             final_reward_rate_basis_points: Some(0),

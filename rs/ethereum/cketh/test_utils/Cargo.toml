@@ -1,0 +1,30 @@
+[package]
+name = "ic-cketh-test-utils"
+description = "Integration test utilities for the ic-cketh minter"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+assert_matches = { workspace = true }
+candid = { workspace = true }
+ethers-core = "2.0.8"
+hex = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-cketh-minter = { path = "../minter" }
+ic-ethereum-types = { path = "../../types" }
+ic-icrc1-ledger = { path = "../../../rosetta-api/icrc1/ledger" }
+ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }
+ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+num-traits = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }

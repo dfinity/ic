@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
-num-traits = "0.2.12"
+num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 

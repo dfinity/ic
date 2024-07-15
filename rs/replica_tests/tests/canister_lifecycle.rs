@@ -3,16 +3,16 @@ use candid::Encode;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
+    InstallCodeArgs, LogVisibility, Method, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
-use ic_test_utilities::universal_canister::management::SkipPreUpgrade;
+use ic_test_utilities::universal_canister::management::CanisterUpgradeOptions;
 use ic_test_utilities::universal_canister::{call_args, management, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_types::{ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId};
 use maplit::btreeset;
@@ -401,7 +401,7 @@ fn provisional_create_canister_with_cycles_respects_whitelist() {
                     ),
                 ),
             ),
-            RejectCode::DestinationInvalid,
+            RejectCode::CanisterError,
         );
     });
 }
@@ -481,7 +481,7 @@ fn provisional_top_up_canister_respects_whitelist() {
                     ),
                 ),
             ),
-            RejectCode::DestinationInvalid,
+            RejectCode::CanisterError,
         );
     });
 }
@@ -712,12 +712,14 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
+                LogVisibility::default(),
                 0u128,
                 0u128,
                 0u128,
                 0u128,
                 0u128,
                 0u128,
+                Some(0),
             )
         );
 
@@ -734,7 +736,6 @@ fn can_get_canister_information() {
                         canister_b,
                         UNIVERSAL_CANISTER_WASM.to_vec(),
                         vec![],
-                        None,
                         None,
                         None,
                     )
@@ -769,12 +770,14 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
+                    LogVisibility::default(),
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
+                    Some(0)
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,
@@ -789,10 +792,10 @@ fn cannot_run_method_on_empty_canister() {
         let canister = test.create_canister().unwrap();
         match test.ingress(canister, "hello", vec![]) {
             Err(err) => {
-                assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-                assert_eq!(
-                    err.description(),
-                    "Attempt to execute a message on canister rwlgt-iiaaa-aaaaa-aaaaa-cai which contains no Wasm module"
+                err.assert_contains(
+                    ErrorCode::CanisterWasmModuleNotFound,
+                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempted \
+                    to execute a message, but the canister contains no Wasm module.",
                 );
             }
             rest => panic!("Unexpected behaviour {:?}", rest),
@@ -819,7 +822,6 @@ fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
                     None,
                     // Set memory allocation to 42 bytes (i.e. something ridiculously small).
                     Some(42),
-                    None,
                 )
                 .encode(),
             ),
@@ -835,7 +837,6 @@ fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
                 canister_id,
                 UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
-                None,
                 None,
                 None,
             )
@@ -856,7 +857,6 @@ fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
                     None,
                     // Set memory allocation to 10 bytes.
                     Some(10),
-                    None,
                 )
                 .encode(),
             ),
@@ -892,7 +892,6 @@ fn upgrading_a_canister_with_lower_memory_allocation_than_it_needs_fails() {
                 vec![],
                 None,
                 None,
-                None,
             )
             .encode(),
         )
@@ -910,7 +909,6 @@ fn upgrading_a_canister_with_lower_memory_allocation_than_it_needs_fails() {
                     vec![],
                     None,
                     Some(10),
-                    None,
                 )
                 .encode(),
             ),
@@ -988,7 +986,10 @@ fn test_canister_skip_upgrade() {
         assert_matches!(
             canister.update(wasm().call(
                 management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
-                    management::InstallMode::Upgrade(Some(SkipPreUpgrade(Some(false)))),
+                    management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
+                        skip_pre_upgrade: Some(false),
+                        wasm_memory_persistence: None,
+                    })),
                 ),
             )),
             Ok(WasmResult::Reject(_))
@@ -998,7 +999,10 @@ fn test_canister_skip_upgrade() {
         assert_matches!(
             canister.update(wasm().call(
                 management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
-                    management::InstallMode::Upgrade(Some(SkipPreUpgrade(Some(true),)))
+                    management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
+                        skip_pre_upgrade: Some(true),
+                        wasm_memory_persistence: None,
+                    }))
                 ),
             )),
             Ok(WasmResult::Reply(_))
@@ -1009,7 +1013,10 @@ fn test_canister_skip_upgrade() {
         assert_matches!(
             canister.update(wasm().call(
                 management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
-                    management::InstallMode::Upgrade(Some(SkipPreUpgrade(Some(false)))),
+                    management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
+                        skip_pre_upgrade: Some(false),
+                        wasm_memory_persistence: None,
+                    })),
                 ),
             )),
             Ok(WasmResult::Reply(_))

@@ -4,15 +4,20 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 CKBTC_RUNTIME_DEPS = [
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    # Keep sorted.
     "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+    "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "@btc_canister//file",
 ]
 
 system_test(
     name = "ckbtc_minter_basics_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -24,7 +29,11 @@ system_test(
 
 system_test(
     name = "ckbtc_minter_batching",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -36,7 +45,11 @@ system_test(
 
 system_test(
     name = "ckbtc_minter_heartbeat",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -48,7 +61,11 @@ system_test(
 
 system_test(
     name = "ckbtc_minter_kyt",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -60,7 +77,11 @@ system_test(
 
 system_test(
     name = "ckbtc_minter_update_balance",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -72,7 +93,11 @@ system_test(
 
 system_test(
     name = "ckbtc_minter_retrieve_btc",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

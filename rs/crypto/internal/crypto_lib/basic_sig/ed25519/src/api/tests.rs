@@ -380,7 +380,7 @@ mod verify {
 
                 // corrupt each signature by flipping a bit and check that both batched and non-batched verification return an error
                 {
-                    let corrupt_sigs: Vec<_> = sigs.iter().map(|sig| corrupt_sig(sig)).collect();
+                    let corrupt_sigs: Vec<_> = sigs.iter().map(corrupt_sig).collect();
                     let key_corrupt_sig_pairs: Vec<_> = key_pairs
                         .iter()
                         .zip(corrupt_sigs.iter())
@@ -597,12 +597,15 @@ mod non_malleability {
 
     #[test]
     fn should_fail_to_verify_malleable_signature() {
+        #[allow(deprecated)]
+        let basepoint = curve25519_dalek::constants::BASEPOINT_ORDER.as_bytes();
+
         for test_vec in Ed25519TestVector::iter() {
             let (_sk, pk, msg, mut sig) = crypto_lib_testvec(test_vec);
 
             // Add curve order (L) to the S-element of the valid signature (R || S)
             let s = BigUint::from_bytes_le(&sig[32..]); // little-endian according to RFC8032
-            let l = BigUint::from_bytes_le(curve25519_dalek::constants::BASEPOINT_ORDER.as_bytes());
+            let l = BigUint::from_bytes_le(basepoint);
             sig[32..].copy_from_slice(&(s + l).to_bytes_le());
 
             let result = verify(&SignatureBytes(sig), &msg, &PublicKeyBytes(pk));

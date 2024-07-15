@@ -13,11 +13,12 @@ use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::CallOrigin;
 use crate::Memory;
 use ic_base_types::NumSeconds;
-use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLogRecord, LogVisibility,
+};
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::mock_time;
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     ids::canister_test_id,
     ids::message_test_id,
     ids::user_test_id,
@@ -25,16 +26,16 @@ use ic_test_utilities::types::{
 };
 use ic_types::{
     messages::{
-        CallContextId, CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext,
-        MAX_RESPONSE_COUNT_BYTES,
+        CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
+        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
     },
     methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
-    xnet::QueueId,
     CountBytes, Cycles, Time,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
+use strum::IntoEnumIterator;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
@@ -47,13 +48,12 @@ fn default_input_request() -> RequestOrResponse {
         .into()
 }
 
-fn default_input_response(callback_id: CallbackId) -> RequestOrResponse {
+fn default_input_response(callback_id: CallbackId) -> Response {
     ResponseBuilder::default()
         .originator(CANISTER_ID)
         .respondent(OTHER_CANISTER_ID)
         .originator_reply_callback(callback_id)
         .build()
-        .into()
 }
 
 fn default_output_request() -> Arc<Request> {
@@ -95,9 +95,10 @@ impl CanisterStateFixture {
             .call_context_manager_mut()
             .unwrap()
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
+                RequestMetadata::new(0, UNIX_EPOCH),
             );
         self.canister_state
             .system_state
@@ -105,14 +106,15 @@ impl CanisterStateFixture {
             .unwrap()
             .register_callback(Callback::new(
                 call_context_id,
-                Some(CANISTER_ID),
-                Some(OTHER_CANISTER_ID),
+                CANISTER_ID,
+                OTHER_CANISTER_ID,
                 Cycles::zero(),
-                Some(Cycles::new(42)),
-                Some(Cycles::new(84)),
+                Cycles::new(42),
+                Cycles::new(84),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
+                NO_DEADLINE,
             ))
     }
 
@@ -130,14 +132,14 @@ impl CanisterStateFixture {
         )
     }
 
-    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
         let mut iter = self.canister_state.output_into_iter();
         iter.pop()
     }
 
-    fn with_input_reservation(&mut self) {
+    fn with_input_slot_reservation(&mut self) {
         self.canister_state
-            .push_output_request(default_output_request(), mock_time())
+            .push_output_request(default_output_request(), UNIX_EPOCH)
             .unwrap();
         self.pop_output().unwrap();
     }
@@ -156,13 +158,22 @@ fn canister_state_push_input_request_success() {
 }
 
 #[test]
-fn canister_state_push_input_response_no_reservation() {
+fn canister_state_push_input_response_no_reserved_slot() {
     let mut fixture = CanisterStateFixture::new();
     let response = default_input_response(fixture.make_callback());
     assert_eq!(
-        Err((StateError::QueueFull { capacity: 0 }, response.clone(),)),
+        Err((
+            StateError::NonMatchingResponse {
+                err_str: "No reserved response slot".to_string(),
+                originator: response.originator,
+                callback_id: response.originator_reply_callback,
+                respondent: response.respondent,
+                deadline: response.deadline,
+            },
+            response.clone().into(),
+        )),
         fixture.push_input(
-            response,
+            response.into(),
             SubnetType::Application,
             InputQueueType::RemoteSubnet
         ),
@@ -172,10 +183,10 @@ fn canister_state_push_input_response_no_reservation() {
 #[test]
 fn canister_state_push_input_response_success() {
     let mut fixture = CanisterStateFixture::new();
-    // Make an input queue reservation.
-    fixture.with_input_reservation();
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
     // Pushing input response should succeed.
-    let response = default_input_response(fixture.make_callback());
+    let response = default_input_response(fixture.make_callback()).into();
     fixture
         .push_input(
             response,
@@ -321,7 +332,9 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     ));
     assert!(canister_state.memory_usage().get() > 0);
     let initial_memory_usage = canister_state.execution_memory_usage()
-        + canister_state.system_state.message_memory_usage();
+        + canister_state
+            .system_state
+            .guaranteed_response_message_memory_usage();
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     let request = default_input_request();
@@ -338,7 +351,9 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     assert_eq!(
         initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
         canister_state.execution_memory_usage()
-            + canister_state.system_state.message_memory_usage(),
+            + canister_state
+                .system_state
+                .guaranteed_response_message_memory_usage(),
     );
     assert_eq!(
         SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,
@@ -391,9 +406,9 @@ fn canister_state_push_input_response_memory_limit_test_impl(
 ) {
     let mut fixture = CanisterStateFixture::new();
 
-    // Make an input queue reservation.
-    fixture.with_input_reservation();
-    let response = default_input_response(fixture.make_callback());
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
+    let response: RequestOrResponse = default_input_response(fixture.make_callback()).into();
 
     let mut subnet_available_memory = -13;
     fixture
@@ -420,7 +435,7 @@ fn canister_state_push_output_request_mismatched_sender() {
         .canister_state
         .push_output_request(
             Arc::new(RequestBuilder::default().sender(OTHER_CANISTER_ID).build()),
-            mock_time(),
+            UNIX_EPOCH,
         )
         .unwrap();
 }
@@ -494,15 +509,13 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started,
+        system_state.canister_metrics.consumed_cycles,
         ingress_induction_debit.into()
     );
     assert_eq!(
         *system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         ingress_induction_debit.into()
@@ -514,17 +527,13 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started = initial_consumed_cycles;
+    system_state.canister_metrics.consumed_cycles = initial_consumed_cycles;
 
     let cycles = Cycles::new(100);
     system_state.add_cycles(cycles, CyclesUseCase::Memory);
     assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
     assert_eq!(
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started,
+        system_state.canister_metrics.consumed_cycles,
         initial_consumed_cycles - NominalCycles::from(cycles)
     );
 }
@@ -544,7 +553,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     assert_eq!(
         *system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
         NominalCycles::from(cycles_to_consume - cycles_to_add)
@@ -555,23 +564,120 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
 fn canister_state_callback_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-    let callback = Callback::new(
+    let minimal_callback = Callback::new(
         CallContextId::new(1),
-        Some(CANISTER_ID),
-        Some(OTHER_CANISTER_ID),
+        CANISTER_ID,
+        OTHER_CANISTER_ID,
         Cycles::zero(),
-        Some(Cycles::new(42)),
-        Some(Cycles::new(84)),
+        Cycles::zero(),
+        Cycles::zero(),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
+        NO_DEADLINE,
+    );
+    let maximal_callback = Callback::new(
+        CallContextId::new(1),
+        CANISTER_ID,
+        OTHER_CANISTER_ID,
+        Cycles::new(21),
+        Cycles::new(42),
+        Cycles::new(84),
+        WasmClosure::new(0, 2),
+        WasmClosure::new(1, 2),
+        Some(WasmClosure::new(2, 2)),
+        ic_types::time::CoarseTime::from_secs_since_unix_epoch(329),
+    );
+    let u64_callback = Callback::new(
+        CallContextId::new(u64::MAX - 1),
+        CanisterId::from_u64(u64::MAX - 2),
+        CanisterId::from_u64(u64::MAX - 3),
+        Cycles::new(u128::MAX - 4),
+        Cycles::new(u128::MAX - 5),
+        Cycles::new(u128::MAX - 6),
+        WasmClosure::new(u32::MAX - 7, u64::MAX - 8),
+        WasmClosure::new(u32::MAX - 9, u64::MAX - 10),
+        Some(WasmClosure::new(u32::MAX - 11, u64::MAX - 12)),
+        ic_types::time::CoarseTime::from_secs_since_unix_epoch(u32::MAX - 13),
     );
 
-    let pb_callback = pb::Callback::from(&callback);
+    for callback in [minimal_callback, maximal_callback, u64_callback] {
+        let pb_callback = pb::Callback::from(&callback);
+        let round_trip = Callback::try_from(pb_callback).unwrap();
 
-    let round_trip = Callback::try_from(pb_callback).unwrap();
+        assert_eq!(callback, round_trip);
+    }
+}
 
-    assert_eq!(callback, round_trip);
+#[test]
+fn canister_state_log_visibility_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in LogVisibility::iter() {
+        let encoded = pb::LogVisibility::from(&initial);
+        let round_trip = LogVisibility::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn long_execution_mode_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in LongExecutionMode::iter() {
+        let encoded = pb::LongExecutionMode::from(initial);
+        let round_trip = LongExecutionMode::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+
+    // Backward compatibility check.
+    assert_eq!(
+        LongExecutionMode::from(pb::LongExecutionMode::Unspecified),
+        LongExecutionMode::Opportunistic
+    );
+}
+
+#[test]
+fn long_execution_mode_decoding() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+    fn test(code: i32, decoded: LongExecutionMode) {
+        let encoded = pb::LongExecutionMode::try_from(code).unwrap_or_default();
+        assert_eq!(LongExecutionMode::from(encoded), decoded);
+    }
+    test(-1, LongExecutionMode::Opportunistic);
+    test(0, LongExecutionMode::Opportunistic);
+    test(1, LongExecutionMode::Opportunistic);
+    test(2, LongExecutionMode::Prioritized);
+    test(3, LongExecutionMode::Opportunistic);
+}
+
+#[test]
+fn compatibility_for_log_visibility() {
+    // If this fails, you are making a potentially incompatible change to `LogVisibility`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        LogVisibility::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2]
+    );
+}
+
+#[test]
+fn canister_state_canister_log_record_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    let initial = CanisterLogRecord {
+        idx: 42,
+        timestamp_nanos: 27,
+        content: vec![1, 2, 3],
+    };
+    let encoded = pb::CanisterLogRecord::from(&initial);
+    let round_trip = CanisterLogRecord::from(encoded);
+
+    assert_eq!(initial, round_trip);
 }
 
 #[test]
@@ -813,6 +919,7 @@ fn reverts_stopping_status_after_split() {
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     canister_state.system_state.status = CanisterStatus::Stopping {
         call_context_manager: call_context_manager.clone(),

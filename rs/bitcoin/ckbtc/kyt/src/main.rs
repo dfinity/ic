@@ -1,4 +1,3 @@
-use candid::candid_method;
 use candid::Principal;
 use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
@@ -9,7 +8,7 @@ use ic_ckbtc_kyt::{
     LifecycleArg, WithdrawalAttempt,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory as VM};
-use ic_stable_structures::storable::Storable;
+use ic_stable_structures::storable::{Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory as RM, StableCell, StableLog};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -76,6 +75,8 @@ where
             }),
         )
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 fn default_kyt_mode() -> KytMode {
@@ -355,7 +356,6 @@ fn caller_is_minter() -> Result<(), String> {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(arg: LifecycleArg) {
     let arg = match arg {
         LifecycleArg::InitArg(arg) => arg,
@@ -400,7 +400,6 @@ fn post_upgrade(arg: LifecycleArg) {
 }
 
 #[update(guard = "caller_is_maintainer")]
-#[candid_method(update)]
 fn set_api_key(arg: SetApiKeyArg) {
     CONFIG_CELL.with(|cell| {
         let caller = ic_cdk::api::caller();
@@ -451,7 +450,6 @@ async fn get_utxo_alerts(
 }
 
 #[update(guard = "caller_is_minter")]
-#[candid_method(update)]
 async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsResponse, Error> {
     loop {
         let (provider, api_key) = pick_api_key()?;
@@ -524,7 +522,6 @@ async fn get_withdrawal_alerts(
 }
 
 #[update(guard = "caller_is_minter")]
-#[candid_method(update)]
 async fn fetch_withdrawal_alerts(
     withdrawal: WithdrawalAttempt,
 ) -> Result<FetchAlertsResponse, Error> {
@@ -578,7 +575,6 @@ async fn fetch_withdrawal_alerts(
 }
 
 #[query]
-#[candid_method(query)]
 fn txid_to_bytes(txid: String) -> Vec<u8> {
     let trimmed = txid.trim();
     let mut bytes =
@@ -587,7 +583,7 @@ fn txid_to_bytes(txid: String) -> Vec<u8> {
     bytes
 }
 
-#[query]
+#[query(hidden = true)]
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response.headers.clear();
     if args.response.status >= 300u64 {
@@ -600,7 +596,7 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response
 }
 
-#[query]
+#[query(hidden = true)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -617,7 +613,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         writer
             .encode_gauge(
                 "stable_memory_bytes",
-                ic_cdk::api::stable::stable_size() as f64 * 65536.0,
+                ic_cdk::api::stable::stable64_size() as f64 * 65536.0,
                 "Size of the stable memory allocated by this canister.",
             )
             .unwrap();
@@ -861,7 +857,7 @@ fn test_key_rotation() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
 
     candid::export_service!();
 

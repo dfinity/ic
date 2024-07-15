@@ -1,21 +1,22 @@
 #![allow(dead_code)]
 use ic_artifact_pool::{
     canister_http_pool, certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl, dkg_pool, ecdsa_pool,
+    consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
     consensus::{ConsensusGossipImpl, ConsensusImpl},
-    dkg,
+    dkg, ecdsa,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
+    ecdsa::IDkgChangeSet,
     ingress_manager::IngressSelector,
-    messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    messaging::XNetPayloadBuilder,
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -27,17 +28,16 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
-    consensus::batch::MockBatchPayloadBuilder, ingress_selector::FakeIngressSelector,
-    message_routing::FakeMessageRouting,
+    ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
 use ic_types::{
-    artifact::{ArtifactKind, Priority, PriorityFn},
-    artifact_kind::ConsensusArtifact,
+    artifact::IdentifiableArtifact,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, CatchUpPackage,
-        ConsensusMessage,
+        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
+        CatchUpPackage, ConsensusMessage,
     },
     replica_config::ReplicaConfig,
     time::{Time, UNIX_EPOCH},
@@ -112,6 +112,7 @@ pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
+    Ecdsa(IDkgMessage),
 }
 
 /// A Message is a tuple of [`InputMessage`] with a timestamp.
@@ -171,10 +172,10 @@ pub struct ConsensusDependencies {
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
-    pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
+    pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<canister_http_pool::CanisterHttpPoolImpl>>,
-    pub message_routing: Arc<dyn MessageRouting>,
-    pub state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    pub message_routing: Arc<FakeMessageRouting>,
+    pub state_manager: Arc<FakeStateManager>,
     pub replica_config: ReplicaConfig,
     pub metrics_registry: MetricsRegistry,
     pub registry_client: Arc<dyn RegistryClient>,
@@ -186,6 +187,7 @@ impl ConsensusDependencies {
         pool_config: ArtifactPoolConfig,
         registry_client: Arc<dyn RegistryClient>,
         cup: CatchUpPackage,
+        time_source: Arc<dyn TimeSource>,
     ) -> ConsensusDependencies {
         let state_manager = FakeStateManager::new();
         let state_manager = Arc::new(state_manager);
@@ -199,10 +201,15 @@ impl ConsensusDependencies {
             pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),
+            time_source,
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
-        let ecdsa_pool =
-            ecdsa_pool::EcdsaPoolImpl::new(pool_config, no_op_logger(), metrics_registry.clone());
+        let idkg_pool = idkg_pool::IDkgPoolImpl::new(
+            pool_config,
+            no_op_logger(),
+            metrics_registry.clone(),
+            Box::new(IDkgStatsNoOp {}),
+        );
         let canister_http_pool =
             canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
@@ -211,7 +218,7 @@ impl ConsensusDependencies {
             registry_client: Arc::clone(&registry_client),
             consensus_pool,
             dkg_pool: Arc::new(RwLock::new(dkg_pool)),
-            ecdsa_pool: Arc::new(RwLock::new(ecdsa_pool)),
+            idkg_pool: Arc::new(RwLock::new(idkg_pool)),
             canister_http_pool: Arc::new(RwLock::new(canister_http_pool)),
             message_routing: Arc::new(FakeMessageRouting::with_state_manager(
                 state_manager.clone(),
@@ -256,15 +263,15 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// This is the type of predicates used by the ConsensusRunner to determine
 /// whether or not it should terminate. It is evaluated for all consensus
 /// instances at every time step.
-pub type StopPredicate<'a> = &'a dyn Fn(&ConsensusInstance<'a>) -> bool;
+pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
 
-pub(crate) struct PriorityFnState<Artifact: ArtifactKind> {
+pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
     priority_fn: PriorityFn<Artifact::Id, Artifact::Attribute>,
     pub last_updated: Time,
 }
 
-impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
-    pub fn new<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
+    pub fn new<Pool, Producer: PriorityFnFactory<Artifact, Pool>>(
         producer: &Producer,
         pool: &Pool,
     ) -> RefCell<Self> {
@@ -274,13 +281,12 @@ impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
         })
     }
     /// Return the priority of the given message
-    pub fn get_priority(&self, msg: &Artifact::Message) -> Priority {
-        let advert = Artifact::message_to_advert(msg);
-        (self.priority_fn)(&advert.id, &advert.attribute)
+    pub fn get_priority(&self, msg: &Artifact) -> Priority {
+        (self.priority_fn)(&msg.id(), &msg.attribute())
     }
 
     /// Compute a new priority function
-    pub fn refresh<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+    pub fn refresh<Pool, Producer: PriorityFnFactory<Artifact, Pool>>(
         &mut self,
         producer: &Producer,
         pool: &Pool,
@@ -291,12 +297,50 @@ impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
     }
 }
 
-/// Consensus modifier that can potentially change its behavior.
-pub type ConsensusModifier = Box<
-    dyn Fn(
-        ConsensusImpl,
-    ) -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
->;
+/// Modifier that can potentially change a component's behavior.
+pub struct ComponentModifier {
+    pub(crate) consensus: Box<
+        dyn Fn(
+            ConsensusImpl,
+        )
+            -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
+    >,
+    pub(crate) ecdsa: Box<
+        dyn Fn(
+            ecdsa::EcdsaImpl,
+        )
+            -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
+    >,
+}
+
+impl Default for ComponentModifier {
+    fn default() -> Self {
+        Self {
+            consensus: Box::new(|x: ConsensusImpl| Box::new(x)),
+            ecdsa: Box::new(|x: ecdsa::EcdsaImpl| Box::new(x)),
+        }
+    }
+}
+
+pub fn apply_modifier_consensus(
+    modifier: &Option<ComponentModifier>,
+    consensus: ConsensusImpl,
+) -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>> {
+    match modifier {
+        Some(f) => (f.consensus)(consensus),
+        _ => Box::new(consensus),
+    }
+}
+
+pub fn apply_modifier_ecdsa(
+    modifier: &Option<ComponentModifier>,
+    ecdsa: ecdsa::EcdsaImpl,
+) -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>> {
+    match modifier {
+        Some(f) => (f.ecdsa)(ecdsa),
+        _ => Box::new(ecdsa),
+    }
+}
 
 /// A ConsensusDriver mainly consists of the consensus component, and the
 /// consensus artifact pool and timer.
@@ -305,6 +349,8 @@ pub struct ConsensusDriver<'a> {
         Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
+    pub(crate) ecdsa:
+        Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,
@@ -312,7 +358,8 @@ pub struct ConsensusDriver<'a> {
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     pub ingress_pool: RefCell<TestIngressPool>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
-    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusArtifact>>,
+    pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
+    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusMessage>>,
 }
 
 /// An execution strategy picks the next instance to execute, and execute a
@@ -350,6 +397,7 @@ pub struct ConsensusRunnerConfig {
     pub num_rounds: u64,
     pub degree: usize,
     pub use_priority_fn: bool,
+    pub stall_clocks: bool,
     pub execution: Box<dyn ExecutionStrategy>,
     pub delivery: Box<dyn DeliveryStrategy>,
 }

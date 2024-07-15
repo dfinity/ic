@@ -1,9 +1,9 @@
 //! Types for the Groth20-BLS12-381 implementation of Non-interactive
 //! Distributed Key Generation.
 
-use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
-    FsEncryptionPok, FsEncryptionPop, FsEncryptionPublicKey,
+    FsEncryptionPop, FsEncryptionPublicKey,
 };
 use serde::{Deserialize, Serialize};
 
@@ -58,18 +58,6 @@ impl fmt::Debug for BTENodeBytes {
     }
 }
 
-/// (deprecated) Forward-secure encryption public key, secret key, and
-/// proof-of-knowledge.
-//CRP-900: Remove the following type
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-pub struct FsEncryptionKeySet {
-    #[zeroize(skip)]
-    pub public_key: FsEncryptionPublicKey,
-    #[zeroize(skip)]
-    pub pok: FsEncryptionPok,
-    pub secret_key: FsEncryptionSecretKey,
-}
-
 /// Forward-secure encryption public key, secret key, and proof-of-possession.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct FsEncryptionKeySetWithPop {
@@ -78,27 +66,4 @@ pub struct FsEncryptionKeySetWithPop {
     #[zeroize(skip)]
     pub pop: FsEncryptionPop,
     pub secret_key: FsEncryptionSecretKey,
-}
-
-/// Converts an old `FsEncryptionKeySet` to a `FsEncryptionKeySetWithPop`.
-///
-/// The old `FsEncryptionPok` is formatted as a `FsEncryptionPop` as follows:
-/// * The `blinder` of the PoK is written as the `pop_key` value in the PoP
-/// * The `challenge` of the proof of possession is set equal to `0`.
-/// * The `response` of the Pok is written as the `response` value in the PoP,
-///
-/// # Security Notice
-/// The reformatted PoK **does not** constitute a valid PoP.
-/// This function must be used for compatibility purposes only and it will be
-/// removed as part of CRP-923.
-pub fn convert_keyset_to_keyset_with_pop(key_set: FsEncryptionKeySet) -> FsEncryptionKeySetWithPop {
-    FsEncryptionKeySetWithPop {
-        public_key: key_set.public_key,
-        pop: FsEncryptionPop {
-            pop_key: key_set.pok.blinder,
-            challenge: FrBytes([0; FrBytes::SIZE]),
-            response: key_set.pok.response,
-        },
-        secret_key: key_set.secret_key.clone(),
-    }
 }

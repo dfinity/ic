@@ -2,13 +2,14 @@ use crate::{runtime::Runtime, spawn};
 use candid::{CandidType, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{log, Sink};
-use ic_ic00_types::IC_00;
+use ic_management_canister_types::IC_00;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
+use crate::ledger::{LedgerAccess, LedgerData};
 use ic_ledger_core::block::EncodedBlock;
 
 fn default_cycles_for_archive_creation() -> u64 {
@@ -25,6 +26,9 @@ pub struct ArchiveOptions {
     pub node_max_memory_size_bytes: Option<u64>,
     pub max_message_size_bytes: Option<u64>,
     pub controller_id: PrincipalId,
+    // More principals to add as controller of the archive.
+    #[serde(default)]
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
     // cycles to use for the call to create a new archive canister.
     #[serde(default)]
     pub cycles_for_archive_creation: Option<u64>,
@@ -36,9 +40,25 @@ pub struct ArchiveOptions {
 /// A scope guard for block archiving.
 /// It sets archiving flag to true on the archive when constructed and disables the flag
 /// when dropped.
-pub struct ArchivingGuard<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+struct ArchivingGuard<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
 );
+
+/// Wraps around `ArchivingGuard` to abstract away the two generic parameters with the single
+/// `LedgerAccess` trait.
+pub struct LedgerArchivingGuard<LA: LedgerAccess> {
+    _guard: ArchivingGuard<
+        <LA::Ledger as LedgerData>::Runtime,
+        <LA::Ledger as LedgerData>::ArchiveWasm,
+    >,
+}
+
+impl<LA: LedgerAccess> LedgerArchivingGuard<LA> {
+    pub fn new() -> Result<Self, ArchivingGuardError> {
+        let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
+        ArchivingGuard::new(Arc::clone(&archive_arc)).map(|guard| Self { _guard: guard })
+    }
+}
 
 pub enum ArchivingGuardError {
     /// There is no archive to lock, the archiving is disabled.
@@ -48,9 +68,7 @@ pub enum ArchivingGuardError {
 }
 
 impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> ArchivingGuard<Rt, Wasm> {
-    pub fn new(
-        archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
-    ) -> Result<Self, ArchivingGuardError> {
+    fn new(archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>) -> Result<Self, ArchivingGuardError> {
         let mut archive_guard = archive.write().expect("failed to obtain archive lock");
         match archive_guard.as_mut() {
             Some(archive) => {
@@ -87,7 +105,9 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     // List of Archive Nodes.
     nodes: Vec<CanisterId>,
 
-    controller_id: PrincipalId,
+    pub controller_id: PrincipalId,
+
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
 
     // BlockIndices of Blocks stored in each archive node.
 
@@ -104,10 +124,10 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     nodes_block_ranges: Vec<(u64, u64)>,
 
     // Maximum amount of data that can be stored in an Archive Node canister.
-    node_max_memory_size_bytes: u64,
+    pub node_max_memory_size_bytes: u64,
 
     // Maximum inter-canister message size in bytes.
-    max_message_size_bytes: u64,
+    pub max_message_size_bytes: u64,
 
     /// How many blocks have been sent to the archive.
     num_archived_blocks: u64,
@@ -140,6 +160,7 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
         Self {
             nodes: vec![],
             controller_id: options.controller_id,
+            more_controller_ids: options.more_controller_ids,
             nodes_block_ranges: vec![],
             node_max_memory_size_bytes: options
                 .node_max_memory_size_bytes
@@ -159,6 +180,9 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
         self.nodes.len() - 1
     }
 
+    // Return the archives with their respective block ranges
+    // associated. The block ranges are inclusive in both start
+    // and end.
     pub fn index(&self) -> Vec<((u64, u64), CanisterId)> {
         self.nodes_block_ranges
             .iter()
@@ -304,7 +328,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         cycles_for_archive_creation,
         node_block_height_offset,
         node_max_memory_size_bytes,
-        controller_id,
+        controller_ids,
         max_transactions_per_response,
     ) = inspect_archive(archive, |archive| {
         let node_block_height_offset: u64 = archive
@@ -316,7 +340,10 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
             archive.cycles_for_archive_creation,
             node_block_height_offset,
             archive.node_max_memory_size_bytes,
-            archive.controller_id,
+            vec![archive.controller_id]
+                .into_iter()
+                .chain(archive.more_controller_ids.clone().unwrap_or_default())
+                .collect(),
             archive.max_transactions_per_response,
         )
     });
@@ -350,18 +377,18 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 
     log!(
         log_sink,
-        "[archive] setting controller_id for archive node: {}",
-        controller_id
+        "[archive] setting controller_id for archive node: {:?}",
+        controller_ids
     );
 
     let res: Result<(), (i32, String)> = Rt::call(
         IC_00,
         "update_settings",
         0,
-        (ic_ic00_types::UpdateSettingsArgs::new(
+        (ic_management_canister_types::UpdateSettingsArgs::new(
             node_canister_id,
-            ic_ic00_types::CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
+            ic_management_canister_types::CanisterSettingsArgsBuilder::new()
+                .with_controllers(controller_ids)
                 .build(),
         ),),
     )

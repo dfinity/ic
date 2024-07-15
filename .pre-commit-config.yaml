@@ -66,16 +66,6 @@ repos:
     stages: [manual]
     pass_filenames: false
 
--   repo: https://github.com/nix-community/nixpkgs-fmt
-    rev: 6740ea881d3ac5942d4fbf124f5956b896666c76
-    hooks:
-    -   id: nixpkgs-fmt
-        exclude: |
-            (?x)^(
-                .*/Cargo\.nix|
-                experimental/.*
-            )$
-
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0
   hooks:

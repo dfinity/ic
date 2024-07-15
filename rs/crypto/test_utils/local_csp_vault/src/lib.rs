@@ -23,6 +23,9 @@ use ic_crypto_internal_csp::vault::api::PublicRandomSeedGenerator;
 use ic_crypto_internal_csp::vault::api::PublicRandomSeedGeneratorError;
 use ic_crypto_internal_csp::vault::api::SecretKeyStoreCspVault;
 use ic_crypto_internal_csp::vault::api::ThresholdEcdsaSignerCspVault;
+use ic_crypto_internal_csp::vault::api::ThresholdSchnorrCreateSigShareVaultError;
+use ic_crypto_internal_csp::vault::api::ThresholdSchnorrSigShareBytes;
+use ic_crypto_internal_csp::vault::api::ThresholdSchnorrSignerCspVault;
 use ic_crypto_internal_csp::vault::api::ThresholdSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::TlsHandshakeCspVault;
 use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
@@ -150,6 +153,7 @@ mock! {
 
         fn idkg_load_transcript(
             &self,
+            algorithm_id: AlgorithmId,
             dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             context_data: Vec<u8>,
             receiver_index: NodeIndex,
@@ -159,6 +163,7 @@ mock! {
 
         fn idkg_load_transcript_with_openings(
             &self,
+            algorithm_id: AlgorithmId,
             dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
             context_data: Vec<u8>,
@@ -171,6 +176,7 @@ mock! {
 
         fn idkg_open_dealing(
             &self,
+            algorithm_id: AlgorithmId,
             dealing: BatchSignedIDkgDealing,
             dealer_index: NodeIndex,
             context_data: Vec<u8>,
@@ -198,6 +204,18 @@ mock! {
             key_times_lambda_raw: IDkgTranscriptInternalBytes,
             algorithm_id: AlgorithmId,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+    }
+
+    impl ThresholdSchnorrSignerCspVault for LocalCspVault {
+        fn create_schnorr_sig_share(
+            &self,
+            derivation_path: ExtendedDerivationPath,
+            message: Vec<u8>,
+            nonce: Randomness,
+            key_raw: IDkgTranscriptInternalBytes,
+            presig_raw: IDkgTranscriptInternalBytes,
+            algorithm_id: AlgorithmId,
+        ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError>;
     }
 
     impl SecretKeyStoreCspVault for LocalCspVault{

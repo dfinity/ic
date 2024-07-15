@@ -4,19 +4,21 @@
 // A replicated query is a call to a `canister_query` function in update
 // context.
 
+use std::time::Duration;
+
 use crate::execution::common::{
     finish_call_with_error, validate_message, wasm_result_to_query_response,
 };
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
+use crate::metrics::CallTreeMetricsNoOp;
 use ic_error_types::{ErrorCode, UserError};
 use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_system_api::{ApiType, ExecutionParameters};
+use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{
     messages::{CanisterCall, CanisterCallOrTask},
     NumBytes, NumInstructions, Time,
 };
-
-use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::IntCounter;
 
 // Execute an inter-canister request or an ingress message as a replicated query.
@@ -41,6 +43,7 @@ pub fn execute_replicated_query(
     let message_memory_usage = canister.message_memory_usage();
     let compute_allocation = canister.scheduler_state.compute_allocation;
 
+    let reveal_top_up = canister.controllers().contains(req.sender());
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
         memory_usage,
@@ -48,6 +51,7 @@ pub fn execute_replicated_query(
         compute_allocation,
         instruction_limit,
         subnet_size,
+        reveal_top_up,
     ) {
         Ok(cycles) => cycles,
         Err(err) => {
@@ -114,15 +118,14 @@ pub fn execute_replicated_query(
     let memory_usage = canister.memory_usage();
     let message_memory_usage = canister.message_memory_usage();
 
-    let api_type =
-        ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender(), None);
+    let api_type = ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender());
 
     // As we are executing the query in the replicated mode, we do
     // not want to commit updates, i.e. we must return the
     // unmodified version of the canister. Hence, execute on clones
     // of system and execution states so that we have the original
     // versions.
-    let (output, _output_execution_state, _output_system_state) = round.hypervisor.execute(
+    let (mut output, _output_execution_state, _output_system_state) = round.hypervisor.execute(
         api_type,
         time,
         canister.system_state.clone(),
@@ -134,8 +137,11 @@ pub fn execute_replicated_query(
         round.network_topology,
         round_limits,
         state_changes_error,
+        &CallTreeMetricsNoOp,
+        time,
     );
 
+    canister.append_log(&mut output.canister_log);
     let result = output.wasm_result;
     let log = round.log;
     let result = result.map_err(|err| err.into_user_error(&canister.canister_id()));
@@ -163,5 +169,6 @@ pub fn execute_replicated_query(
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
+        call_duration: Some(Duration::from_secs(0)),
     }
 }

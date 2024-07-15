@@ -131,21 +131,18 @@ CONFIG="$(cat ${INPUT})"
 # Read all the top-level values out in one swoop
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
-    (.name_servers | join(" ")),
-    (.ipv4_name_servers | join(" ")),
     (.elasticsearch_hosts | join(" ")),
     (.elasticsearch_tags | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS IPV4_NAME_SERVERS ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
 VALUES=$(echo ${CONFIG} \
     | jq -r -c '.datacenters[]
 | .aux_nodes[] += { "type": "aux" } | .boundary_nodes[] += {"type": "boundary"} | .nodes[] += { "type": "replica" }
-| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix, "ipv6_subnet": .ipv6_subnet } | [
+| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix } | [
     .ipv6_prefix,
-    .ipv6_subnet,
     .ipv6_address,
     .hostname,
     .subnet_type,
@@ -154,10 +151,9 @@ VALUES=$(echo ${CONFIG} \
     .use_hsm,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
+while IFS=$'\1' read -r ipv6_prefix ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
     eval "declare -A __RAW_NODE_${NODES}=(
         ['ipv6_prefix']=${ipv6_prefix}
-        ['ipv6_subnet']=${ipv6_subnet}
         ['ipv6_address']=${ipv6_address}
         ['hostname']=${hostname}
         ['subnet_type']=${subnet_type}
@@ -320,14 +316,12 @@ function build_bootstrap_images() {
         fi
 
         set -x
-        "${REPO_ROOT}"/ic-os/scripts/build-bootstrap-config-image.sh \
+        "${REPO_ROOT}"/ic-os/components/hostos-scripts/build-bootstrap-config-image.sh \
             "${OUTPUT}/${NODE_PREFIX}.img" \
             ${root_subnet:+"--ic_registry_local_store"} ${root_subnet:+"${IC_PREP_DIR}/ic_registry_local_store"} \
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
             "--nns_url" "${NNS_URL}" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
-            "--ipv6_name_servers" "${NAME_SERVERS}" \
-            "--ipv4_name_servers" "${IPV4_NAME_SERVERS}" \
             "--hostname" "${hostname}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
             ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \

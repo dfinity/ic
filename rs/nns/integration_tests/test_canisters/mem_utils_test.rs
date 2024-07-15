@@ -7,6 +7,7 @@ use ic_nervous_system_common::dfn_core_stable_mem_utils::{
 };
 use ic_nns_governance::pb::v1::{Governance, Neuron};
 use prost::Message;
+use std::ptr::addr_of_mut;
 
 const LOG_PREFIX: &str = "[Governance mem utils test] ";
 
@@ -32,7 +33,7 @@ fn test_buffer_size() {
     over(candid, |(buffer_size,): (u32,)| {
         println!("{}Testing with buffer size {}...", LOG_PREFIX, buffer_size);
 
-        let gov_opt = unsafe { &mut GOVERNANCE };
+        let gov_opt = unsafe { &mut *addr_of_mut!(GOVERNANCE) };
         let gov = gov_opt.as_mut().unwrap();
 
         // Make one of the vec fields larger then the buffer size, to test that
@@ -97,7 +98,7 @@ fn test_1_byte_buffer() {
 fn canister_init() {
     dfn_core::printer::hook();
 
-    let gov = unsafe { &mut GOVERNANCE };
+    let gov = unsafe { &mut *addr_of_mut!(GOVERNANCE) };
 
     #[cfg(target_arch = "wasm32")]
     let wasm_pages_init = core::arch::wasm32::memory_size(0);

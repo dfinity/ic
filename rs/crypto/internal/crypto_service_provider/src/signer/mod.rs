@@ -267,6 +267,10 @@ impl CspSigVerifier for Csp {
                         .iter()
                         .map(|(pk, sig)| pk_and_sig_to_bytes(pk, sig))
                         .collect::<Result<Vec<_>, _>>()?;
+
+                // False positive `map_identity` warning.
+                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+                #[allow(clippy::map_identity)]
                 let pairs_of_refs: Vec<_> = key_sig_bytes_pairs
                     .iter()
                     .map(|(pk_bytes, sig_bytes)| (pk_bytes, sig_bytes))

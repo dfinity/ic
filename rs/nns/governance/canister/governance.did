@@ -1,4 +1,4 @@
-type AccountIdentifier = record { hash : vec nat8 };
+type AccountIdentifier = record { hash : blob };
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   ManageNeuron : ManageNeuron;
@@ -33,7 +33,7 @@ type CanisterStatusResultV2 = record {
   memory_size : opt nat64;
   cycles : opt nat64;
   idle_cycles_burned_per_day : opt nat64;
-  module_hash : vec nat8;
+  module_hash : blob;
 };
 type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
@@ -123,6 +123,7 @@ type CreateServiceNervousSystem = record {
   swap_parameters : opt SwapParameters;
   initial_token_distribution : opt InitialTokenDistribution;
 };
+type Decimal = record { human_readable : opt text };
 type DerivedProposalInformation = record {
   swap_background_information : opt SwapBackgroundInformation;
 };
@@ -146,7 +147,7 @@ type DissolveState = variant {
   WhenDissolvedTimestampSeconds : nat64;
 };
 type Duration = record { seconds : opt nat64 };
-type ExecuteNnsFunction = record { nns_function : int32; payload : vec nat8 };
+type ExecuteNnsFunction = record { nns_function : int32; payload : blob };
 type Follow = record { topic : int32; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
 type Followers = record { followers : vec NeuronId };
@@ -157,7 +158,7 @@ type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   making_sns_proposal : opt MakingSnsProposal;
-  most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
+  most_recent_monthly_node_provider_rewards : opt MonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
   metrics : opt GovernanceCachedMetrics;
@@ -165,6 +166,7 @@ type Governance = record {
   node_providers : vec NodeProvider;
   cached_daily_maturity_modulation_basis_points : opt int32;
   economics : opt NetworkEconomics;
+  restore_aging_summary : opt RestoreAgingSummary;
   spawning_neurons : opt bool;
   latest_reward_event : opt RewardEvent;
   to_claim_transfers : vec NeuronStakeTransfer;
@@ -172,6 +174,7 @@ type Governance = record {
   topic_followee_index : vec record { int32; FollowersMap };
   migrations : opt Migrations;
   proposals : vec record { nat64; ProposalData };
+  xdr_conversion_rate : opt XdrConversionRate;
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
   neurons : vec record { nat64; Neuron };
   genesis_timestamp_seconds : nat64;
@@ -198,11 +201,13 @@ type GovernanceCachedMetrics = record {
   not_dissolving_neurons_count : nat64;
   total_locked_e8s : nat64;
   neurons_fund_total_active_neurons : nat64;
+  total_voting_power_non_self_authenticating_controller : opt nat64;
   total_staked_maturity_e8s_equivalent : nat64;
   not_dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
   total_staked_e8s_ect : nat64;
   not_dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;
   dissolved_neurons_e8s : nat64;
+  total_staked_e8s_non_self_authenticating_controller : opt nat64;
   dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   neurons_with_less_than_6_months_dissolve_delay_e8s : nat64;
   not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets : vec record {
@@ -211,6 +216,7 @@ type GovernanceCachedMetrics = record {
   };
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
+  non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   total_staked_maturity_e8s_equivalent_seed : nat64;
@@ -258,6 +264,7 @@ type LedgerParameters = record {
 type ListKnownNeuronsResponse = record { known_neurons : vec KnownNeuron };
 type ListNeurons = record {
   neuron_ids : vec nat64;
+  include_empty_neurons_readable_by_caller : opt bool;
   include_neurons_readable_by_caller : bool;
 };
 type ListNeuronsResponse = record {
@@ -275,7 +282,10 @@ type ListProposalInfo = record {
   include_status : vec int32;
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };
-type MakeProposalResponse = record { proposal_id : opt NeuronId };
+type MakeProposalResponse = record {
+  message : opt text;
+  proposal_id : opt NeuronId;
+};
 type MakingSnsProposal = record {
   proposal : opt Proposal;
   caller : opt principal;
@@ -308,9 +318,14 @@ type Migrations = record {
   neuron_indexes_migration : opt Migration;
   copy_inactive_neurons_to_stable_memory_migration : opt Migration;
 };
-type MostRecentMonthlyNodeProviderRewards = record {
+type MonthlyNodeProviderRewards = record {
+  minimum_xdr_permyriad_per_icp : opt nat64;
+  registry_version : opt nat64;
+  node_providers : vec NodeProvider;
   timestamp : nat64;
   rewards : vec RewardNodeProvider;
+  xdr_conversion_rate : opt XdrConversionRate;
+  maximum_node_provider_rewards_e8s : opt nat64;
 };
 type Motion = record { motion_text : text };
 type NetworkEconomics = record {
@@ -322,6 +337,7 @@ type NetworkEconomics = record {
   neuron_spawn_dissolve_delay_seconds : nat64;
   minimum_icp_xdr_rate : nat64;
   maximum_node_provider_rewards_e8s : nat64;
+  neurons_fund_economics : opt NeuronsFundEconomics;
 };
 type Neuron = record {
   id : opt NeuronId;
@@ -337,7 +353,7 @@ type Neuron = record {
   auto_stake_maturity : opt bool;
   aging_since_timestamp_seconds : nat64;
   hot_keys : vec principal;
-  account : vec nat8;
+  account : blob;
   joined_community_fund_timestamp_seconds : opt nat64;
   dissolve_state : opt DissolveState;
   followees : vec record { int32; Followees };
@@ -362,10 +378,7 @@ type NeuronDistribution = record {
   stake : opt Tokens;
 };
 type NeuronId = record { id : nat64 };
-type NeuronIdOrSubaccount = variant {
-  Subaccount : vec nat8;
-  NeuronId : NeuronId;
-};
+type NeuronIdOrSubaccount = variant { Subaccount : blob; NeuronId : NeuronId };
 type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
@@ -384,13 +397,25 @@ type NeuronInfo = record {
   age_seconds : nat64;
 };
 type NeuronStakeTransfer = record {
-  to_subaccount : vec nat8;
+  to_subaccount : blob;
   neuron_stake_e8s : nat64;
   from : opt principal;
   memo : nat64;
-  from_subaccount : vec nat8;
+  from_subaccount : blob;
   transfer_timestamp : nat64;
   block_height : nat64;
+};
+type NeuronSubsetMetrics = record {
+  total_maturity_e8s_equivalent : opt nat64;
+  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+  voting_power_buckets : vec record { nat64; nat64 };
+  total_staked_e8s : opt nat64;
+  count : opt nat64;
+  total_staked_maturity_e8s_equivalent : opt nat64;
+  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+  staked_e8s_buckets : vec record { nat64; nat64 };
+  total_voting_power : opt nat64;
+  count_buckets : vec record { nat64; nat64 };
 };
 type NeuronsFundAuditInfo = record {
   final_neurons_fund_participation : opt NeuronsFundParticipation;
@@ -402,6 +427,17 @@ type NeuronsFundData = record {
   initial_neurons_fund_participation : opt NeuronsFundParticipation;
   neurons_fund_refunds : opt NeuronsFundSnapshot;
 };
+type NeuronsFundEconomics = record {
+  maximum_icp_xdr_rate : opt Percentage;
+  neurons_fund_matched_funding_curve_coefficients : opt NeuronsFundMatchedFundingCurveCoefficients;
+  max_theoretical_neurons_fund_participation_amount_xdr : opt Decimal;
+  minimum_icp_xdr_rate : opt Percentage;
+};
+type NeuronsFundMatchedFundingCurveCoefficients = record {
+  contribution_threshold_xdr : opt Decimal;
+  one_third_participation_milestone_xdr : opt Decimal;
+  full_participation_milestone_xdr : opt Decimal;
+};
 type NeuronsFundNeuron = record {
   hotkey_principal : opt text;
   is_capped : opt bool;
@@ -409,7 +445,9 @@ type NeuronsFundNeuron = record {
   amount_icp_e8s : opt nat64;
 };
 type NeuronsFundNeuronPortion = record {
+  controller : opt principal;
   hotkey_principal : opt principal;
+  hotkeys : vec principal;
   is_capped : opt bool;
   maturity_equivalent_icp_e8s : opt nat64;
   nns_neuron_id : opt NeuronId;
@@ -512,6 +550,16 @@ type ProposalInfo = record {
 };
 type RegisterVote = record { vote : int32; proposal : opt NeuronId };
 type RemoveHotKey = record { hot_key_to_remove : opt principal };
+type RestoreAgingNeuronGroup = record {
+  count : opt nat64;
+  previous_total_stake_e8s : opt nat64;
+  current_total_stake_e8s : opt nat64;
+  group_type : int32;
+};
+type RestoreAgingSummary = record {
+  groups : vec RestoreAgingNeuronGroup;
+  timestamp_seconds : opt nat64;
+};
 type Result = variant { Ok; Err : GovernanceError };
 type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
 type Result_10 = variant { Ok : Ok_1; Err : GovernanceError };
@@ -628,6 +676,10 @@ type VotingRewardParameters = record {
   final_reward_rate : opt Percentage;
 };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
+type XdrConversionRate = record {
+  xdr_permyriad_per_icp : opt nat64;
+  timestamp_seconds : opt nat64;
+};
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
@@ -642,7 +694,7 @@ service : (Governance) -> {
   get_metrics : () -> (Result_3) query;
   get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (
-      opt MostRecentMonthlyNodeProviderRewards,
+      opt MonthlyNodeProviderRewards,
     ) query;
   get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;
@@ -656,6 +708,7 @@ service : (Governance) -> {
   get_node_provider_by_caller : (null) -> (Result_7) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
+  get_restore_aging_summary : () -> (RestoreAgingSummary) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;

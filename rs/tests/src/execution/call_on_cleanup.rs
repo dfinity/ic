@@ -1,12 +1,12 @@
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
-use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::util::*;
 use assert_matches::assert_matches;
 use ic_agent::{
     agent::{RejectCode, RejectResponse},
     AgentError,
 };
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::util::*;
 use ic_universal_canister::{call_args, wasm};
 
 pub fn is_called_if_reply_traps(env: TestEnv) {
@@ -31,13 +31,13 @@ pub fn is_called_if_reply_traps(env: TestEnv) {
                         ),
                     )
                     .await,
-                Err(AgentError::ReplicaError(RejectResponse{
+                Err(AgentError::CertifiedReject(RejectResponse{
                     reject_code,
                     reject_message,
                     ..
                 })) if reject_code == RejectCode::CanisterError
                     // Verify that the error message being returned is the original.
-                    && reject_message.contains("trapped explicitly")
+                    && reject_message.contains("called `ic0.trap` with message")
             );
 
             // Verify that `call_on_cleanup` was invoked.
@@ -115,15 +115,15 @@ pub fn changes_are_discarded_if_trapped(env: TestEnv) {
                             )
                     )
                     .await,
-                Err(AgentError::ReplicaError(RejectResponse {
+                Err(AgentError::CertifiedReject(RejectResponse {
                     reject_code,
                     reject_message,
                     ..
                 })) if reject_code == RejectCode::CanisterError
                     // Verify that the original error message as well as the on_cleanup error is
                     // returned.
-                    && reject_message.contains("trapped explicitly: in on_reply")
-                    && reject_message.contains("trapped explicitly: in on_call_cleanup")
+                    && reject_message.contains("called `ic0.trap` with message: in on_reply")
+                    && reject_message.contains("called `ic0.trap` with message: in on_call_cleanup")
             );
 
             // Changes by call_on_cleanup were discarded.

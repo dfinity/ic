@@ -43,6 +43,7 @@ pub(crate) struct BoundaryNodeManager {
     version: ReplicaVersion,
     logger: ReplicaLogger,
     node_id: NodeId,
+    domain_name: Option<String>,
 }
 
 impl BoundaryNodeManager {
@@ -64,6 +65,7 @@ impl BoundaryNodeManager {
             version,
             logger,
             node_id,
+            domain_name: None,
         }
     }
 
@@ -83,8 +85,38 @@ impl BoundaryNodeManager {
                     );
                     // NOTE: We could also shutdown the boundary node here. However, it makes sense to continue
                     // serving requests while the orchestrator is downloading the new image in most cases.
-                } else if let Err(err) = self.ensure_boundary_node_running(&self.version) {
-                    warn!(self.logger, "Failed to start Boundary Node: {}", err);
+                } else {
+                    match self.registry.get_node_domain_name(registry_version) {
+                        Ok(Some(domain_name)) => {
+                            let domain_name = Some(domain_name);
+
+                            // stop ic-boundary when the domain name changes and start it again.
+                            if domain_name != self.domain_name {
+                                if let Err(err) = self.ensure_boundary_node_stopped() {
+                                    warn!(self.logger, "Failed to stop Boundary Node: {}", err);
+                                }
+                                self.domain_name = domain_name;
+                            }
+
+                            // make sure the boundary node is running
+                            if let Err(err) = self.ensure_boundary_node_running(&self.version) {
+                                warn!(self.logger, "Failed to start Boundary Node: {}", err);
+                            }
+                        }
+                        // BN should not be active when the node doesn't have a domain name
+                        Ok(None) => {
+                            warn!(self.logger, "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting ic-boundary down.");
+                            if let Err(err) = self.ensure_boundary_node_stopped() {
+                                warn!(self.logger, "Failed to stop Boundary Node: {}", err);
+                            }
+                            self.domain_name = None;
+                        }
+                        // Failing to read the registry
+                        Err(err) => warn!(
+                            self.logger,
+                            "Failed to fetch Boundary Node domain name: {}", err
+                        ),
+                    }
                 }
             }
             // BN should not be active
@@ -116,12 +148,33 @@ impl BoundaryNodeManager {
             .as_path()
             .display()
             .to_string();
+
+        let domain_name = self
+            .domain_name
+            .as_ref()
+            .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
+
         // TODO: Should these values be settable via config?
         let args = vec![
-            format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
-            format!("--http-port=4444"),
-            format!("--metrics-addr=[::]:9324"),
+            format!("--hostname={}", domain_name),
+            format!("--http-port=80"),
+            format!("--https-port=443"),
+            format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
+            format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
+            format!("--acme-credentials-path=/var/lib/ic/data/ic-boundary-acme.json"),
             format!("--disable-registry-replicator"),
+            format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
+            format!("--log-journald"),
+            format!("--metrics-addr=[::]:9324"),
+            format!("--bouncer-enable"),
+            format!("--bouncer-ratelimit=600"),
+            format!("--bouncer-burst-size=1200"),
+            format!("--bouncer-ban-seconds=300"),
+            format!("--bouncer-max-buckets=30000"),
+            format!("--bouncer-bucket-ttl=60"),
+            format!("--cache-size-bytes=1073741824"),
+            format!("--cache-max-item-size-bytes=10485760"),
+            format!("--cache-ttl-seconds=1"),
         ];
 
         process

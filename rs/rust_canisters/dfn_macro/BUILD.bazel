@@ -1,4 +1,4 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_proc_macro")
 
 package(default_visibility = ["//visibility:public"])
@@ -9,6 +9,7 @@ rust_proc_macro(
     crate_name = "dfn_macro",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         ":build_script",
         "@crate_index//:proc-macro2",
         "@crate_index//:quote",
@@ -25,6 +26,7 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:rustversion",
     ],
     visibility = ["//visibility:private"],

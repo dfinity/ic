@@ -5,11 +5,11 @@ Goal:: Test the robustness of the replica by sending invalid requests to its HTT
 
 
 end::catalog[] */
-use crate::driver::{
+use ic_base_types::CanisterId;
+use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
 };
-use ic_base_types::CanisterId;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
@@ -45,7 +45,10 @@ fn test_invalid_content_type(env: TestEnv) {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Not specifying a content type should also result in a 400.
-        let res = client.post(format!("{}{}", node_url, e)).send().unwrap();
+        let res = client
+            .post(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
+            .send()
+            .unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }
@@ -59,9 +62,10 @@ fn test_invalid_get_requests(env: TestEnv) {
     for e in ENDPOINTS {
         let res = client
             .get(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
+            .header("Content-Type", "application/cbor")
             .send()
             .unwrap();
-        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
 }
 

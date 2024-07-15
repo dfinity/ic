@@ -7,11 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 ic-types = { path = "../../../../../types/types" }
-
-[dev-dependencies]
-ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
-

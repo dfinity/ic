@@ -40,41 +40,31 @@ pub mod state_api;
 use crate::state_api::state::OpOut;
 use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
 use axum::async_trait;
+use pocket_ic::PocketIc;
+use serde::Deserialize;
 
-/// Represents an identifiable operation on a TargetType.
+/// Represents an identifiable operation on PocketIC.
 pub trait Operation {
-    type TargetType: Send + Sync;
+    /// Executes an operation.
+    fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut;
 
-    /// Consumes self and executes computation.
-    fn compute(self, _pocket_ic: &mut Self::TargetType) -> OpOut;
+    /// True iff this operation should be retried if the instance is busy.
+    /// This must be the case if the caller cannot handle the error condition
+    /// of a busy instance.
+    fn retry_if_busy(&self) -> bool {
+        false
+    }
 
+    /// Returns the unique identifier of this operation.
     fn id(&self) -> OpId;
 }
 
 /// Uniquely identifies an operation.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct OpId(String);
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
+pub struct OpId(pub String);
 
 // Index into a vector of PocketIc instances
 pub type InstanceId = usize;
-
-pub struct Computation<T> {
-    op: T,
-    instance_id: InstanceId,
-}
-
-trait BindOperation: 'static + Sized {
-    fn on_instance(self, instance_id: InstanceId) -> Computation<Self>;
-}
-
-impl<T: Operation + 'static> BindOperation for T {
-    fn on_instance(self, instance_id: InstanceId) -> Computation<T> {
-        Computation {
-            op: self,
-            instance_id,
-        }
-    }
-}
 
 #[async_trait]
 pub trait BlobStore: Send + Sync {
@@ -133,7 +123,7 @@ mod tests {
 
         let timeout = Some(Duration::from_secs(30));
         let res = rt
-            .block_on(api_state.update_with_timeout(msg1.on_instance(instance_id), timeout))
+            .block_on(api_state.update_with_timeout(msg1.into(), instance_id, timeout))
             .unwrap();
 
         match res {

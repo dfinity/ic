@@ -193,6 +193,9 @@ pub struct Swap {
     /// the swap proposal.
     #[prost(uint64, optional, tag = "11")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
+    /// The timestamp for the actual termination of the swap (committed or aborted).
+    #[prost(uint64, optional, tag = "21")]
+    pub decentralization_swap_termination_timestamp_seconds: ::core::option::Option<u64>,
     /// This ticket id counter keeps track of the latest ticket id. Whenever a new
     /// ticket is created this counter is incremented. It ensures that ticket ids
     /// are unique. The ticket IDs are sequential and next_ticket_id is assigned to
@@ -206,6 +209,7 @@ pub struct Swap {
     /// The next principal bytes that should be checked by the next
     /// running purge_old_tickets routine.
     #[prost(bytes = "vec", optional, tag = "14")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub purge_old_tickets_next_principal: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// Set to true when auto-finalization is attempted. Prevents auto-finalization
     /// from being attempted more than once.
@@ -890,7 +894,8 @@ pub struct DerivedState {
     /// the Neurons' Fund have the same controller.
     #[prost(uint64, optional, tag = "5")]
     pub cf_neuron_count: ::core::option::Option<u64>,
-    /// Current approximate rate SNS tokens per ICP.
+    /// Current approximate rate SNS tokens per ICP. Note that this should not be used for super
+    /// precise financial accounting, because this is floating point.
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,
     /// Current amount of contributions from direct swap participants.
@@ -1022,37 +1027,6 @@ pub mod set_mode_call_result {
     pub enum Possibility {
         #[prost(message, tag = "1")]
         Ok(SetModeResult),
-        #[prost(message, tag = "2")]
-        Err(super::CanisterCallError),
-    }
-}
-/// Request struct for the method restore_dapp_controllers.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RestoreDappControllersRequest {}
-/// Response of the method restore_dapp_controllers.
-/// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RestoreDappControllersResponse {
-    #[prost(
-        oneof = "restore_dapp_controllers_response::Possibility",
-        tags = "1, 2"
-    )]
-    pub possibility: ::core::option::Option<restore_dapp_controllers_response::Possibility>,
-}
-/// Nested message and enum types in `RestoreDappControllersResponse`.
-pub mod restore_dapp_controllers_response {
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Possibility {
-        /// TODO(NNS1-1589): Uncomment.
-        /// ic_sns_root.pb.v1.
-        #[prost(message, tag = "1")]
-        Ok(super::SetDappControllersResponse),
         #[prost(message, tag = "2")]
         Err(super::CanisterCallError),
     }
@@ -1573,6 +1547,7 @@ pub mod settle_neurons_fund_participation_response {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1707,6 +1682,8 @@ pub struct GetLifecycleResponse {
     pub lifecycle: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "2")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub decentralization_swap_termination_timestamp_seconds: ::core::option::Option<u64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1783,6 +1760,7 @@ pub struct Icrc1Account {
     #[prost(message, optional, tag = "1")]
     pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
     #[prost(bytes = "vec", optional, tag = "2")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub subaccount: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// A device for ensuring that retrying (direct) participation does not result
@@ -1916,6 +1894,7 @@ pub struct NewSaleTicketRequest {
     pub amount_icp_e8s: u64,
     /// The subaccount of the caller to be used for the ticket
     #[prost(bytes = "vec", optional, tag = "2")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub subaccount: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Response struct for the method `new_sale_ticket`

@@ -1,10 +1,11 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_test")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/types",
     "//rs/validator/ingress_message",
     "@crate_index//:build-info",
@@ -13,10 +14,12 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
@@ -41,20 +44,17 @@ rust_canister(
     deps = DEPENDENCIES + [":build_script"],
 )
 
-rust_test(
+rust_ic_test(
     name = "integration_tests",
     srcs = ["tests/test.rs"],
     data = [
         ":test_canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
         "IC_VALIDATOR_INGRESS_MESSAGE_TEST_CANISTER_WASM_PATH": "$(rootpath :test_canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/types",

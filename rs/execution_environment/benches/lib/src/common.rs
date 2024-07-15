@@ -23,17 +23,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
-use ic_test_utilities::types::ids::subnet_test_id;
-use ic_test_utilities::{
-    mock_time,
-    state::canister_from_exec_state,
-    types::ids::{canister_test_id, user_test_id},
-    types::messages::IngressBuilder,
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
+use ic_test_utilities_state::canister_from_exec_state;
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata, NO_DEADLINE},
     methods::{Callback, WasmClosure},
+    time::UNIX_EPOCH,
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use ic_wasm_types::CanisterModule;
@@ -107,23 +105,32 @@ where
     canister_state.system_state.freeze_threshold = 0.into();
 
     // Create call context and callback
-    let call_origin =
-        CallOrigin::CanisterUpdate(canister_test_id(REMOTE_CANISTER_ID), CallbackId::new(0));
+    let call_origin = CallOrigin::CanisterUpdate(
+        canister_test_id(REMOTE_CANISTER_ID),
+        CallbackId::new(0),
+        NO_DEADLINE,
+    );
     let call_context_id = canister_state
         .system_state
         .call_context_manager_mut()
         .unwrap()
-        .new_call_context(call_origin.clone(), Cycles::new(10), mock_time());
+        .new_call_context(
+            call_origin.clone(),
+            Cycles::new(10),
+            UNIX_EPOCH,
+            RequestMetadata::new(0, UNIX_EPOCH),
+        );
     let callback = Callback::new(
         call_context_id,
-        Some(canister_test_id(LOCAL_CANISTER_ID)),
-        Some(canister_test_id(REMOTE_CANISTER_ID)),
+        canister_test_id(LOCAL_CANISTER_ID),
+        canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
-        None,
-        None,
+        Cycles::new(0),
+        Cycles::new(0),
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,
+        NO_DEADLINE,
     );
 
     // Create an Ingress message
@@ -145,7 +152,8 @@ where
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS,
         ),
-        canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
+        canister_memory_limit: canister_state.memory_limit(NumBytes::new(u64::MAX)),
+        wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
         compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
@@ -167,7 +175,7 @@ where
         canister_state,
         ingress,
         reject,
-        time: mock_time(),
+        time: UNIX_EPOCH,
         network_topology,
         execution_parameters,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
@@ -182,7 +190,7 @@ fn run_benchmark<G, I, W, R>(
     group: G,
     id: I,
     wat: W,
-    expected_instructions: u64,
+    expected_ops: u64,
     routine: R,
     exec_env: &ExecutionEnvironment,
 ) where
@@ -194,16 +202,16 @@ fn run_benchmark<G, I, W, R>(
     let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
     group
-        .throughput(criterion::Throughput::Elements(expected_instructions))
+        .throughput(criterion::Throughput::Elements(expected_ops))
         .bench_function(id.as_ref(), |b| {
             b.iter_batched(
                 || {
                     // Lazily setup the benchmark arguments
                     if bench_args.is_none() {
                         println!(
-                            "\n    Instructions per bench iteration: {} ({}M)",
-                            expected_instructions,
-                            expected_instructions / 1_000_000
+                            "\n    Operations per benchmark iteration: {} ({}M)",
+                            expected_ops,
+                            expected_ops / 1_000_000
                         );
                         println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
@@ -211,7 +219,7 @@ fn run_benchmark<G, I, W, R>(
                     bench_args.as_ref().unwrap().clone()
                 },
                 |args| {
-                    routine(exec_env, expected_instructions, args);
+                    routine(exec_env, expected_ops, args);
                 },
                 BatchSize::SmallInput,
             );
@@ -220,8 +228,11 @@ fn run_benchmark<G, I, W, R>(
 }
 
 fn check_sandbox_defined() -> bool {
-    if std::env::var("SANDBOX_BINARY").is_err() || std::env::var("LAUNCHER_BINARY").is_err() {
-        eprintln!("WARNING: The SANDBOX_BINARY or LAUNCHER_BINARY env variables are not defined.");
+    if std::env::var("SANDBOX_BINARY").is_err()
+        || std::env::var("LAUNCHER_BINARY").is_err()
+        || std::env::var("COMPILER_BINARY").is_err()
+    {
+        eprintln!("WARNING: The SANDBOX_BINARY or LAUNCHER_BINARY or COMPILER_BINARY env variables are not defined.");
         eprintln!("         Please use `bazel run ...` instead or define the variables manually.");
         eprintln!("         Skipping the benchmark...");
         return false;
@@ -268,9 +279,17 @@ where
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     ));
-    let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> = Arc::new(
-        IngressHistoryWriterImpl::new(config.clone(), log.clone(), &metrics_registry),
-    );
+
+    let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+    let state_reader = Arc::new(FakeStateManager::new());
+    let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
+        Arc::new(IngressHistoryWriterImpl::new(
+            config.clone(),
+            log.clone(),
+            &metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        ));
     let exec_env = ExecutionEnvironment::new(
         log,
         hypervisor,
@@ -288,13 +307,13 @@ where
             .scheduler_config
             .upload_wasm_chunk_instructions,
     );
-    for Benchmark(id, wat, expected_instructions) in benchmarks {
+    for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(
             c,
             group.as_ref(),
             id,
             wat,
-            *expected_instructions,
+            *expected_ops,
             routine,
             &exec_env,
         );

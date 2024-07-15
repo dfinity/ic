@@ -6,7 +6,8 @@ use crate::{get_ledger_principal, next_u64};
 use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::management_canister::main::{
-    CanisterIdRecord, CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument, WasmModule,
+    CanisterIdRecord, CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument,
+    SkipPreUpgrade, WasmModule,
 };
 use ic_icrc1_benchmark_worker::InitArgs;
 use ic_ledger_core::Tokens;
@@ -117,7 +118,7 @@ async fn verify_canister_upgrade(canister_id: Principal, wasm: WasmModule) -> Re
         return Err(());
     }
     let result = ic_cdk::api::management_canister::main::install_code(InstallCodeArgument {
-        mode: CanisterInstallMode::Upgrade,
+        mode: CanisterInstallMode::Upgrade(Some(SkipPreUpgrade(Some(false)))),
         canister_id,
         wasm_module: wasm.clone(),
         arg: vec![],

@@ -211,7 +211,7 @@ fn should_fail_on_ineligible_signer() {
     let rng = &mut reproducible_rng();
     let (mut transcript, params) = valid_transcript_and_params(rng);
     let non_receiver = node_id(99999);
-    assert!(!params.receivers.get().contains(&non_receiver));
+    assert!(!params.receivers.contains(non_receiver));
     let first_dealer_index = *transcript.verified_dealings.keys().next().unwrap();
     transcript
         .verified_dealings

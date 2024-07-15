@@ -1,6 +1,6 @@
 //! Defines [`MaliciousBehaviour`] that allows to control malicious flags.
 
-use crate::malicious_flags::MaliciousFlags;
+use crate::malicious_flags::{InvalidChunksAllowance, MaliciousFlags};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -147,6 +147,31 @@ impl MaliciousBehaviour {
     pub fn set_maliciously_alter_certified_hash(self) -> Self {
         self.set_malicious_behaviour(|mut s| {
             s.malicious_flags.maliciously_alter_certified_hash = true;
+            s
+        })
+    }
+
+    pub fn set_maliciously_alter_state_sync_chunk_sending_side(self) -> Self {
+        self.set_malicious_behaviour(|mut s| {
+            s.malicious_flags
+                .maliciously_alter_state_sync_chunk_sending_side = true;
+            s
+        })
+    }
+
+    pub fn set_maliciously_alter_state_sync_chunk_receiving_side(
+        self,
+        meta_manifest_chunk_error_allowance: u32,
+        manifest_chunk_error_allowance: u32,
+        state_chunk_error_allowance: u32,
+    ) -> Self {
+        self.set_malicious_behaviour(|mut s| {
+            s.malicious_flags
+                .maliciously_alter_state_sync_chunk_receiving_side = Some(InvalidChunksAllowance {
+                meta_manifest_chunk_error_allowance,
+                manifest_chunk_error_allowance,
+                state_chunk_error_allowance,
+            });
             s
         })
     }

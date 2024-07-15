@@ -95,7 +95,6 @@ pub mod tests {
         // Example config.ini
         let config_map = HashMap::from([
             ("ipv6_prefix".to_string(), "2a00:fb01:400:100".to_string()),
-            ("ipv6_subnet".to_string(), "\\64".to_string()),
             (
                 "ipv6_gateway".to_string(),
                 "2a00:fb01:400:100::1".to_string(),
@@ -106,7 +105,6 @@ pub mod tests {
         // With ipv6_address and ipv6_prefix
         let config_map = HashMap::from([
             ("ipv6_prefix".to_string(), "2a00:fb01:400:100".to_string()),
-            ("ipv6_subnet".to_string(), "\\64".to_string()),
             (
                 "ipv6_gateway".to_string(),
                 "2a00:fb01:400:100::1".to_string(),
@@ -134,7 +132,6 @@ pub mod tests {
                 "ipv6_address".to_string(),
                 "2a00:fb01:400:100::1".to_string(),
             ),
-            ("ipv6_subnet".to_string(), "\\64".to_string()),
             (
                 "ipv6_gateway".to_string(),
                 "2a00:fb01:400:100::1".to_string(),
@@ -143,23 +140,17 @@ pub mod tests {
         assert!(NetworkInfo::from_config_map(&config_map).is_ok());
 
         // Need prefix or address, gateway
-        let config_map = HashMap::from([
-            ("ipv6_subnet".to_string(), "\\64".to_string()),
-            (
-                "ipv6_gateway".to_string(),
-                "2a00:fb01:400:100::1".to_string(),
-            ),
-        ]);
+        let config_map = HashMap::from([(
+            "ipv6_gateway".to_string(),
+            "2a00:fb01:400:100::1".to_string(),
+        )]);
         assert!(NetworkInfo::from_config_map(&config_map).is_err());
-        let config_map = HashMap::from([
-            ("ipv6_prefix".to_string(), "2a00:fb01:400:100".to_string()),
-            ("ipv6_subnet".to_string(), "\\64".to_string()),
-        ]);
+        let config_map =
+            HashMap::from([("ipv6_prefix".to_string(), "2a00:fb01:400:100".to_string())]);
         assert!(NetworkInfo::from_config_map(&config_map).is_err());
 
         // With ipv6_address with subnet len
         let config_map = HashMap::from([
-            ("ipv6_subnet".to_string(), "\\64".to_string()),
             (
                 "ipv6_gateway".to_string(),
                 "2a00:fb01:400:100::1".to_string(),

@@ -48,13 +48,13 @@
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::ic::{
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use ic_tests::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::driver::test_env_api::{
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;

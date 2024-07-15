@@ -71,7 +71,7 @@ pub fn install_code_benchmark(c: &mut Criterion) {
         &mut group,
         "canisters:1/wasm:0B/arg:0B",
         (1, 0, 0),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,

@@ -53,12 +53,6 @@ testnet/
 
 
                  inventory/
-                             inventory
-                                 Shell script which invokes Python tool to
-                                 generate dynamic inventory.
-                                 This wrapper script is necessary due to the
-                                 use of Nix environment.
-
                              inventory.py
                                  This Python script generates the Ansible
                                  inventory, based on the hosts.ini input.
@@ -121,17 +115,17 @@ testnet/
       env/
                  <testnet>/
                              hosts
-                                 This file is a symbolic link to the inventory
-                                 Shell script, not the actual Ansible inventory.
+                                 This file is a symbolic link to the dynamic Ansible
+                                 inventory script.
 
-                                   hosts -> ../../ansible/inventory/inventory
+                                   hosts -> ../../ansible/inventory/inventory.py
 
                                 When creating a new testnet, this link can be created with
-                                `cd testnet/env/<testnet> && ln -sf ../../ansible/inventory/inventory hosts`
+                                `cd testnet/env/<testnet> && ln -sf ../../ansible/inventory/inventory.py hosts`
 
                              hosts.ini
-                                 An abstracted, more human readable version of
-                                 the Ansible inventory. Please define your
+                                 An abstracted, human readable version of the minimal
+                                 Ansible inventory for a deployment. Please define your
                                  subnet here.
 
                                  For examples, look at the hosts.ini of the
@@ -140,7 +134,7 @@ testnet/
 
                  shared-config.yml
                      Ansible inventory configuration shared across testnets.
-                     This includes data center IPv6 prefixes, Prometheus scraping
+                     This includes data center IPv6 prefixes, metrics scraping
                      parameters and default values for Ansible roles.
 
 
@@ -153,11 +147,6 @@ testnet/
                      Command:
                        ./icos_deploy.sh --git-revision <hash> ${testnet}
 ```
-
-### Support
-
-Please send bugs and questions to the [#eng-testnet](https://dfinity.slack.com/archives/C014QBN5EE5) channel. The IC-OS team
-is happy to help and will try to answer your questions in a timely manner.
 
 ### Dependencies
 
@@ -239,10 +228,7 @@ Adjective
 
 ***Additional Options***
 
-Ansible accepts setting variables from the command line with -e $key=$value. For instance:
-
-  `-e yes_i_confirm=yes`: Skip confirmation prompts.
-  `-e ic_no_destroy=yes`: For install verbs, skip the destroy operation.
+Ansible accepts setting variables from the command line with -e $key=$value.
 
 ### Run-Deployment
 
@@ -355,7 +341,7 @@ zh1-spm00.zh1.dfinity.network
 For large testnets it might make sense to adjust the default resources. The disk
 size should not be smaller than 50 GB.
 
-(example of changed `env/xsmall-a/hosts.ini`)
+(example of changed `env/small01/hosts.ini`)
 ```
 [physical_hosts]
 zh1-spm19.zh1.dfinity.network ic_cores=2 ic_disk_gb=50 ic_memory_gb=8
@@ -457,66 +443,3 @@ example.1.1 node_index=4 ic_host="zh1-spm00"
 nns
 subnet_1
 ```
-
-Again, in case of invalid configuration an exception will be thrown and the Ansible inventory will not be usable.
-
-### Monitoring
-
-The third section holds the Prometheus monitoring configuration. Please make
-sure to use a unique port.
-
-```
-[prometheus]
-# General prometheus config is in shared-config.yml
-[prometheus:vars]
-# Note: The port must be different for each deployment. Find used ports in all deployments with:
-# cd testnet
-# grep ic_p8s_service_discovery_metrics_addr= env/*/*host* | awk -F : '{print $1,$NF}' | sort -k2,3n
-ic_p8s_service_discovery_metrics_addr=[2a05:d01c:d9:2b84:e1df:81b7:9c18:a85b]:8000
-```
-## Blueprint
-
-This section describes the tools and architecture behind the new IC-OS
-deployment.
-
-### HostOS
-
-:construction:
-
-### GuestOS
-
-:construction:
-
-### Ansible
-
-:construction:
-
-## Troubleshooting
-
-:construction:
-
-## FAQ
-
-Please help us to curate and extend this FAQ.
-
----
-
-:question:
-What does the notation `<testnet>` mean?
-
-:white_check_mark:
-This notation is simply a placeholder for a testnet define in:
-
-`ic/testnet/env/*`
-
----
-
-:question:
-Question
-
-:white_check_mark:
-Answer
-
----
-
-## Appendix

@@ -21,29 +21,27 @@ Success::
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
-use crate::{
-    driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
-    orchestrator::utils::ssh_access::update_ssh_keys_for_all_unassigned_nodes,
+use crate::orchestrator::utils::{
+    ssh_access::{
+        generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted, AuthMean,
+    },
+    upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
 };
-use crate::{
+use anyhow::bail;
+use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nns_common::types::NeuronId;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
     nns::{
         self, submit_update_elected_replica_versions_proposal,
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
-    orchestrator::utils::ssh_access::{
-        generate_key_strings, get_updateunassignednodespayload,
-        wait_until_authentication_is_granted, AuthMean,
-    },
-    orchestrator::utils::upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
     util::{block_on, get_nns_node, runtime_from_url},
 };
-use anyhow::bail;
-use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::types::NeuronId;
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
 use slog::info;
 use std::convert::TryFrom;
@@ -69,7 +67,7 @@ pub fn test(env: TestEnv) {
 
     // obtain readonly access
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let payload = get_updateunassignednodespayload(Some(vec![readonly_public_key.clone()]));
+    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key.clone()]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -142,7 +140,6 @@ pub fn test(env: TestEnv) {
             proposal_sender.clone(),
             test_neuron_id,
             target_version.clone(),
-            readonly_public_key.clone(),
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal2_id).await;
@@ -154,7 +151,11 @@ pub fn test(env: TestEnv) {
     });
 
     // wait for the unassigned node to be updated
-    retry(
+    ic_system_test_driver::retry_with_msg!(
+        format!(
+            "check if unassigned node {} is at version {}",
+            unassigned_node.node_id, target_version
+        ),
         env.logger(),
         secs(900),
         secs(10),
@@ -162,7 +163,7 @@ pub fn test(env: TestEnv) {
             Ok(ver) if (ver == target_version) => Ok(()),
             Ok(ver) => bail!("Unassigned node replica version: {}", ver),
             Err(_) => bail!("Waiting for the host to boot..."),
-        },
+        }
     )
     .expect("Unassigned node was not updated!");
     info!(logger, "Unassigned node was updated to: {}", target_version);

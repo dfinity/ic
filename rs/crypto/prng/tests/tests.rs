@@ -2,8 +2,8 @@ use ic_crypto_prng::RandomnessPurpose::{
     BlockmakerRanking, CommitteeSampling, DkgCommitteeSampling, ExecutionThread,
 };
 use ic_crypto_prng::{Csprng, RandomnessPurpose};
-use ic_types::consensus::{RandomBeacon, RandomTape};
-use ic_types::consensus::{RandomBeaconContent, RandomTapeContent};
+use ic_types::consensus::RandomBeacon;
+use ic_types::consensus::RandomBeaconContent;
 use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
 };
@@ -60,23 +60,6 @@ fn should_produce_deterministic_randomness_from_seed_and_purpose() {
     let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
 
     assert_eq!(rng.next_u32(), 196_996_056);
-}
-
-#[test]
-fn should_produce_deterministic_randomness_from_seed_from_random_tape() {
-    fix_replica_version();
-
-    let random_tape = fake_random_tape(1);
-
-    let randomness = Csprng::seed_from_random_tape(&random_tape);
-
-    assert_eq!(
-        randomness.get(),
-        [
-            109, 145, 169, 77, 62, 78, 152, 146, 147, 81, 94, 181, 213, 81, 105, 131, 60, 109, 217,
-            138, 33, 26, 94, 209, 110, 76, 228, 189, 126, 119, 13, 2
-        ]
-    );
 }
 
 #[test]
@@ -181,19 +164,6 @@ fn should_produce_different_randomness_for_different_execution_threads_for_rando
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
 }
 
-#[test]
-fn should_produce_different_seeds_for_different_random_tapes() {
-    fix_replica_version();
-
-    let (tape_1, tape_2) = (random_tape(), random_tape_2());
-    assert_ne!(tape_1, tape_2);
-
-    let seed_1 = Csprng::seed_from_random_tape(&tape_1);
-    let seed_2 = Csprng::seed_from_random_tape(&tape_2);
-
-    assert_ne!(seed_1, seed_2);
-}
-
 fn fake_random_beacon(height: u64) -> RandomBeacon {
     Signed {
         content: RandomBeaconContent::new(
@@ -215,14 +185,6 @@ fn random_beacon_2() -> RandomBeacon {
     fake_random_beacon(2)
 }
 
-fn random_tape() -> RandomTape {
-    fake_random_tape(1)
-}
-
-fn random_tape_2() -> RandomTape {
-    fake_random_tape(2)
-}
-
 fn seed() -> Randomness {
     Randomness::new([123; 32])
 }
@@ -237,15 +199,5 @@ fn fake_dkg_id(h: u64) -> NiDkgId {
         dealer_subnet: subnet_test_id(0),
         dkg_tag: NiDkgTag::HighThreshold,
         target_subnet: NiDkgTargetSubnet::Local,
-    }
-}
-
-fn fake_random_tape(height: u64) -> RandomTape {
-    Signed {
-        content: RandomTapeContent::new(Height::from(height)),
-        signature: ThresholdSignature {
-            signer: fake_dkg_id(0),
-            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-        },
     }
 }

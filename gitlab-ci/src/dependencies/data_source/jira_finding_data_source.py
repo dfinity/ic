@@ -90,11 +90,21 @@ class JiraFindingDataSource(FindingDataSource):
         self.deleted_findings_cached = {}
         self.risk_assessors = []
 
+    # Remove the unnecessary text strings from the description of the Linux kernel CNA CVEs
+    @staticmethod
+    def __filter_linux_kernel_cna_cves(vuln_description: str) -> str:
+        filter_strings = [
+            "In the Linux kernel, the following vulnerability has been resolved: "
+        ]
+        for filter_string in filter_strings:
+            vuln_description = vuln_description.replace(filter_string, "")
+        return vuln_description
+
     @staticmethod
     def __finding_to_jira_vulnerabilities(vulnerabilities: List[Vulnerability]) -> str:
         vuln_table: str = "||*id*||*name*||*description*||*score*||*risk*||\n"
         for vuln in vulnerabilities:
-            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ', True)}|\n"
+            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(JiraFindingDataSource.__filter_linux_kernel_cna_cves(vuln.description))}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ', True)}|\n"
         return vuln_table
 
     @staticmethod
@@ -232,6 +242,7 @@ class JiraFindingDataSource(FindingDataSource):
                     if team == known_team_val["name"]:
                         owners.append(known_team_key)
                         break
+        owners.sort()
         return owners
 
     @staticmethod
@@ -586,6 +597,19 @@ class JiraFindingDataSource(FindingDataSource):
         logging.debug(f"did not find commit hash {commit_hash} in comments of ticket {ticket}")
         return False
 
+    @staticmethod
+    def __does_exceed_character_limit(finding: Finding, fields_to_update: Dict[str, Any]):
+        does_exceed = False
+        for field_name, field_value in fields_to_update.items():
+            try:
+                if len(field_value) > 32700:
+                    logging.warning(f"field {field_name} in finding {finding.id()} exceeds character limit with {len(field_value)} characters")
+                    does_exceed = True
+            except TypeError:
+                pass # some types don't have a length
+
+        return does_exceed
+
     def create_or_update_open_finding(self, finding: Finding):
         logging.debug(f"create_or_update_open_finding({finding})")
         self.__load_findings_for_scanner(finding.scanner)
@@ -596,9 +620,13 @@ class JiraFindingDataSource(FindingDataSource):
             finding_old, jira_issue = self.findings[finding.id()]
             fields_to_update = self.__finding_diff_to_jira(finding_old, finding)
             if len(fields_to_update) > 0:
-                logging.debug(f"updating finding fields {fields_to_update}")
-                jira_issue.update(fields_to_update)
-                self.findings[finding.id()] = (finding_new, jira_issue)
+                if self.__does_exceed_character_limit(finding, fields_to_update):
+                    # in this case we print the whole finding, so we have the updated finding at least in the log
+                    logging.warning(f"skipping update of the following finding because some fields exceed character limit: {finding} ")
+                else:
+                    logging.debug(f"updating finding fields {fields_to_update}")
+                    jira_issue.update(fields_to_update)
+                    self.findings[finding.id()] = (finding_new, jira_issue)
             else:
                 logging.debug(f"no fields were changed for finding {finding}")
             for sub in self.subscribers:
@@ -607,12 +635,16 @@ class JiraFindingDataSource(FindingDataSource):
             # create finding
             logging.debug(f"creating finding {finding}")
             fields_to_update = self.__finding_diff_to_jira(None, finding)
-            logging.debug(f"creating finding fields {fields_to_update}")
-            jira_issue = self.jira.create_issue(fields_to_update)
-            finding.more_info = jira_issue.permalink()
-            self.findings[finding.id()] = (finding_new, jira_issue)
-            for sub in self.subscribers:
-                sub.on_finding_created(deepcopy(finding))
+            if self.__does_exceed_character_limit(finding, fields_to_update):
+                # in this case we print the whole finding, so we have the new finding at least in the log
+                logging.warning(f"skipping creation of the following finding because some fields exceed character limit: {finding}")
+            else:
+                logging.debug(f"creating finding fields {fields_to_update}")
+                jira_issue = self.jira.create_issue(fields_to_update)
+                finding.more_info = jira_issue.permalink()
+                self.findings[finding.id()] = (finding_new, jira_issue)
+                for sub in self.subscribers:
+                    sub.on_finding_created(deepcopy(finding))
 
     def delete_finding(self, finding: Finding):
         logging.debug(f"delete_finding({finding})")
@@ -668,6 +700,9 @@ class JiraFindingDataSource(FindingDataSource):
             return self.risk_assessors
         except RuntimeError:
             logging.error(
-                f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}\nusing default risk assessors instead"
+                "could not determine risk assessors by ticket\nusing default risk assessors instead"
+            )
+            logging.debug(
+                f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}"
             )
             return JIRA_DEFAULT_RISK_ASSESSORS

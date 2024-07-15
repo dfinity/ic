@@ -14,10 +14,6 @@ Usage: $0 <CANISTER_NAME> <VERSION> (<CANDID_ARGS> <NNS_URL> <NEURON_ID>)
   NNS_URL: The url to the subnet running the NNS in your testnet.
   NEURON_ID: The neuron used to submit proposals (should have following to immediately pass)
 
-  NOTE: Both NNS_URL and NEURON_ID can be passed in or set as environment variables.
-    Using \"source \$YOUR_WORKING_DIRECTORY/output_vars_nns_state_deployment.sh\" will give you the needed
-    variables in your shell.
-
   NOTE: If testing cycles-minting canister upgrade, you may have to set SKIP_STOPPING=yes in your environment before
     running this script, if your upgrade arguments reference canisters not running on this testnet.
 
@@ -30,6 +26,8 @@ Usage: $0 <CANISTER_NAME> <VERSION> (<CANDID_ARGS> <NNS_URL> <NEURON_ID>)
 if [ $# -lt 2 ]; then
     help
 fi
+
+set_testnet_env_variables
 
 CANISTER_NAME=$1
 VERSION=$2
@@ -45,10 +43,12 @@ if [ ! -z "$CANDID_ARGS" ]; then
     ENCODED_ARGS_FILE=$(encode_candid_args_in_file "$CANDID_ARGS")
 fi
 
-# Due to open call contexts being restored with mainnet state that point to a subnet not existing in subnets,
-# we need to skip stopping the canister if we are upgrading cycles-minting.  This should be safe because the
-# responses to those requests will never happen.  This test may cause a
-# false failure, but not a false success, which is okay for this use case.
+# When CMC is recovered from mainnet, it soon starts making calls to the Exchange Rate Canister (XRC), which is on a
+# subnet that is not recovered.  These calls don't timeout and can't return.  That prevents CMC from ever being able to
+# stop, which means we could never complete the upgrade. However, because they cannot return,
+# it is safe to skip stopping when testing the upgrade of this canister, as replies cannot cause arbitrary code to execute
+# when they return (which is the only reason for stopping in the first place).  The upgrade will still work, and
+# the upgrade process will be exercised.
 if [ "$CANISTER_NAME" == "cycles-minting" ]; then
     export SKIP_STOPPING=yes
 fi

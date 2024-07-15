@@ -3,9 +3,9 @@ use std::{sync::Arc, time::Instant};
 use anyhow::{anyhow, Context as AnyhowContext};
 use async_trait::async_trait;
 use candid::Principal;
-use hyper::{Body, Request, StatusCode, Uri};
 use mockall::automock;
 use opentelemetry::KeyValue;
+use reqwest::{Method, Request, StatusCode, Url};
 use serde::Deserialize;
 use tracing::info;
 
@@ -48,14 +48,14 @@ pub struct CertificatesImporter {
     http_client: Arc<dyn HttpClient>,
 
     // Configuration
-    exporter_uri: Uri,
+    exporter_url: Url,
 }
 
 impl CertificatesImporter {
-    pub fn new(http_client: Arc<dyn HttpClient>, exporter_uri: Uri) -> Self {
+    pub fn new(http_client: Arc<dyn HttpClient>, exporter_url: Url) -> Self {
         Self {
             http_client,
-            exporter_uri,
+            exporter_url,
         }
     }
 }
@@ -63,27 +63,21 @@ impl CertificatesImporter {
 #[async_trait]
 impl Import for CertificatesImporter {
     async fn import(&self) -> Result<Vec<Package>, ImportError> {
-        let req = Request::builder()
-            .method("GET")
-            .uri(&self.exporter_uri)
-            .body(Body::empty())
-            .context("failed to create http request")?;
-
-        let mut response = self
+        let req = Request::new(Method::GET, self.exporter_url.clone());
+        let response = self
             .http_client
-            .request(req)
+            .execute(req)
             .await
             .context("failed to make http request")?;
-
         if response.status() != StatusCode::OK {
             return Err(anyhow!(format!("request failed: {}", response.status())).into());
         }
 
-        let bs = hyper::body::to_bytes(response.body_mut())
+        let bs = response
+            .bytes()
             .await
             .context("failed to consume response")?
             .to_vec();
-
         let pkgs: Vec<Package> =
             serde_json::from_slice(&bs).context("failed to parse json body")?;
 
@@ -140,8 +134,9 @@ mod tests {
     use super::*;
 
     use anyhow::Error;
-    use hyper::Response;
+    use axum::http::Response;
     use mockall::predicate;
+    use reqwest::Body;
     use std::{str::FromStr, sync::Arc};
 
     use crate::{http::MockHttpClient, verify::MockVerify};
@@ -150,14 +145,15 @@ mod tests {
     async fn import_ok() -> Result<(), Error> {
         let mut http_client = MockHttpClient::new();
         http_client
-            .expect_request()
+            .expect_execute()
             .times(1)
-            .with(predicate::function(|req: &Request<Body>| {
-                req.method().eq("GET") && req.uri().to_string().eq("http://certificates/")
+            .with(predicate::function(|req: &Request| {
+                req.method().as_str().eq("GET") && req.url().to_string().eq("http://certificates/")
             }))
             .returning(|_| {
-                Ok(Response::new(Body::from(
-                    r#"[
+                Ok(Response::builder()
+                    .body(Body::from(
+                        r#"[
                 {
                     "name": "name",
                     "canister": "aaaaa-aa",
@@ -167,12 +163,14 @@ mod tests {
                     ]
                 }
             ]"#,
-                )))
+                    ))
+                    .unwrap()
+                    .into())
             });
 
         let importer = CertificatesImporter::new(
             Arc::new(http_client),                 // http_client
-            Uri::from_str("http://certificates")?, // exporter_uri
+            Url::from_str("http://certificates")?, // exporter_uri
         );
 
         let out = importer.import().await?;

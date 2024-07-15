@@ -4,20 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.36"
-axum = "0.6.12"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 bytes = { workspace = true }
-crossbeam-channel = "0.5.5"
 either = "1.6.0"
 futures = { workspace = true }
-ic-artifact-manager = { path = "../../artifact_manager" }
+ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-consensus-manager = { path = "../consensus_manager" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-peer-manager = { path = "../peer_manager" }
@@ -33,12 +32,14 @@ ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../state_sync_manager" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
-mockall = "0.11.4"
-quinn = { version = "0.10.2", features = ["ring"] }
-serde = "1.0.99"
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+mockall = { workspace = true }
+pin-project-lite = "0.2"
+quinn = { workspace = true }
+quinn-udp = { workspace = true }
+serde = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
-turmoil = "0.5"
+turmoil = { workspace = true }

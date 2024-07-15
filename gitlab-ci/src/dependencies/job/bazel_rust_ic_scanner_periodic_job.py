@@ -1,11 +1,11 @@
-from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
+import logging
+
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from model.project import Project
 from model.repository import Repository
 from model.team import Team
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
-from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyManager
 from scanner.scanner_job_type import ScannerJobType
@@ -16,9 +16,11 @@ REPOS_TO_SCAN = [
     Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project(name="internet-identity", path="internet-identity", owner=Team.GIX_TEAM)]),
     Repository("response-verification", "https://github.com/dfinity/response-verification", [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)]),
     Repository("agent-rs", "https://github.com/dfinity/agent-rs", [Project(name="agent-rs", path="agent-rs", owner=Team.SDK_TEAM)]),
+    Repository("ic-canister-sig-creation", "https://github.com/dfinity/ic-canister-sig-creation", [Project(name="ic-canister-sig-creation", path="ic-canister-sig-creation", owner=Team.GIX_TEAM)]),
 ]
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:
@@ -37,8 +39,8 @@ if __name__ == "__main__":
         notify_on_scan_job_failed=notify_on_scan_job_failed,
     )
     notifier = NotificationCreator(config)
-    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), notifier]
-    scanner_subscribers = [ConsoleLoggerScannerSubscriber(), notifier]
+    finding_data_source_subscribers = [notifier]
+    scanner_subscribers = [notifier]
     scanner_job = DependencyScanner(
         BazelRustDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers), scanner_subscribers
     )

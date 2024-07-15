@@ -1,4 +1,4 @@
-use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
+use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -15,13 +15,17 @@ use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
-use ic_types::{methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time};
+use ic_types::{
+    messages::RequestMetadata, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
+    Time,
+};
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, IntCounter, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
+use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
 #[cfg(test)]
@@ -29,44 +33,49 @@ mod tests;
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
-    accessed_pages: Histogram,
-    dirty_pages: Histogram,
-    read_before_write_count: Histogram,
-    direct_write_count: Histogram,
+    accessed_pages: HistogramVec,
+    dirty_pages: HistogramVec,
+    read_before_write_count: HistogramVec,
+    direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
     largest_function_instruction_count: Histogram,
     compile: Histogram,
     max_complexity: Histogram,
-    sigsegv_count: Histogram,
-    mmap_count: Histogram,
-    mprotect_count: Histogram,
-    copy_page_count: Histogram,
+    num_tables: Histogram,
+    sigsegv_count: HistogramVec,
+    mmap_count: HistogramVec,
+    mprotect_count: HistogramVec,
+    copy_page_count: HistogramVec,
 }
 
 impl HypervisorMetrics {
     #[doc(hidden)] // pub for usage in tests
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            accessed_pages: metrics_registry.histogram(
+            accessed_pages: metrics_registry.histogram_vec(
                 "hypervisor_accessed_pages",
-                "Number of pages accessed per execution round.",
+                "Number of pages accessed by type of memory (wasm, stable) and api type.",
                 // 1 page, 2 pages, …, 2^21 (8GiB worth of) pages
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
-            dirty_pages: metrics_registry.histogram(
+            dirty_pages: metrics_registry.histogram_vec(
                 "hypervisor_dirty_pages",
-                "Number of pages modified (dirtied) per execution round.",
+                "Number of pages modified (dirtied) by type of memory (wasm, stable) and api type.",
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
-            read_before_write_count: metrics_registry.histogram(
+            read_before_write_count: metrics_registry.histogram_vec(
                 "hypervisor_read_before_write_count",
-                "Number of wasm heap write accesses handled where the page had already been read.",
+                "Number of write accesses handled where the page had already been read by type of memory (wasm, stable) and api type.",
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
-            direct_write_count: metrics_registry.histogram(
+            direct_write_count: metrics_registry.histogram_vec(
                 "hypervisor_direct_write_count",
-                "Number of wasm heap write accesses handled where the page had not yet been read.",
+                "Number of write accesses handled where the page had not yet been read by type of memory (wasm, stable) and api type.",
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
             allocated_pages: metrics_registry.int_gauge(
                 "hypervisor_allocated_pages",
@@ -87,48 +96,92 @@ impl HypervisorMetrics {
                 "The maximum function complexity in a wasm module.",
                 decimal_buckets_with_zero(1, 8), //10 - 100M.
             ),
-            sigsegv_count: metrics_registry.histogram(
+            num_tables: metrics_registry.histogram(
+                "hypervisor_wasm_num_tables",
+                "The number of tables in a wasm module.",
+                decimal_buckets_with_zero(0, 0), // 0, 1, 2, 5
+            ),
+            sigsegv_count: metrics_registry.histogram_vec(
                 "hypervisor_sigsegv_count",
-                "Number of signal faults handled during the execution.",
+                "Number of signal faults handled during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
-            mmap_count: metrics_registry.histogram(
+            mmap_count: metrics_registry.histogram_vec(
                 "hypervisor_mmap_count",
-                "Number of calls to mmap during the execution.",
+                "Number of calls to mmap during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
-            mprotect_count: metrics_registry.histogram(
+            mprotect_count: metrics_registry.histogram_vec(
                 "hypervisor_mprotect_count",
-                "Number of calls to mprotect during the execution.",
+                "Number of calls to mprotect during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
-            copy_page_count: metrics_registry.histogram(
+            copy_page_count: metrics_registry.histogram_vec(
                 "hypervisor_copy_page_count",
-                "Number of calls to pages memcopied during the execution.",
+                "Number of calls to pages memcopied during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
         }
     }
 
-    fn observe(&self, result: &WasmExecutionResult) {
+    fn observe(&self, result: &WasmExecutionResult, api_type: &str) {
         if let WasmExecutionResult::Finished(_, output, ..) = result {
             self.accessed_pages
-                .observe(output.instance_stats.accessed_pages as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_accessed_pages as f64);
             self.dirty_pages
-                .observe(output.instance_stats.dirty_pages as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_dirty_pages as f64);
             self.read_before_write_count
-                .observe(output.instance_stats.read_before_write_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_read_before_write_count as f64);
             self.direct_write_count
-                .observe(output.instance_stats.direct_write_count as f64);
-            self.allocated_pages.set(allocated_pages_count() as i64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_direct_write_count as f64);
             self.sigsegv_count
-                .observe(output.instance_stats.sigsegv_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_sigsegv_count as f64);
             self.mmap_count
-                .observe(output.instance_stats.mmap_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_mmap_count as f64);
             self.mprotect_count
-                .observe(output.instance_stats.mprotect_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_mprotect_count as f64);
             self.copy_page_count
-                .observe(output.instance_stats.copy_page_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_copy_page_count as f64);
+
+            // Additional metrics for the stable memory.
+            self.accessed_pages
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_accessed_pages as f64);
+            self.dirty_pages
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_dirty_pages as f64);
+            self.read_before_write_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_read_before_write_count as f64);
+            self.direct_write_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_direct_write_count as f64);
+            self.sigsegv_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_sigsegv_count as f64);
+            self.mmap_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_mmap_count as f64);
+            self.mprotect_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_mprotect_count as f64);
+            self.copy_page_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_copy_page_count as f64);
+
+            self.allocated_pages.set(allocated_pages_count() as i64);
         }
     }
 
@@ -137,11 +190,13 @@ impl HypervisorMetrics {
             largest_function_instruction_count,
             compilation_time,
             max_complexity,
+            num_tables,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
         self.max_complexity.observe(*max_complexity as f64);
+        self.num_tables.observe(*num_tables as f64);
     }
 }
 
@@ -317,6 +372,8 @@ impl Hypervisor {
         network_topology: &NetworkTopology,
         round_limits: &mut RoundLimits,
         state_changes_error: &IntCounter,
+        call_tree_metrics: &dyn CallTreeMetrics,
+        call_context_creation_time: Time,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         assert_eq!(
             execution_parameters.instruction_limits.message(),
@@ -330,6 +387,7 @@ impl Hypervisor {
             canister_current_message_memory_usage,
             execution_parameters,
             func_ref,
+            RequestMetadata::for_new_call_tree(time),
             round_limits,
             network_topology,
         );
@@ -353,6 +411,8 @@ impl Hypervisor {
             self.own_subnet_id,
             &self.log,
             state_changes_error,
+            call_tree_metrics,
+            call_context_creation_time,
         );
         (output, execution_state, system_state)
     }
@@ -368,6 +428,7 @@ impl Hypervisor {
         canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
+        request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
         network_topology: &NetworkTopology,
     ) -> WasmExecutionResult {
@@ -387,7 +448,11 @@ impl Hypervisor {
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
+            request_metadata,
+            api_type.caller(),
+            api_type.call_context_id(),
         );
+        let api_type_str = api_type.as_str();
         let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
                 api_type,
@@ -401,12 +466,11 @@ impl Hypervisor {
             },
             execution_state,
         );
-
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
-        self.metrics.observe(&execution_result);
+        self.metrics.observe(&execution_result, api_type_str);
         execution_result
     }
 

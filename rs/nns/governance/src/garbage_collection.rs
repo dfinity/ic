@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 lazy_static! {
     static ref TOPICS_EXEMPT_FROM_GARBAGE_COLLECTION: HashSet<Topic> =
-        hashset![Topic::SnsAndCommunityFund, Topic::SnsDecentralizationSale];
+        hashset![Topic::SnsAndCommunityFund];
 }
 
 impl Governance {

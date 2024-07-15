@@ -7,9 +7,10 @@ use axum::{
     Extension,
 };
 use bytes::BytesMut;
+use ic_base_types::NodeId;
+use ic_interfaces::p2p::state_sync::StateSyncArtifactId;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
-use ic_types::{artifact::StateSyncArtifactId, NodeId};
 use prost::Message;
 
 pub const STATE_SYNC_ADVERT_PATH: &str = "/state-sync/advert";

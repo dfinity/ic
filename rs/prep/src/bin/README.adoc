@@ -35,8 +35,6 @@ The fields are:
 
 - `xnet_api` - an endpoint on which the node will handle XNet messages
 
-- `chip_id` - an optional value to register as the node's chip id.
-
 - `node_operator_principal_id` - an optional Principal to use as the node's NO.
 
 === Example

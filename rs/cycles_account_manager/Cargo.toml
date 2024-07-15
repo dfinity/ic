@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-nns-constants = { path = "../nns/constants" }
@@ -25,4 +25,6 @@ candid = { workspace = true }
 ic-constants = { path = "../constants" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-wasm-types = { path = "../types/wasm_types" }

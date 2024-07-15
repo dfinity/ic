@@ -2,14 +2,19 @@ use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    DefaultMemoryImpl, RestrictedMemory, Storable,
+    storable::Bound, DefaultMemoryImpl, RestrictedMemory, Storable,
 };
-use icrc_ledger_types::icrc3::blocks::BlockRange;
-use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
+use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::icrc3::blocks::{
+    GenericBlock as IcrcBlock, ICRC3DataCertificate, SupportedBlockType,
+};
+use icrc_ledger_types::{icrc::generic_value::ICRC3Value, icrc3::blocks::BlockWithId};
 
 use icrc_ledger_types::icrc3::transactions::Transaction;
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, TransactionRange};
@@ -106,6 +111,8 @@ impl Storable for ArchiveConfig {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).expect("failed to decode archive options")
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 /// A helper function to access the configuration.
@@ -272,6 +279,80 @@ fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
 }
 
 #[query]
+#[candid_method(query)]
+fn icrc3_get_archives(_arg: GetArchivesArgs) -> GetArchivesResult {
+    vec![]
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
+    // Only the Ledger certifies the tip of the chain.
+    None
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
+    vec![
+        SupportedBlockType {
+            block_type: "1burn".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "1mint".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "2approve".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "2xfer".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
+                .to_string(),
+        },
+    ]
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    const MAX_BLOCKS_PER_RESPONSE: u64 = 100;
+
+    let mut blocks = vec![];
+    for req in reqs {
+        let mut id = req.start.clone();
+        let (start, length) = req
+            .as_start_and_length()
+            .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+        let max_length = MAX_BLOCKS_PER_RESPONSE.saturating_sub(blocks.len() as u64);
+        if max_length == 0 {
+            break;
+        }
+        let length = length.min(max_length);
+        let decoded_block_range = decode_block_range(start, length, decode_icrc1_block);
+        for block in decoded_block_range {
+            blocks.push(BlockWithId {
+                id: id.clone(),
+                block: ICRC3Value::from(block),
+            });
+            id += 1u64;
+        }
+    }
+    GetBlocksResult {
+        // We return the local log length because the archive
+        // knows only about its local blocks.
+        log_length: candid::Nat::from(with_blocks(|blocks| blocks.len())),
+        blocks,
+        archived_blocks: vec![],
+    }
+}
+
+#[query(hidden = true)]
 fn __get_candid_interface_tmp_hack() -> &'static str {
     include_str!(env!("ARCHIVE_DID_PATH"))
 }
@@ -279,13 +360,18 @@ fn __get_candid_interface_tmp_hack() -> &'static str {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "archive_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::api::stable::stable64_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "archive_stable_memory_bytes",
-        ic_cdk::api::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::api::stable::stable64_size() as f64 * 65536f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "archive_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
@@ -308,7 +394,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -333,7 +419,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     candid::export_service!();

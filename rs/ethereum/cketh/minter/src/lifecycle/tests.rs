@@ -18,7 +18,7 @@ mod init {
 
         assert_matches!(
             State::try_from(InitArg {
-                minimum_withdrawal_amount: Nat::from(0),
+                minimum_withdrawal_amount: Nat::from(0_u8),
                 ..valid_init_arg()
             }),
             Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))
@@ -79,9 +79,12 @@ mod init {
 
         assert_eq!(state.ethereum_network, init_arg.ethereum_network);
         assert_eq!(state.ecdsa_key_name, init_arg.ecdsa_key_name);
-        assert_eq!(state.ethereum_contract_address, None);
-        assert_eq!(state.ledger_id, init_arg.ledger_id);
-        assert_eq!(state.minimum_withdrawal_amount, Wei::TWO);
+        assert_eq!(state.eth_helper_contract_address, None);
+        assert_eq!(state.cketh_ledger_id, init_arg.ledger_id);
+        assert_eq!(
+            state.cketh_minimum_withdrawal_amount,
+            Wei::new(10_000_000_000_000_000)
+        );
         assert_eq!(
             state.eth_transactions.next_transaction_nonce(),
             TransactionNonce::ZERO
@@ -96,7 +99,7 @@ mod init {
             ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                 .expect("BUG: invalid principal"),
             ethereum_block_height: Default::default(),
-            minimum_withdrawal_amount: Wei::TWO.into(),
+            minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
             next_transaction_nonce: TransactionNonce::ZERO.into(),
             last_scraped_block_number: Default::default(),
         }

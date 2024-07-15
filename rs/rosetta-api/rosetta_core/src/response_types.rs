@@ -231,3 +231,157 @@ impl ConstructionPreprocessResponse {
         }
     }
 }
+
+/// The ConstructionMetadataResponse returns network-specific metadata used for
+/// transaction construction.  Optionally, the implementer can return the
+/// suggested fee associated with the transaction being constructed. The caller
+/// may use this info to adjust the intent of the transaction or to create a
+/// transaction with a different account that can pay the suggested fee.
+/// Suggested fee is an array in case fee payment must occur in multiple
+/// currencies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionMetadataResponse {
+    pub metadata: ObjectMap,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_fee: Option<Vec<Amount>>,
+}
+
+/// ConstructionTransactionResponse is returned by `/construction/payloads`. It
+/// contains an unsigned transaction blob (that is usually needed to construct
+/// the a network transaction from a collection of signatures) and an array of
+/// payloads that must be signed by the caller.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionPayloadsResponse {
+    /// CBOR+hex-encoded 'UnsignedTransaction'
+    pub unsigned_transaction: String,
+
+    pub payloads: Vec<SigningPayload>,
+}
+
+impl ConstructionPayloadsResponse {
+    pub fn new(
+        unsigned_transaction: String,
+        payloads: Vec<SigningPayload>,
+    ) -> ConstructionPayloadsResponse {
+        ConstructionPayloadsResponse {
+            unsigned_transaction,
+            payloads,
+        }
+    }
+}
+
+/// ConstructionParseResponse contains an array of operations that occur in a
+/// transaction blob. This should match the array of operations provided to
+/// `/construction/preprocess` and `/construction/payloads`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionParseResponse {
+    pub operations: Vec<Operation>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_identifier_signers: Option<Vec<AccountIdentifier>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl ConstructionParseResponse {
+    pub fn new(operations: Vec<Operation>) -> ConstructionParseResponse {
+        ConstructionParseResponse {
+            operations,
+            account_identifier_signers: None,
+            metadata: None,
+        }
+    }
+}
+
+/// ConstructionCombineResponse is returned by `/construction/combine`. The
+/// network payload will be sent directly to the `construction/submit` endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionCombineResponse {
+    /// CBOR+hex-encoded 'SignedTransaction'
+    pub signed_transaction: String,
+}
+
+// This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
+// Then heavily tweaked because openapi-generator no longer generates valid rust
+// code
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConstructionSubmitResponse {
+    /// Transfers produce a real transaction identifier,
+    /// Neuron management requests produce a constant (pseudo) identifier.
+    ///
+    /// This field contains the transaction id of the last transfer operation.
+    /// If a transaction only contains neuron management operations
+    /// the constant identifier will be returned.
+    pub transaction_identifier: TransactionIdentifier,
+    pub metadata: Option<ObjectMap>,
+}
+
+/// An AccountBalanceResponse is returned on the /account/balance endpoint. If
+/// an account has a balance for each AccountIdentifier describing it (ex: an
+/// ERC-20 token balance on a few smart contracts), an account balance request
+/// must be made with each AccountIdentifier.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct AccountBalanceResponse {
+    #[serde(rename = "block_identifier")]
+    pub block_identifier: BlockIdentifier,
+
+    /// A single account may have a balance in multiple currencies.
+    #[serde(rename = "balances")]
+    pub balances: Vec<Amount>,
+
+    /// Account-based blockchains that utilize a nonce or sequence number should
+    /// include that number in the metadata. This number could be unique to the
+    /// identifier or global across the account address.
+    #[serde(rename = "metadata")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConstructionHashResponse {
+    pub transaction_identifier: TransactionIdentifier,
+    pub metadata: ObjectMap,
+}
+
+/// SearchTransactionsResponse contains an ordered collection of
+/// BlockTransactions that match the query in SearchTransactionsRequest. These
+/// BlockTransactions are sorted from most recent block to oldest block.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct SearchTransactionsResponse {
+    /// transactions is an array of BlockTransactions sorted by most recent BlockIdentifier (meaning that transactions in recent blocks appear first).
+    /// If there are many transactions for a particular search, transactions may not contain all matching transactions. It is up to the caller to paginate these transactions using the max_block field.
+    pub transactions: Vec<BlockTransaction>,
+
+    /// total_count is the number of results for a given search. Callers typically use this value to concurrently fetch results by offset or to display a virtual page number associated with results.
+    #[serde(rename = "total_count")]
+    pub total_count: i64,
+
+    /// next_offset is the next offset to use when paginating through transaction results. If this field is not populated, there are no more transactions to query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct CallResponse {
+    /// Result contains the result of the `/call` invocation. This result will not be inspected or interpreted by Rosetta tooling and is left to the caller to decode.
+    #[serde(rename = "result")]
+    pub result: ObjectMap,
+
+    /// Idempotent indicates that if `/call` is invoked with the same CallRequest again, at any point in time, it will return the same CallResponse. Integrators may cache the CallResponse if this is set to true to avoid making unnecessary calls to the Rosetta implementation. For this reason, implementers should be very conservative about returning true here or they could cause issues for the caller.
+    pub idempotent: bool,
+}
+
+impl CallResponse {
+    pub fn new(result: ObjectMap, idempotent: bool) -> CallResponse {
+        CallResponse { result, idempotent }
+    }
+}

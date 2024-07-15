@@ -51,8 +51,10 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
 
     RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + [
         # This would only work inside the devcontainer
-        "-Clink-arg=/usr/lib/llvm-15/lib/clang/15.0.7/lib/linux/libclang_rt.fuzzer-x86_64.a",
+        "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/x86_64-pc-linux-gnu/libclang_rt.fuzzer.a",
     ]
+
+    kwargs.setdefault("testonly", True)
 
     rust_binary(
         name = name,
@@ -91,11 +93,14 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
         "-Clink-arg=-fsanitize=address",
     ]
 
+    kwargs.setdefault("testonly", True)
+
     rust_binary(
         name = name,
         srcs = srcs,
         aliases = {},
         rustc_env = {
+            "AFL_LLVM_LAF_ALL": "1",
             "AFL_USE_ASAN": "1",
             "AFL_USE_LSAN": "1",
         },

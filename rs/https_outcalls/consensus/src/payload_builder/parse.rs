@@ -88,7 +88,7 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
         // All metadata shares have the same id, otherwise they would not have been included as a past payload
         Some(MessageType::DivergenceResponse(response)) => response
             .shares
-            .get(0)
+            .first()
             .and_then(|share| share.metadata.as_ref().map(|md| md.id)),
         Some(MessageType::Timeout(id)) => Some(id),
         None => None,

@@ -16,7 +16,7 @@ dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
 candid = { workspace = true }
 futures = { workspace = true }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 wat = "1.0.52"

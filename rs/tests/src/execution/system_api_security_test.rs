@@ -3,13 +3,22 @@
    data, write into unauthorized memory etc.
 */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
-use crate::util::*;
 use core::fmt::Write;
 use ic_agent::{agent::RejectResponse, export::Principal, AgentError, RequestId};
 use ic_registry_subnet_type::SubnetType;
+
+use ic_system_test_driver::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+        },
+    },
+    retry_with_msg_async,
+    util::*,
+};
 use ic_utils::interfaces::ManagementCanister;
 use slog::{debug, Logger};
 use std::{time::Duration, time::Instant};
@@ -170,12 +179,45 @@ pub fn malicious_inputs(env: TestEnv) {
             .await
             .unwrap();
 
-        tests_for_illegal_wasm_memory_access(logger, &agent, &canister_id).await;
+        retry_with_msg_async!(
+            "testing for illegal wasm memory access",
+            logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                tests_for_illegal_wasm_memory_access(logger, &agent, &canister_id).await;
+                Ok(())
+            }
+        )
+        .await
+        .unwrap();
 
-        tests_for_stale_data_in_buffer_between_calls(&agent, &canister_id).await;
+        retry_with_msg_async!(
+            "testing for stale data in buffer between calls",
+            logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                tests_for_stale_data_in_buffer_between_calls(&agent, &canister_id).await;
+                Ok(())
+            }
+        )
+        .await
+        .unwrap();
 
-        tests_for_illegal_data_buffer_access(&agent, &canister_id).await;
-    })
+        retry_with_msg_async!(
+            "testing for illegal data buffer access",
+            logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                tests_for_illegal_data_buffer_access(&agent, &canister_id).await;
+                Ok(())
+            }
+        )
+        .await
+        .unwrap();
+    });
 }
 
 async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_id: &Principal) {
@@ -191,7 +233,7 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "Should return error if try to read input buffer on no input",
     );
@@ -215,13 +257,15 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
         .call()
         .await;
     let containing_str = "violated contract: ic0.msg_arg_data_copy heap: src=65536 + length=10 exceeds the slice size=65536";
-    assert!(
-        matches!(
-            ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
-        ),
-        "Should return error if input data is copied to out of bound internal buffer"
-    );
+
+    match ret_val {
+        Err(AgentError::UncertifiedReject(RejectResponse { reject_message, reject_code, error_code})) => {
+            assert!(reject_message.contains(containing_str), "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", reject_message);
+            assert_eq!(reject_code, ic_agent::agent::RejectCode::CanisterError);
+            assert_eq!(error_code, Some("IC0504".into()));
+        }
+        _ => panic!("Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected reply: {:?}.", ret_val)
+    };
 
     // Calls msg caller with correct size = 29 bytes
     let ret_val = agent
@@ -242,7 +286,7 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "msg_caller with caller large length 128 was accepted"
     );
@@ -348,7 +392,7 @@ async fn tests_for_illegal_wasm_memory_access(
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "expected msg_reply_data_append(0, 65537) to fail"
     );
@@ -364,7 +408,7 @@ async fn tests_for_illegal_wasm_memory_access(
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "expected msg_reply_data_append(65536, 10) to fail"
     );
@@ -407,11 +451,21 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
 
     let agent = node.build_default_agent();
 
-    block_on(async move {
-        let canister_b =
-            create_and_install(&agent, node.effective_canister_id(), &canister_b_wasm).await;
+    block_on(retry_with_msg_async!(
+        "testing malitious intercanister calls",
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            let effective_canister_id = node.effective_canister_id();
+            let canister_b_wasm_clone = canister_b_wasm.clone();
+            let agent_clone = agent.clone();
+            async move {
+                let canister_b =
+                    create_and_install(&agent_clone, effective_canister_id, &canister_b_wasm_clone)
+                        .await;
 
-        let canister_a_wasm = wat::parse_str(format!(
+                let canister_a_wasm = wat::parse_str(format!(
             r#"(module
             (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -533,99 +587,104 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
             canister_b.as_slice().len(),
             canister_b.as_slice().len(),
             escape_for_wat(&canister_b))).unwrap();
-        let canister_a =
-            create_and_install(&agent, node.effective_canister_id(), &canister_a_wasm).await;
+                let canister_a =
+                    create_and_install(&agent_clone, effective_canister_id, &canister_a_wasm).await;
 
-        let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_before =
-            print_validate_num_cycles(logger, &ret_val, "Before calling proxy()");
+                let ret_val = agent_clone.query(&canister_a, "read_cycles").call().await;
+                let num_cycles_before =
+                    print_validate_num_cycles(logger, &ret_val, "Before calling proxy()");
 
-        let ret_val = agent
-            .update(&canister_a, "proxy")
-            .with_arg(vec![1; 4])
-            .call()
-            .await;
-        assert!(ret_val.is_ok());
+                let ret_val = agent_clone
+                    .update(&canister_a, "proxy")
+                    .with_arg(vec![1; 4])
+                    .call()
+                    .await;
+                assert!(ret_val.is_ok());
 
-        const NR_SLEEPS: usize = 3;
-        for _ in 0..NR_SLEEPS {
-            // Wait for few seconds before reading the data.
-            sleep_until(tokio::time::Instant::from_std(
-                Instant::now() + Duration::from_secs(5),
-            ))
-            .await;
-            let ret_val = agent.query(&canister_a, "read").call().await;
-            assert!(ret_val.is_ok());
-            let result = ret_val.unwrap();
-            // Initial value at mem location 60 is [0,0,0,0,0]
-            if result.as_slice() != [0, 0, 0, 0, 0] {
-                // The last (5th) byte having a value of 1 means that the inter-canister response was processed by on_reply
-                assert_eq!(
-                    [1, 1, 1, 1, 1],
-                    result.as_slice(),
-                    "Expected result is [1,1,1,1,1]"
+                const NR_SLEEPS: usize = 3;
+                for _ in 0..NR_SLEEPS {
+                    // Wait for few seconds before reading the data.
+                    sleep_until(tokio::time::Instant::from_std(
+                        Instant::now() + Duration::from_secs(5),
+                    ))
+                    .await;
+                    let ret_val = agent_clone.query(&canister_a, "read").call().await;
+                    assert!(ret_val.is_ok());
+                    let result = ret_val.unwrap();
+                    // Initial value at mem location 60 is [0,0,0,0,0]
+                    if result.as_slice() != [0, 0, 0, 0, 0] {
+                        // The last (5th) byte having a value of 1 means that the inter-canister response was processed by on_reply
+                        assert_eq!(
+                            [1, 1, 1, 1, 1],
+                            result.as_slice(),
+                            "Expected result is [1,1,1,1,1]"
+                        );
+                        break;
+                    }
+                }
+
+                let ret_val = agent_clone.query(&canister_a, "read_cycles").call().await;
+                let num_cycles_after =
+                    print_validate_num_cycles(logger, &ret_val, "After calling proxy()");
+                assert!(
+                    (num_cycles_after < num_cycles_before),
+                    "num_cycles_after is not less than num_cycles_before"
                 );
-                break;
+                let cycles_used_proxy = num_cycles_before - num_cycles_after;
+                if ENABLE_DEBUG_LOG {
+                    debug!(logger, "total cycles used = {}", cycles_used_proxy);
+                }
+
+                /* Now make intercanister call proxy_err that throws error  and check the cycles used */
+                let ret_val = agent_clone.query(&canister_a, "read_cycles").call().await;
+                let num_cycles_before =
+                    print_validate_num_cycles(logger, &ret_val, "Before calling proxy_err()");
+
+                let ret_val = agent_clone
+                    .update(&canister_a, "proxy_err")
+                    .with_arg(vec![2; 4])
+                    .call()
+                    .await;
+                assert!(ret_val.is_ok());
+
+                // Wait for few seconds before reading the data.
+                for _ in 0..NR_SLEEPS {
+                    sleep_until(tokio::time::Instant::from_std(
+                        Instant::now() + Duration::from_secs(5),
+                    ))
+                    .await;
+                    let ret_val = agent_clone.query(&canister_a, "read").call().await;
+                    assert!(ret_val.is_ok());
+                    let result = ret_val.unwrap();
+                    // The initial value is [1,1,1,1,1] because of the previous call that succeeded and copies [1,1,1,1,1] to mem location 60
+                    if result.as_slice() != [1, 1, 1, 1, 1] {
+                        // The last (5th) byte having a value of 1 means that the inter-canister response was processed by on_reply
+                        assert_eq!(
+                            [2, 2, 2, 2, 1],
+                            result.as_slice(),
+                            "Expected result is [2,2,2,2,1]"
+                        );
+                        break;
+                    }
+                }
+
+                let ret_val = agent_clone.query(&canister_a, "read_cycles").call().await;
+                let num_cycles_after =
+                    print_validate_num_cycles(logger, &ret_val, "After calling proxy_err()");
+                assert!(
+                    (num_cycles_after < num_cycles_before),
+                    "num_cycles_after is not less than num_cycles_before"
+                );
+                let cycles_used_proxy_err = num_cycles_before - num_cycles_after;
+                if ENABLE_DEBUG_LOG {
+                    debug!(logger, "total cycles used = {}", cycles_used_proxy_err);
+                }
+                assert!(cycles_used_proxy > cycles_used_proxy_err);
+
+                Ok(())
             }
         }
-
-        let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_after = print_validate_num_cycles(logger, &ret_val, "After calling proxy()");
-        assert!(
-            (num_cycles_after < num_cycles_before),
-            "num_cycles_after is not less than num_cycles_before"
-        );
-        let cycles_used_proxy = num_cycles_before - num_cycles_after;
-        if ENABLE_DEBUG_LOG {
-            debug!(logger, "total cycles used = {}", cycles_used_proxy);
-        }
-
-        /* Now make intercanister call proxy_err that throws error  and check the cycles used */
-        let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_before =
-            print_validate_num_cycles(logger, &ret_val, "Before calling proxy_err()");
-
-        let ret_val = agent
-            .update(&canister_a, "proxy_err")
-            .with_arg(vec![2; 4])
-            .call()
-            .await;
-        assert!(ret_val.is_ok());
-
-        // Wait for few seconds before reading the data.
-        for _ in 0..NR_SLEEPS {
-            sleep_until(tokio::time::Instant::from_std(
-                Instant::now() + Duration::from_secs(5),
-            ))
-            .await;
-            let ret_val = agent.query(&canister_a, "read").call().await;
-            assert!(ret_val.is_ok());
-            let result = ret_val.unwrap();
-            // The initial value is [1,1,1,1,1] because of the previous call that succeeded and copies [1,1,1,1,1] to mem location 60
-            if result.as_slice() != [1, 1, 1, 1, 1] {
-                // The last (5th) byte having a value of 1 means that the inter-canister response was processed by on_reply
-                assert_eq!(
-                    [2, 2, 2, 2, 1],
-                    result.as_slice(),
-                    "Expected result is [2,2,2,2,1]"
-                );
-                break;
-            }
-        }
-
-        let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_after =
-            print_validate_num_cycles(logger, &ret_val, "After calling proxy_err()");
-        assert!(
-            (num_cycles_after < num_cycles_before),
-            "num_cycles_after is not less than num_cycles_before"
-        );
-        let cycles_used_proxy_err = num_cycles_before - num_cycles_after;
-        if ENABLE_DEBUG_LOG {
-            debug!(logger, "total cycles used = {}", cycles_used_proxy_err);
-        }
-        assert!(cycles_used_proxy > cycles_used_proxy_err);
-    });
+    )).unwrap();
 }
 
 #[allow(dead_code)]

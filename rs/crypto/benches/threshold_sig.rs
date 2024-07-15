@@ -1,7 +1,7 @@
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion};
-use ic_crypto::THRESHOLD_SIG_DATA_STORE_CAPACITY;
+use ic_crypto::THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
@@ -360,8 +360,10 @@ fn purge_dkg_id_from_data_store(
     transcript: &NiDkgTranscript,
 ) {
     let mut dummy_transcript = transcript.clone();
+    // Ensure that the tag of the dummy transcript matches the explicitly provided one.
+    assert_eq!(dummy_transcript.dkg_id.dkg_tag, dkg_id.dkg_tag);
 
-    for _i in 1..=THRESHOLD_SIG_DATA_STORE_CAPACITY
+    for _i in 1..=THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG
         .try_into()
         .expect("overflow")
     {

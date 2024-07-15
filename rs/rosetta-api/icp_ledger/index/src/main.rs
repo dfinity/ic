@@ -1,4 +1,5 @@
 use candid::{candid_method, Principal};
+use dfn_core::api::caller;
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query};
@@ -7,16 +8,17 @@ use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
     GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
-    Priority, Status, TransactionWithId,
+    Priority, SettledTransaction, SettledTransactionWithId, Status,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_stable_structures::StableBTreeMap;
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    DefaultMemoryImpl, Storable,
+    storable::Bound, DefaultMemoryImpl, Storable,
 };
-use ic_stable_structures::{BoundedStorable, StableBTreeMap};
 use icp_ledger::{
     AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
     GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
@@ -122,6 +124,8 @@ impl Storable for State {
             ic_cdk::api::trap(&format!("{:?}", err));
         })
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -150,11 +154,11 @@ impl Storable for AccountIdentifierDataType {
             ic_cdk::api::trap(&format!("Unknown AccountDataType {}", bytes[0]));
         }
     }
-}
 
-impl BoundedStorable for AccountIdentifierDataType {
-    const MAX_SIZE: u32 = 1;
-    const IS_FIXED_SIZE: bool = true;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 1,
+        is_fixed_size: true,
+    };
 }
 
 /// A helper function to access the scalar state.
@@ -488,7 +492,7 @@ fn get_block_range_from_stable_memory(
     start: u64,
     length: u64,
 ) -> Result<Vec<EncodedBlock>, String> {
-    let length = length.min(DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64);
+    let length = length.min(icp_ledger::max_blocks_per_request(&caller()) as u64);
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         let mut res = vec![];
@@ -528,13 +532,18 @@ fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex>
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::api::stable::stable64_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "index_stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "index_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
@@ -586,12 +595,12 @@ fn get_account_identifier_transactions(
 ) -> GetAccountIdentifierTransactionsResult {
     let length = arg
         .max_results
-        .min(DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64)
+        .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
         .min(usize::MAX as u64) as usize;
     // TODO: deal with the user setting start to u64::MAX
     let start = arg.start.map_or(u64::MAX, |n| n);
     let key = account_identifier_block_ids_key(arg.account_identifier, start);
-    let mut transactions = vec![];
+    let mut settled_transactions = vec![];
     let indices = with_account_identifier_block_ids(|account_identifier_block_ids| {
         account_identifier_block_ids
             .range(key..)
@@ -611,21 +620,22 @@ fn get_account_identifier_transactions(
                 ));
             })
         });
-        let transaction = decode_encoded_block(id, block.into())
+        let settled_transaction = SettledTransaction::from(decode_encoded_block(id, EncodedBlock::from(block))
             .unwrap_or_else(|_| {
                 ic_cdk::api::trap(&format!(
-                "Block {} not found in the block log, account_identifier blocks map is corrupted!",id
-            ));
-            })
-            .transaction;
-        let transaction_with_idx = TransactionWithId { id, transaction };
-        transactions.push(transaction_with_idx);
+                    "Block {} not found in the block log, account_identifier blocks map is corrupted!",id))
+            }));
+        let transaction_with_idx = SettledTransactionWithId {
+            id,
+            transaction: settled_transaction,
+        };
+        settled_transactions.push(transaction_with_idx);
     }
     let oldest_tx_id = get_oldest_tx_id(arg.account_identifier);
     let balance = get_balance(arg.account_identifier);
     Ok(GetAccountIdentifierTransactionsResponse {
         balance,
-        transactions,
+        transactions: settled_transactions,
         oldest_tx_id,
     })
 }
@@ -634,7 +644,7 @@ fn get_account_identifier_transactions(
 #[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
-        account_identifier: arg.account.into(),
+        account_identifier: AccountIdentifier::from(arg.account),
         max_results: arg
             .max_results
             .0
@@ -703,7 +713,7 @@ fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 
 #[query]
 #[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> u64 {
-    get_balance(account.into())
+    get_balance(AccountIdentifier::from(account))
 }
 
 #[query]
@@ -725,7 +735,7 @@ fn test_account_identifier_data_type_storable() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
 
     candid::export_service!();
 
@@ -735,7 +745,7 @@ fn check_candid_interface_compatibility() {
     let old_interface =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("index.did");
 
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

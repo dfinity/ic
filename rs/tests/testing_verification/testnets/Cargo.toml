@@ -7,11 +7,19 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
 tests = { path = "../.." }
 ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
+ic-xrc-types = "1.0.0"
 slog = { workspace = true }
+xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
+serde_json = { workspace = true }
+serde = { workspace = true }
 
 [[bin]]
 name = "large"
@@ -34,10 +42,6 @@ name = "single_large_node"
 path = "single_large_node.rs"
 
 [[bin]]
-name = "small_api_boundary"
-path = "small_api_boundary.rs"
-
-[[bin]]
 name = "small_nns"
 path = "small_nns.rs"
 
@@ -48,3 +52,11 @@ path = "small.rs"
 [[bin]]
 name = "sns_testing"
 path = "sns_testing.rs"
+
+[[bin]]
+name = "src_testing"
+path = "src_testing.rs"
+
+[[bin]]
+name = "from_config"
+path = "from_config.rs"

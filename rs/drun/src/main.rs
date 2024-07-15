@@ -1,9 +1,10 @@
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command};
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_canister_sandbox_launcher::sandbox_launcher_main;
-use ic_config::{embedders::MeteringType, flag_status::FlagStatus, Config, ConfigSource};
+use ic_config::{flag_status::FlagStatus, Config, ConfigSource};
 use ic_drun::{run_drun, DrunOptions};
 use ic_registry_subnet_type::SubnetType;
 use std::path::PathBuf;
@@ -16,7 +17,6 @@ const ARG_MESSAGES: &str = "messages";
 const ARG_EXTRA_BATCHES: &str = "extra-batches";
 const ARG_INSTRUCTION_LIMIT: &str = "instruction-limit";
 const ARG_SUBNET_TYPE: &str = "subnet-type";
-const USE_OLD_METERING: &str = "use-old-metering";
 
 fn main() -> Result<(), String> {
     // Check if `drun` is running in the canister sandbox mode where it waits
@@ -29,6 +29,9 @@ fn main() -> Result<(), String> {
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
         Ok(())
+    } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
+        compiler_sandbox_main();
+        Ok(())
     } else {
         drun_main()
     }
@@ -37,7 +40,7 @@ fn main() -> Result<(), String> {
 #[tokio::main]
 async fn drun_main() -> Result<(), String> {
     let matches = get_arg_matches();
-    Config::run_with_temp_config(|mut default_config| {
+    Config::run_with_temp_config(|mut default_config| async {
         let source = matches
             .value_of(ARG_CONF)
             .map(|arg| ConfigSource::File(PathBuf::from(arg)))
@@ -52,7 +55,7 @@ async fn drun_main() -> Result<(), String> {
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         default_config.hypervisor.rate_limiting_of_heap_delta = FlagStatus::Disabled;
         default_config.hypervisor.rate_limiting_of_instructions = FlagStatus::Disabled;
-        let mut cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
+        let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             eprintln!("Failed to load config:\n  {}", err);
             std::process::exit(1);
         });
@@ -86,13 +89,6 @@ async fn drun_main() -> Result<(), String> {
             })
             .unwrap_or(SubnetType::System);
 
-        let use_old_metering = matches.get_flag(USE_OLD_METERING);
-        cfg.hypervisor.embedders_config.metering_type = if use_old_metering {
-            MeteringType::Old
-        } else {
-            MeteringType::New
-        };
-
         let uo = DrunOptions {
             msg_filename: matches.value_of(ARG_MESSAGES).unwrap().to_string(),
             cfg,
@@ -101,8 +97,9 @@ async fn drun_main() -> Result<(), String> {
             instruction_limit,
             subnet_type,
         };
-        run_drun(uo)
+        run_drun(uo).await
     })
+    .await
 }
 
 fn get_arg_matches() -> ArgMatches {
@@ -161,12 +158,6 @@ fn get_arg_matches() -> ArgMatches {
                 .help("Use specified subnet type.")
                 .value_name("Subnet Type")
                 .takes_value(true),
-        )
-        .arg(
-            Arg::new(USE_OLD_METERING)
-                .long(USE_OLD_METERING)
-                .help("Enable the old metering in the local canister execution environment.")
-                .action(ArgAction::SetTrue),
         )
         .get_matches()
 }

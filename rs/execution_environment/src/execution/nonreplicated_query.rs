@@ -7,13 +7,13 @@
 
 use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
-use crate::{Hypervisor, NonReplicatedQueryKind};
+use crate::{metrics::CallTreeMetricsNoOp, Hypervisor, NonReplicatedQueryKind};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
-use ic_types::messages::CallContextId;
+use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{Cycles, NumInstructions, Time};
 use prometheus::IntCounter;
@@ -81,7 +81,12 @@ pub fn execute_non_replicated_query(
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .new_call_context(call_origin, Cycles::zero(), time);
+                .new_call_context(
+                    call_origin,
+                    Cycles::zero(),
+                    time,
+                    RequestMetadata::for_new_call_tree(time),
+                );
             (
                 ic_system_api::NonReplicatedQueryKind::Stateful {
                     call_context_id,
@@ -101,6 +106,7 @@ pub fn execute_non_replicated_query(
         data_certificate,
         non_replicated_query_kind,
     );
+
     // As we are executing the query in non-replicated mode, we can
     // modify the canister as the caller is not going to be able to
     // commit modifications to the canister anyway.
@@ -116,6 +122,8 @@ pub fn execute_non_replicated_query(
         network_topology,
         round_limits,
         state_changes_error,
+        &CallTreeMetricsNoOp,
+        time,
     );
     canister.system_state = output_system_state;
     if preserve_changes {

@@ -17,6 +17,7 @@ struct FieldElementConfig {
     monty_r3: BigUint,
     p_dash: u64,
     is_p_3_mod_4: bool,
+    is_p_5_mod_8: bool,
     params: BTreeMap<String, BigUint>,
 }
 
@@ -51,6 +52,8 @@ impl FieldElementConfig {
             params.insert("SSWU_C2".to_string(), sswu_c2);
         }
 
+        let is_p_5_mod_8 = modulus.get_limb(0) % 8 == 5;
+
         Self {
             ident,
             limbs,
@@ -61,6 +64,7 @@ impl FieldElementConfig {
             monty_r3,
             p_dash,
             is_p_3_mod_4,
+            is_p_5_mod_8,
             params,
         }
     }
@@ -174,6 +178,10 @@ pub fn derive_field_element(input: proc_macro::TokenStream) -> proc_macro::Token
         gen.extend(p_3_mod_4_extras(&config));
     }
 
+    if config.is_p_5_mod_8 && config.params.contains_key("SQRT_NEG_1") {
+        gen.extend(p_5_mod_8_extras(&config));
+    }
+
     gen.into()
 }
 
@@ -244,6 +252,9 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
             const MONTY_R3: Self = Self::from_limbs([#(#monty_r3_limbs,)*]);
             const P_DASH: u64 = #p_dash;
 
+            /// Size of this field element in bytes
+            pub const BYTES: usize = 8 * #limbs;
+
             /// Initialize from limbs (private constructor)
             const fn from_limbs(limbs: [u64; #limbs]) -> Self {
                 Self { limbs }
@@ -285,11 +296,24 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
                 }
             }
 
+            /// Conditional assignment matching hash2curve notation
+            ///
+            /// CMOV(a, b, c): If c is False, CMOV returns a, otherwise it returns b.
+            pub fn cmov(a: &Self, b: &Self, assign: subtle::Choice) -> Self {
+                use subtle::ConditionallySelectable;
+
+                let mut r = [0u64; #limbs];
+                for i in 0..#limbs {
+                    r[i] = u64::conditional_select(&a.limbs[i], &b.limbs[i], assign);
+                }
+                Self::from_limbs(r)
+            }
+
             /// Parse the given byte array as a field element.
             ///
             /// Return None if the byte array does not represeent an integer in [0,p)
             pub fn from_bytes(bytes: &[u8]) -> std::option::Option<Self> {
-                if bytes.len() != 8 * #limbs {
+                if bytes.len() != Self::BYTES {
                     return None;
                 }
 
@@ -316,13 +340,17 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
             }
 
             pub fn from_bytes_wide(bytes: &[u8]) -> Option<Self> {
-                if bytes.len() > 2 * 8 * #limbs {
+                if bytes.len() > 2 * Self::BYTES {
                     return None;
                 }
 
-                let mut wide_bytes = [0u8; 2 * 8 * #limbs];
-                wide_bytes[2 * 8 * #limbs - bytes.len()..].copy_from_slice(bytes);
+                let mut wide_bytes = [0u8; 2 * Self::BYTES];
+                wide_bytes[2 * Self::BYTES - bytes.len()..].copy_from_slice(bytes);
 
+                Some(Self::from_bytes_wide_exact(&wide_bytes))
+            }
+
+            pub fn from_bytes_wide_exact(wide_bytes: &[u8; 2*Self::BYTES]) -> Self {
                 let mut limbs = [0u64; 2 * #limbs];
 
                 for i in 0..2 * #limbs {
@@ -330,19 +358,26 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
                 }
 
                 // First reduce then mul by R3 to convert to Montgomery form
-                Some(Self::redc(&limbs).mul(&Self::MONTY_R3))
+                Self::redc(&limbs).mul(&Self::MONTY_R3)
             }
 
             /// Return the encoding of this field element
-            pub fn as_bytes(&self) -> [u8; 8*#limbs] {
+            pub fn as_bytes(&self) -> [u8; Self::BYTES] {
                 // Convert from Montgomery form
                 let value = Self::redc(&self.limbs);
-                let mut ret = [0u8; 8 * #limbs];
+                let mut ret = [0u8; Self::BYTES];
                 for i in 0..#limbs {
                     ret[8 * i..(8 * i + 8)]
                         .copy_from_slice(&value.limbs[#limbs - 1 - i].to_be_bytes());
                 }
                 ret
+            }
+
+            /// Return the "sign" of self (effectively self mod 2)
+            ///
+            /// See Section 4.1 of RFC 9380 for details
+            pub fn sign(&self) -> u8 {
+                (self.as_bytes()[Self::BYTES - 1] & 1) as u8
             }
 
             /// Return self + rhs mod p
@@ -359,8 +394,13 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
             }
 
             /// Return self - rhs mod p
-            pub fn subtract(&self, rhs: &Self) -> Self {
+            pub fn sub(&self, rhs: &Self) -> Self {
                 Self::mod_sub(&self.limbs, rhs.limbs)
+            }
+
+            /// Return -self mod p
+            pub fn negate(&self) -> Self {
+                Self::zero().sub(self)
             }
 
             fn mod_sub(l: &[u64], r: [u64; #limbs]) -> Self {
@@ -512,6 +552,46 @@ fn p_3_mod_4_extras(config: &FieldElementConfig) -> proc_macro2::TokenStream {
 
                 // zero the result if invalid
                 sqrt.ct_assign(&Self::zero(), !is_correct_sqrt);
+
+                (is_correct_sqrt, sqrt)
+            }
+        }
+    }
+}
+
+fn p_5_mod_8_extras(config: &FieldElementConfig) -> proc_macro2::TokenStream {
+    let ident = config.ident.clone();
+    let limbs = config.limbs;
+
+    let q_plus3_div8 = (&config.modulus + BigUint::from_bytes_be(&[3])) >> 3;
+    let q_plus3_div8_limbs = biguint_as_u64s(&q_plus3_div8, limbs);
+
+    let q_minus5_div8 = (&config.modulus - BigUint::from_bytes_be(&[5])) >> 3;
+    let q_minus5_div8_limbs = biguint_as_u64s(&q_minus5_div8, limbs);
+
+    quote! {
+        impl #ident {
+            const Q_PLUS3_DIV8: [u64; #limbs] = [#(#q_plus3_div8_limbs,)*];
+
+            const Q_MINUS5_DIV8: [u64; #limbs] = [#(#q_minus5_div8_limbs,)*];
+
+            /// Return the square root of self mod p, or zero if no square root exists.
+            ///
+            /// The validity of the result is determined by the returned Choice
+            pub fn sqrt(&self) -> (subtle::Choice, Self) {
+                // See https://www.rfc-editor.org/rfc/rfc9380.html#name-sqrt-for-q-5-mod-8
+
+                let tv1 = self.pow_vartime(&Self::Q_PLUS3_DIV8);
+                let tv2 = tv1.mul(&Self::sqrt_neg_1());
+
+                let tv1_ok = tv1.square().ct_eq(self);
+                let tv2_ok = tv2.square().ct_eq(self);
+
+                let mut sqrt = Self::zero();
+                sqrt.ct_assign(&tv1, tv1_ok);
+                sqrt.ct_assign(&tv2, tv2_ok);
+
+                let is_correct_sqrt = tv1_ok | tv2_ok;
 
                 (is_correct_sqrt, sqrt)
             }

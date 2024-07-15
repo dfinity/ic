@@ -12,7 +12,7 @@ use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
-        governance::{NeuronInFlightCommand, SnsMetadata},
+        governance::{Mode, NeuronInFlightCommand, SnsMetadata},
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron::{DissolveState, Followees},
         proposal::Action,
@@ -257,7 +257,7 @@ fn allocate_proposal_data(
     let payload_size: usize = match action {
         native_action_ids::UNSPECIFIED | native_action_ids::MOTION => 10_000, // Max size of motion_text payload = 10_000 bytes
         native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS => 280, // sizeof(NervousSystemParameter) = 280 bytes
-        native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER => 1_500_000, // Governance wasm is 1.5 MB
+        native_action_ids::UPGRADE_SNS_CONTROLLED_CANISTER => 1_500_000, // Governance wasm is 1.5 MB
         native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION => 200, // sizeof(NervousSystemFunction) = ~200 bytes
         native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 8, // sizeof(u64) = 8 bytes
         native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 1_000_000, // Estimate of average payload size = 1MB
@@ -322,6 +322,7 @@ fn populate_canister_state() {
             description: Some("A project to spin up a ServiceNervousSystem".to_string()),
             url: Some("https://internetcomputer.org".to_string()),
         }),
+        mode: Mode::Normal.into(),
         ..Default::default()
     };
 

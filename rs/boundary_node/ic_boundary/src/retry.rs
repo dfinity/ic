@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse, Extension};
 use http::{request::Parts, Request};
 use hyper::body;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, SubnetId};
 
 use crate::{
     http::AxumResponse,
@@ -16,6 +16,7 @@ use crate::{
 pub struct RetryParams {
     pub retry_count: usize,
     pub retry_update_call: bool,
+    pub disable_latency_routing: bool,
 }
 
 #[derive(Clone)]
@@ -51,27 +52,41 @@ fn request_clone(parts: &Parts, body: &[u8]) -> Request<Body> {
     // TODO upgrade to 1.0.0 at some point, for now we just manually copy the following extensions that have
     // to be present. This must be kept in sync with whatever extensions we inject into the request before retry middleware.
 
-    request
-        .extensions_mut()
-        .insert(parts.extensions.get::<RequestContext>().unwrap().clone());
+    request.extensions_mut().insert(
+        parts
+            .extensions
+            .get::<Arc<RequestContext>>()
+            .unwrap()
+            .clone(),
+    );
 
-    request
-        .extensions_mut()
-        .insert(parts.extensions.get::<CanisterId>().cloned().unwrap());
+    if let Some(canister_id) = parts.extensions.get::<CanisterId>().cloned() {
+        request.extensions_mut().insert(canister_id);
+    };
+    if let Some(subnet_id) = parts.extensions.get::<SubnetId>().cloned() {
+        request.extensions_mut().insert(subnet_id);
+    }
 
     request
 }
 
-/// Middleware that optionally retries the request according to the predefined conditions
+// Middleware that optionally retries the request according to the predefined conditions
 pub async fn retry_request(
     State(params): State<RetryParams>,
-    Extension(ctx): Extension<RequestContext>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet): Extension<Arc<RouteSubnet>>,
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Select up to 1+retry_count nodes from the subnet if there are any
-    let nodes = subnet.pick_random_nodes(1 + params.retry_count)?;
+    let nodes = if !params.disable_latency_routing
+        && (ctx.request_type == RequestType::Call || ctx.request_type == RequestType::CallV3)
+    {
+        let factor = subnet.fault_tolerance_factor() + 1;
+        subnet.pick_n_out_of_m_closest(1 + params.retry_count, factor)?
+    } else {
+        subnet.pick_random_nodes(1 + params.retry_count)?
+    };
 
     // Skip retrying in certain cases
     if params.retry_count == 0
@@ -94,7 +109,7 @@ pub async fn retry_request(
     let body = body::to_bytes(body).await.unwrap();
 
     let mut response_last: Option<AxumResponse> = None;
-    let mut node_last: Option<Node> = None;
+    let mut node_last: Option<Arc<Node>> = None;
     let mut retry_result = RetryResult {
         retries: 0,
         success: false,

@@ -17,13 +17,12 @@ def _upload_artifact_impl(ctx):
     if rclone_endpoint != "":
         rclone_config = ctx.file.rclone_anon_config
 
-    rc = ctx.attr._rc[BuildSettingInfo].value
+    s3_upload = ctx.attr._s3_upload[BuildSettingInfo].value
 
     ctx.actions.expand_template(
         template = ctx.file._artifacts_uploader_template,
         output = uploader,
         substitutions = {
-            "@@RC@@": "True" if rc else "False",
             "@@RCLONE@@": ctx.file._rclone.path,
             "@@RCLONE_CONFIG@@": rclone_config.path,
             "@@REMOTE_SUBDIR@@": ctx.attr.remote_subdir,
@@ -53,7 +52,8 @@ def _upload_artifact_impl(ctx):
     )
 
     fileurl = []
-    for f in ctx.files.inputs + [checksum]:
+    allinputs = ctx.files.inputs + [checksum] if s3_upload else [checksum]
+    for f in allinputs:
         filename = ctx.label.name + "_" + f.basename
         url = ctx.actions.declare_file(filename + ".url")
         proxy_cache_url = ctx.actions.declare_file(filename + ".proxy-cache-url")
@@ -95,7 +95,7 @@ _upload_artifacts = rule(
         "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
         "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
         "_s3_endpoint": attr.label(default = ":s3_endpoint"),
-        "_rc": attr.label(default = ":rc"),
+        "_s3_upload": attr.label(default = ":s3_upload"),
     },
 )
 

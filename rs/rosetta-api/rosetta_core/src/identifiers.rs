@@ -1,9 +1,14 @@
 use crate::objects::{Object, ObjectMap};
+use anyhow::{anyhow, Context};
+use candid::Principal;
+use ic_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
+use std::str::FromStr;
 
 /// The network_identifier specifies which network a particular object is
 /// associated with.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NetworkIdentifier {
     pub blockchain: String,
@@ -26,6 +31,17 @@ impl NetworkIdentifier {
             network,
             sub_network_identifier: None,
         }
+    }
+}
+
+impl TryFrom<&NetworkIdentifier> for CanisterId {
+    type Error = anyhow::Error;
+    fn try_from(value: &NetworkIdentifier) -> Result<Self, Self::Error> {
+        let principal_bytes: Vec<u8> =
+            hex::decode(&value.network).context("Hex decoding of network string failed")?;
+        let principal_id =
+            PrincipalId::try_from(&principal_bytes).context("Invalid principal id")?;
+        CanisterId::try_from(principal_id).context("Invalid canister id")
     }
 }
 
@@ -65,6 +81,26 @@ impl BlockIdentifier {
     pub fn new(index: u64, hash: String) -> BlockIdentifier {
         BlockIdentifier { index, hash }
     }
+    pub fn from_bytes(index: u64, bytes: &ByteBuf) -> BlockIdentifier {
+        BlockIdentifier {
+            index,
+            hash: hex::encode(bytes),
+        }
+    }
+}
+
+impl TryFrom<BlockIdentifier> for ByteBuf {
+    type Error = anyhow::Error;
+    fn try_from(value: BlockIdentifier) -> Result<Self, Self::Error> {
+        Ok(ByteBuf::from(
+            hex::decode(value.hash.clone()).with_context(|| {
+                format!(
+                    "Could not decode string format for BlockIdentifier: {}",
+                    value.hash
+                )
+            })?,
+        ))
+    }
 }
 
 /// When fetching data by BlockIdentifier, it may be possible to only specify
@@ -89,6 +125,15 @@ impl PartialBlockIdentifier {
     }
 }
 
+impl From<BlockIdentifier> for PartialBlockIdentifier {
+    fn from(value: BlockIdentifier) -> Self {
+        Self {
+            index: Some(value.index),
+            hash: Some(value.hash),
+        }
+    }
+}
+
 /// Neuron management commands have no transaction identifier.
 /// Since Rosetta requires a transaction identifier,
 /// `None` is serialized to a transaction identifier with the hash
@@ -103,9 +148,32 @@ pub struct TransactionIdentifier {
     pub hash: String,
 }
 
+impl TransactionIdentifier {
+    pub fn from_bytes(bytes: &ByteBuf) -> TransactionIdentifier {
+        TransactionIdentifier {
+            hash: hex::encode(bytes),
+        }
+    }
+}
+
+impl TryFrom<TransactionIdentifier> for ByteBuf {
+    type Error = anyhow::Error;
+
+    fn try_from(value: TransactionIdentifier) -> Result<Self, Self::Error> {
+        Ok(ByteBuf::from(
+            hex::decode(value.hash.clone()).with_context(|| {
+                format!(
+                    "Could not decode string format for TransactionIdentifier: {}",
+                    value.hash
+                )
+            })?,
+        ))
+    }
+}
+
 /// The operation_identifier uniquely identifies an operation within a
 /// transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct OperationIdentifier {
     /// The operation index is used to ensure each operation has a unique
@@ -154,11 +222,38 @@ pub struct AccountIdentifier {
     pub metadata: Option<ObjectMap>,
 }
 
-impl AccountIdentifier {
-    pub fn new(address: String, subaccount: Option<String>) -> AccountIdentifier {
-        AccountIdentifier {
-            address,
-            sub_account: subaccount.map(SubAccountIdentifier::new),
+impl TryFrom<AccountIdentifier> for icrc_ledger_types::icrc1::account::Account {
+    type Error = anyhow::Error;
+    fn try_from(value: AccountIdentifier) -> Result<Self, Self::Error> {
+        let subaccount: Option<[u8; 32]> = match value.sub_account.as_ref() {
+            None => None,
+            Some(sub_acc) => Some(hex::decode(&sub_acc.address)?.try_into().map_err(|_| {
+                anyhow!(
+                    "Could not convert subaccount to [u8;32] array: {:?}",
+                    sub_acc
+                )
+            })?),
+        };
+        Ok(icrc_ledger_types::icrc1::account::Account {
+            owner: Principal::from_str(&value.address).with_context(|| {
+                format!(
+                    "Unable to convert accountidentifier.address {:?} to Principal",
+                    &value.address
+                )
+            })?,
+            subaccount,
+        })
+    }
+}
+
+impl From<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
+    fn from(value: icrc_ledger_types::icrc1::account::Account) -> Self {
+        Self {
+            address: value.owner.to_string(),
+            sub_account: Some(SubAccountIdentifier {
+                address: hex::encode(value.effective_subaccount()),
+                metadata: None,
+            }),
             metadata: None,
         }
     }
@@ -180,15 +275,6 @@ pub struct SubAccountIdentifier {
     /// differing metadata will not be considered equal by clients.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<ObjectMap>,
-}
-
-impl SubAccountIdentifier {
-    pub fn new(address: String) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address,
-            metadata: None,
-        }
-    }
 }
 
 /// CoinIdentifier uniquely identifies a Coin.

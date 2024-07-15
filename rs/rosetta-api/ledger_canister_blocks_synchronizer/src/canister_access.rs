@@ -1,5 +1,5 @@
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestTransport;
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{Agent, AgentError, NonceGenerator};
 use ic_ledger_core::block::EncodedBlock;
@@ -46,7 +46,7 @@ fn make_agent(url: Url) -> Result<Agent, AgentError> {
     let is_exchanges_testnet = url.host_str() == Some("exchanges.testnet.dfinity.network");
     Agent::builder()
         .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestHttpReplicaV2Transport::create(url)?)
+        .with_transport(ReqwestTransport::create(url)?)
         .with_nonce_generator(TimestampBlob::default())
         // The testnet has an old replica version and the query
         // verification wouldn't work so we disable it

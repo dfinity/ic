@@ -15,7 +15,6 @@ use ic_types::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
     },
-    xnet::QueueId,
     CountBytes, SubnetId,
 };
 #[cfg(test)]
@@ -28,12 +27,14 @@ use std::sync::{Arc, Mutex};
 mod tests;
 
 struct StreamBuilderMetrics {
-    /// Messages currently enqueued in streams, by destination subnet.
+    /// Messages currently enqueued in streams, by remote subnet.
     pub stream_messages: IntGaugeVec,
-    /// Stream byte size, by destination subnet.
+    /// Stream byte size, by remote subnet.
     pub stream_bytes: IntGaugeVec,
-    /// Stream begin, by destination subnet.
+    /// Stream begin, by remote subnet.
     pub stream_begin: IntGaugeVec,
+    /// Signals end, by remote subnet.
+    pub signals_end: IntGaugeVec,
     /// Routed XNet messages, by type and status.
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
@@ -61,6 +62,7 @@ const MAX_STREAM_MESSAGES: usize = 50_000;
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
+const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 
@@ -83,17 +85,22 @@ impl StreamBuilderMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         let stream_messages = metrics_registry.int_gauge_vec(
             METRIC_STREAM_MESSAGES,
-            "Messages currently enqueued in streams, by destination subnet.",
+            "Messages currently enqueued in streams, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let stream_bytes = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BYTES,
-            "Stream byte size including header, by destination subnet.",
+            "Stream byte size including header, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let stream_begin = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BEGIN,
-            "Stream begin, by destination subnet",
+            "Stream begin, by remote subnet",
+            &[LABEL_REMOTE],
+        );
+        let signals_end = metrics_registry.int_gauge_vec(
+            METRIC_SIGNALS_END,
+            "Signals end, by remote subnet",
             &[LABEL_REMOTE],
         );
         let routed_messages = metrics_registry.int_counter_vec(
@@ -103,7 +110,7 @@ impl StreamBuilderMetrics {
         );
         let routed_payload_sizes = metrics_registry.histogram(
             METRIC_ROUTED_PAYLOAD_SIZES,
-            "Successfully routed XNet messages' total payload size.",
+            "Successfully routed XNet messages' payload sizes.",
             // 10 B - 5 MB
             decimal_buckets(1, 6),
         );
@@ -134,6 +141,7 @@ impl StreamBuilderMetrics {
             stream_messages,
             stream_bytes,
             stream_begin,
+            signals_end,
             routed_messages,
             routed_payload_sizes,
             critical_error_infinite_loops,
@@ -197,6 +205,7 @@ impl StreamBuilderImpl {
                             MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
                         ),
                     ),
+                    deadline: req.deadline,
                 }
                 .into(),
                 // Arbitrary large amount, pushing a response always returns memory.
@@ -248,10 +257,10 @@ impl StreamBuilderImpl {
         ///    peeked one.
         fn validated_next(
             iterator: &mut dyn PeekableOutputIterator,
-            (expected_id, expected_message): (QueueId, &RequestOrResponse),
+            expected_message: &RequestOrResponse,
         ) -> RequestOrResponse {
-            let (queue_id, message) = iterator.next().unwrap();
-            debug_assert_eq!((queue_id, &message), (expected_id, expected_message));
+            let message = iterator.next().unwrap();
+            debug_assert_eq!(&message, expected_message);
             message
         }
 
@@ -305,12 +314,12 @@ impl StreamBuilderImpl {
         // Route all messages into the appropriate stream or generate reject Responses
         // when unable to (no route to canister). When a stream's byte size reaches or
         // exceeds `target_stream_size_bytes`, any matching queues are skipped.
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
             // Safeguard to guarantee that iteration always terminates. Will always loop at
             // least once, if messages are available.
-            let output_size = output_iter.size_hint().0;
+            let output_size = output_iter.size();
             debug_assert!(output_size < last_output_size);
             if output_size >= last_output_size {
                 error!(
@@ -324,16 +333,16 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            match routing_table.route(queue_id.dst_canister.get()) {
+            match routing_table.route(msg.receiver().get()) {
                 // Destination subnet found.
-                Some(dst_net_id) => {
+                Some(dst_subnet_id) => {
                     if is_at_limit(
-                        streams.get(&dst_net_id),
+                        streams.get(&dst_subnet_id),
                         max_stream_messages,
                         target_stream_size_bytes,
-                        self.subnet_id == dst_net_id,
+                        self.subnet_id == dst_subnet_id,
                         *subnet_types
-                            .get(&dst_net_id)
+                            .get(&dst_subnet_id)
                             .unwrap_or(&SubnetType::Application),
                     ) {
                         // Stream full, skip all other messages to this destination.
@@ -342,14 +351,14 @@ impl StreamBuilderImpl {
                     }
 
                     // We will route (or reject) the message, pop it.
-                    let mut msg = validated_next(&mut output_iter, (queue_id, &msg));
+                    let mut msg = validated_next(&mut output_iter, &msg);
 
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
                     match msg {
                         // Remote request above the payload size limit.
                         RequestOrResponse::Request(req)
-                            if dst_net_id != self.subnet_id
+                            if dst_subnet_id != self.subnet_id
                                 && req.payload_size_bytes()
                                     > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES =>
                         {
@@ -401,23 +410,23 @@ impl StreamBuilderImpl {
                                 }
                             }
 
-                            streams.push(dst_net_id, msg);
+                            streams.push(dst_subnet_id, msg);
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            streams.push(dst_net_id, msg);
+                            streams.push(dst_subnet_id, msg);
                         }
                     };
                 }
 
                 // Destination subnet not found.
                 None => {
-                    warn!(self.log, "No route to canister {}", queue_id.dst_canister);
+                    warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match validated_next(&mut output_iter, (queue_id, &msg)) {
+                    match validated_next(&mut output_iter, &msg) {
                         // A Request: generate a reject Response.
                         RequestOrResponse::Request(req) => {
                             requests_to_reject.push(req);
@@ -474,9 +483,10 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.signals_end(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin)| {
+            .for_each(|(subnet, len, size_bytes, begin, signals_end)| {
                 self.metrics
                     .stream_messages
                     .with_label_values(&[&subnet])
@@ -489,6 +499,10 @@ impl StreamBuilderImpl {
                     .stream_begin
                     .with_label_values(&[&subnet])
                     .set(begin.get() as i64);
+                self.metrics
+                    .signals_end
+                    .with_label_values(&[&subnet])
+                    .set(signals_end.get() as i64);
             });
 
         {

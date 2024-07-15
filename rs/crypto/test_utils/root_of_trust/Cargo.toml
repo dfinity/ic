@@ -8,5 +8,5 @@ documentation.workspace = true
 
 [dependencies]
 ic-types = { path = "../../../types/types" }
-mockall = "0.11.4"
-thiserror = "1.0"
+mockall = { workspace = true }
+thiserror = { workspace = true }

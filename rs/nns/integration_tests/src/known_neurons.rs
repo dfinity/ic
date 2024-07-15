@@ -1,6 +1,8 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_3_ID,
+};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -12,8 +14,7 @@ use ic_nns_governance::pb::v1::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
-    itest_helpers::NnsCanisters,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 
 /// Integration test for the known neuron functionality.
@@ -27,7 +28,7 @@ use ic_nns_test_utils::{
 ///   one.
 #[test]
 fn test_known_neurons() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()

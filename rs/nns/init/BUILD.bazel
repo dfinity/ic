@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/types/base_types",
     "@crate_index//:candid",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:prost",
     "@crate_index//:tokio",
     "@crate_index//:url",
@@ -38,6 +38,7 @@ MACRO_DEV_DEPENDENCIES = []
 
 rust_library(
     name = "init",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_nns_init",
@@ -48,6 +49,7 @@ rust_library(
 
 rust_binary(
     name = "ic-nns-init",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -56,6 +58,7 @@ rust_binary(
 
 rust_binary(
     name = "ic-get-neuron-ids",
+    testonly = True,
     srcs = ["src/get_neuron_ids.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

@@ -2,18 +2,24 @@
 This module defines utilities for building Rust canisters.
 """
 
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:candid.bzl", "did_git_test")
+load("//bazel:defs.bzl", "gzip_compress")
 
-def _wasm_rust_transition_impl(_settings, _attr):
+def _wasm_rust_transition_impl(_settings, attr):
     return {
         "//command_line_option:platforms": "@rules_rust//rust/platform:wasm",
         "@rules_rust//:extra_rustc_flags": [
+            # rustc allocates a default stack size of 1MiB for Wasm, which causes stack overflow on certain
+            # recursive workloads when compiled with 1.78.0+. Hence, we set the new stack size to 3MiB
+            "-C",
+            "link-args=-z stack-size=3145728",
             "-C",
             "linker-plugin-lto",
             "-C",
-            "opt-level=z",
+            "opt-level=" + attr.opt,
             "-C",
             "debug-assertions=no",
             "-C",
@@ -48,6 +54,7 @@ wasm_rust_binary_rule = rule(
     attrs = {
         "binary": attr.label(mandatory = True, cfg = wasm_rust_transition),
         "_whitelist_function_transition": attr.label(default = "@bazel_tools//tools/whitelists/function_transition_whitelist"),
+        "opt": attr.string(mandatory = True),
     },
 )
 
@@ -60,8 +67,10 @@ def rust_canister(name, service_file, **kwargs):
       **kwargs: additional arguments to pass a rust_binary rule.
     """
     wasm_name = "_wasm_" + name.replace(".", "_")
+    opt = kwargs.pop("opt", "3")
     kwargs.setdefault("visibility", ["//visibility:public"])
     kwargs.setdefault("tags", []).append("canister")
+    kwargs.setdefault("testonly", False)
 
     rust_binary(
         name = wasm_name,
@@ -72,6 +81,8 @@ def rust_canister(name, service_file, **kwargs):
     wasm_rust_binary_rule(
         name = name + ".raw",
         binary = ":" + wasm_name,
+        opt = opt,
+        testonly = kwargs.get("testonly"),
     )
 
     did_git_test(
@@ -84,6 +95,7 @@ def rust_canister(name, service_file, **kwargs):
         name = name + ".opt",
         srcs = [name + ".raw", service_file],
         outs = [name + ".opt.wasm"],
+        testonly = kwargs.get("testonly"),
         message = "Shrinking canister " + name,
         tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = """
@@ -98,9 +110,28 @@ def rust_canister(name, service_file, **kwargs):
     )
 
     inject_version_into_wasm(
-        name = name,
+        name = name + "_with_version.opt",
         src_wasm = name + ".opt",
         version_file = "//bazel:rc_only_version.txt",
+        testonly = kwargs.get("testonly"),
+    )
+
+    gzip_compress(
+        name = name + ".wasm",
+        srcs = [name + "_with_version.opt"],
+        testonly = kwargs.get("testonly"),
+    )
+
+    copy_file(
+        name = name + "-wasm.gz",
+        src = name + ".wasm",
+        out = name + ".wasm.gz",
+        testonly = kwargs.get("testonly"),
+    )
+
+    native.alias(
+        name = name,
+        actual = name + ".wasm",
     )
 
 def motoko_canister(name, entry, deps):
@@ -112,7 +143,7 @@ def motoko_canister(name, entry, deps):
       deps: list of actor dependencies, e.g., external_actor targets from @rules_motoko.
     """
 
-    raw_wasm = entry.replace(".mo", ".wasm")
+    raw_wasm = entry.replace(".mo", ".raw")
     raw_did = entry.replace(".mo", ".did")
 
     motoko_binary(
@@ -129,12 +160,28 @@ def motoko_canister(name, entry, deps):
     )
 
     inject_version_into_wasm(
-        name = name,
+        name = name + "_with_version.opt",
         src_wasm = raw_wasm,
         version_file = "//bazel:rc_only_version.txt",
     )
 
-def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.txt", visibility = None):
+    gzip_compress(
+        name = name + ".wasm",
+        srcs = [name + "_with_version.opt"],
+    )
+
+    copy_file(
+        name = name + "-wasm.gz",
+        src = name + ".wasm",
+        out = name + ".wasm.gz",
+    )
+
+    native.alias(
+        name = name,
+        actual = name + ".wasm",
+    )
+
+def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.txt", visibility = None, testonly = False):
     """Generates an output file named `name + '.wasm'`.
 
     The output file is almost identical to the input (i.e. `src_wasm`), except
@@ -167,4 +214,5 @@ def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.
             "--file $(location " + version_file + ")",
         ]),
         visibility = visibility,
+        testonly = testonly,
     )

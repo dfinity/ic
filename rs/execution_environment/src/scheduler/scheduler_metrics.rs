@@ -6,7 +6,9 @@ use ic_metrics::{
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
-use prometheus::{Gauge, GaugeVec, Histogram, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+};
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
@@ -25,6 +27,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
+    pub(super) canister_log_memory_usage: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -38,21 +41,21 @@ pub(super) struct SchedulerMetrics {
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
-    /// Metric `consumed_cycles_since_replica_started` is not
-    /// monotonically increasing. Cycles consumed are increasing the
-    /// value of the metric while refunding cycles are decreasing it.
+    /// Metric `consumed_cycles` is not monotonically increasing. Cycles
+    /// consumed are increasing the value of the metric while refunding
+    /// cycles are decreasing it.
     ///
     /// `f64` gauge because cycles values are `u128`: converting them
     /// into `u64` would result in truncation when the value overflows
     /// 64 bits (which would be indistinguishable from a huge refund);
     /// whereas conversion to `f64` merely results in loss of precision
     /// when dealing with values > 2^53.
-    pub(super) consumed_cycles_since_replica_started: Gauge,
-    pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
+    pub(super) consumed_cycles: Gauge,
+    pub(super) consumed_cycles_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
     pub(super) input_queues_size_bytes: IntGaugeVec,
     pub(super) queues_response_bytes: IntGauge,
-    pub(super) queues_reservations: IntGauge,
+    pub(super) queues_memory_reservations: IntGauge,
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
     pub(super) streams_response_bytes: IntGauge,
     pub(super) canister_messages_where_cycles_were_charged: IntCounter,
@@ -68,11 +71,14 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
+    pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
+    pub(super) round_update_signature_request_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
+    pub(super) round_inner_iteration_exe: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
     pub(super) round_inner_iteration_thread_message: ScopedMetrics,
     pub(super) round_inner_iteration_fin: Histogram,
@@ -100,7 +106,11 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
+    // TODO(CON-1302): Remove metric once `threshold_signature_agreements` is rolled out.
     pub(super) ecdsa_signature_agreements: IntGauge,
+    pub(super) threshold_signature_agreements: IntGaugeVec,
+    pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
 }
@@ -133,12 +143,17 @@ impl SchedulerMetrics {
             ),
             canister_binary_size: memory_histogram(
                 "canister_binary_size_bytes",
-                "Canisters WASM binary size distribution in bytes.",
+                "Canisters Wasm binary size distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_log_memory_usage: memory_histogram(
+                "canister_log_memory_usage_bytes",
+                "Canisters log memory usage distribution in bytes.",
                 metrics_registry,
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
-                "Canisters WASM memory usage distribution in bytes.",
+                "Canisters Wasm memory usage distribution in bytes.",
                 metrics_registry,
             ),
             canister_stable_memory_usage: memory_histogram(
@@ -202,18 +217,34 @@ impl SchedulerMetrics {
                 "replicated_state_available_canister_ids",
                 "Number of allocated canister IDs that can still be generated.",
             ),
-            consumed_cycles_since_replica_started: metrics_registry.gauge(
+            consumed_cycles: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
-                "Number of cycles consumed since replica started",
+                "Number of cycles consumed",
             ),
-            consumed_cycles_since_replica_started_by_use_case: metrics_registry.gauge_vec(
+            consumed_cycles_by_use_case: metrics_registry.gauge_vec(
                 "replicated_state_consumed_cycles_from_replica_start",
-                "Number of cycles consumed since replica started by use cases.",
+                "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
             ecdsa_signature_agreements: metrics_registry.int_gauge(
                 "replicated_state_ecdsa_signature_agreements_total",
                 "Total number of ECDSA signature agreements created",
+            ),
+            threshold_signature_agreements: metrics_registry.int_gauge_vec(
+                "replicated_state_threshold_signature_agreements_total",
+                "Total number of threshold signature agreements created by key Id",
+                &["key_id"],
+            ),
+            delivered_pre_signatures: metrics_registry.histogram_vec(
+                "execution_ecdsa_delivered_quadruples",
+                "Number of ECDSA quadruples delivered to execution by key ID",
+                vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
+                &["key_id"],
+            ),
+            completed_signature_request_contexts: metrics_registry.int_counter_vec(
+                "execution_completed_sign_with_ecdsa_contexts_total",
+                "Total number of completed sign with ECDSA contexts by key ID",
+                &["key_id"],
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(
                 "execution_input_queue_messages",
@@ -229,9 +260,9 @@ impl SchedulerMetrics {
                 "execution_queues_response_size_bytes",
                 "Total byte size of all responses in input and output queues.",
             ),
-            queues_reservations: metrics_registry.int_gauge(
+            queues_memory_reservations: metrics_registry.int_gauge(
                 "execution_queues_reservations",
-                "Total number of reserved slots for responses in input and output queues.",
+                "Total number of memory reservations for guaranteed responses in input and output queues.",
             ),
             queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
                 "execution_queues_oversized_requests_extra_bytes",
@@ -387,9 +418,40 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            round_advance_long_install_code: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_advance_long_install_code_duration_seconds",
+                    "The duration of advancing an in progress long install code in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_advance_long_install_code_instructions",
+                    "The number of instructions executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_advance_long_install_code_slices",
+                    "The number of slices executed executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_advance_long_install_code_messages",
+                    "The number of messages executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+            },
             round_scheduling_duration: duration_histogram(
                 "execution_round_scheduling_duration_seconds",
                 "The duration of execution round scheduling in seconds.",
+                metrics_registry,
+            ),
+            round_update_signature_request_contexts_duration: duration_histogram(
+                "execution_round_update_sign_with_ecdsa_contexts_duration_seconds",
+                "The duration of updating sign with ecdsa contexts in seconds.",
                 metrics_registry,
             ),
             round_inner: ScopedMetrics {
@@ -444,6 +506,11 @@ impl SchedulerMetrics {
             round_inner_iteration_prep: duration_histogram(
                 "execution_round_inner_preparation_duration_seconds",
                 "The duration of inner execution round preparation in seconds.",
+                metrics_registry,
+            ),
+            round_inner_iteration_exe: duration_histogram(
+                "execution_round_inner_execution_duration_seconds",
+                "The duration of inner execution round of all the threads in seconds.",
                 metrics_registry,
             ),
             round_inner_iteration_thread: ScopedMetrics {
@@ -618,8 +685,7 @@ impl SchedulerMetrics {
     }
 
     pub(super) fn observe_consumed_cycles(&self, consumed_cycles: NominalCycles) {
-        self.consumed_cycles_since_replica_started
-            .set(consumed_cycles.get() as f64);
+        self.consumed_cycles.set(consumed_cycles.get() as f64);
     }
 
     pub(super) fn observe_consumed_cycles_by_use_case(
@@ -627,7 +693,7 @@ impl SchedulerMetrics {
         consumed_cycles_by_use_case: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
         for (use_case, cycles) in consumed_cycles_by_use_case.iter() {
-            self.consumed_cycles_since_replica_started_by_use_case
+            self.consumed_cycles_by_use_case
                 .with_label_values(&[use_case.as_str()])
                 .set(cycles.get() as f64);
         }
@@ -649,8 +715,8 @@ impl SchedulerMetrics {
         self.queues_response_bytes.set(size_bytes as i64);
     }
 
-    pub(super) fn observe_queues_reservations(&self, reservations: usize) {
-        self.queues_reservations.set(reservations as i64);
+    pub(super) fn observe_queues_memory_reservations(&self, reservations: usize) {
+        self.queues_memory_reservations.set(reservations as i64);
     }
 
     pub(super) fn observe_oversized_requests_extra_bytes(&self, size_bytes: usize) {

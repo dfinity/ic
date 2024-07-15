@@ -1,11 +1,11 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
@@ -18,18 +18,19 @@ use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
+    CanisterState, IngressHistoryState, NextInputQueue, ReplicatedState, SchedulerState,
+    StateError, SystemState,
 };
-use ic_test_utilities::mock_time;
-use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
-use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
-use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
+use ic_test_utilities_state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::RejectContext;
 use ic_types::{
     messages::{
         CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
     },
+    time::UNIX_EPOCH,
     CountBytes, Cycles, MemoryAllocation, Time,
 };
 use maplit::btreemap;
@@ -37,6 +38,7 @@ use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
 use std::sync::Arc;
+use strum::IntoEnumIterator;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
@@ -158,6 +160,10 @@ impl ReplicatedStateFixture {
         self.state.memory_taken()
     }
 
+    fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
+        self.state.guaranteed_response_message_memory_taken()
+    }
+
     fn remote_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
         self.state
             .canister_state(canister)
@@ -187,7 +193,11 @@ fn assert_execution_memory_taken(total_memory_usage: usize, fixture: &Replicated
 fn assert_message_memory_taken(queues_memory_usage: usize, fixture: &ReplicatedStateFixture) {
     assert_eq!(
         queues_memory_usage as u64,
-        fixture.memory_taken().messages().get()
+        fixture.memory_taken().guaranteed_response_messages().get()
+    );
+    assert_eq!(
+        queues_memory_usage as u64,
+        fixture.guaranteed_response_message_memory_taken().get()
     );
 }
 
@@ -557,7 +567,7 @@ fn insert_bitcoin_response() {
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }),
     );
 
@@ -574,7 +584,7 @@ fn insert_bitcoin_response() {
         .unwrap();
 
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
     );
 }
@@ -591,7 +601,7 @@ fn insert_bitcoin_get_successor_reject_response() {
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }),
     );
 
@@ -608,7 +618,7 @@ fn insert_bitcoin_get_successor_reject_response() {
         })
         .unwrap();
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
     );
 }
@@ -624,7 +634,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
                 network: Network::Regtest,
                 transaction: vec![],
             },
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }),
     );
 
@@ -641,7 +651,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
         })
         .unwrap();
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
     );
 }
@@ -657,7 +667,7 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
     let remote_canister_id = CanisterId::from_u64(123);
     for receiver in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id] {
         fixture
-            .push_output_request(request_to(receiver), mock_time())
+            .push_output_request(request_to(receiver), UNIX_EPOCH)
             .unwrap();
     }
 
@@ -715,10 +725,10 @@ fn split() {
                     IngressStatus::Known {
                         receiver: canister.get(),
                         user_id: user_test_id(i as u64),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         state: IngressState::Received,
                     },
-                    mock_time(),
+                    UNIX_EPOCH,
                     NumBytes::from(u64::MAX),
                 );
             }
@@ -837,6 +847,30 @@ fn split() {
     assert_eq!(expected, state_b);
 }
 
+#[test]
+fn next_input_queue_round_trip() {
+    use ic_protobuf::state::queues::v1::canister_queues as pb;
+
+    for initial in NextInputQueue::iter() {
+        let encoded = pb::NextInputQueue::from(&initial);
+        let round_trip = NextInputQueue::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_next_input_queue() {
+    // If this fails, you are making a potentially incompatible change to `NextInputQueue`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        NextInputQueue::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [0, 1, 2]
+    );
+}
+
 proptest! {
     #[test]
     fn peek_and_next_consistent(
@@ -845,9 +879,9 @@ proptest! {
         let mut output_iter = replicated_state.output_into_iter();
 
         let mut num_requests = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             num_requests += 1;
-            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
 
         drop(output_iter);
@@ -871,13 +905,13 @@ proptest! {
         let mut i = start;
         let mut excluded = 0;
         let mut consumed = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
                 excluded += 1;
             } else {
-                assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+                assert_eq!(Some(msg.clone()), output_iter.next());
                 consumed += 1;
             }
         }
@@ -893,7 +927,7 @@ proptest! {
     ) {
         let mut output_iter = replicated_state.output_into_iter();
 
-        for (_, msg) in &mut output_iter {
+        for msg in &mut output_iter {
             let mut requests = raw_requests.pop_front().unwrap();
             while requests.is_empty() {
                 requests = raw_requests.pop_front().unwrap();
@@ -927,7 +961,7 @@ proptest! {
             let mut output_iter = replicated_state.output_into_iter();
 
             let mut i = start;
-            while let Some((_, msg)) = output_iter.peek() {
+            while let Some(msg) = output_iter.peek() {
 
                 let mut requests = raw_requests.pop_front().unwrap();
                 while requests.is_empty() {
@@ -948,7 +982,7 @@ proptest! {
                     continue;
                 }
 
-                let (_, msg) = output_iter.next().unwrap();
+                let msg = output_iter.next().unwrap();
                 if let Some(raw_msg) = requests.pop_front() {
                     consumed += 1;
                     assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);

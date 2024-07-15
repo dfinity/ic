@@ -9,17 +9,18 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/protobuf",
     "//rs/types/base_types",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:prost",
     "@crate_index//:serde",
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/registry/keys",
+    # Keep sorted.
     "//rs/nervous_system/common/test_keys",
+    "//rs/registry/keys",
 ]
 
 rust_library(
@@ -50,6 +51,7 @@ generated_files_check(
     ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/transport",
     deps = [
+        # Keep sorted.
         "//rs/registry/transport/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

@@ -8,7 +8,7 @@ documentation.workspace = true
 
 # Dependencies required to compile the test canisters.
 [dependencies]
-assert_matches = "1.4.0"
+assert_matches = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
@@ -17,6 +17,7 @@ ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-runtime = { path = "../runtime" }
+ic-nervous-system-root = { path = "../root" }
 ic-nervous-system-proto = { path = "../proto" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
@@ -25,7 +26,9 @@ ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-swap = { path = "../../sns/swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
+rust_decimal = "1.25"
+rust_decimal_macros = "1.25"
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 prost = { workspace = true }
@@ -33,8 +36,9 @@ prost = { workspace = true }
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../types/error_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../common/test_keys" }
 ic-nervous-system-root = { path = "../root" }
 ic-nns-constants = { path = "../../nns/constants" }
@@ -44,18 +48,24 @@ ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-test-utils-macros = { path = "../../nns/test_utils_macros" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-init = { path = "../../sns/init" }
+ic-sns-test-utils = { path = "../../sns/test_utils" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-xrc-types = "1.0.0"
 maplit = "1.0.2"
+num-traits = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
 serde = { workspace = true }
-assert_matches = "1.3.0"
+ic-icrc1 = { path = "../../rosetta-api/icrc1/" }
+ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
+ic-icrc1-tokens-u64 = { path = "../../rosetta-api/icrc1/tokens_u64" }
+assert_matches = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }

@@ -3,10 +3,13 @@ use canister_test::Runtime;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
+    canister_status::{CanisterStatusResult, CanisterStatusType},
+};
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_USER1_KEYPAIR,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_USER1_KEYPAIR,
 };
 use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
@@ -26,9 +29,10 @@ use ic_nns_test_utils::{
         get_pending_proposals, maybe_upgrade_root_controlled_canister_to_self,
         submit_external_update_proposal, wait_for_final_state,
     },
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters, UpgradeTestingScenario},
+    itest_helpers::{NnsCanisters, UpgradeTestingScenario},
 };
+
+use ic_nns_test_utils::itest_helpers::state_machine_test_on_nns_subnet;
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use icp_ledger::{
@@ -52,9 +56,8 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
         name: name.clone(),
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
-        query_allocation: Some(Nat::from(34)),
-        memory_allocation: Some(Nat::from(12345678)),
-        compute_allocation: Some(Nat::from(12)),
+        memory_allocation: Some(Nat::from(12345678_u32)),
+        compute_allocation: Some(Nat::from(12_u8)),
         initial_cycles: 1 << 45,
     };
 
@@ -109,7 +112,7 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
 
 #[test]
 fn test_stop_start_nns_canister() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user1 = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);

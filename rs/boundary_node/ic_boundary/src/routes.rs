@@ -17,25 +17,26 @@ use axum::{
     BoxError, Extension,
 };
 use bytes::Bytes;
-use candid::Principal;
+use candid::{CandidType, Decode, Principal};
 use http::{
     header::{HeaderName, HeaderValue, CONTENT_TYPE},
     Method,
 };
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
-    CanisterId,
+    CanisterId, PrincipalId, SubnetId,
 };
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use strum::Display;
+use strum::{Display, IntoStaticStr};
 use tower_governor::errors::GovernorError;
 use url::Url;
 
 use crate::{
     cache::CacheStatus,
-    core::MAX_REQUEST_BODY_SIZE,
+    core::{decoder_config, MAX_REQUEST_BODY_SIZE},
     http::{read_streaming_body, reqwest_error_infer, HttpClient},
     persist::{RouteSubnet, Routes},
     retry::RetryResult,
@@ -45,6 +46,7 @@ use crate::{
 // TODO which one to use?
 const IC_API_VERSION: &str = "0.18.0";
 pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
+const METHOD_HTTP: &str = "http_request";
 
 // Clippy complains that these are interior-mutable.
 // We don't mutate them, so silence it.
@@ -65,6 +67,8 @@ const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
 #[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
+#[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
@@ -73,13 +77,25 @@ const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
 #[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
+#[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_REAL_IP: http::HeaderName = http::HeaderName::from_static("x-real-ip");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_IC_COUNTRY_CODE: http::HeaderName =
+    http::HeaderName::from_static("x-ic-country-code");
+
+const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
+    ["x-real-ip", "x-forwarded-for", "x-request-id", "user-agent"];
 
 // Rust const/static concat is non-existent, so we have to repeat
 pub const PATH_STATUS: &str = "/api/v2/status";
 pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
 pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
+pub const PATH_CALL_V3: &str = "/api/v3/canister/:canister_id/call";
 pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
+pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/:subnet_id/read_state";
 pub const PATH_HEALTH: &str = "/health";
 
 lazy_static! {
@@ -88,31 +104,26 @@ lazy_static! {
 }
 
 // Type of IC request
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, Display, PartialEq, Eq, Hash, IntoStaticStr, Deserialize)]
+#[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum RequestType {
     #[default]
+    Unknown,
     Status,
     Query,
     Call,
+    CallV3,
     ReadState,
-}
-
-impl fmt::Display for RequestType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Status => write!(f, "status"),
-            Self::Query => write!(f, "query"),
-            Self::Call => write!(f, "call"),
-            Self::ReadState => write!(f, "read_state"),
-        }
-    }
+    ReadStateSubnet,
 }
 
 #[derive(Debug, Clone, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RateLimitCause {
     Normal,
-    LedgerTransfer,
+    Bouncer,
+    Generic,
 }
 
 // Categorized possible causes for request processing failures
@@ -121,7 +132,9 @@ pub enum RateLimitCause {
 pub enum ErrorCause {
     UnableToReadBody(String),
     PayloadTooLarge(usize),
-    UnableToParseCBOR(String), // TODO just use MalformedRequest?
+    UnableToParseCBOR(String),
+    UnableToParseHTTPArg(String),
+    LoadShed,
     MalformedRequest(String),
     MalformedResponse(String),
     NoRoutingTable,
@@ -144,6 +157,8 @@ impl ErrorCause {
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
             Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
+            Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
+            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
             Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
             Self::MalformedResponse(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::NoRoutingTable => StatusCode::SERVICE_UNAVAILABLE,
@@ -165,6 +180,8 @@ impl ErrorCause {
             Self::PayloadTooLarge(x) => Some(format!("maximum body size is {x} bytes")),
             Self::UnableToReadBody(x) => Some(x.clone()),
             Self::UnableToParseCBOR(x) => Some(x.clone()),
+            Self::UnableToParseHTTPArg(x) => Some(x.clone()),
+            Self::LoadShed => Some("Overloaded".into()),
             Self::MalformedRequest(x) => Some(x.clone()),
             Self::MalformedResponse(x) => Some(x.clone()),
             Self::ReplicaErrorDNS(x) => Some(x.clone()),
@@ -193,6 +210,8 @@ impl fmt::Display for ErrorCause {
             Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
             Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
             Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
+            Self::UnableToParseHTTPArg(_) => write!(f, "unable_to_parse_http_arg"),
+            Self::LoadShed => write!(f, "load_shed"),
             Self::MalformedRequest(_) => write!(f, "malformed_request"),
             Self::MalformedResponse(_) => write!(f, "malformed_response"),
             Self::NoRoutingTable => write!(f, "no_routing_table"),
@@ -224,6 +243,15 @@ impl IntoResponse for ErrorCause {
     }
 }
 
+#[derive(Clone, CandidType, Deserialize, Hash, PartialEq)]
+pub struct HttpRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    #[serde(with = "serde_bytes")]
+    pub body: Vec<u8>,
+}
+
 // Object that holds per-request information
 #[derive(Default, Clone)]
 pub struct RequestContext {
@@ -237,6 +265,9 @@ pub struct RequestContext {
     pub nonce: Option<Vec<u8>>,
     pub ingress_expiry: Option<u64>,
     pub arg: Option<Vec<u8>>,
+
+    // Filled in when the request is HTTP
+    pub http_request: Option<HttpRequest>,
 }
 
 impl RequestContext {
@@ -254,17 +285,30 @@ impl Hash for RequestContext {
         self.sender.hash(state);
         self.method_name.hash(state);
         self.ingress_expiry.hash(state);
-        self.arg.hash(state);
+
+        // Hash http_request if it's present, arg otherwise
+        // They're mutually exclusive
+        if self.http_request.is_some() {
+            self.http_request.hash(state);
+        } else {
+            self.arg.hash(state);
+        }
     }
 }
 
 impl PartialEq for RequestContext {
     fn eq(&self, other: &Self) -> bool {
-        self.canister_id == other.canister_id
+        let r = self.canister_id == other.canister_id
             && self.sender == other.sender
             && self.method_name == other.method_name
-            && self.ingress_expiry == other.ingress_expiry
-            && self.arg == other.arg
+            && self.ingress_expiry == other.ingress_expiry;
+
+        // Same as in hash()
+        if self.http_request.is_some() {
+            r && self.http_request == other.http_request
+        } else {
+            r && self.arg == other.arg
+        }
     }
 }
 impl Eq for RequestContext {}
@@ -287,18 +331,13 @@ pub struct ICRequestEnvelope {
 
 #[async_trait]
 pub trait Proxy: Sync + Send {
-    async fn proxy(
-        &self,
-        request_type: RequestType,
-        request: Request<Body>,
-        node: Node,
-        canister_id: CanisterId,
-    ) -> Result<Response, ErrorCause>;
+    async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause>;
 }
 
-#[async_trait]
 pub trait Lookup: Sync + Send {
-    async fn lookup_subnet(&self, id: &CanisterId) -> Result<Arc<RouteSubnet>, ErrorCause>;
+    fn lookup_subnet_by_canister_id(&self, id: &CanisterId)
+        -> Result<Arc<RouteSubnet>, ErrorCause>;
+    fn lookup_subnet_by_id(&self, id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause>;
 }
 
 #[async_trait]
@@ -336,24 +375,11 @@ impl ProxyRouter {
 
 #[async_trait]
 impl Proxy for ProxyRouter {
-    async fn proxy(
-        &self,
-        request_type: RequestType,
-        request: Request<Body>,
-        node: Node,
-        canister_id: CanisterId,
-    ) -> Result<Response, ErrorCause> {
+    async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause> {
         // Prepare the request
         let (parts, body) = request.into_parts();
 
-        // Create request
-        let u = Url::from_str(&format!(
-            "https://{}:{}/api/v2/canister/{canister_id}/{request_type}",
-            node.id, node.port,
-        ))
-        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
-
-        let mut request = reqwest::Request::new(Method::POST, u);
+        let mut request = reqwest::Request::new(Method::POST, url);
         *request.headers_mut() = parts.headers;
         *request.body_mut() = Some(body.into());
 
@@ -378,7 +404,7 @@ impl Proxy for ProxyRouter {
 
 #[async_trait]
 impl Lookup for ProxyRouter {
-    async fn lookup_subnet(
+    fn lookup_subnet_by_canister_id(
         &self,
         canister_id: &CanisterId,
     ) -> Result<Arc<RouteSubnet>, ErrorCause> {
@@ -386,8 +412,19 @@ impl Lookup for ProxyRouter {
             .published_routes
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
-            .lookup(canister_id.get_ref().0)
+            .lookup_by_canister_id(canister_id.get_ref().0)
             .ok_or(ErrorCause::SubnetNotFound)?; // Requested canister route wasn't found
+
+        Ok(subnet)
+    }
+
+    fn lookup_subnet_by_id(&self, subnet_id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause> {
+        let subnet = self
+            .published_routes
+            .load_full()
+            .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
+            .lookup_by_id(subnet_id.get_ref().0)
+            .ok_or(ErrorCause::SubnetNotFound)?; // Requested subnet_id route wasn't found
 
         Ok(subnet)
     }
@@ -476,6 +513,67 @@ impl From<BoxError> for ApiError {
     }
 }
 
+pub async fn validate_canister_request(
+    matched_path: MatchedPath,
+    canister_id: Path<String>,
+    mut request: Request<Body>,
+    next: Next<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    let request_type = match matched_path.as_str() {
+        PATH_QUERY => RequestType::Query,
+        PATH_CALL => RequestType::Call,
+        PATH_CALL_V3 => RequestType::CallV3,
+        PATH_READ_STATE => RequestType::ReadState,
+        _ => panic!("unknown path, should never happen"),
+    };
+
+    request.extensions_mut().insert(request_type);
+
+    // Decode canister_id from URL
+    let canister_id = CanisterId::from_str(&canister_id).map_err(|err| {
+        ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
+    })?;
+
+    request.extensions_mut().insert(canister_id);
+
+    let mut resp = next.run(request).await;
+
+    resp.headers_mut().insert(
+        HEADER_IC_CANISTER_ID,
+        HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),
+    );
+
+    Ok(resp)
+}
+
+pub async fn validate_subnet_request(
+    matched_path: MatchedPath,
+    subnet_id: Path<String>,
+    mut request: Request<Body>,
+    next: Next<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    let request_type = match matched_path.as_str() {
+        PATH_SUBNET_READ_STATE => RequestType::ReadStateSubnet,
+        _ => panic!("unknown path, should never happen"),
+    };
+
+    request.extensions_mut().insert(request_type);
+
+    // Decode canister_id from URL
+    let principal_id: PrincipalId = Principal::from_text(subnet_id.as_str())
+        .map_err(|err| {
+            ErrorCause::MalformedRequest(format!("Unable to decode subnet_id from URL: {err}"))
+        })?
+        .into();
+    let subnet_id = SubnetId::from(principal_id);
+
+    request.extensions_mut().insert(subnet_id);
+
+    let resp = next.run(request).await;
+
+    Ok(resp)
+}
+
 pub async fn validate_request(
     request: Request<Body>,
     next: Next<Body>,
@@ -485,6 +583,7 @@ pub async fn validate_request(
             .to_str()
             .map(|id| UUID_REGEX.is_match(id))
             .unwrap_or(false);
+
         if !is_valid_id {
             #[allow(clippy::borrow_interior_mutable_const)]
             return Err(ErrorCause::MalformedRequest(format!(
@@ -494,29 +593,17 @@ pub async fn validate_request(
         }
     }
 
-    Ok(next.run(request).await)
+    let resp = next.run(request).await;
+
+    Ok(resp)
 }
 
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
-    canister_id: Path<String>,
-    matched_path: MatchedPath,
+    Extension(request_type): Extension<RequestType>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Derive request type, status call never ends up here
-    let request_type = match matched_path.as_str() {
-        PATH_QUERY => RequestType::Query,
-        PATH_CALL => RequestType::Call,
-        PATH_READ_STATE => RequestType::ReadState,
-        _ => panic!("unknown path, should never happen"),
-    };
-
-    // Decode canister_id from URL
-    let canister_id = CanisterId::from_str(&canister_id).map_err(|err| {
-        ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
-    })?;
-
     // Consume body
     let (parts, body) = request.into_parts();
     let body = read_streaming_body(body, MAX_REQUEST_BODY_SIZE).await?;
@@ -526,6 +613,31 @@ pub async fn preprocess_request(
         .map_err(|err| ErrorCause::UnableToParseCBOR(err.to_string()))?;
     let content = envelope.content;
 
+    // Check if the request is HTTP and try to parse the arg
+    let (arg, http_request) = match (&content.method_name, content.arg) {
+        (Some(method), Some(arg)) => {
+            if request_type == RequestType::Query && method == METHOD_HTTP {
+                let mut req: HttpRequest = Decode!([decoder_config()]; &arg.0, HttpRequest)
+                    .map_err(|err| {
+                        ErrorCause::UnableToParseHTTPArg(format!(
+                            "unable to decode arg as HttpRequest: {err}"
+                        ))
+                    })?;
+
+                // Remove specific headers
+                req.headers
+                    .retain(|x| !HEADERS_HIDE_HTTP_REQUEST.contains(&(x.0.as_str())));
+
+                // Drop the arg as it's now redundant
+                (None, Some(req))
+            } else {
+                (Some(arg), None)
+            }
+        }
+
+        (_, arg) => (arg, None),
+    };
+
     // Construct the context
     let ctx = RequestContext {
         request_type,
@@ -534,16 +646,18 @@ pub async fn preprocess_request(
         canister_id: content.canister_id,
         method_name: content.method_name,
         ingress_expiry: content.ingress_expiry,
-        arg: content.arg.map(|x| x.0),
+        arg: arg.map(|x| x.0),
         nonce: content.nonce.map(|x| x.0),
+        http_request,
     };
+
+    let ctx = Arc::new(ctx);
 
     // Reconstruct request back from parts
     let mut request = Request::from_parts(parts, Body::from(body));
 
     // Inject variables into the request
     request.extensions_mut().insert(ctx.clone());
-    request.extensions_mut().insert(canister_id);
 
     // Pass request to the next processor
     let mut response = next.run(request).await;
@@ -551,23 +665,23 @@ pub async fn preprocess_request(
     // Inject context into the response for access by other middleware
     response.extensions_mut().insert(ctx);
 
-    // Inject canister_id if it's not there already (could be overriden by other middleware)
-    if response.extensions().get::<CanisterId>().is_none() {
-        response.extensions_mut().insert(canister_id);
-    }
-
     Ok(response)
 }
 
 // Middleware: looks up the target subnet in the routing table
 pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
-    Extension(canister_id): Extension<CanisterId>,
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Try to look up a target subnet using the canister id
-    let subnet = lk.lookup_subnet(&canister_id).await?;
+    let subnet: Arc<RouteSubnet> =
+        if let Some(canister_id) = request.extensions().get::<CanisterId>() {
+            lk.lookup_subnet_by_canister_id(canister_id)?
+        } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
+            lk.lookup_subnet_by_id(subnet_id)?
+        } else {
+            panic!("canister_id and subnet_id can't be both empty for a request")
+        };
 
     // Inject subnet into request
     request.extensions_mut().insert(Arc::clone(&subnet));
@@ -585,13 +699,23 @@ pub async fn lookup_subnet(
 pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
     let mut response = next.run(request).await;
 
+    let error_cause = response
+        .extensions()
+        .get::<ErrorCause>()
+        .map(|x| x.to_string())
+        .unwrap_or("none".into());
+
     // Set the correct content-type for all replies if it's not an error
-    let error_cause = response.extensions().get::<ErrorCause>();
-    if error_cause.is_none() {
+    if error_cause == "none" && response.status().is_success() {
         response
             .headers_mut()
             .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
     }
+
+    response.headers_mut().insert(
+        HEADER_IC_ERROR_CAUSE,
+        HeaderValue::from_maybe_shared(Bytes::from(error_cause)).unwrap(),
+    );
 
     // Add cache status if there's one
     let cache_status = response.extensions().get::<CacheStatus>().cloned();
@@ -609,7 +733,14 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         }
     }
 
-    let node = response.extensions().get::<Node>().cloned();
+    if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
+        response.headers_mut().insert(
+            HEADER_IC_SUBNET_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
+        );
+    }
+
+    let node = response.extensions().get::<Arc<Node>>().cloned();
     if let Some(v) = node {
         // Principals and subnet type are always ASCII printable, so unwrap is safe
         response.headers_mut().insert(
@@ -618,35 +749,23 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         );
 
         response.headers_mut().insert(
-            HEADER_IC_SUBNET_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.subnet_id.to_string())).unwrap(),
-        );
-
-        response.headers_mut().insert(
             HEADER_IC_SUBNET_TYPE,
             HeaderValue::from_str(v.subnet_type.as_ref()).unwrap(),
         );
     }
 
-    if let Some(ctx) = response.extensions().get::<RequestContext>().cloned() {
+    if let Some(ctx) = response.extensions().get::<Arc<RequestContext>>().cloned() {
         response.headers_mut().insert(
             HEADER_IC_REQUEST_TYPE,
             HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
         );
 
-        // Try to get canister_id from CBOR first, then from the URL
-        ctx.canister_id
-            .or(response
-                .extensions()
-                .get::<CanisterId>()
-                .map(|x| x.get_ref().0))
-            .map(|x| x.to_string())
-            .and_then(|v| {
-                response.headers_mut().insert(
-                    HEADER_IC_CANISTER_ID,
-                    HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
-                )
-            });
+        ctx.canister_id.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_CANISTER_ID_CBOR,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
 
         ctx.sender.and_then(|v| {
             response.headers_mut().insert(
@@ -655,10 +774,10 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             )
         });
 
-        ctx.method_name.and_then(|v| {
+        ctx.method_name.as_ref().and_then(|v| {
             response.headers_mut().insert(
                 HEADER_IC_METHOD_NAME,
-                HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
+                HeaderValue::from_maybe_shared(Bytes::from(v.clone())).unwrap(),
             )
         });
     }
@@ -716,17 +835,34 @@ pub async fn status(
 }
 
 // Handler: Unified handler for query/call/read_state calls
-pub async fn handle_call(
+pub async fn handle_canister(
     State(p): State<Arc<dyn Proxy>>,
-    Extension(ctx): Extension<RequestContext>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(canister_id): Extension<CanisterId>,
-    Extension(node): Extension<Node>,
+    Extension(node): Extension<Arc<Node>>,
     request: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let url = node
+        .build_url(ctx.request_type, canister_id.into())
+        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
     // Proxy the request
-    let resp = p
-        .proxy(ctx.request_type, request, node, canister_id)
-        .await?;
+    let resp = p.proxy(request, url).await?;
+
+    Ok(resp)
+}
+
+pub async fn handle_subnet(
+    State(p): State<Arc<dyn Proxy>>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
+    Extension(subnet_id): Extension<SubnetId>,
+    Extension(node): Extension<Arc<Node>>,
+    request: Request<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    let url = node
+        .build_url(ctx.request_type, subnet_id.get().into())
+        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
+    // Proxy the request
+    let resp = p.proxy(request, url).await?;
 
     Ok(resp)
 }

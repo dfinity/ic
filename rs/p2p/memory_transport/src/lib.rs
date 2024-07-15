@@ -33,14 +33,15 @@
 /// ┌──────┐   │                  │    ┌──────┐
 /// │ Node ├───┘                  └────┤ Node │
 /// └──────┘                           └──────┘
+use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
-    body::{Body, HttpBody},
+    body::Body,
+    http::{Request, Response},
     Router,
 };
-use bytes::{Buf, BufMut, Bytes};
-use http::{Request, Response};
-use ic_quic_transport::{ConnId, SendError, Transport};
+use bytes::Bytes;
+use ic_quic_transport::{ConnId, Transport};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -54,7 +55,7 @@ use tokio::{
         oneshot, Semaphore,
     },
 };
-use tower::{Service, ServiceExt};
+use tower::ServiceExt;
 
 #[derive(Clone)]
 pub struct PeerHandle {
@@ -93,6 +94,7 @@ pub struct TransportRouter {
 }
 
 impl TransportRouter {
+    #[allow(clippy::disallowed_methods)]
     pub fn new() -> Self {
         let (router_req_tx, mut router_req_rx) =
             unbounded_channel::<(Request<Bytes>, NodeId, oneshot::Sender<Response<Bytes>>)>();
@@ -127,12 +129,13 @@ impl TransportRouter {
     pub fn add_peer(
         &mut self,
         node_id: NodeId,
-        mut router: Router,
+        router: Router,
         latency: Duration,
         capacity: usize,
     ) -> PeerTransport {
         // It is fine to use unbounded channel since ingestion rate is limited by
         // capacity and processing rate >> ingestion rate.
+        #[allow(clippy::disallowed_methods)]
         let (rpc_tx, mut rpc_rx) =
             unbounded_channel::<(Request<Bytes>, oneshot::Sender<Response<Bytes>>)>();
         self.peers
@@ -152,11 +155,12 @@ impl TransportRouter {
                 let req = Request::from_parts(parts, Body::from(body));
 
                 // Call request handler
-                let resp = router.ready().await.unwrap().call(req).await.unwrap();
+                let resp = router.clone().oneshot(req).await.unwrap();
 
                 // Transform request back to `Request<Bytes>` and attach this node in the extension map.
                 let (mut parts, body) = resp.into_parts();
-                let body = to_bytes(body).await.unwrap();
+
+                let body = axum::body::to_bytes(body, usize::MAX).await.unwrap();
                 parts.extensions.insert(this_node_id);
                 let resp = Response::from_parts(parts, body);
                 let _ = router_resp_tx.send((resp, origin_id, oneshot_tx));
@@ -276,9 +280,9 @@ impl Transport for PeerTransport {
         &self,
         peer_id: &NodeId,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, SendError> {
+    ) -> Result<Response<Bytes>, anyhow::Error> {
         if peer_id == &self.node_id {
-            panic!("Should not happen");
+            return Err(anyhow!("Can't connect to self"));
         }
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
@@ -288,19 +292,15 @@ impl Transport for PeerTransport {
             .send((request, *peer_id, oneshot_tx))
             .is_err()
         {
-            return Err(SendError::SendRequestFailed {
-                reason: String::from("router channel closed"),
-            });
+            return Err(anyhow!("router channel closed"));
         }
         match oneshot_rx.await {
             Ok(r) => Ok(r),
-            Err(_) => Err(SendError::RecvResponseFailed {
-                reason: "channel closed".to_owned(),
-            }),
+            Err(_) => Err(anyhow!("channel closed")),
         }
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
         let _ = self.rpc(peer_id, request).await?;
         Ok(())
     }
@@ -315,44 +315,4 @@ impl Transport for PeerTransport {
             .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
             .collect()
     }
-}
-
-// Copied from hyper. Used to transform `BoxBodyBytes` to `Bytes`.
-// It might look slow but since in our case the data is fully available
-// the first data() call will immediately return everything.
-pub(crate) async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
-where
-    T: HttpBody + Unpin,
-{
-    futures::pin_mut!(body);
-
-    // If there's only 1 chunk, we can just return Buf::to_bytes()
-    let mut first = if let Some(buf) = body.data().await {
-        buf?
-    } else {
-        return Ok(Bytes::new());
-    };
-
-    let second = if let Some(buf) = body.data().await {
-        buf?
-    } else {
-        return Ok(first.copy_to_bytes(first.remaining()));
-    };
-
-    // Don't pre-emptively reserve *too* much.
-    let rest = (body.size_hint().lower() as usize).min(1024 * 16);
-    let cap = first
-        .remaining()
-        .saturating_add(second.remaining())
-        .saturating_add(rest);
-    // With more than 1 buf, we gotta flatten into a Vec first.
-    let mut vec = Vec::with_capacity(cap);
-    vec.put(first);
-    vec.put(second);
-
-    while let Some(buf) = body.data().await {
-        vec.put(buf?);
-    }
-
-    Ok(vec.into())
 }

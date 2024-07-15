@@ -56,6 +56,8 @@ pub enum Request {
     StakeMaturity(StakeMaturity),
     #[serde(rename = "NEURON_INFO")]
     NeuronInfo(NeuronInfo),
+    #[serde(rename = "LIST_NEURONS")]
+    ListNeurons(ListNeurons),
     #[serde(rename = "FOLLOW")]
     Follow(Follow),
 }
@@ -141,6 +143,7 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
+            Request::ListNeurons(ListNeurons { .. }) => Ok(RequestType::ListNeurons),
             Request::Follow(Follow {
                 neuron_index,
                 controller,
@@ -163,7 +166,7 @@ impl Request {
         let mut builder = TransactionBuilder::default();
         for request in requests {
             match request {
-                Request::Transfer(o) => builder.transfer(o, token_name)?,
+                Request::Transfer(o) => builder.transfer(o, token_name),
                 Request::Stake(o) => builder.stake(o),
                 Request::SetDissolveTimestamp(o) => builder.set_dissolve_timestamp(o),
                 Request::ChangeAutoStakeMaturity(o) => builder.change_auto_stake_maturity(o),
@@ -177,8 +180,9 @@ impl Request {
                 Request::RegisterVote(o) => builder.register_vote(o),
                 Request::StakeMaturity(o) => builder.stake_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
+                Request::ListNeurons(o) => builder.list_neurons(o),
                 Request::Follow(o) => builder.follow(o),
-            };
+            }?;
         }
         Ok(builder.build())
     }
@@ -202,6 +206,7 @@ impl Request {
                 | Request::RegisterVote(_)
                 | Request::MergeMaturity(_)
                 | Request::StakeMaturity(_)
+                | Request::ListNeurons(_) // not neuron management but we need it signed.
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
                 | Request::Follow(_)
         )
@@ -465,6 +470,7 @@ impl TryFrom<&models::Request> for Request {
                     Some(Err(e)) => Err(e),
                 }
             }
+            RequestType::ListNeurons { .. } => Ok(Request::ListNeurons(ListNeurons { account })),
             RequestType::Follow {
                 neuron_index,
                 controller,

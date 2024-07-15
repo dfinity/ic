@@ -9,7 +9,7 @@ use crate::consensus::{
 use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, ProposalContext},
-    consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
+    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -76,12 +76,14 @@ impl PayloadBuilderImpl {
         registry_client: Arc<dyn RegistryClient>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         let section_builder = vec![
             BatchPayloadSectionBuilder::Ingress(ingress_selector),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
+            BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
         ];
 
         Self {
@@ -183,8 +185,8 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.metrics.critical_error_payload_too_large.inc();
         }
         if accumulated_size > max_block_payload_size * 2 {
-            return Err(ValidationError::Permanent(
-                PayloadPermanentError::PayloadTooBig {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::PayloadTooBig {
                     expected: max_block_payload_size,
                     received: accumulated_size,
                 },
@@ -237,28 +239,30 @@ impl PayloadBuilderImpl {
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
-    use ic_btc_types_internal::{
+    use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
-        consensus::{batch::MockBatchPayloadBuilder, fake::Fake},
         ingress_selector::FakeIngressSelector,
-        mock_time,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-        types::ids::{node_test_id, subnet_test_id},
-        types::messages::SignedIngressBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
+    use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::Fake};
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::certification::{Certification, CertificationContent},
         crypto::{CryptoHash, Signed},
         messages::SignedIngress,
         signature::ThresholdSignature,
+        time::UNIX_EPOCH,
         xnet::CertifiedStreamSlice,
         CryptoHashOfPartialState, RegistryVersion,
     };
@@ -355,7 +359,7 @@ pub(crate) mod test {
             let context = ValidationContext {
                 certified_height: Height::from(0),
                 registry_version: RegistryVersion::from(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
             };
             let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
             let subnet_records = SubnetRecords {

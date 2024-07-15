@@ -1,9 +1,8 @@
 type AddCanisterRequest = record {
-  arg : vec nat8;
+  arg : blob;
   initial_cycles : nat64;
-  wasm_module : vec nat8;
+  wasm_module : blob;
   name : text;
-  query_allocation : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
@@ -15,7 +14,9 @@ type CanisterStatusResult = record {
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
-  module_hash : opt vec nat8;
+  idle_cycles_burned_per_day : opt nat;
+  module_hash : opt blob;
+  reserved_cycles : opt nat;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
 type ChangeCanisterControllersError = record {
@@ -34,16 +35,21 @@ type ChangeCanisterControllersResult = variant {
   Err : ChangeCanisterControllersError;
 };
 type ChangeCanisterRequest = record {
-  arg : vec nat8;
-  wasm_module : vec nat8;
+  arg : blob;
+  wasm_module : blob;
   stop_before_installing : bool;
   mode : CanisterInstallMode;
   canister_id : principal;
-  query_allocation : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
-type DefiniteCanisterSettings = record { controllers : vec principal };
+type DefiniteCanisterSettings = record {
+  freezing_threshold : opt nat;
+  controllers : vec principal;
+  reserved_cycles_limit : opt nat;
+  memory_allocation : opt nat;
+  compute_allocation : opt nat;
+};
 type StopOrStartCanisterRequest = record {
   action : CanisterAction;
   canister_id : principal;

@@ -45,6 +45,7 @@ fn get_hostos_version() -> Response {
     Ok(Payload::HostOSVersion(version))
 }
 
+// HostOSVsockVersion command used for backwards compatibility
 fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
@@ -76,7 +77,7 @@ fn notify(notify_data: &NotifyData) -> Response {
             .write(true)
             .open("/dev/tty1")
             .map_err(|err| {
-                println!("Error opening file: {}", err);
+                println!("Error opening terminal device file: {}", err);
                 err.to_string()
             })?;
 
@@ -84,7 +85,6 @@ fn notify(notify_data: &NotifyData) -> Response {
     let message_clone = notify_data.message.clone();
 
     let write_lambda = move || -> Result<(), String> {
-        println!("Thread spawned");
         for _ in 0..message_output_count {
             match terminal_device_file.write_all(format!("\n{}\n", message_clone).as_bytes()) {
                 Ok(_) => std::thread::sleep(std::time::Duration::from_secs(2)),
@@ -94,14 +94,20 @@ fn notify(notify_data: &NotifyData) -> Response {
         Ok(())
     };
 
-    println!("Spawning thread to write to terminal device file...");
     std::thread::spawn(write_lambda);
 
     Ok(Payload::NoPayload)
 }
 
 fn create_hostos_upgrade_file(upgrade_url: &str) -> Result<(), String> {
-    let response = reqwest::blocking::get(upgrade_url)
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(60 * 5))
+        .build()
+        .map_err(|err| format!("Could not build download client: {}", err))?;
+
+    let response = client
+        .get(upgrade_url)
+        .send()
         .map_err(|err| format!("Could not download url: {}", err))?;
 
     let hostos_upgrade_contents = response
@@ -170,27 +176,16 @@ fn run_upgrade() -> Response {
 }
 
 fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
-    println!("Creating hostos upgrade file...");
-    create_hostos_upgrade_file(&upgrade_data.url)?;
+    // Attempt to re-use any previously downloaded upgrades, so long as the
+    // hash matches.
+    if verify_hash(&upgrade_data.target_hash).is_err() {
+        println!("Creating hostos upgrade file...");
+        create_hostos_upgrade_file(&upgrade_data.url)?;
 
-    println!("Verifying hostos upgrade file hash...");
-    verify_hash(&upgrade_data.target_hash)?;
+        println!("Verifying hostos upgrade file hash...");
+        verify_hash(&upgrade_data.target_hash)?;
+    }
 
     println!("Starting upgrade...");
     run_upgrade()
 }
-
-/*
-pub mod tests {
-    #[test]
-    fn create_hostos_upgrade_file_and_verify_hash() {
-        use super::*;
-
-        let upgrade_url = std::env::var("URL").unwrap_or_else(|_| "dummy url".to_string());
-        let hash = std::env::var("HASH").unwrap_or_else(|_| "dummy hash".to_string());
-
-        create_hostos_upgrade_file(&upgrade_url).unwrap();
-        assert!(verify_hash(&hash).unwrap())
-    }
-}
-*/

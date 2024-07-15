@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
@@ -11,12 +12,16 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/types/types",
     "@crate_index//:crossbeam-channel",
+    "@crate_index//:prometheus",
     "@crate_index//:slog",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
     "//rs/types/types_test_utils",
 ]
 

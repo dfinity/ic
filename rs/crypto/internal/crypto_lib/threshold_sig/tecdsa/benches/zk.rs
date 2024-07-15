@@ -4,6 +4,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 fn zk_proofs(c: &mut Criterion) {
+    let alg = IdkgProtocolAlgorithm::EcdsaSecp256k1;
     let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
     let ad = rng.gen::<[u8; 32]>();
@@ -17,13 +18,16 @@ fn zk_proofs(c: &mut Criterion) {
     let simple = EccPoint::mul_by_g(&secret);
 
     c.bench_function("ProofOfEqualOpenings::create", |b| {
-        b.iter(|| zk::ProofOfEqualOpenings::create(seed.clone(), &secret, &masking, &ad).unwrap())
+        b.iter(|| {
+            zk::ProofOfEqualOpenings::create(seed.clone(), alg, &secret, &masking, &ad).unwrap()
+        })
     });
 
-    let proof = zk::ProofOfEqualOpenings::create(seed.clone(), &secret, &masking, &ad).unwrap();
+    let proof =
+        zk::ProofOfEqualOpenings::create(seed.clone(), alg, &secret, &masking, &ad).unwrap();
 
     c.bench_function("ProofOfEqualOpenings::verify", |b| {
-        b.iter(|| proof.verify(&pedersen, &simple, &ad).unwrap())
+        b.iter(|| proof.verify(alg, &pedersen, &simple, &ad).unwrap())
     });
 
     let lhs = EccScalar::random(curve, rng);
@@ -36,6 +40,7 @@ fn zk_proofs(c: &mut Criterion) {
         b.iter(|| {
             zk::ProofOfProduct::create(
                 seed.clone(),
+                alg,
                 &lhs,
                 &rhs,
                 &rhs_masking,
@@ -49,6 +54,7 @@ fn zk_proofs(c: &mut Criterion) {
 
     let proof = zk::ProofOfProduct::create(
         seed.clone(),
+        alg,
         &lhs,
         &rhs,
         &rhs_masking,
@@ -63,7 +69,7 @@ fn zk_proofs(c: &mut Criterion) {
     let product_c = EccPoint::pedersen(&product, &product_masking).unwrap();
 
     c.bench_function("ProofOfProduct::verify", |b| {
-        b.iter(|| proof.verify(&lhs_c, &rhs_c, &product_c, &ad).unwrap());
+        b.iter(|| proof.verify(alg, &lhs_c, &rhs_c, &product_c, &ad).unwrap());
     });
 
     let secret = EccScalar::random(curve, rng);
@@ -72,18 +78,19 @@ fn zk_proofs(c: &mut Criterion) {
 
     c.bench_function("ProofOfDLogEquivalence::create", |b| {
         b.iter(|| {
-            zk::ProofOfDLogEquivalence::create(seed.clone(), &secret, &base1, &base2, &ad).unwrap()
+            zk::ProofOfDLogEquivalence::create(seed.clone(), alg, &secret, &base1, &base2, &ad)
+                .unwrap()
         });
     });
 
-    let proof =
-        zk::ProofOfDLogEquivalence::create(seed.clone(), &secret, &base1, &base2, &ad).unwrap();
+    let proof = zk::ProofOfDLogEquivalence::create(seed.clone(), alg, &secret, &base1, &base2, &ad)
+        .unwrap();
 
     let b1s = base1.scalar_mul(&secret).unwrap();
     let b2s = base2.scalar_mul(&secret).unwrap();
 
     c.bench_function("ProofOfDLogEquivalence::verify", |b| {
-        b.iter(|| proof.verify(&base1, &base2, &b1s, &b2s, &ad).unwrap())
+        b.iter(|| proof.verify(alg, &base1, &base2, &b1s, &b2s, &ad).unwrap())
     });
 }
 

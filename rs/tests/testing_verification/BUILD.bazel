@@ -5,6 +5,7 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 IC_HS_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/tests:ic-hs",
 ]
 
@@ -14,6 +15,7 @@ ALIASES = {
 
 rust_binary(
     name = "colocate_test_bin",
+    testonly = True,
     srcs = ["colocate_test.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -23,72 +25,82 @@ rust_binary(
 
 system_test(
     name = "spec_compliance_application_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + [
+        "//rs/tests",
+        "//rs/tests/testing_verification/spec_compliance",
+    ],
 )
 
 system_test(
     name = "spec_compliance_system_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + [
+        "//rs/tests",
+        "//rs/tests/testing_verification/spec_compliance",
+    ],
 )
 
 system_test(
     name = "spec_compliance_group_01_application_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + [
+        "//rs/tests",
+        "//rs/tests/testing_verification/spec_compliance",
+    ],
 )
 
 system_test(
     name = "spec_compliance_group_01_system_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "spec_compliance_group_02_application_subnet_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["cpu:4"],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+    deps = DEPENDENCIES + [
+        "//rs/tests",
+        "//rs/tests/testing_verification/spec_compliance",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "spec_compliance_group_02_system_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + [
+        "//rs/tests",
+        "//rs/tests/testing_verification/spec_compliance",
+    ],
 )
 
 system_test(
     name = "basic_health_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -102,6 +114,7 @@ system_test(
 
 system_test(
     name = "ii_delegation_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -116,7 +129,6 @@ system_test(
 
 system_test(
     name = "mainnet_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -128,7 +140,6 @@ system_test(
 
 system_test(
     name = "remote_replicable_mock_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -147,7 +158,6 @@ system_test(
 # 3. docker run -it bazel/rs/tests:replicable_mock_test_image
 system_test(
     name = "replicable_mock_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -155,6 +165,7 @@ system_test(
 
 rust_binary(
     name = "test-driver-e2e-scenarios",
+    testonly = True,
     srcs = ["test_driver_e2e_scenarios.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -171,9 +182,6 @@ rust_test(
 
 rust_test(
     name = "generic_workload_engine",
-    srcs = [
-        "//rs/tests:src/generic_workload_engine/metrics.rs",
-    ],
     aliases = ALIASES,
     crate = "//rs/tests",
 )

@@ -2,7 +2,7 @@ use candid::Nat;
 use ciborium::tag::Required;
 use ethnum::u256;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
-use ic_stable_structures::storable::{BoundedStorable, Storable};
+use ic_stable_structures::storable::{Bound, Storable};
 use num_traits::Bounded;
 use serde::{
     de::{self, Deserializer},
@@ -108,11 +108,11 @@ impl Storable for U256 {
         be_bytes.copy_from_slice(bytes.as_ref());
         Self(u256::from_be_bytes(be_bytes))
     }
-}
 
-impl BoundedStorable for U256 {
-    const IS_FIXED_SIZE: bool = true;
-    const MAX_SIZE: u32 = 32;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 32,
+        is_fixed_size: true,
+    };
 }
 
 impl Bounded for U256 {

@@ -12,7 +12,7 @@ from scanner.manager.bazel_trivy_dependency_manager import TRIVY_SCANNER_ID
 
 SUPPORTED_TEAMS = (Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM)
 SLACK_CHANNEL_CONFIG_BY_TEAM = {Team.NODE_TEAM : SlackChannelConfig(channel_id="C05CYLM94KU", channel="#eng-node-psec"),
-                                Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(channel_id="C01R76CSJ4R", channel="#eng-boundary-nodes")}
+                                Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(channel_id="C06KQKZ3EBW", channel="#eng-boundary-nodes-psec")}
 SLACK_TEAM_GROUP_ID = {Team.NODE_TEAM: "<!subteam^S05FTRNRC5A>", Team.BOUNDARY_NODE_TEAM: "<!subteam^S0313LYB9FZ>"}
 
 SLACK_LOG_TO_CONSOLE = False

@@ -1,6 +1,7 @@
 use crate::utils::{expect_error, expect_reply, test_canister_wasm};
 use candid::{CandidType, Encode};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     Cycles, EcdsaCurve, EcdsaKeyId, ErrorCode, PrincipalId, StateMachineBuilder, SubnetId,
@@ -44,7 +45,7 @@ fn run_bench<M: criterion::measurement::Measurement>(
                     .with_subnet_type(SubnetType::Application)
                     .with_nns_subnet_id(nns_subnet_id)
                     .with_subnet_id(subnet_id)
-                    .with_ecdsa_key(ecdsa_key.clone())
+                    .with_idkg_key(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()))
                     .build();
                 let test_canister = env
                     .install_canister_with_cycles(
@@ -140,21 +141,21 @@ fn sign_with_ecdsa_benchmark(c: &mut Criterion) {
         method,
         "calls:10/derivation_paths:1/buf_size:1",
         (10, 1, 1),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,
         method,
         "calls:10/derivation_paths:1/buf_size:2M",
         (10, 1, 2_000_000),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,
         method,
         "calls:10/derivation_paths:250/buf_size:8k",
         (10, 250, 8_000),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,

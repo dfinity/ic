@@ -560,3 +560,78 @@ fn arrival_table_updated_correctly() {
             .unwrap();
     }
 }
+
+#[test]
+fn expected_allowance_not_checked_against_expired() {
+    let mut table = TestAllowanceTable::default();
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(5),
+            Some(ts(2)),
+            ts(1),
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(
+        table
+            .approve(
+                &Account(1),
+                &Account(2),
+                tokens(100),
+                None,
+                ts(1),
+                Some(tokens(0))
+            )
+            .unwrap_err(),
+        ApproveError::AllowanceChanged {
+            current_allowance: tokens(5)
+        }
+    );
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(100),
+            None,
+            ts(2),
+            Some(tokens(0)),
+        )
+        .unwrap();
+
+    assert_eq!(
+        table.allowance(&Account(1), &Account(2), ts(3)),
+        Allowance {
+            amount: tokens(100),
+            expires_at: None,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(2),
+        }
+    );
+}
+
+#[test]
+fn expected_allowance_if_zero_no_approval() {
+    let mut table = TestAllowanceTable::default();
+
+    // If there were no approvals present, we used to always accept 0 approvals
+    // without checking the expected_allowance.
+    assert_eq!(
+        table
+            .approve(
+                &Account(1),
+                &Account(2),
+                tokens(0),
+                None,
+                ts(1),
+                Some(tokens(4))
+            )
+            .unwrap_err(),
+        ApproveError::AllowanceChanged {
+            current_allowance: tokens(0)
+        }
+    );
+}

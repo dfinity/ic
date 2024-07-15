@@ -18,7 +18,7 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
         ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
-        NetworkEconomics, Neuron, NnsFunction, Proposal, Topic, Vote,
+        NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
     },
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -31,7 +31,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
+    collections::{hash_map::Entry, BTreeMap, HashMap},
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -65,15 +65,12 @@ pub struct FakeAccount {
 
 type LedgerMap = HashMap<AccountIdentifier, u64>;
 
-type CallCanisterResult = Result<Vec<u8>, (Option<i32>, String)>;
-
 /// The state required for fake implementations of `Environment` and
 /// `Ledger`.
 pub struct FakeState {
     pub now: u64,
     pub rng: ChaCha20Rng,
     pub accounts: LedgerMap,
-    pub call_canister_method_results: VecDeque<CallCanisterResult>,
 }
 
 impl Default for FakeState {
@@ -94,7 +91,6 @@ impl Default for FakeState {
             // different places doesn't conflict.
             rng: ChaCha20Rng::seed_from_u64(9539),
             accounts: HashMap::new(),
-            call_canister_method_results: vec![Ok(vec![])].into(),
         }
     }
 }
@@ -459,7 +455,8 @@ impl Environment for FakeDriver {
                 NodeProvidersMonthlyXdrRewards {
                     rewards: hashmap! {
                         PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    }
+                    },
+                    registry_version: Some(5)
                 }
             ))
             .unwrap());
@@ -500,28 +497,6 @@ impl Environment for FakeDriver {
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
     PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
-}
-
-/// Issues a manage_neuron command to follow
-pub fn follow(
-    governance: &mut Governance,
-    caller: PrincipalId,
-    neuron_id: NeuronId,
-    topic: Topic,
-    followee_neuron_id: NeuronId,
-) -> ManageNeuronResponse {
-    let manage_neuron = ManageNeuron {
-        id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
-        command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
-            topic: topic as i32,
-            followees: vec![followee_neuron_id],
-        })),
-    };
-    governance
-        .manage_neuron(&caller, &manage_neuron)
-        .now_or_never()
-        .unwrap()
 }
 
 /// Issues a manage_neuron command to register a vote
@@ -619,17 +594,18 @@ impl ProposalNeuronBehavior {
                 })
             }
         };
-        let pid = tokio_test::block_on(gov.make_proposal(
-            &NeuronId { id: self.proposer },
-            &principal(self.proposer),
-            &Proposal {
-                title: Some("A Reasonable Title".to_string()),
-                summary,
-                action: Some(action),
-                ..Default::default()
-            },
-        ))
-        .unwrap();
+        let pid = gov
+            .make_proposal(
+                &NeuronId { id: self.proposer },
+                &principal(self.proposer),
+                &Proposal {
+                    title: Some("A Reasonable Title".to_string()),
+                    summary,
+                    action: Some(action),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
         // Vote
         for (voter, vote) in &self.votes {
             register_vote_assert_success(

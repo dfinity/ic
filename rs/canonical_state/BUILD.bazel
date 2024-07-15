@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/certification_version",
     "//rs/canonical_state/tree_hash",
     "//rs/crypto/tree_hash",
@@ -14,22 +15,28 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/types",
-    "@crate_index//:itertools",
     "@crate_index//:leb128",
-    "@crate_index//:scoped_threadpool",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
-    "@crate_index//:thiserror",
+    "@crate_index//:strum",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/tree_hash/test_utils",
+    "//rs/crypto/sha2",
     "//rs/registry/subnet_features",
     "//rs/sys",
-    "//rs/test_utilities",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:assert_matches",
@@ -37,12 +44,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
 ]
 
 rust_library(

@@ -2,7 +2,7 @@
 mod tests;
 
 use candid::types::{Type, TypeInner};
-use candid::{IDLArgs, TypeEnv};
+use candid::TypeEnv;
 use std::path::Path;
 
 const EMPTY_UPGRADE_ARGS: &str = "()";
@@ -12,6 +12,7 @@ pub struct UpgradeArgs {
     constructor_types: Vec<Type>,
     upgrade_args: String,
     encoded_upgrade_args: Vec<u8>,
+    candid_file_name: String,
 }
 
 impl UpgradeArgs {
@@ -26,7 +27,8 @@ impl UpgradeArgs {
     pub fn didc_encode_cmd(&self) -> String {
         if self.upgrade_args != EMPTY_UPGRADE_ARGS {
             format!(
-                "didc encode -d '{}' -t '{}'",
+                "didc encode -d {} -t '{}' '{}'",
+                self.candid_file_name,
                 format_types(&self.constructor_types),
                 self.upgrade_args
             )
@@ -37,27 +39,32 @@ impl UpgradeArgs {
 }
 
 pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F) -> UpgradeArgs {
-    let (env, constructor_types) = parse_constructor_args(candid_file);
     let upgrade_args: String = upgrade_args.into();
-    let upgrade_types = if upgrade_args != EMPTY_UPGRADE_ARGS {
-        constructor_types.clone()
+    let (env, upgrade_types) = if upgrade_args != EMPTY_UPGRADE_ARGS {
+        parse_constructor_args(candid_file)
     } else {
-        vec![]
+        (TypeEnv::new(), vec![])
     };
-    let encoded_upgrade_args = upgrade_args
-        .parse::<IDLArgs>()
+    let encoded_upgrade_args = candid_parser::parse_idl_args(&upgrade_args)
         .expect("fail to parse upgrade args")
         .to_bytes_with_types(&env, &upgrade_types)
         .expect("failed to encode");
+    let candid_file_name = candid_file
+        .file_name()
+        .expect("missing file name")
+        .to_string_lossy()
+        .to_string();
     UpgradeArgs {
         constructor_types: upgrade_types,
         upgrade_args,
         encoded_upgrade_args,
+        candid_file_name,
     }
 }
 
 fn parse_constructor_args(candid_file: &Path) -> (TypeEnv, Vec<Type>) {
-    let (env, class_type) = candid::check_file(candid_file).expect("fail to parse candid file");
+    let (env, class_type) =
+        candid_parser::check_file(candid_file).expect("fail to parse candid file");
     let class_type = class_type.expect("missing class type");
     let constructor_types = match class_type.as_ref() {
         TypeInner::Class(constructor_types, _service_type) => constructor_types,

@@ -17,7 +17,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     p2p::consensus::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
@@ -32,23 +32,26 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
+use ic_replicated_state::{
+    canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+};
 use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
-    history::MockIngressHistory,
-    mock_time,
-    state::ReplicatedStateBuilder,
-    types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-    types::messages::SignedIngressBuilder,
-    FastForwardTimeSource,
 };
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     batch::RawQueryStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
+    time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId, Time,
 };
 use rand::{seq::SliceRandom, Rng};
@@ -90,7 +93,7 @@ impl SimulatedIngressHistory {
                         IngressStatus::Known {
                             receiver: canister_test_id(0).get(),
                             user_id: user_test_id(0),
-                            time: mock_time(),
+                            time: UNIX_EPOCH,
                             state: IngressState::Completed(ic_types::ingress::WasmResult::Reply(
                                 vec![],
                             )),
@@ -139,7 +142,7 @@ impl SimulatedIngressHistory {
         let set_limit = MAX_INGRESS_COUNT_PER_PAYLOAD * (MAX_INGRESS_TTL.as_secs() as usize) / 2;
         while time < end_time {
             let min_time = if start_time + MAX_INGRESS_TTL < time {
-                time.saturating_sub_duration(MAX_INGRESS_TTL)
+                time.saturating_sub(MAX_INGRESS_TTL)
             } else {
                 start_time
             };
@@ -190,6 +193,7 @@ where
                         metadata,
                         CanisterQueues::default(),
                         RawQueryStats::default(),
+                        CanisterSnapshots::default(),
                     )),
                 )
             });
@@ -235,7 +239,7 @@ where
                 Arc::new(state_manager),
                 cycles_account_manager,
                 MaliciousFlags::default(),
-                CustomRandomState::default(),
+                RandomStateKind::Random,
             );
             test(
                 time_source,

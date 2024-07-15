@@ -1,17 +1,22 @@
-use crate::SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES;
+use crate::{
+    state_test_helpers::state_machine_builder_for_sns_tests,
+    SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+};
 use candid::{types::number::Nat, Principal};
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
+use futures::FutureExt;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
-use ic_icrc1_index::InitArgs as IndexInitArgs;
+use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{
     InitArgs as LedgerInitArgs, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_common::DEFAULT_TRANSFER_FEE;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
@@ -40,13 +45,12 @@ use ic_sns_governance::{
         NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
         ProposalId, RegisterDappCanisters, RewardEvent, Subaccount as SubaccountProto, Vote,
     },
-    types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
     pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
-use ic_sns_swap::pb::v1::Init as SwapInit;
+use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_types::{CanisterId, PrincipalId};
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
@@ -115,7 +119,7 @@ pub struct SnsTestsInitPayloadBuilder {
     pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
     pub swap: SwapInit,
-    pub index: IndexInitArgs,
+    pub index_ng: Option<IndexArg>,
 }
 
 /// Caveat emptor: Even though sns-wasm creates SNS governance in
@@ -136,6 +140,7 @@ impl SnsTestsInitPayloadBuilder {
                 max_message_size_bytes: Some(128 * 1024),
                 // controller_id will be set when the Root canister ID is allocated
                 controller_id: CanisterId::from_u64(0).into(),
+                more_controller_ids: None,
                 cycles_for_archive_creation: Some(0),
                 max_transactions_per_response: None,
             })
@@ -148,9 +153,10 @@ impl SnsTestsInitPayloadBuilder {
             ..Default::default()
         };
 
-        let index = IndexInitArgs {
-            ledger_id: CanisterId::from_u64(0),
-        };
+        let index_ng = Some(IndexArg::Init(InitArg {
+            ledger_id: CanisterId::from_u64(0).into(),
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        }));
 
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();
         // Existing tests expect this.
@@ -159,9 +165,9 @@ impl SnsTestsInitPayloadBuilder {
         SnsTestsInitPayloadBuilder {
             root: SnsRootCanister::default(),
             governance,
-            ledger,
             swap,
-            index,
+            ledger,
+            index_ng,
         }
     }
 
@@ -232,44 +238,62 @@ impl SnsTestsInitPayloadBuilder {
 
         let ledger = LedgerArgument::Init(self.ledger.clone());
 
-        let mut swap = self.swap.clone();
-        swap.transaction_fee_e8s = Some(self.ledger.transfer_fee.0.to_u64().unwrap());
-        swap.neuron_minimum_stake_e8s = Some(
-            governance
-                .parameters
-                .as_ref()
-                .unwrap()
-                .neuron_minimum_stake_e8s
-                .unwrap(),
-        );
+        let swap = SwapInit {
+            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(6360).to_string()],
+            should_auto_finalize: Some(true),
+            transaction_fee_e8s: Some(self.ledger.transfer_fee.0.to_u64().unwrap()),
+            neuron_minimum_stake_e8s: Some(
+                governance
+                    .parameters
+                    .as_ref()
+                    .unwrap()
+                    .neuron_minimum_stake_e8s
+                    .unwrap(),
+            ),
+            min_participants: Some(5),
+            min_icp_e8s: None,
+            max_icp_e8s: None,
+            min_direct_participation_icp_e8s: Some(12_300_000_000),
+            max_direct_participation_icp_e8s: Some(65_000_000_000),
+            min_participant_icp_e8s: Some(6_500_000_000),
+            max_participant_icp_e8s: Some(65_000_000_000),
+            swap_start_timestamp_seconds: Some(10_000_000),
+            swap_due_timestamp_seconds: Some(10_086_400),
+            sns_token_e8s: Some(10_000_000),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 5,
+                dissolve_delay_interval_seconds: 10_001,
+            }),
+            nns_proposal_id: Some(10),
+            neurons_fund_participants: None,
+            neurons_fund_participation: Some(false),
+            neurons_fund_participation_constraints: None,
+            ..Default::default()
+        };
 
         let root = self.root.clone();
-        let index = self.index.clone();
+
+        let index_ng = self.index_ng.clone();
 
         SnsCanisterInitPayloads {
             governance,
             ledger,
             root,
             swap,
-            index,
+            index_ng,
         }
     }
 }
 
 pub fn populate_canister_ids(
-    root_canister_id: CanisterId,
-    governance_canister_id: CanisterId,
-    ledger_canister_id: CanisterId,
-    swap_canister_id: CanisterId,
-    index_canister_id: CanisterId,
+    root_canister_id: PrincipalId,
+    governance_canister_id: PrincipalId,
+    ledger_canister_id: PrincipalId,
+    swap_canister_id: PrincipalId,
+    index_canister_id: PrincipalId,
+    archive_canister_ids: Vec<PrincipalId>,
     sns_canister_init_payloads: &mut SnsCanisterInitPayloads,
 ) {
-    let root_canister_id = PrincipalId::from(root_canister_id);
-    let governance_canister_id = PrincipalId::from(governance_canister_id);
-    let ledger_canister_id = PrincipalId::from(ledger_canister_id);
-    let swap_canister_id = Some(PrincipalId::from(swap_canister_id));
-    let index_canister_id = Some(PrincipalId::from(index_canister_id));
-
     // Root.
     {
         let root = &mut sns_canister_init_payloads.root;
@@ -280,10 +304,13 @@ pub fn populate_canister_ids(
             root.ledger_canister_id = Some(ledger_canister_id);
         }
         if root.swap_canister_id.is_none() {
-            root.swap_canister_id = swap_canister_id;
+            root.swap_canister_id = Some(swap_canister_id);
         }
         if root.index_canister_id.is_none() {
-            root.index_canister_id = index_canister_id;
+            root.index_canister_id = Some(index_canister_id);
+        }
+        if root.archive_canister_ids.is_empty() {
+            root.archive_canister_ids = archive_canister_ids;
         }
     }
 
@@ -292,7 +319,7 @@ pub fn populate_canister_ids(
         let governance = &mut sns_canister_init_payloads.governance;
         governance.ledger_canister_id = Some(ledger_canister_id);
         governance.root_canister_id = Some(root_canister_id);
-        governance.swap_canister_id = swap_canister_id;
+        governance.swap_canister_id = Some(swap_canister_id);
     }
 
     // Ledger
@@ -373,11 +400,12 @@ impl SnsCanisters<'_> {
         let index_canister_id = index.canister_id();
 
         populate_canister_ids(
-            root_canister_id,
-            governance_canister_id,
-            ledger_canister_id,
-            swap_canister_id,
-            index_canister_id,
+            root_canister_id.get(),
+            governance_canister_id.get(),
+            ledger_canister_id.get(),
+            swap_canister_id.get(),
+            index_canister_id.get(),
+            vec![],
             &mut init_payloads,
         );
 
@@ -409,7 +437,7 @@ impl SnsCanisters<'_> {
             install_ledger_canister(&mut ledger, init_payloads.ledger),
             install_root_canister(&mut root, init_payloads.root),
             install_swap_canister(&mut swap, init_payloads.swap),
-            install_index_canister(&mut index, init_payloads.index),
+            install_index_ng_canister(&mut index, init_payloads.index_ng),
         );
 
         eprintln!("SNS canisters installed after {:.1} s", since_start_secs());
@@ -1304,6 +1332,20 @@ pub async fn install_rust_canister_with_memory_allocation(
     );
 }
 
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+pub fn state_machine_test_on_sns_subnet<Fut, Out, F>(run: F) -> Out
+where
+    Fut: Future<Output = Result<Out, String>>,
+    F: FnOnce(Runtime) -> Fut + 'static,
+{
+    let state_machine = state_machine_builder_for_sns_tests().build();
+    // This is for easy conversion from existing tests, but nothing is actually async.
+    run(Runtime::StateMachine(state_machine))
+        .now_or_never()
+        .expect("Async call did not return from now_or_never")
+        .expect("state_machine_test_on_sns_subnet failed.")
+}
+
 /// Runs a local test on the sns subnetwork, so that the canister will be
 /// assigned the same ids as in prod.
 pub fn local_test_on_sns_subnet<Fut, Out, F>(run: F) -> Out
@@ -1361,13 +1403,13 @@ pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) 
 }
 
 /// Compiles the ledger index canister, builds it's initial payload and installs it
-pub async fn install_index_canister<'runtime, 'a>(
+pub async fn install_index_ng_canister<'runtime, 'a>(
     canister: &mut Canister<'runtime>,
-    args: IndexInitArgs,
+    args: Option<IndexArg>,
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "ic-icrc1-index",
+        "ic-icrc1-index-ng",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,

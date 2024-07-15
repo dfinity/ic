@@ -78,10 +78,6 @@ where
             .tasks_by_key
             .insert(key, (self.tasks.spawn_on(task, handle), replaced_c));
 
-        debug_assert_eq!(
-            self.tasks.len(),
-            self.tasks_by_key.len() + (jh.is_some() as usize)
-        );
         jh.map(|(jh, replaced)| {
             jh.abort();
             replaced.store(true, Ordering::Release);
@@ -108,8 +104,18 @@ where
             break result;
         };
 
-        debug_assert!(self.tasks.len() == self.tasks_by_key.len());
         result.map(|o| o.map(|(q, (k, _))| (q, k)))
+    }
+
+    /// Removes a task from the [`JoinMap`] with the associated key. Returns true if the key was found.
+    pub fn remove(&mut self, key: &K) -> bool {
+        self.tasks_by_key
+            .remove(key)
+            .map(|(abort_handle, replaced)| {
+                abort_handle.abort();
+                replaced.store(true, Ordering::Release);
+            })
+            .is_some()
     }
 
     /// Cancels all running tasks and waits for them. Will clear any internal data structure.

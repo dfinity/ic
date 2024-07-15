@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/canister_client/sender",
     "//rs/config",
@@ -40,18 +41,21 @@ BASE_DEPENDENCIES = [
     "//rs/sns/swap",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
+    "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
+    "@crate_index//:flate2",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:maplit",
     "@crate_index//:num-traits",
-    "@crate_index//:prost",
     "@crate_index//:prometheus-parse",
+    "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:tokio",
@@ -86,6 +90,7 @@ ALIASES = {}
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_nns_test_utils",
@@ -96,6 +101,7 @@ rust_library(
 
 rust_library(
     name = "test_utils--test_feature",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_features = ["test"],

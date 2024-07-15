@@ -1,13 +1,16 @@
 use assert_matches::assert_matches;
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_error_types::RejectCode;
+use ic_management_canister_types::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
 use ic_state_machine_tests::{Cycles, StateMachine};
-use ic_state_machine_tests::{StateMachineBuilder, WasmResult};
+use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::messages::CanisterTask;
-use ic_types::NumBytes;
+use ic_types::{CanisterId, NumBytes};
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
@@ -227,10 +230,14 @@ fn global_timer_can_be_cancelled() {
         .unwrap();
 
     // Setup global timer to increase a global counter
-    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let now_nanos = env
+        .time_of_next_round()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
-        .api_global_timer_set(now_nanos + 1)
+        .api_global_timer_set(now_nanos + 3) // set the deadline in three rounds from now
         .get_global_counter()
         .reply_int64()
         .build();
@@ -255,7 +262,7 @@ fn global_timer_can_be_cancelled() {
         .unwrap();
     assert_eq!(
         result,
-        WasmResult::Reply((now_nanos + 1).to_le_bytes().into())
+        WasmResult::Reply((now_nanos + 3).to_le_bytes().into())
     );
 
     // The timer should not be called
@@ -306,10 +313,14 @@ fn global_timer_is_one_off() {
         .unwrap();
 
     // Setup global timer to increase a global counter
-    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let now_nanos = env
+        .time_of_next_round()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
-        .api_global_timer_set(now_nanos + 1)
+        .api_global_timer_set(now_nanos + 2) // set the deadline in two rounds from now
         .get_global_counter()
         .reply_int64()
         .build();
@@ -327,7 +338,6 @@ fn global_timer_is_one_off() {
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
 
     // The timer should reach the deadline now
-    env.advance_time(Duration::from_secs(1));
     env.tick();
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
@@ -336,6 +346,7 @@ fn global_timer_is_one_off() {
 
     // The timer should be called just once
     env.advance_time(Duration::from_secs(1));
+    env.tick();
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter)
         .unwrap();
@@ -702,9 +713,16 @@ fn global_timer_runs_if_set_in_stopped_canister_post_upgrade() {
     assert_eq!(result, WasmResult::Reply(5_u64.to_le_bytes().into()));
 }
 
-#[test]
-fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
-    let env = StateMachine::new();
+fn global_timer_resumes<F, G>(stop: F, start: G)
+where
+    F: FnOnce(&StateMachine, CanisterId),
+    G: FnOnce(&StateMachine, CanisterId),
+{
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config.clone(),
+        HypervisorConfig::default(),
+    ));
 
     // Install a canister with a periodic timer.
     let set_global_timer_in_canister_init = wasm()
@@ -712,10 +730,11 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
         .api_global_timer_set(1)
         .build();
     let canister_id = env
-        .install_canister(
+        .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.to_vec(),
             set_global_timer_in_canister_init,
             None,
+            Cycles::new(1_000_000_000_000),
         )
         .unwrap();
 
@@ -733,8 +752,7 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
     assert_eq!(result, WasmResult::Reply(5_u64.to_le_bytes().into()));
 
     // Stop the canister.
-    let result = env.stop_canister(canister_id);
-    assert_matches!(result, Ok(_));
+    stop(&env, canister_id);
 
     // The timer should not be triggered as the canister is stopped.
     for _ in 0..20 {
@@ -743,8 +761,8 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
     }
 
     // Start the canister.
-    let result = env.start_canister(canister_id);
-    assert_matches!(result, Ok(_));
+    start(&env, canister_id);
+
     // Assert the global timer was not running.
     let result = env
         .query(canister_id, "query", get_global_counter.clone())
@@ -761,4 +779,49 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
     // Assert the global timer is running.
     let result = env.query(canister_id, "query", get_global_counter).unwrap();
     assert_eq!(result, WasmResult::Reply(10_u64.to_le_bytes().into()));
+}
+
+#[test]
+fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
+    let start = |env: &StateMachine, canister_id: CanisterId| {
+        let result = env.stop_canister(canister_id);
+        assert_matches!(result, Ok(_));
+    };
+    let stop = |env: &StateMachine, canister_id: CanisterId| {
+        let result = env.start_canister(canister_id);
+        assert_matches!(result, Ok(_));
+    };
+    global_timer_resumes(start, stop);
+}
+
+#[test]
+fn global_timer_resumes_after_canister_is_being_frozen_and_unfrozen_again() {
+    let freeze = |env: &StateMachine, canister_id: CanisterId| {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1 << 62)
+            .build();
+        let result = env.update_settings(&canister_id, args);
+        assert_matches!(result, Ok(_));
+    };
+    let unfreeze = |env: &StateMachine, canister_id: CanisterId| {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(0)
+            .build();
+        let result = env.update_settings(&canister_id, args);
+        assert_matches!(result, Ok(_));
+    };
+    global_timer_resumes(freeze, unfreeze);
+}
+
+#[test]
+fn global_timer_produces_transient_error_on_out_of_cycles() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    // The canister has no enough cycles for the install.
+    let err = env
+        .install_canister_with_cycles(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None, 0_u64.into())
+        .unwrap_err();
+
+    assert_eq!(RejectCode::SysTransient, err.code().into());
 }

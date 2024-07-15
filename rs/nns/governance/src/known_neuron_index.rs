@@ -1,6 +1,7 @@
 use crate::{governance::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::{Memory, StableBTreeMap, Storable};
 
 /// An index to make it easy to check whether a known neuron with the same name exists,
 /// as well as listing all known neuron's ids.
@@ -153,11 +154,11 @@ impl Storable for KnownNeuronName {
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
         Self(String::from_bytes(bytes))
     }
-}
 
-impl BoundedStorable for KnownNeuronName {
-    const MAX_SIZE: u32 = KNOWN_NEURON_NAME_MAX_LEN as u32;
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: KNOWN_NEURON_NAME_MAX_LEN as u32,
+        is_fixed_size: false,
+    };
 }
 
 #[cfg(test)]

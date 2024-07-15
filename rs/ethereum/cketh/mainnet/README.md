@@ -1,3 +1,4 @@
+# ckETH Mainnet Deployment
 This directory contains the deployed arguments and canister IDs related to ckETH.
 
 The canisters have been create on pzp6e, the fiduciary subnet.
@@ -161,6 +162,19 @@ Installing the canister:
     --summary-file ./index_proposal.md
 ```
 
+## Deployment of ckERC20
+
+Tasks:
+1. [x] Create empty canister for the orchestrator, see `vxkom-oyaaa-aaaar-qafda-cai`.
+2. [x] Change controller of the orchestrator to the NNS root `r7inp-6aaaa-aaaaa-aaabq-cai` and self `vxkom-oyaaa-aaaar-qafda-cai`.
+3. [x] Install the orchestrator canister wasm via NNS proposal, see the [proposal](orchestrator_install_2024_05_10).
+4. [x] Deploy the ckERC20 deposit helper smart contract on Ethereum mainnet.
+5. [x] Upgrade the minter canister via NNS proposal to support ckERC20, see the [proposal](minter_upgrade_2024_05_10).
+6. [x] Add at least 500T cycles to the orchestrator canister `vxkom-oyaaa-aaaar-qafda-cai`.
+7. [x] Add ckUSDC by upgrading the orchestrator via NNS proposal, see the [proposal](orchestrator_upgrade_2024_05_19).
+
+Step 3 and (4,5) could happen in any order (first 3, then (4.5); or first (4,5), then 3). It's crucial that the last step happens after step 5 so that the minter is aware of the orchestrator, which will notify the minter when a new token is added.
+
 ## Test the proposals on a testnet
 
 To test the proposals with a testnet that uses the same canister IDs as in the proposals we need:
@@ -169,7 +183,7 @@ To test the proposals with a testnet that uses the same canister IDs as in the p
 
 ### Spin up the dynamic testnet
 
-The simplest is to tweak the setup from [small_api_boundary](https://sourcegraph.com/github.com/dfinity/ic@ee5f7514e37d138e0ff6e69ef5d0d10706a23f67/-/blob/rs/tests/testing_verification/testnets/small_api_boundary.rs?L65)
+The simplest is to tweak the setup from [small](https://sourcegraph.com/github.com/dfinity/ic@7313a15e21d8fb06fa119ef3ab9371da47c2cddc/-/blob/rs/tests/testing_verification/testnets/small.rs?L62)
 ```rust
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -187,31 +201,14 @@ pub fn setup(env: TestEnv) {
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
-    // Deploy a boundary node with a boundary-api-guestos image.
-    ApiBoundaryNode::new(String::from(API_BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of ApiBoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup ApiBoundaryNode VM");
-    let api_boundary_node = env
-        .get_deployed_api_boundary_node(API_BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
     env.sync_with_prometheus();
-    // Await for API boundary node to report healthy.
-    api_boundary_node
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
 }
 ```
 
 and then spin up the dynamic testnet with a generous lifetime
 ```shell
 ./gitlab-ci/tools/docker-run
-ict testnet create small_api_boundary --lifetime-mins=880 --output-dir=./small_api_boundary -- --test_tmpdir=./small_api_boundary
+ict testnet create small --lifetime-mins=880 --output-dir=./small -- --test_tmpdir=./small
 ```
 
 Once the testnet is up and running, extract the external url of the boundary node from the logs, which should have the following format `https://ic<x>.farm.dfinity.systems`. In the following we will use `https://ic1.farm.dfinity.systems`.

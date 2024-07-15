@@ -126,12 +126,12 @@ ic_raw_rand'' :: (HasAgentConfig) => Blob -> Blob -> IO (HTTPErrOr ReqResponse)
 ic_raw_rand'' user ecid = do
   callIC'' user ecid #raw_rand ()
 
-ic_http_get_request'' :: (HasAgentConfig) => Blob -> Blob -> IO (HTTPErrOr ReqResponse)
-ic_http_get_request'' user ecid =
+ic_http_get_request'' :: (HasAgentConfig) => Blob -> Blob -> String -> IO (HTTPErrOr ReqResponse)
+ic_http_get_request'' user ecid proto =
   callIC'' user ecid #http_request $
     empty
       .+ #url
-      .== (T.pack $ "https://" ++ httpbin)
+      .== (T.pack $ proto ++ httpbin)
       .+ #max_response_bytes
       .== Nothing
       .+ #method

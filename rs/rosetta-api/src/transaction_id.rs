@@ -65,6 +65,7 @@ impl TransactionIdentifier {
             | RequestType::MergeMaturity { .. }
             | RequestType::StakeMaturity { .. }
             | RequestType::NeuronInfo { .. }
+            | RequestType::ListNeurons { .. }
             | RequestType::Follow { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
                 Ok(TransactionIdentifier::from(

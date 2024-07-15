@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../../nns/cmc" }
@@ -22,6 +22,7 @@ ic-nns-governance = { path = "../../../nns/governance" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-sns-wasm = { path = "../../../nns/sns-wasm" }
+ic-system-test-driver = { path = "../../driver" }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 tests = { path = "../../" }
 ic-types = { path = "../../../types/types" }

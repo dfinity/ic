@@ -91,7 +91,7 @@ fn kyt_wasm() -> Vec<u8> {
 fn install_ledger(env: &StateMachine) -> CanisterId {
     let args = LedgerArgument::Init(
         LedgerInitArgsBuilder::for_tests()
-            .with_transfer_fee(0)
+            .with_transfer_fee(0_u8)
             .build(),
     );
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
@@ -153,16 +153,22 @@ fn range_to_txid(range: std::ops::RangeInclusive<u8>) -> Txid {
     vec_to_txid(range.collect::<Vec<u8>>())
 }
 
+fn new_state_machine() -> StateMachine {
+    StateMachineBuilder::new()
+        .with_master_ecdsa_public_key()
+        .build()
+}
+
 #[test]
 fn test_install_ckbtc_minter_canister() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     install_minter(&env, ledger_id);
 }
 
 #[test]
 fn test_wrong_upgrade_parameter() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
 
     // wrong init args
 
@@ -222,7 +228,7 @@ fn test_wrong_upgrade_parameter() {
 
 #[test]
 fn test_upgrade_read_only() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -288,7 +294,7 @@ fn test_upgrade_read_only() {
 
 #[test]
 fn test_upgrade_restricted() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -502,7 +508,7 @@ fn update_balance_should_return_correct_confirmations() {
 
 #[test]
 fn test_illegal_caller() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -555,7 +561,7 @@ pub fn get_btc_address(
 fn test_minter() {
     use bitcoin::Address;
 
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let args = MinterArg::Init(CkbtcMinterInitArgs {
         btc_network: Network::Regtest.into(),
         ecdsa_key_name: "master_ecdsa_public_key".into(),
@@ -591,20 +597,24 @@ fn test_minter() {
     assert_ne!(address_1, address_2);
 }
 
-fn mainnet_bitcoin_canister_id() -> CanisterId {
+fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
     CanisterId::try_from(
-        PrincipalId::from_str(ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID)
-            .unwrap(),
+        PrincipalId::from_str(match btc_network {
+            Network::Testnet | Network::Regtest => {
+                ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID
+            }
+            Network::Mainnet => ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID,
+        })
+        .unwrap(),
     )
     .unwrap()
 }
 
-fn install_bitcoin_mock_canister(env: &StateMachine) {
-    let args = Network::Mainnet;
-    let cid = mainnet_bitcoin_canister_id();
+fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
+    let cid = bitcoin_canister_id(btc_network);
     env.create_canister_with_cycles(Some(cid.into()), Cycles::new(0), None);
 
-    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&args).unwrap())
+    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&btc_network).unwrap())
         .unwrap();
 }
 
@@ -620,13 +630,18 @@ struct CkBtcSetup {
 
 impl CkBtcSetup {
     pub fn new() -> Self {
-        let bitcoin_id = mainnet_bitcoin_canister_id();
+        Self::new_with(Network::Mainnet)
+    }
+
+    pub fn new_with(btc_network: Network) -> Self {
+        let bitcoin_id = bitcoin_canister_id(btc_network);
         let env = StateMachineBuilder::new()
+            .with_master_ecdsa_public_key()
             .with_default_canister_range()
             .with_extra_canister_range(bitcoin_id..=bitcoin_id)
             .build();
 
-        install_bitcoin_mock_canister(&env);
+        install_bitcoin_mock_canister(&env, btc_network);
         let ledger_id = env.create_canister(None);
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
@@ -647,13 +662,18 @@ impl CkBtcSetup {
         )
         .expect("failed to install the ledger");
 
+        let retrieve_btc_min_amount = match btc_network {
+            Network::Testnet | Network::Regtest => 10_000,
+            Network::Mainnet => 100_000,
+        };
+
         env.install_existing_canister(
             minter_id,
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-                btc_network: Network::Mainnet.into(),
+                btc_network: btc_network.into(),
                 ecdsa_key_name: "master_ecdsa_public_key".to_string(),
-                retrieve_btc_min_amount: 100_000,
+                retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
                 min_confirmations: Some(MIN_CONFIRMATIONS),
@@ -871,6 +891,27 @@ impl CkBtcSetup {
                     .expect("failed to query get_transactions on the ledger")
             ),
             GetTransactionsResponse
+        )
+        .unwrap()
+    }
+
+    pub fn get_known_utxos(&self, account: impl Into<Account>) -> Vec<Utxo> {
+        let account = account.into();
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "get_known_utxos",
+                        Encode!(&UpdateBalanceArgs {
+                            owner: Some(account.owner),
+                            subaccount: account.subaccount,
+                        })
+                        .unwrap()
+                    )
+                    .expect("failed to query balance on the ledger")
+            ),
+            Vec<Utxo>
         )
         .unwrap()
     }
@@ -1241,9 +1282,11 @@ fn test_transaction_finalization() {
 
     let user = Principal::from(ckbtc.caller);
 
-    ckbtc.deposit_utxo(user, utxo);
+    ckbtc.deposit_utxo(user, utxo.clone());
 
     assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+
+    assert_eq!(ckbtc.get_known_utxos(user), vec![utxo]);
 
     // Step 2: request a withdrawal
 
@@ -1284,10 +1327,12 @@ fn test_transaction_finalization() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+    assert_eq!(ckbtc.get_known_utxos(user), vec![]);
 }
 
 #[test]
-fn test_min_retrieval_amount() {
+fn test_min_retrieval_amount_mainnet() {
     let ckbtc = CkBtcSetup::new();
 
     ckbtc.refresh_fee_percentiles();
@@ -1314,6 +1359,36 @@ fn test_min_retrieval_amount() {
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 200_000);
+}
+
+#[test]
+fn test_min_retrieval_amount_testnet() {
+    let ckbtc = CkBtcSetup::new_with(Network::Testnet);
+
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 10_000);
+
+    // The numbers used in this test have been re-computed using a python script using integers.
+    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 10_000);
+
+    ckbtc.set_fee_percentiles(&vec![116_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 60_000);
+
+    ckbtc.set_fee_percentiles(&vec![342_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 60_000);
+
+    ckbtc.set_fee_percentiles(&vec![343_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 110_000);
 }
 
 #[test]
@@ -1635,8 +1710,8 @@ fn test_ledger_memo() {
     assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
 
     let get_transaction_request = GetTransactionsRequest {
-        start: 0.into(),
-        length: 1.into(),
+        start: 0_u8.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
@@ -1665,7 +1740,7 @@ fn test_ledger_memo() {
 
     let get_transaction_request = GetTransactionsRequest {
         start: block_index.into(),
-        length: 1.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
@@ -1688,8 +1763,8 @@ fn test_ledger_memo() {
         .expect("failed to transfer funds");
 
     let get_transaction_request = GetTransactionsRequest {
-        start: 3.into(),
-        length: 1.into(),
+        start: 3_u8.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
@@ -1802,7 +1877,7 @@ fn test_retrieve_btc_with_approval() {
 
     let get_transaction_request = GetTransactionsRequest {
         start: block_index.into(),
-        length: 1.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
@@ -1891,7 +1966,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
 
     let get_transaction_request = GetTransactionsRequest {
         start: block_index.into(),
-        length: 1.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();

@@ -37,14 +37,6 @@ impl fmt::Display for Request {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct LegacyRequest {
-    #[serde(rename = "sender_cid")]
-    pub guest_cid: String,
-    #[serde(rename = "message")]
-    pub command: String,
-}
-
 /// All commands that can be sent to the Host server
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Command {
@@ -96,21 +88,6 @@ pub struct HostOSVsockVersion {
 impl fmt::Display for HostOSVsockVersion {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub enum VsockProtocol {
-    V0,
-    V1,
-}
-
-impl fmt::Display for VsockProtocol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            VsockProtocol::V0 => write!(f, "V0"),
-            VsockProtocol::V1 => write!(f, "V1"),
-        }
     }
 }
 

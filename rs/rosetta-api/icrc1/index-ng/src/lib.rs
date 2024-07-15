@@ -7,20 +7,22 @@ use icrc_ledger_types::icrc3::transactions::Transaction;
 /// The maximum number of blocks to return in a single [get_blocks] request.
 pub const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Clone)]
 pub enum IndexArg {
     Init(InitArg),
     Upgrade(UpgradeArg),
 }
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Clone)]
 pub struct InitArg {
     pub ledger_id: Principal,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Clone)]
 pub struct UpgradeArg {
     pub ledger_id: Option<Principal>,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
@@ -97,4 +99,14 @@ pub struct LogEntry {
 #[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
 pub struct Log {
     pub entries: Vec<LogEntry>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GetBlocksMethod {
+    // The `get_blocks` endpoint used by the Ledger
+    // before ICRC-3 was implemented.
+    GetBlocks,
+    // The `icrc3_get_blocks` endpoint supported by
+    // ICRC-3 compatible Ledgers.
+    ICRC3GetBlocks,
 }

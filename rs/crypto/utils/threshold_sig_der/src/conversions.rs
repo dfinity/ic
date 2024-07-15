@@ -1,5 +1,4 @@
-use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
-use ic_crypto_internal_threshold_sig_bls12381_der::public_key_from_der;
+use crate::{public_key_from_der, public_key_to_der};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
@@ -71,8 +70,14 @@ pub fn parse_threshold_sig_key_from_der(der_bytes: &[u8]) -> Result<ThresholdSig
 /// * `CryptoError::MalformedPublicKey`: if the public cannot be DER encoded.
 pub fn threshold_sig_public_key_to_der(pk: ThresholdSigPublicKey) -> CryptoResult<Vec<u8>> {
     // TODO(CRP-641): add a check that the key is indeed a BLS key.
-    let pk = PublicKeyBytes(pk.into_bytes());
-    bls12_381::api::public_key_to_der(pk)
+
+    let key = PublicKeyBytes(pk.into_bytes());
+
+    public_key_to_der(&key.0).map_err(|e| CryptoError::MalformedPublicKey {
+        algorithm: AlgorithmId::ThresBls12_381,
+        key_bytes: Some(key.0.to_vec()),
+        internal_error: format!("Conversion to DER failed with error {}", e),
+    })
 }
 
 /// Decodes a threshold signature public key from DER.
@@ -80,53 +85,16 @@ pub fn threshold_sig_public_key_to_der(pk: ThresholdSigPublicKey) -> CryptoResul
 /// # Errors
 /// * `CryptoError::MalformedPublicKey`: if the public cannot be DER decoded.
 pub fn threshold_sig_public_key_from_der(bytes: &[u8]) -> CryptoResult<ThresholdSigPublicKey> {
-    let pk = bls12_381::api::public_key_from_der(bytes)?;
-    Ok(pk.into())
+    match public_key_from_der(bytes) {
+        Ok(key_bytes) => Ok(PublicKeyBytes(key_bytes).into()),
+        Err(internal_error) => Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::ThresBls12_381,
+            key_bytes: Some(bytes.to_vec()),
+            internal_error,
+        }),
+    }
 }
 
 fn invalid_data_err(msg: impl std::string::ToString) -> Error {
     Error::new(ErrorKind::InvalidData, msg.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used)]
-    use super::*;
-
-    #[test]
-    fn can_parse_pem_file() {
-        use std::io::Write;
-
-        let contents = r#"-----BEGIN PUBLIC KEY-----
-MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAKOY3Qk9qTesCRaL
-GY4Bb/WQ5wfxhiUca4hbVIRfOkPlNtXSg/AHff5QIckWPifeyRB/S9A1jjg1XdKP
-5lSemYM6VVTrGhjShUwHqVmdOBJ8ofpb2+qV/2ppvxc+3OFBvA==
------END PUBLIC KEY-----
-"#;
-
-        let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
-        tmpfile.write_all(contents.as_bytes()).unwrap();
-        let pk = parse_threshold_sig_key(tmpfile.path()).unwrap();
-        assert_eq!(
-        hex::encode(&pk.into_bytes()[..]),
-        "a398dd093da937ac09168b198e016ff590e707f186251c6b885b54845f3a43e536d5d283f0077dfe5021c9163e27dec9107f4bd0358e38355dd28fe6549e99833a5554eb1a18d2854c07a9599d38127ca1fa5bdbea95ff6a69bf173edce141bc"
-    );
-    }
-
-    #[test]
-    fn base64_decode_fails() {
-        use std::io::Write;
-
-        let contents = r#"-----BEGIN PUBLIC KEY-----
-MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAKOY3Qk9qTesCRaL
-GY4Bb/WQ5wfxhiUca4hbVIRfOkPlNtXSg/AHff5QIckWPifeyRB/S9A1jjg1XdKP
-5lSemYM6VVTGhjShUwHqVmdOBJ8ofpb2+qV/2ppvxc+3OFBvA==
------END PUBLIC KEY-----
-"#;
-
-        let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
-        tmpfile.write_all(contents.as_bytes()).unwrap();
-        let pk = parse_threshold_sig_key(tmpfile.path());
-        assert!(pk.is_err());
-    }
 }

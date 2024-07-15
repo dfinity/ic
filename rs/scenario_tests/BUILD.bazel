@@ -3,9 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
-    "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/ed25519",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -42,6 +42,7 @@ ALIASES = {}
 
 rust_library(
     name = "scenario_tests",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_scenario_tests",
@@ -52,6 +53,7 @@ rust_library(
 
 rust_binary(
     name = "e2e-test-driver",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

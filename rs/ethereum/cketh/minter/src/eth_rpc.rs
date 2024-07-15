@@ -1,7 +1,6 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use crate::address::Address;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
@@ -10,6 +9,7 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
+use evm_rpc_client::types::candid::HttpOutcallError as EvmHttpOutcallError;
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
@@ -17,6 +17,7 @@ use ic_cdk::api::management_canister::http_request::{
     TransformContext,
 };
 use ic_cdk_macros::query;
+use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
 use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -48,7 +49,7 @@ pub fn into_nat(quantity: Quantity) -> candid::Nat {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct Data(#[serde(with = "crate::serde_data")] pub Vec<u8>);
+pub struct Data(#[serde(with = "ic_ethereum_types::serde_data")] pub Vec<u8>);
 
 impl AsRef<[u8]> for Data {
     fn as_ref(&self) -> &[u8] {
@@ -58,7 +59,7 @@ impl AsRef<[u8]> for Data {
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct FixedSizeData(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+pub struct FixedSizeData(#[serde(with = "ic_ethereum_types::serde_data")] pub [u8; 32]);
 
 impl AsRef<[u8]> for FixedSizeData {
     fn as_ref(&self) -> &[u8] {
@@ -124,7 +125,7 @@ impl HttpResponsePayload for SendRawTransactionResult {
 #[serde(transparent)]
 #[cbor(transparent)]
 pub struct Hash(
-    #[serde(with = "crate::serde_data")]
+    #[serde(with = "ic_ethereum_types::serde_data")]
     #[cbor(n(0), with = "minicbor::bytes")]
     pub [u8; 32],
 );
@@ -197,6 +198,16 @@ impl From<CandidBlockTag> for BlockTag {
     }
 }
 
+impl From<BlockTag> for CandidBlockTag {
+    fn from(value: BlockTag) -> Self {
+        match value {
+            BlockTag::Latest => CandidBlockTag::Latest,
+            BlockTag::Safe => CandidBlockTag::Safe,
+            BlockTag::Finalized => CandidBlockTag::Finalized,
+        }
+    }
+}
+
 impl Display for BlockTag {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -255,7 +266,27 @@ pub struct GetLogsParam {
     /// Topics are order-dependent.
     /// Each topic can also be an array of DATA with "or" options.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub topics: Vec<FixedSizeData>,
+    pub topics: Vec<Topic>,
+}
+
+/// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum Topic {
+    Single(FixedSizeData),
+    Multiple(Vec<FixedSizeData>),
+}
+
+impl From<FixedSizeData> for Topic {
+    fn from(data: FixedSizeData) -> Self {
+        Topic::Single(data)
+    }
+}
+
+impl From<Vec<FixedSizeData>> for Topic {
+    fn from(data: Vec<FixedSizeData>) -> Self {
+        Topic::Multiple(data)
+    }
 }
 
 /// An entry of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call reply.
@@ -528,6 +559,23 @@ pub enum HttpOutcallError {
     },
 }
 
+impl From<EvmHttpOutcallError> for HttpOutcallError {
+    fn from(value: EvmHttpOutcallError) -> Self {
+        match value {
+            EvmHttpOutcallError::IcError { code, message } => Self::IcError { code, message },
+            EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
+                status,
+                body,
+                parsing_error,
+            } => Self::InvalidHttpJsonRpcResponse {
+                status,
+                body,
+                parsing_error,
+            },
+        }
+    }
+}
+
 impl HttpOutcallError {
     pub fn is_response_too_large(&self) -> bool {
         match self {
@@ -542,16 +590,6 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 }
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
-
-pub fn are_errors_consistent<T: PartialEq>(
-    left: &HttpOutcallResult<JsonRpcResult<T>>,
-    right: &HttpOutcallResult<JsonRpcResult<T>>,
-) -> bool {
-    match (left, right) {
-        (Ok(JsonRpcResult::Result(_)), _) | (_, Ok(JsonRpcResult::Result(_))) => true,
-        _ => left == right,
-    }
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResponseSizeEstimate(u64);

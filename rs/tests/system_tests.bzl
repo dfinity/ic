@@ -100,7 +100,7 @@ def system_test(
         runtime_deps = [],
         tags = [],
         test_timeout = "long",
-        flaky = True,
+        flaky = False,
         malicious = False,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
@@ -111,6 +111,7 @@ def system_test(
         uses_setupos_dev = False,
         uses_hostos_dev_test = False,
         env_inherit = [],
+        additional_colocate_tags = [],
         **kwargs):
     """Declares a system-test.
 
@@ -138,7 +139,9 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
-      env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
+      env_inherit: specifies additional environment variables to inherit from
+      the external environment when the test is executed by bazel test.
+      additional_colocate_tags: additional tags to pass to the colocated test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 
@@ -150,6 +153,7 @@ def system_test(
 
     rust_binary(
         name = bin_name,
+        testonly = True,
         srcs = [name + ".rs"],
         **kwargs
     )
@@ -171,12 +175,9 @@ def system_test(
     _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
 
     if uses_guestos_dev:
-        # TODO: remove GZ after CDI is upgraded to version that supports ZST
-        _env_deps[_guestos + "disk-img-url-gz"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_CAS_URL"
-        _env_deps[_guestos + "disk-img.tar.gz.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_SHA256"
-        _env_deps[_guestos + "disk-img-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
-        _env_deps[_guestos + "update-img-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
 
     if uses_hostos_dev_test:
@@ -209,7 +210,6 @@ def system_test(
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         timeout = test_timeout,
-        # TODO: set flaky = False by default when PFOPS-3148 is resolved
         flaky = flaky,
     )
 
@@ -242,9 +242,8 @@ def system_test(
         env_inherit = env_inherit,
         env = env,
         tags = tags + ["requires-network", "system_test"] +
-               ([] if "experimental_system_test_colocation" in tags else ["manual"]),
+               ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
         timeout = test_timeout,
-        # TODO: set flaky = False by default when PFOPS-3148 is resolved
         flaky = flaky,
     )
 

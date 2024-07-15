@@ -3,27 +3,30 @@ use crate::{
     logs::{ERROR, INFO},
     pb::{
         sns_root_types::{
-            set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
-            SetDappControllersRequest,
+            set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
+            RegisterDappCanistersRequest, SetDappControllersRequest,
         },
         v1::{
             claim_swap_neurons_request::NeuronParameters,
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             get_neuron_response,
             governance::{
-                self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
+                self,
+                neuron_in_flight_command::{self, SyncCommand},
+                SnsMetadata,
             },
             governance_error::ErrorType,
-            manage_neuron, manage_neuron_response,
+            manage_neuron,
             manage_neuron_response::{
-                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
             ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageNeuronResponse, MintSnsTokens, Motion, NervousSystemFunction,
+            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
             NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
             NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
@@ -36,13 +39,18 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
-use ic_ic00_types::CanisterInstallModeError;
-use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
-use ic_nervous_system_common::{validate_proposal_url, NervousSystemError, SECONDS_PER_DAY};
+use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
+use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
+use ic_management_canister_types::CanisterInstallModeError;
+use ic_nervous_system_common::{
+    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError,
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
 };
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
@@ -51,12 +59,6 @@ use std::{
     fmt,
 };
 use strum::IntoEnumIterator;
-
-pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
-
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 #[allow(dead_code)]
 /// TODO Use to validate the size of the payload 70 KB (for executing
@@ -79,7 +81,7 @@ pub mod native_action_ids {
     pub const MANAGE_NERVOUS_SYSTEM_PARAMETERS: u64 = 2;
 
     /// UpgradeSnsControlledCanister Action.
-    pub const UPGRADE_SNS_CONTROLLER_CANISTER: u64 = 3;
+    pub const UPGRADE_SNS_CONTROLLED_CANISTER: u64 = 3;
 
     /// AddGenericNervousSystemFunction Action.
     pub const ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION: u64 = 4;
@@ -110,6 +112,9 @@ pub mod native_action_ids {
 
     /// ManageLedgerParameters Action.
     pub const MANAGE_LEDGER_PARAMETERS: u64 = 13;
+
+    /// ManageDappCanisterSettings Action.
+    pub const MANAGE_DAPP_CANISTER_SETTINGS: u64 = 14;
 }
 
 impl governance::Mode {
@@ -203,39 +208,47 @@ impl governance::Mode {
         }
     }
 
+    pub fn proposal_types_disallowed_in_pre_initialization_swap() -> Vec<NervousSystemFunction> {
+        vec![
+            NervousSystemFunction::manage_nervous_system_parameters(),
+            NervousSystemFunction::transfer_sns_treasury_funds(),
+            NervousSystemFunction::mint_sns_tokens(),
+            NervousSystemFunction::upgrade_sns_controlled_canister(),
+            NervousSystemFunction::register_dapp_canisters(),
+            NervousSystemFunction::deregister_dapp_canisters(),
+        ]
+    }
+
     fn proposal_action_is_allowed_in_pre_initialization_swap_or_err(
         action: &Action,
         disallowed_target_canister_ids: &HashSet<CanisterId>,
         id_to_nervous_system_function: &BTreeMap<u64, NervousSystemFunction>,
     ) -> Result<(), GovernanceError> {
-        match action {
-            Action::ExecuteGenericNervousSystemFunction(execute) => {
-                Self::execute_generic_nervous_system_function_is_allowed_in_pre_initialization_swap_or_err(
+        // ExecuteGenericNervousSystemFunction is special in that it
+        // is only disallowed in some cases.
+        if let Action::ExecuteGenericNervousSystemFunction(execute) = action {
+            return Self::execute_generic_nervous_system_function_is_allowed_in_pre_initialization_swap_or_err(
                     execute,
                     disallowed_target_canister_ids,
                     id_to_nervous_system_function,
-                )
-            }
+                );
+        }
 
-            Action::ManageNervousSystemParameters(_) => Err(GovernanceError::new_with_message(
+        let is_action_disallowed = Self::proposal_types_disallowed_in_pre_initialization_swap()
+            .into_iter()
+            .any(|t| t.id == NervousSystemFunction::from(action.clone()).id);
+
+        if is_action_disallowed {
+            Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "ManageNervousSystemParameters proposals are not allowed while \
-                         governance is in PreInitializationSwap mode: {:#?}",
+                    "This proposal type is not allowed while governance is in \
+                     PreInitializationSwap mode: {:#?}",
                     action,
                 ),
-            )),
-
-            Action::TransferSnsTreasuryFunds(_) => Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "TransferSnsTreasuryFunds proposals are not allowed while \
-                        governance is in PreInitializationSwap mode: {:#?}",
-                    action
-                )
-            )),
-
-            _ => Ok(()),
+            ))
+        } else {
+            Ok(())
         }
     }
 
@@ -270,9 +283,8 @@ impl governance::Mode {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "ExecuteGenericNervousSystemFunction proposals are not allowed while \
-                     governance is in PreInitializationSwap mode: {:#?}",
-                    execute,
+                    "ExecuteGenericNervousSystemFunction proposals targeting {target_canister_id:?} are not allowed while \
+                     governance is in PreInitializationSwap mode: {execute:#?}"
                 ),
             ));
         }
@@ -325,6 +337,7 @@ impl NervousSystemParameters {
 
     /// This is an upper bound for `max_number_of_neurons`. Exceeding it may cause
     /// degradation in the governance canister or the subnet hosting the SNS.
+    /// See also: `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`.
     pub const MAX_NUMBER_OF_NEURONS_CEILING: u64 = 200_000;
 
     /// This is an upper bound for `max_number_of_proposals_with_ballots`. Exceeding
@@ -945,6 +958,15 @@ impl From<NervousSystemError> for GovernanceError {
     }
 }
 
+impl From<prost::DecodeError> for GovernanceError {
+    fn from(decode_error: prost::DecodeError) -> Self {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Invalid mode for install_code: {}", decode_error),
+        )
+    }
+}
+
 impl From<CanisterInstallModeError> for GovernanceError {
     fn from(canister_install_mode_error: CanisterInstallModeError) -> Self {
         GovernanceError {
@@ -983,131 +1005,200 @@ impl NervousSystemFunction {
             Some(FunctionType::NativeNervousSystemFunction(_))
         )
     }
+    fn unspecified() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::UNSPECIFIED,
+            name: "All non-critical topics".to_string(),
+            description: Some(
+                "Catch-all w.r.t to following for non-critical proposals.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn motion() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::MOTION,
+            name: "Motion".to_string(),
+            description: Some(
+                "Side-effect-less proposals to set general governance direction.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn manage_nervous_system_parameters() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS,
+            name: "Manage nervous system parameters".to_string(),
+            description: Some(
+                "Proposal to change the core parameters of SNS governance.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn upgrade_sns_controlled_canister() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::UPGRADE_SNS_CONTROLLED_CANISTER,
+            name: "Upgrade SNS controlled canister".to_string(),
+            description: Some(
+                "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn add_generic_nervous_system_function() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            name: "Add nervous system function".to_string(),
+            description: Some("Proposal to add a new, user-defined, nervous system function: a canister call which can then be executed by proposal.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn remove_generic_nervous_system_function() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            name: "Remove nervous system function".to_string(),
+            description: Some("Proposal to remove a user-defined nervous system function, which will be no longer executable by proposal.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn execute_generic_nervous_system_function() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            name: "Execute nervous system function".to_string(),
+            description: Some("Proposal to execute a user-defined nervous system function, previously added by an AddNervousSystemFunction proposal. A canister call will be made when executed.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn upgrade_sns_to_next_version() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
+            name: "Upgrade SNS to next version".to_string(),
+            description: Some("Proposal to upgrade the WASM of a core SNS canister.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn manage_sns_metadata() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::MANAGE_SNS_METADATA,
+            name: "Manage SNS metadata".to_string(),
+            description: Some(
+                "Proposal to change the metadata associated with an SNS.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn transfer_sns_treasury_funds() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
+            name: "Transfer SNS treasury funds".to_string(),
+            description: Some(
+                "Proposal to transfer funds from an SNS Governance controlled treasury account"
+                    .to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn register_dapp_canisters() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::REGISTER_DAPP_CANISTERS,
+            name: "Register dapp canisters".to_string(),
+            description: Some("Proposal to register a dapp canister with the SNS.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn deregister_dapp_canisters() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::DEREGISTER_DAPP_CANISTERS,
+            name: "Deregister Dapp Canisters".to_string(),
+            description: Some(
+                "Proposal to deregister a previously-registered dapp canister from the SNS."
+                    .to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn mint_sns_tokens() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::MINT_SNS_TOKENS,
+            name: "Mint SNS tokens".to_string(),
+            description: Some("Proposal to mint SNS tokens to a specified recipient.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn manage_ledger_parameters() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::MANAGE_LEDGER_PARAMETERS,
+            name: "Manage ledger parameters".to_string(),
+            description: Some(
+                "Proposal to change some parameters in the ledger canister.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn manage_dapp_canister_settings() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS,
+            name: "Manage dapp canister settings".to_string(),
+            description: Some(
+                "Proposal to change canister settings for some dapp canisters.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
 }
 
 impl From<Action> for NervousSystemFunction {
     fn from(action: Action) -> Self {
         match action {
-            Action::Unspecified(_) => NervousSystemFunction {
-                id: native_action_ids::UNSPECIFIED,
-                name: "All Topics".to_string(),
-                description: Some(
-                    "Catch-all w.r.t to following for all types of proposals.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::Motion(_) => NervousSystemFunction {
-                id: native_action_ids::MOTION,
-                name: "Motion".to_string(),
-                description: Some(
-                    "Side-effect-less proposals to set general governance direction.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::ManageNervousSystemParameters(_) => NervousSystemFunction {
-                id: native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS,
-                name: "Manage nervous system parameters".to_string(),
-                description: Some(
-                    "Proposal to change the core parameters of SNS governance.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::UpgradeSnsControlledCanister(_) => NervousSystemFunction {
-                id: native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER,
-                name: "Upgrade SNS controlled canister".to_string(),
-                description: Some(
-                    "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::AddGenericNervousSystemFunction(_) => NervousSystemFunction {
-                id: native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-                name: "Add nervous system function".to_string(),
-                description: Some(
-                    "Proposal to add a new, user-defined, nervous system function:\
-                     a canister call which can then be executed by proposal."
-                        .to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::RemoveGenericNervousSystemFunction(_) => NervousSystemFunction {
-                id: native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-                name: "Remove nervous system function".to_string(),
-                description: Some(
-                    "Proposal to remove a user-defined nervous system function,\
-                     which will be no longer executable by proposal."
-                        .to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::ExecuteGenericNervousSystemFunction(_) => NervousSystemFunction {
-                id: native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-                name: "Execute nervous system function".to_string(),
-                description: Some(
-                    "Proposal to execute a user-defined nervous system function,\
-                     previously added by an AddNervousSystemFunction proposal. A canister \
-                     call will be made when executed."
-                        .to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::UpgradeSnsToNextVersion(_) => NervousSystemFunction {
-                id: native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
-                name: "Upgrade SNS to next version".to_string(),
-                description: Some(
-                    "Proposal to upgrade the WASM of a core SNS canister.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::ManageSnsMetadata(_) => NervousSystemFunction {
-                id: native_action_ids::MANAGE_SNS_METADATA,
-                name: "Manage SNS metadata".to_string(),
-                description: Some(
-                    "Proposal to change the metadata associated with an SNS.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::TransferSnsTreasuryFunds(_) => NervousSystemFunction {
-                id: native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
-                name: "Transfer SNS treasury funds".to_string(),
-                description: Some(
-                    "Proposal to transfer funds from an SNS Governance controlled treasury \
-                     account"
-                        .to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::RegisterDappCanisters(_) => NervousSystemFunction {
-                id: native_action_ids::REGISTER_DAPP_CANISTERS,
-                name: "Register dapp canisters".to_string(),
-                description: Some("Proposal to register a dapp canister with the SNS.".to_string()),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::DeregisterDappCanisters(_) => NervousSystemFunction {
-                id: native_action_ids::DEREGISTER_DAPP_CANISTERS,
-                name: "Deregister Dapp Canisters".to_string(),
-                description: Some(
-                    "Proposal to deregister a previously-registered dapp canister from the SNS."
-                        .to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::MintSnsTokens(_) => NervousSystemFunction {
-                id: native_action_ids::MINT_SNS_TOKENS,
-                name: "Mint SNS Tokens".to_string(),
-                description: Some(
-                    "Proposal to mint SNS tokens to a specified recipient.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            Action::ManageLedgerParameters(_) => NervousSystemFunction {
-                id: native_action_ids::MANAGE_LEDGER_PARAMETERS,
-                name: "Manage ledger parameters".to_string(),
-                description: Some(
-                    "Proposal to change some parameters in the ledger canister.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
+            Action::Unspecified(_) => NervousSystemFunction::unspecified(),
+            Action::Motion(_) => NervousSystemFunction::motion(),
+            Action::ManageNervousSystemParameters(_) => {
+                NervousSystemFunction::manage_nervous_system_parameters()
+            }
+            Action::UpgradeSnsControlledCanister(_) => {
+                NervousSystemFunction::upgrade_sns_controlled_canister()
+            }
+            Action::AddGenericNervousSystemFunction(_) => {
+                NervousSystemFunction::add_generic_nervous_system_function()
+            }
+            Action::RemoveGenericNervousSystemFunction(_) => {
+                NervousSystemFunction::remove_generic_nervous_system_function()
+            }
+
+            Action::ExecuteGenericNervousSystemFunction(_) => {
+                NervousSystemFunction::execute_generic_nervous_system_function()
+            }
+
+            Action::UpgradeSnsToNextVersion(_) => {
+                NervousSystemFunction::upgrade_sns_to_next_version()
+            }
+            Action::ManageSnsMetadata(_) => NervousSystemFunction::manage_sns_metadata(),
+            Action::TransferSnsTreasuryFunds(_) => {
+                NervousSystemFunction::transfer_sns_treasury_funds()
+            }
+            Action::RegisterDappCanisters(_) => NervousSystemFunction::register_dapp_canisters(),
+            Action::DeregisterDappCanisters(_) => {
+                NervousSystemFunction::deregister_dapp_canisters()
+            }
+            Action::MintSnsTokens(_) => NervousSystemFunction::mint_sns_tokens(),
+            Action::ManageLedgerParameters(_) => NervousSystemFunction::manage_ledger_parameters(),
+            Action::ManageDappCanisterSettings(_) => {
+                NervousSystemFunction::manage_dapp_canister_settings()
+            }
         }
     }
 }
@@ -1325,10 +1416,6 @@ impl SnsMetadata {
     /// The minimum number of characters allowed for a SNS url.
     pub const MIN_URL_LENGTH: usize = 10;
 
-    /// The maximum number of characters allowed for a SNS logo encoding.
-    /// Roughly 256Kb
-    pub const MAX_LOGO_LENGTH: usize = 341334;
-
     /// The maximum number of characters allowed for a SNS name.
     pub const MAX_NAME_LENGTH: usize = 255;
 
@@ -1374,10 +1461,10 @@ impl SnsMetadata {
     pub fn validate_logo(logo: &str) -> Result<(), String> {
         const PREFIX: &str = "data:image/png;base64,";
         // TODO: Should we check that it's a valid PNG?
-        if logo.len() > Self::MAX_LOGO_LENGTH {
+        if logo.len() > MAX_LOGO_LENGTH {
             return Err(format!(
                 "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                Self::MAX_LOGO_LENGTH
+                MAX_LOGO_LENGTH
             ));
         }
         if !logo.starts_with(PREFIX) {
@@ -1460,9 +1547,9 @@ impl Action {
         Self::iter().map(NervousSystemFunction::from).collect()
     }
 
-    // The current set of valid native function ids, for the purposes of following.
-    // See `Proposal`.
-    // See `impl From<&Action> for u64`.
+    /// The current set of valid native function ids, for the purposes of following.
+    /// See `Proposal`.
+    /// See `impl From<&Action> for u64`.
     pub fn native_function_ids() -> Vec<u64> {
         Action::native_functions()
             .into_iter()
@@ -1470,16 +1557,35 @@ impl Action {
             .collect()
     }
 
-    // Returns a clone of self, except that "large blob fields" are replaced
-    // with a (UTF-8 encoded) textual summary of their contents. See
-    // summarize_blob_field.
-    pub(crate) fn strip_large_fields(&self) -> Self {
+    /// Returns a clone of self, except that "large blob fields" are replaced
+    /// with a (UTF-8 encoded) textual summary of their contents. See
+    /// summarize_blob_field.
+    pub(crate) fn limited_for_get_proposal(&self) -> Self {
         match self {
             Action::UpgradeSnsControlledCanister(action) => {
-                Action::UpgradeSnsControlledCanister(action.strip_large_fields())
+                Action::UpgradeSnsControlledCanister(action.limited_for_get_proposal())
             }
             Action::ExecuteGenericNervousSystemFunction(action) => {
-                Action::ExecuteGenericNervousSystemFunction(action.strip_large_fields())
+                Action::ExecuteGenericNervousSystemFunction(action.limited_for_get_proposal())
+            }
+            action => action.clone(),
+        }
+    }
+
+    /// Returns a clone of self, except that "large blob fields" are cleared.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        match self {
+            Action::UpgradeSnsControlledCanister(action) => {
+                Action::UpgradeSnsControlledCanister(action.limited_for_list_proposals())
+            }
+            Action::ExecuteGenericNervousSystemFunction(action) => {
+                Action::ExecuteGenericNervousSystemFunction(action.limited_for_list_proposals())
+            }
+            Action::ManageSnsMetadata(action) => {
+                Action::ManageSnsMetadata(action.limited_for_list_proposals())
+            }
+            Action::ManageLedgerParameters(action) => {
+                Action::ManageLedgerParameters(action.limited_for_list_proposals())
             }
             action => action.clone(),
         }
@@ -1517,11 +1623,11 @@ impl Action {
 
                 VotingDurationParameters {
                     initial_voting_period: PbDuration {
-                        seconds: Some(initial_voting_period_seconds.max(5 * SECONDS_PER_DAY)),
+                        seconds: Some(initial_voting_period_seconds.max(5 * ONE_DAY_SECONDS)),
                     },
                     wait_for_quiet_deadline_increase: PbDuration {
                         seconds: Some(wait_for_quiet_deadline_increase_seconds.max(
-                            2 * SECONDS_PER_DAY + SECONDS_PER_DAY / 2, // 2.5 days
+                            2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2, // 2.5 days
                         )),
                     },
                 }
@@ -1546,7 +1652,8 @@ impl Action {
             | UpgradeSnsToNextVersion(_)
             | ManageSnsMetadata(_)
             | ManageLedgerParameters(_)
-            | RegisterDappCanisters(_) => ProposalCriticality::Normal,
+            | RegisterDappCanisters(_)
+            | ManageDappCanisterSettings(_) => ProposalCriticality::Normal,
         }
     }
 }
@@ -1591,29 +1698,72 @@ pub(crate) fn function_id_to_proposal_criticality(function_id: u64) -> ProposalC
 }
 
 impl UpgradeSnsControlledCanister {
-    // Returns a clone of self, except that "large blob fields" are replaced
-    // with a (UTF-8 encoded) textual summary of their contents. See
-    // summarize_blob_field.
-    pub(crate) fn strip_large_fields(&self) -> Self {
+    /// Returns a clone of self, except that "large blob fields" are replaced
+    /// with a (UTF-8 encoded) textual summary of their contents. See
+    /// summarize_blob_field.
+    pub(crate) fn limited_for_get_proposal(&self) -> Self {
         Self {
+            canister_id: self.canister_id,
             new_canister_wasm: summarize_blob_field(&self.new_canister_wasm),
             canister_upgrade_arg: self
                 .canister_upgrade_arg
                 .as_ref()
                 .map(|blob| summarize_blob_field(blob)),
-            ..self.clone()
+            mode: self.mode,
+        }
+    }
+
+    // Returns a clone of self, except that "large blob fields" are cleared.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            canister_id: self.canister_id,
+            canister_upgrade_arg: self.canister_upgrade_arg.clone(),
+            mode: self.mode,
+            new_canister_wasm: Vec::new(),
         }
     }
 }
 
 impl ExecuteGenericNervousSystemFunction {
-    // Returns a clone of self, except that "large blob fields" are replaced
-    // with a (UTF-8 encoded) textual summary of their contents. See
-    // summarize_blob_field.
-    pub(crate) fn strip_large_fields(&self) -> Self {
+    /// Returns a clone of self, except that "large blob fields" are replaced
+    /// with a (UTF-8 encoded) textual summary of their contents. See
+    /// summarize_blob_field.
+    pub(crate) fn limited_for_get_proposal(&self) -> Self {
         Self {
+            function_id: self.function_id,
             payload: summarize_blob_field(&self.payload),
-            ..self.clone()
+        }
+    }
+
+    /// Returns a clone of self, except that "large blob fields" are cleared.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            function_id: self.function_id,
+            payload: Vec::new(),
+        }
+    }
+}
+
+impl ManageSnsMetadata {
+    /// Returns a clone of self, except that the logo is cleared because it can be large.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            url: self.url.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            logo: None,
+        }
+    }
+}
+
+impl ManageLedgerParameters {
+    /// Returns a clone of self, except that the logo is cleared because it can be large.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            transfer_fee: self.transfer_fee,
+            token_name: self.token_name.clone(),
+            token_symbol: self.token_symbol.clone(),
+            token_logo: None,
         }
     }
 }
@@ -1667,7 +1817,7 @@ impl From<&Action> for u64 {
                 native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS
             }
             Action::UpgradeSnsControlledCanister(_) => {
-                native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER
+                native_action_ids::UPGRADE_SNS_CONTROLLED_CANISTER
             }
             Action::UpgradeSnsToNextVersion(_) => native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
             Action::AddGenericNervousSystemFunction(_) => {
@@ -1683,6 +1833,9 @@ impl From<&Action> for u64 {
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
             Action::MintSnsTokens(_) => native_action_ids::MINT_SNS_TOKENS,
             Action::ManageLedgerParameters(_) => native_action_ids::MANAGE_LEDGER_PARAMETERS,
+            Action::ManageDappCanisterSettings(_) => {
+                native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
+            }
         }
     }
 }
@@ -1699,6 +1852,29 @@ pub fn is_registered_function_id(
     match nervous_system_functions.get(&function_id) {
         None => false,
         Some(function) => function != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+    }
+}
+
+impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
+    fn from(manage_ledger_parameters: ManageLedgerParameters) -> Self {
+        let ManageLedgerParameters {
+            transfer_fee,
+            token_name,
+            token_symbol,
+            token_logo,
+        } = manage_ledger_parameters;
+        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
+            .collect();
+
+        LedgerUpgradeArgs {
+            transfer_fee: transfer_fee.map(|tf| tf.into()),
+            token_name,
+            token_symbol,
+            metadata: Some(metadata),
+            ..LedgerUpgradeArgs::default()
+        }
     }
 }
 
@@ -2109,6 +2285,30 @@ impl From<DeregisterDappCanisters> for SetDappControllersRequest {
     }
 }
 
+impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
+    fn from(manage_dapp_canister_settings: ManageDappCanisterSettings) -> Self {
+        let ManageDappCanisterSettings {
+            canister_ids,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            log_visibility,
+            wasm_memory_limit,
+        } = manage_dapp_canister_settings;
+
+        ManageDappCanisterSettingsRequest {
+            canister_ids,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            log_visibility,
+            wasm_memory_limit,
+        }
+    }
+}
+
 impl Motion {
     pub fn new(text: &str) -> Self {
         Motion {
@@ -2175,9 +2375,19 @@ impl From<MintSnsTokens> for Action {
     }
 }
 
+impl UpgradeSnsControlledCanister {
+    // Gets the install mode if it is set, otherwise defaults to Upgrade.
+    // This function is not called `mode_or_default` because `or_default` usually
+    // returns the default value for the type.
+    pub fn mode_or_upgrade(&self) -> ic_protobuf::types::v1::CanisterInstallMode {
+        self.mode
+            .and_then(|mode| ic_protobuf::types::v1::CanisterInstallMode::try_from(mode).ok())
+            .unwrap_or(ic_protobuf::types::v1::CanisterInstallMode::Upgrade)
+    }
+}
+
 pub mod test_helpers {
     use super::*;
-    use ic_crypto_sha2::Sha256;
     use rand::{Rng, RngCore};
     use std::{
         borrow::BorrowMut,
@@ -2202,7 +2412,10 @@ pub mod test_helpers {
 
         /// Map of expected calls to a result, where key is hash of arguments (See `compute_call_canister_key`).
         #[allow(clippy::type_complexity)]
-        pub canister_calls_map: HashMap<[u8; 32], CanisterCallResult>,
+        pub canister_calls_map: HashMap<
+            (dfn_core::CanisterId, std::string::String, std::vec::Vec<u8>),
+            CanisterCallResult,
+        >,
 
         // The default response is canister_calls_map doesn't have an entry.  Useful when you only
         // care about specifying a single response for a given test, or alternately want to ensure
@@ -2236,19 +2449,6 @@ pub mod test_helpers {
         }
     }
 
-    /// Used to create a hash for our call map.
-    fn compute_call_canister_key(
-        canister_id: CanisterId,
-        method_name: &str,
-        arg: &Vec<u8>,
-    ) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        hasher.write(canister_id.get().as_slice());
-        hasher.write(method_name.as_bytes());
-        hasher.write(arg.as_slice());
-        hasher.finish()
-    }
-
     impl NativeEnvironment {
         pub fn new(local_canister_id: Option<CanisterId>) -> Self {
             Self {
@@ -2272,10 +2472,8 @@ pub mod test_helpers {
             arg: Vec<u8>,
             response: CanisterCallResult,
         ) {
-            self.canister_calls_map.insert(
-                compute_call_canister_key(canister_id, method_name, &arg),
-                response,
-            );
+            self.canister_calls_map
+                .insert((canister_id, method_name.to_string(), arg), response);
         }
 
         /// Requires that a call will be made (and optionally sets a response)
@@ -2368,11 +2566,11 @@ pub mod test_helpers {
                 }
             }
 
-            let entry = compute_call_canister_key(canister_id, method_name, &arg);
+            let entry = (canister_id, method_name.to_string(), arg.clone());
             match self.canister_calls_map.get(&entry) {
                 None => {
                     log!(INFO,
-                        "No call_canister entry found for: {:?} {} {:?}.  Using default response: {:?}",
+                        "No call_canister entry found for: {:?} {} {:?}.  Using default response: {:?}.",
                         canister_id, method_name, arg, &self.default_canister_call_response
                     );
                     &self.default_canister_call_response
@@ -2430,18 +2628,18 @@ pub(crate) mod tests {
         let critical_action = Action::TransferSnsTreasuryFunds(Default::default());
 
         let normal_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(4 * SECONDS_PER_DAY),
-            wait_for_quiet_deadline_increase_seconds: Some(2 * SECONDS_PER_DAY),
+            initial_voting_period_seconds: Some(4 * ONE_DAY_SECONDS),
+            wait_for_quiet_deadline_increase_seconds: Some(2 * ONE_DAY_SECONDS),
             ..Default::default()
         };
         assert_eq!(
             non_critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * SECONDS_PER_DAY),
+                    seconds: Some(2 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -2449,10 +2647,10 @@ pub(crate) mod tests {
             critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(5 * SECONDS_PER_DAY),
+                    seconds: Some(5 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * SECONDS_PER_DAY + SECONDS_PER_DAY / 2),
+                    seconds: Some(2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2),
                 }
             },
         );
@@ -2461,18 +2659,18 @@ pub(crate) mod tests {
         // quiet) for critical proposals. Therefore, these values are used for both normal and
         // critical proposals.
         let slow_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(7 * SECONDS_PER_DAY),
-            wait_for_quiet_deadline_increase_seconds: Some(4 * SECONDS_PER_DAY),
+            initial_voting_period_seconds: Some(7 * ONE_DAY_SECONDS),
+            wait_for_quiet_deadline_increase_seconds: Some(4 * ONE_DAY_SECONDS),
             ..Default::default()
         };
         assert_eq!(
             non_critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(7 * SECONDS_PER_DAY),
+                    seconds: Some(7 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -2480,10 +2678,10 @@ pub(crate) mod tests {
             critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(7 * SECONDS_PER_DAY),
+                    seconds: Some(7 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -2788,15 +2986,18 @@ pub(crate) mod tests {
             Action,      // ExecuteGenericNervousSystemFunction, but target is not one of the distinguished canisters.
         ) = {
             let allowed_in_pre_initialization_swap = vec! [
-                Action::Motion                             (Default::default()),
-                Action::UpgradeSnsControlledCanister       (Default::default()),
-                Action::AddGenericNervousSystemFunction    (Default::default()),
-                Action::RemoveGenericNervousSystemFunction (Default::default()),
-            ];
+                Action::Motion(Default::default()),
+                Action::AddGenericNervousSystemFunction(Default::default()),
+                Action::RemoveGenericNervousSystemFunction(Default::default()),
+            ]; 
 
             let disallowed_in_pre_initialization_swap = vec! [
                 Action::ManageNervousSystemParameters(Default::default()),
-                Action::TransferSnsTreasuryFunds(Default::default())
+                Action::TransferSnsTreasuryFunds(Default::default()),
+                Action::MintSnsTokens(Default::default()),
+                Action::UpgradeSnsControlledCanister(Default::default()),
+                Action::RegisterDappCanisters(Default::default()),
+                Action::DeregisterDappCanisters(Default::default()),
             ];
 
             // Conditionally allow: No targeting SNS canisters.
@@ -3072,7 +3273,7 @@ pub(crate) mod tests {
                 ..default.clone()
             },
             SnsMetadata {
-                logo: Some("X".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                logo: Some("X".repeat(MAX_LOGO_LENGTH + 1)),
                 ..default.clone()
             },
             SnsMetadata {
@@ -3379,7 +3580,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_strip_large_fields() {
+    fn test_limited_for_get_proposal() {
         let motion_proposal = ProposalData {
             proposal: Some(Proposal {
                 action: Some(Action::Motion(Motion {
@@ -3390,7 +3591,7 @@ pub(crate) mod tests {
             ..Default::default()
         };
 
-        assert_eq!(motion_proposal.strip_large_fields(), motion_proposal,);
+        assert_eq!(motion_proposal.limited_for_get_proposal(), motion_proposal,);
 
         let upgrade_sns_controlled_canister_proposal = ProposalData {
             proposal: Some(Proposal {
@@ -3406,7 +3607,7 @@ pub(crate) mod tests {
         };
 
         assert_ne!(
-            upgrade_sns_controlled_canister_proposal.strip_large_fields(),
+            upgrade_sns_controlled_canister_proposal.limited_for_get_proposal(),
             upgrade_sns_controlled_canister_proposal,
         );
 
@@ -3424,7 +3625,7 @@ pub(crate) mod tests {
         };
 
         assert_ne!(
-            execute_generic_nervous_system_function_proposal.strip_large_fields(),
+            execute_generic_nervous_system_function_proposal.limited_for_get_proposal(),
             execute_generic_nervous_system_function_proposal,
         );
     }

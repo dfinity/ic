@@ -1,9 +1,10 @@
 //! ECDSA specific stats.
 
-use crate::consensus::metrics::{
-    EcdsaQuadrupleMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
+use crate::ecdsa::metrics::{
+    IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
 };
-use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, QuadrupleId, RequestId};
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_types::consensus::idkg::{IDkgBlockReader, IDkgStats, PreSigId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
 };
@@ -14,17 +15,17 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// Implementation of EcdsaStats
-pub struct EcdsaStatsImpl {
-    state: Mutex<EcdsaStatsInternal>,
-    transcript_metrics: EcdsaTranscriptMetrics,
-    quadruple_metrics: EcdsaQuadrupleMetrics,
-    signature_metrics: EcdsaSignatureMetrics,
+/// Implementation of IDkgStats
+pub struct IDkgStatsImpl {
+    state: Mutex<IDkgStatsInternal>,
+    transcript_metrics: IDkgTranscriptMetrics,
+    pre_signature_metrics: IDkgPreSignatureMetrics,
+    signature_metrics: ThresholdSignatureMetrics,
 }
 
-struct EcdsaStatsInternal {
+struct IDkgStatsInternal {
     transcript_stats: HashMap<IDkgTranscriptId, TranscriptStats>,
-    quadruple_stats: HashMap<QuadrupleId, QuadrupleStats>,
+    pre_signature_stats: HashMap<PreSigId, PreSignatureStats>,
     signature_stats: HashMap<RequestId, SignatureStats>,
 }
 
@@ -36,8 +37,9 @@ struct TranscriptStats {
     create_transcript_duration: Vec<Duration>,
 }
 
-struct QuadrupleStats {
+struct PreSignatureStats {
     start_time: Instant,
+    key_id: MasterPublicKeyId,
 }
 
 struct SignatureStats {
@@ -46,18 +48,18 @@ struct SignatureStats {
     sig_share_aggregation_duration: Vec<Duration>,
 }
 
-impl EcdsaStatsImpl {
-    /// Creates EcdsaStatsImpl
+impl IDkgStatsImpl {
+    /// Creates IDkgStatsImpl
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            state: Mutex::new(EcdsaStatsInternal {
+            state: Mutex::new(IDkgStatsInternal {
                 transcript_stats: HashMap::new(),
-                quadruple_stats: HashMap::new(),
+                pre_signature_stats: HashMap::new(),
                 signature_stats: HashMap::new(),
             }),
-            transcript_metrics: EcdsaTranscriptMetrics::new(metrics_registry.clone()),
-            quadruple_metrics: EcdsaQuadrupleMetrics::new(metrics_registry.clone()),
-            signature_metrics: EcdsaSignatureMetrics::new(metrics_registry),
+            transcript_metrics: IDkgTranscriptMetrics::new(metrics_registry.clone()),
+            pre_signature_metrics: IDkgPreSignatureMetrics::new(metrics_registry.clone()),
+            signature_metrics: ThresholdSignatureMetrics::new(metrics_registry),
         }
     }
 
@@ -109,10 +111,11 @@ impl EcdsaStatsImpl {
 
     /// Called when the quadruple completed building. Reports the accumulated
     /// stats.
-    fn on_quadruple_done(&self, quadruple_stats: &QuadrupleStats) {
-        self.quadruple_metrics
-            .quadruple_e2e_latency
-            .observe(quadruple_stats.start_time.elapsed().as_secs_f64());
+    fn on_pre_signature_done(&self, pre_signature_stats: &PreSignatureStats) {
+        self.pre_signature_metrics
+            .pre_signature_e2e_latency
+            .with_label_values(&[&pre_signature_stats.key_id.to_string()])
+            .observe(pre_signature_stats.start_time.elapsed().as_secs_f64());
     }
 
     /// Called when the signature is completed. Reports the accumulated
@@ -149,8 +152,8 @@ impl EcdsaStatsImpl {
     }
 }
 
-impl EcdsaStats for EcdsaStatsImpl {
-    fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader) {
+impl IDkgStats for IDkgStatsImpl {
+    fn update_active_transcripts(&self, block_reader: &dyn IDkgBlockReader) {
         let mut active_transcripts = HashSet::new();
         let mut state = self.state.lock().unwrap();
         for transcript_params_ref in block_reader.requested_transcripts() {
@@ -184,31 +187,32 @@ impl EcdsaStats for EcdsaStatsImpl {
             .set(state.transcript_stats.len() as i64);
     }
 
-    fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader) {
-        let mut active_quadruples = HashSet::new();
+    fn update_active_pre_signatures(&self, block_reader: &dyn IDkgBlockReader) {
+        let mut active_pre_signatures = HashSet::new();
         let mut state = self.state.lock().unwrap();
-        for quadruple_id in block_reader.quadruples_in_creation() {
-            active_quadruples.insert(quadruple_id);
+        for (pre_sig_id, key_id) in block_reader.pre_signatures_in_creation() {
+            active_pre_signatures.insert(pre_sig_id);
 
             state
-                .quadruple_stats
-                .entry(quadruple_id.clone())
-                .or_insert(QuadrupleStats {
+                .pre_signature_stats
+                .entry(pre_sig_id)
+                .or_insert(PreSignatureStats {
                     start_time: Instant::now(),
+                    key_id,
                 });
         }
 
         // Remove the entries that are no longer active, and finish reporting their metrics
         let mut to_remove = HashSet::new();
-        for (quadruple_id, quadruple_stats) in &state.quadruple_stats {
-            if !active_quadruples.contains(quadruple_id) {
-                to_remove.insert(quadruple_id.clone());
-                self.on_quadruple_done(quadruple_stats);
+        for (pre_sig_id, pre_signature_stats) in &state.pre_signature_stats {
+            if !active_pre_signatures.contains(pre_sig_id) {
+                to_remove.insert(*pre_sig_id);
+                self.on_pre_signature_done(pre_signature_stats);
             }
         }
 
-        for quadruple_id in &to_remove {
-            state.quadruple_stats.remove(quadruple_id);
+        for pre_sig_id in &to_remove {
+            state.pre_signature_stats.remove(pre_sig_id);
         }
     }
 
@@ -258,10 +262,10 @@ impl EcdsaStats for EcdsaStatsImpl {
         transcript_stats.create_transcript_duration.push(duration);
     }
 
-    fn update_active_signature_requests(&self, block_reader: &dyn EcdsaBlockReader) {
+    fn update_active_signature_requests(&self, requests: Vec<RequestId>) {
         let mut active_requests = HashSet::new();
         let mut state = self.state.lock().unwrap();
-        for (request_id, _) in block_reader.requested_signatures() {
+        for request_id in &requests {
             active_requests.insert(request_id);
 
             state

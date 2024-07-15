@@ -11,24 +11,27 @@ name = "ic-balance-exporter"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.56"
-async-trait = "0.1.53"
-axum = "0.6.1"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 candid = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 dashmap = "5.3.4"
 futures = { workspace = true }
 humantime = "2.1.0"
-hyper = "0.14.18"
+hyper = { workspace = true }
 ic-agent = { workspace = true }
 indoc = "1.0.9"
-mockall = "0.11.1"
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+mockall = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tempfile = "3.3.0"
 tokio = { workspace = true }
-tracing = "0.1.34"
-tracing-subscriber = { version = "0.3.11", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

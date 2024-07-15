@@ -9,12 +9,13 @@ documentation.workspace = true
 [dependencies]
 askama = { workspace = true }
 candid = { workspace = true }
-clap = { version = "4", features = ["derive"] }
-hex = "0.4.2"
+candid_parser = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }

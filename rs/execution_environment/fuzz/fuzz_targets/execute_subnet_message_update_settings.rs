@@ -1,5 +1,5 @@
 #![no_main]
-use ic_ic00_types::{Method, Payload, UpdateSettingsArgs};
+use ic_management_canister_types::{Method, Payload, UpdateSettingsArgs};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
 use libfuzzer_sys::{fuzz_target, Corpus};
 
@@ -12,6 +12,7 @@ use libfuzzer_sys::{fuzz_target, Corpus};
 
 fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
     let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_time_slicing_disabled()
         .with_canister_sandboxing_disabled()
         .build();
 

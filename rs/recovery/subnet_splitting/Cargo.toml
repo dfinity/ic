@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { workspace = true }
-hex = "0.4.2"
+clap = { version = "3.2.25", features = ["derive"] }
+hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }

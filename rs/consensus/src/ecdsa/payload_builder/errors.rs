@@ -1,11 +1,11 @@
 use ic_crypto::MegaKeyFromRegistryError;
 use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
-    consensus::ecdsa,
+    consensus::idkg,
     crypto::canister_threshold_sig::{
         error::{
-            IDkgParamsValidationError, IDkgTranscriptIdError, PresignatureQuadrupleCreationError,
-            ThresholdEcdsaSigInputsCreationError,
+            EcdsaPresignatureQuadrupleCreationError, IDkgParamsValidationError,
+            IDkgTranscriptIdError, ThresholdEcdsaSigInputsCreationError,
         },
         idkg::InitialIDkgDealings,
     },
@@ -15,76 +15,77 @@ use ic_types::{
 
 use super::InvalidChainCacheError;
 
-#[derive(Clone, Debug)]
-pub enum EcdsaPayloadError {
+#[derive(Clone, Debug, PartialEq)]
+// The fields are only read by the `Debug` implementation.
+// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
+// #[allow(dead_code)]
+pub(crate) enum IDkgPayloadError {
     RegistryClientError(RegistryClientError),
     MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     ConsensusSummaryBlockNotFound(Height),
-    ConsensusRegistryVersionNotFound(Height),
     StateManagerError(StateManagerError),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
-    PreSignatureError(PresignatureQuadrupleCreationError),
+    PreSignatureError(EcdsaPresignatureQuadrupleCreationError),
     IDkgParamsValidationError(IDkgParamsValidationError),
     IDkgTranscriptIdError(IDkgTranscriptIdError),
-    DkgSummaryBlockNotFound(Height),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
-    TranscriptLookupError(ecdsa::TranscriptLookupError),
-    TranscriptCastError(ecdsa::TranscriptCastError),
+    TranscriptLookupError(idkg::TranscriptLookupError),
+    TranscriptCastError(idkg::TranscriptCastError),
     InvalidChainCacheError(InvalidChainCacheError),
     InitialIDkgDealingsNotUnmaskedParams(Box<InitialIDkgDealings>),
 }
 
-impl From<ecdsa::TranscriptLookupError> for EcdsaPayloadError {
-    fn from(err: ecdsa::TranscriptLookupError) -> Self {
-        EcdsaPayloadError::TranscriptLookupError(err)
+impl From<idkg::TranscriptLookupError> for IDkgPayloadError {
+    fn from(err: idkg::TranscriptLookupError) -> Self {
+        IDkgPayloadError::TranscriptLookupError(err)
     }
 }
 
-impl From<RegistryClientError> for EcdsaPayloadError {
+impl From<RegistryClientError> for IDkgPayloadError {
     fn from(err: RegistryClientError) -> Self {
-        EcdsaPayloadError::RegistryClientError(err)
+        IDkgPayloadError::RegistryClientError(err)
     }
 }
 
-impl From<StateManagerError> for EcdsaPayloadError {
+impl From<StateManagerError> for IDkgPayloadError {
     fn from(err: StateManagerError) -> Self {
-        EcdsaPayloadError::StateManagerError(err)
+        IDkgPayloadError::StateManagerError(err)
     }
 }
 
-impl From<PresignatureQuadrupleCreationError> for EcdsaPayloadError {
-    fn from(err: PresignatureQuadrupleCreationError) -> Self {
-        EcdsaPayloadError::PreSignatureError(err)
+impl From<EcdsaPresignatureQuadrupleCreationError> for IDkgPayloadError {
+    fn from(err: EcdsaPresignatureQuadrupleCreationError) -> Self {
+        IDkgPayloadError::PreSignatureError(err)
     }
 }
 
-impl From<IDkgParamsValidationError> for EcdsaPayloadError {
+impl From<IDkgParamsValidationError> for IDkgPayloadError {
     fn from(err: IDkgParamsValidationError) -> Self {
-        EcdsaPayloadError::IDkgParamsValidationError(err)
+        IDkgPayloadError::IDkgParamsValidationError(err)
     }
 }
 
-impl From<IDkgTranscriptIdError> for EcdsaPayloadError {
+impl From<IDkgTranscriptIdError> for IDkgPayloadError {
     fn from(err: IDkgTranscriptIdError) -> Self {
-        EcdsaPayloadError::IDkgTranscriptIdError(err)
+        IDkgPayloadError::IDkgTranscriptIdError(err)
     }
 }
 
-impl From<ThresholdEcdsaSigInputsCreationError> for EcdsaPayloadError {
+impl From<ThresholdEcdsaSigInputsCreationError> for IDkgPayloadError {
     fn from(err: ThresholdEcdsaSigInputsCreationError) -> Self {
-        EcdsaPayloadError::ThresholdEcdsaSigInputsCreationError(err)
+        IDkgPayloadError::ThresholdEcdsaSigInputsCreationError(err)
     }
 }
 
-impl From<ecdsa::TranscriptCastError> for EcdsaPayloadError {
-    fn from(err: ecdsa::TranscriptCastError) -> Self {
-        EcdsaPayloadError::TranscriptCastError(err)
+impl From<idkg::TranscriptCastError> for IDkgPayloadError {
+    fn from(err: idkg::TranscriptCastError) -> Self {
+        IDkgPayloadError::TranscriptCastError(err)
     }
 }
 
-impl From<InvalidChainCacheError> for EcdsaPayloadError {
+impl From<InvalidChainCacheError> for IDkgPayloadError {
     fn from(err: InvalidChainCacheError) -> Self {
-        EcdsaPayloadError::InvalidChainCacheError(err)
+        IDkgPayloadError::InvalidChainCacheError(err)
     }
 }
 
@@ -95,17 +96,15 @@ pub(super) enum MembershipError {
     SubnetWithNoNodes(SubnetId, RegistryVersion),
 }
 
-impl From<MembershipError> for EcdsaPayloadError {
+impl From<MembershipError> for IDkgPayloadError {
     fn from(err: MembershipError) -> Self {
         match err {
-            MembershipError::RegistryClientError(err) => {
-                EcdsaPayloadError::RegistryClientError(err)
-            }
+            MembershipError::RegistryClientError(err) => IDkgPayloadError::RegistryClientError(err),
             MembershipError::MegaKeyFromRegistryError(err) => {
-                EcdsaPayloadError::MegaKeyFromRegistryError(err)
+                IDkgPayloadError::MegaKeyFromRegistryError(err)
             }
             MembershipError::SubnetWithNoNodes(subnet_id, err) => {
-                EcdsaPayloadError::SubnetWithNoNodes(subnet_id, err)
+                IDkgPayloadError::SubnetWithNoNodes(subnet_id, err)
             }
         }
     }

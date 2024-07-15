@@ -5,10 +5,8 @@ use candid::types::principal::{Principal, PrincipalError};
 use candid::types::{Type, TypeId, TypeInner};
 use ic_crypto_sha2::Sha224;
 use ic_protobuf::types::v1 as pb;
-use ic_stable_structures::{BoundedStorable, Storable};
 use serde::{Deserialize, Serialize};
 use std::{
-    borrow::Cow,
     convert::TryFrom,
     error::Error,
     fmt,
@@ -16,26 +14,22 @@ use std::{
 };
 
 /// The type representing principals as described in the [interface
-/// spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_principals).
+/// spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#principal).
 ///
 /// A principal is just a blob that is displayed in a particular way.
-/// (see <https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids>)
+/// (see <https://internetcomputer.org/docs/current/references/ic-interface-spec#textual-ids>)
 ///
 /// Principals have variable length, bounded by 29 bytes. Since we
 /// want [`PrincipalId`] to implement the Copy trait, we encode them as
 /// a fixed-size array and a length.
-#[derive(Clone, Copy, Eq, PartialOrd, Ord, Serialize, Deserialize, comparable::Comparable)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, comparable::Comparable,
+)]
 #[describe_type(String)]
 #[describe_body(self.to_string())]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct PrincipalId(#[comparable_ignore] pub Principal);
-
-impl PartialEq for PrincipalId {
-    fn eq(&self, other: &PrincipalId) -> bool {
-        self.0 == other.0
-    }
-}
 
 impl Hash for PrincipalId {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -171,7 +165,7 @@ impl std::str::FromStr for PrincipalId {
 }
 
 /// Some principal ids have special classes (system-generated,
-/// self-authenticating, derived), see <https://sdk.dfinity.org/docs/interface-spec/index.html#id-classes>
+/// self-authenticating, derived), see <https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes>
 ///
 /// The following functions allow creating and testing for the special forms.
 impl PrincipalId {
@@ -277,7 +271,7 @@ impl PrincipalId {
         PrincipalId::try_from(&bytes[..]).unwrap()
     }
 
-    pub fn new_anonymous() -> Self {
+    pub const fn new_anonymous() -> Self {
         PrincipalId(Principal::anonymous())
     }
 
@@ -439,27 +433,6 @@ impl TryFrom<pb::PrincipalId> for PrincipalId {
     fn try_from(value: pb::PrincipalId) -> Result<Self, Self::Error> {
         Self::try_from(&value.raw[..])
     }
-}
-
-/// Super trait implementation for the BoundedStorable trait on PrincipalId for use
-/// in StableStructures
-impl Storable for PrincipalId {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        self.to_vec().into()
-    }
-
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        PrincipalId::try_from(&bytes[..]).expect("Cannot decode PrincipalId")
-    }
-}
-
-/// Impl of the BoundedStorable trait on PrincipalId for use in StableStructures
-impl BoundedStorable for PrincipalId {
-    /// The upper bound of a PrincipalId is 29 bytes.
-    const MAX_SIZE: u32 = Self::MAX_LENGTH_IN_BYTES as u32;
-
-    /// PrincipalIds can be variable length.
-    const IS_FIXED_SIZE: bool = false;
 }
 
 #[cfg(test)]

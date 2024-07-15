@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
     "//rs/crypto/internal/crypto_lib/types",
@@ -12,7 +13,7 @@ DEPENDENCIES = [
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
     "//rs/interfaces",
-    "//rs/interfaces/registry",
+    "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/types/types",
     "@crate_index//:tokio",
@@ -21,19 +22,19 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto",
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
-    "//rs/crypto/test_utils/csp",
     "//rs/crypto/test_utils/keys",
-    "//rs/monitoring/logger",
+    "//rs/crypto/test_utils/local_csp_vault",
     "//rs/monitoring/metrics",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
+    "//rs/test_utilities",
     "//rs/types/base_types",
     "//rs/types/types_test_utils",
-    "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:hex",
     "@crate_index//:tempfile",

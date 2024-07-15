@@ -14,5 +14,5 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 serde = { workspace = true }

@@ -40,11 +40,13 @@ impl TransactionResults {
     }
 }
 
-impl From<&TransactionResults> for ObjectMap {
-    fn from(d: &TransactionResults) -> Self {
+impl TryFrom<TransactionResults> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: TransactionResults) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
-            Ok(Value::Object(o)) => o,
-            _ => ObjectMap::default(),
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert TransactionResults to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert TransactionResults to ObjectMap: {:?}",err))),
         }
     }
 }

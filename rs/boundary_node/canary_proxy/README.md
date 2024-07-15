@@ -4,7 +4,7 @@
 
 The `canary-proxy` is an HTTP proxy service that forwards all traffic to a specific address (usually `localhost`).
 
-Essentially this acts as a blackhole DNS on the proxy server side, regardless of the requsted domain.
+Essentially this acts as a blackhole DNS on the proxy server side, regardless of the requested domain.
 
 ## Usage
 

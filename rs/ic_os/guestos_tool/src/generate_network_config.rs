@@ -8,17 +8,19 @@ use anyhow::{bail, Context, Result};
 
 use config::config_map_from_path;
 use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
-use network::systemd::{generate_ipv4_nameserver_list, generate_ipv6_nameserver_list};
 use utils::get_command_stdout;
 
+use network::systemd::IPV6_NAME_SERVER_NETWORKD_CONTENTS;
+
 pub static DEFAULT_GUESTOS_NETWORK_CONFIG_PATH: &str = "/boot/config/network.conf";
+
+const IPV4_NAME_SERVER_NETWORKD_CONTENTS: &str =
+    "DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n";
 
 #[derive(Debug)]
 struct NetworkInfo {
     ipv6_info: Option<IpAddressInfo>,
-    ipv6_name_servers: Option<String>,
     ipv4_info: Option<IpAddressInfo>,
-    ipv4_name_servers: Option<String>,
 }
 
 #[derive(Debug)]
@@ -163,23 +165,9 @@ fn create_network_info(
         _ => None,
     };
 
-    let ipv6_name_servers = network_config_variables
-        .get("name_servers")
-        .map(|ipv6_name_servers| ipv6_name_servers.split_whitespace())
-        .map(generate_ipv6_nameserver_list)
-        .transpose()?;
-
-    let ipv4_name_servers = network_config_variables
-        .get("ipv4_name_servers")
-        .map(|ipv4_name_servers| ipv4_name_servers.split_whitespace())
-        .map(generate_ipv4_nameserver_list)
-        .transpose()?;
-
     Ok(NetworkInfo {
         ipv6_info,
-        ipv6_name_servers,
         ipv4_info,
-        ipv4_name_servers,
     })
 }
 
@@ -205,16 +193,9 @@ fn generate_networkd_config_contents(
 ) -> String {
     let match_contents = generate_network_config_match_contents(interface_name);
     let ipv6_contents = generate_network_config_ipv6_contents(network_info.ipv6_info, disable_dad);
-    let ipv6_name_servers = generate_network_config_dns_contents(network_info.ipv6_name_servers);
-    let ipv4_contents = generate_network_config_ipv4_contents(
-        network_info.ipv4_info,
-        network_info.ipv4_name_servers,
-    );
+    let ipv4_contents = generate_network_config_ipv4_contents(network_info.ipv4_info);
 
-    format!(
-        "{}{}{}\n{}",
-        match_contents, ipv6_contents, ipv6_name_servers, ipv4_contents
-    )
+    format!("{}{}{}", match_contents, ipv6_contents, ipv4_contents)
 }
 
 fn generate_network_config_match_contents(interface_name: &str) -> String {
@@ -240,6 +221,7 @@ fn generate_network_config_ipv6_contents(
                     Address={ipv6_address}
                     Gateway={ipv6_gateway}
                     IPv6AcceptRA=false
+                    {IPV6_NAME_SERVER_NETWORKD_CONTENTS}
                 "#,
             );
             if disable_dad {
@@ -256,14 +238,7 @@ fn generate_network_config_ipv6_contents(
     }
 }
 
-fn generate_network_config_dns_contents(name_servers: Option<String>) -> String {
-    name_servers.unwrap_or_default()
-}
-
-fn generate_network_config_ipv4_contents(
-    ipv4_info: Option<IpAddressInfo>,
-    ipv4_name_servers: Option<String>,
-) -> String {
+fn generate_network_config_ipv4_contents(ipv4_info: Option<IpAddressInfo>) -> String {
     ipv4_info
         .map(|ipv4_info| {
             indoc::formatdoc!(
@@ -274,7 +249,7 @@ fn generate_network_config_ipv4_contents(
             "#,
                 ipv4_info.address_with_prefix,
                 ipv4_info.gateway,
-                ipv4_name_servers.unwrap_or_default()
+                IPV4_NAME_SERVER_NETWORKD_CONTENTS
             )
         })
         .unwrap_or_default()
@@ -330,15 +305,6 @@ mod tests {
         let mut network_config_variables = HashMap::new();
         network_config_variables.insert("ipv6_address".to_string(), "2001:db8::1/64".to_string());
         network_config_variables.insert("ipv6_gateway".to_string(), "2001:db8::1".to_string());
-        network_config_variables.insert(
-            "name_servers".to_string(),
-            "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
-                .to_string(),
-        );
-        network_config_variables.insert(
-            "ipv4_name_servers".to_string(),
-            "1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4".to_string(),
-        );
 
         eprintln!("network_config_variables: {:?}", network_config_variables);
 
@@ -355,17 +321,6 @@ mod tests {
         let ipv4_info = result.ipv4_info.as_ref().unwrap();
         assert_eq!(ipv4_info.address_with_prefix, "192.168.1.100/30");
         assert_eq!(ipv4_info.gateway, "192.168.1.1");
-
-        assert!(result.ipv6_name_servers.is_some());
-        let ipv6_name_servers = result.ipv6_name_servers.unwrap();
-        assert_eq!(ipv6_name_servers, "DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n");
-
-        assert!(result.ipv4_name_servers.is_some());
-        let ipv4_name_servers = result.ipv4_name_servers.unwrap();
-        assert_eq!(
-            ipv4_name_servers,
-            "DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n"
-        );
     }
 
     #[test]
@@ -373,15 +328,6 @@ mod tests {
         let mut network_config_variables = HashMap::new();
         network_config_variables.insert("ipv6_address".to_string(), "2001:db8::1/64".to_string());
         network_config_variables.insert("ipv6_gateway".to_string(), "2001:db8::1".to_string());
-        network_config_variables.insert(
-            "name_servers".to_string(),
-            "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
-                .to_string(),
-        );
-        network_config_variables.insert(
-            "ipv4_name_servers".to_string(),
-            "1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4".to_string(),
-        );
 
         eprintln!("network_config_variables: {:?}", network_config_variables);
 
@@ -393,17 +339,6 @@ mod tests {
         let ipv6_info = result.ipv6_info.as_ref().unwrap();
         assert_eq!(ipv6_info.address_with_prefix, "2001:db8::1/64");
         assert_eq!(ipv6_info.gateway, "2001:db8::1");
-
-        assert!(result.ipv6_name_servers.is_some());
-        let ipv6_name_servers = result.ipv6_name_servers.unwrap();
-        assert_eq!(ipv6_name_servers, "DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n");
-
-        assert!(result.ipv4_name_servers.is_some());
-        let ipv4_name_servers = result.ipv4_name_servers.unwrap();
-        assert_eq!(
-            ipv4_name_servers,
-            "DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n"
-        );
     }
 
     #[test]
@@ -411,11 +346,6 @@ mod tests {
         let mut network_config_variables = HashMap::new();
         network_config_variables.insert("ipv6_address".to_string(), "invalid_address".to_string());
         network_config_variables.insert("ipv6_gateway".to_string(), "invalid_gateway".to_string());
-        network_config_variables.insert(
-            "name_servers".to_string(),
-            "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
-                .to_string(),
-        );
 
         let result = create_network_info(&network_config_variables, None);
 
@@ -428,11 +358,6 @@ mod tests {
         network_config_variables.insert("ipv6_address".to_string(), "invalid_address".to_string());
         // ipv6 gateway intentionally omitted:
         // network_config_variables.insert("ipv6_gateway".to_string(), "invalid_gateway".to_string());
-        network_config_variables.insert(
-            "name_servers".to_string(),
-            "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
-                .to_string(),
-        );
 
         let result = create_network_info(&network_config_variables, None);
 
@@ -448,7 +373,6 @@ mod tests {
 
         let result = create_network_info(&network_config_variables, None).unwrap();
         assert!(result.ipv6_info.is_none());
-        assert!(result.ipv6_name_servers.is_none());
     }
 
     #[test]
@@ -514,48 +438,52 @@ mod tests {
     #[test]
     fn test_generate_networkd_config_contents_with_full_networking_info() {
         let network_info = NetworkInfo {
-            ipv6_info: Some(IpAddressInfo::new_ipv6_address("2001:db8::1/64", "2001:db8::1").unwrap()),
-            ipv6_name_servers: Some("DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n".to_string()),
-            ipv4_info: Some(IpAddressInfo::new_ipv4_address("192.168.1.100", "30", "192.168.1.1").unwrap()),
-            ipv4_name_servers: Some("DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n".to_string()),
+            ipv6_info: Some(
+                IpAddressInfo::new_ipv6_address("2001:db8::1/64", "2001:db8::1").unwrap(),
+            ),
+            ipv4_info: Some(
+                IpAddressInfo::new_ipv4_address("192.168.1.100", "30", "192.168.1.1").unwrap(),
+            ),
         };
         let interface_name = "enp65s0f1";
 
         let result = generate_networkd_config_contents(network_info, interface_name, false);
 
-        let expected_output = "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nAddress=2001:db8::1/64\nGateway=2001:db8::1\nIPv6AcceptRA=false\nDNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n\nAddress=192.168.1.100/30\nGateway=192.168.1.1\nDNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n\n";
+        let expected_output = "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nAddress=2001:db8::1/64\nGateway=2001:db8::1\nIPv6AcceptRA=false\n\nDNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n\nAddress=192.168.1.100/30\nGateway=192.168.1.1\nDNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n\n";
         assert_eq!(result, expected_output);
     }
 
     #[test]
     fn test_generate_networkd_config_contents_with_just_ipv6_networking_info() {
         let network_info = NetworkInfo {
-            ipv6_info: Some(IpAddressInfo::new_ipv6_address("2001:db8::1/64", "2001:db8::1").unwrap()),
-            ipv6_name_servers: Some("DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n".to_string()),
+            ipv6_info: Some(
+                IpAddressInfo::new_ipv6_address("2001:db8::1/64", "2001:db8::1").unwrap(),
+            ),
             ipv4_info: None,
-            ipv4_name_servers: Some("DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n".to_string()),
         };
         let interface_name = "enp65s0f1";
 
         let result = generate_networkd_config_contents(network_info, interface_name, false);
 
-        let expected_output = "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nAddress=2001:db8::1/64\nGateway=2001:db8::1\nIPv6AcceptRA=false\nDNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n\n";
+        let expected_output = "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nAddress=2001:db8::1/64\nGateway=2001:db8::1\nIPv6AcceptRA=false\n\nDNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n\n";
         assert_eq!(result, expected_output);
     }
 
     #[test]
     fn test_generate_networkd_config_contents_with_full_info_disable_dad() {
         let network_info = NetworkInfo {
-            ipv6_info: Some(IpAddressInfo::new_ipv6_address("2001:db8::1/64", "2001:db8::1").unwrap()),
-            ipv6_name_servers: Some("DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n".to_string()),
-            ipv4_info: Some(IpAddressInfo::new_ipv4_address("192.168.1.100", "30", "192.168.1.1").unwrap()),
-            ipv4_name_servers: Some("DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n".to_string()),
+            ipv6_info: Some(
+                IpAddressInfo::new_ipv6_address("2001:db8::1/64", "2001:db8::1").unwrap(),
+            ),
+            ipv4_info: Some(
+                IpAddressInfo::new_ipv4_address("192.168.1.100", "30", "192.168.1.1").unwrap(),
+            ),
         };
         let interface_name = "enp65s0f1";
 
         let result = generate_networkd_config_contents(network_info, interface_name, true);
 
-        let expected_output = "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nAddress=2001:db8::1/64\nGateway=2001:db8::1\nIPv6AcceptRA=false\nIPv6DuplicateAddressDetection=0\nDNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n\nAddress=192.168.1.100/30\nGateway=192.168.1.1\nDNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n\n";
+        let expected_output = "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nAddress=2001:db8::1/64\nGateway=2001:db8::1\nIPv6AcceptRA=false\n\nDNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n\nIPv6DuplicateAddressDetection=0\nAddress=192.168.1.100/30\nGateway=192.168.1.1\nDNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n\n";
         assert_eq!(result, expected_output);
     }
 
@@ -563,16 +491,14 @@ mod tests {
     fn test_generate_networkd_config_contents_with_no_networking_or_nameservers() {
         let network_info = NetworkInfo {
             ipv6_info: None,
-            ipv6_name_servers: None,
             ipv4_info: None,
-            ipv4_name_servers: None,
         };
         let interface_name = "enp65s0f1";
 
         let result = generate_networkd_config_contents(network_info, interface_name, false);
 
         let expected_output =
-            "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nIPv6AcceptRA=true\n\n";
+            "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nIPv6AcceptRA=true\n";
         assert_eq!(result, expected_output);
     }
 }

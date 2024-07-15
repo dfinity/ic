@@ -1,6 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/ed25519",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/types",
@@ -21,6 +23,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
@@ -32,6 +35,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest-derive",
 ]
 
@@ -45,10 +49,7 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     visibility = [
-        "//rs/boundary_node/ic_boundary:__pkg__",
         "//rs/crypto:__subpackages__",
-        "//rs/messaging:__pkg__",
-        "//rs/replicated_state:__pkg__",
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = DEPENDENCIES,

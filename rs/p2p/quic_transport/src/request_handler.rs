@@ -17,11 +17,12 @@ use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
+use tracing::instrument;
 
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
+        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
     utils::{read_request, write_response},
     ConnId,
@@ -124,6 +125,7 @@ pub(crate) async fn run_stream_acceptor(
     inflight_requests.shutdown().await;
 }
 
+#[instrument(skip(log, metrics, router, bi_tx, bi_rx))]
 async fn handle_bi_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
@@ -136,7 +138,7 @@ async fn handle_bi_stream(
     let mut request = match read_request(bi_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(log, "Failed to read request from bidi stream: {}", e);
+            info!(every_n_seconds => 60, log, "Failed to read request from bidi stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
@@ -169,21 +171,29 @@ async fn handle_bi_stream(
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
     if let Err(e) = write_response(&mut bi_tx, response).await {
-        info!(log, "Failed to write response to stream: {}", e);
+        info!(every_n_seconds => 60, log, "Failed to write response to stream: {}", e);
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
             .inc();
     }
-    if let Err(e) = bi_tx.finish().await {
-        info!(log, "Failed to finish stream: {}", e.to_string());
+    if let Err(e) = bi_tx.finish() {
+        info!(every_n_seconds => 60, log, "Failed to finish stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
             .inc();
     }
+    if let Err(e) = bi_tx.stopped().await {
+        info!(every_n_seconds => 60, log, "Failed to stop stream: {}", e.to_string());
+        metrics
+            .request_handle_errors_total
+            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
+            .inc();
+    }
 }
 
+#[instrument(skip(log, metrics, router, uni_rx))]
 async fn handle_uni_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
@@ -195,7 +205,7 @@ async fn handle_uni_stream(
     let mut request = match read_request(uni_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(log, "Failed to read request from uni stream: {}", e);
+            info!(every_n_seconds => 60, log, "Failed to read request from uni stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])

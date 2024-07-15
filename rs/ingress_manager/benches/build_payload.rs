@@ -11,7 +11,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::{ChangeAction, ChangeSet, IngressPool},
@@ -28,16 +28,16 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
-    artifact_pool_config::with_test_pool_config,
-    crypto::temp_crypto_component_with_fake_registry,
+    artifact_pool_config::with_test_pool_config, crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
-    history::MockIngressHistory,
-    state::{CanisterStateBuilder, ReplicatedStateBuilder},
-    types::ids::{node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
-    FastForwardTimeSource,
 };
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_state::{CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder};
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     artifact::IngressMessageId, batch::ValidationContext, ingress::IngressStatus,
     malicious_flags::MaliciousFlags, CanisterId, Cycles, Height, NumBytes, PrincipalId,
@@ -115,7 +115,7 @@ where
                 Arc::new(state_manager),
                 cycles_account_manager,
                 MaliciousFlags::default(),
-                CustomRandomState::default(),
+                RandomStateKind::Random,
             ),
             registry,
             canisters,
@@ -159,7 +159,6 @@ fn prepare(
             .build();
         let message_id = IngressMessageId::from(&ingress);
         let peer_id = (i % 10) as u64;
-        let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
         pool.insert(UnvalidatedArtifact {
             message: ingress,
             peer_id: node_test_id(peer_id),
@@ -168,9 +167,6 @@ fn prepare(
         changeset.push(ChangeAction::MoveToValidated((
             message_id,
             node_test_id(peer_id),
-            0,
-            (),
-            integrity_hash,
         )));
     }
     pool.apply_changes(changeset);

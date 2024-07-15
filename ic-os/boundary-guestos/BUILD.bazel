@@ -6,11 +6,6 @@ exports_files([
     "scripts/build-bootstrap-config-image.sh",
 ])
 
-filegroup(
-    name = "rootfs-files",
-    srcs = glob(["rootfs/**"]),
-)
-
 # All boundary-guest-os targets are named the same, just stay in different submodules.
 # To build or run specific target:
 #

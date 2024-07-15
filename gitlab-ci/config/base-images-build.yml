@@ -7,17 +7,16 @@
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
 
 .build-base-image: &build-base-image |
   set -euo pipefail
@@ -39,7 +38,6 @@
 
 .build-base-image-job:
   extends:
-    - .build-k8s
     - .rules-build-base-images
   needs: []
   artifacts:
@@ -52,162 +50,86 @@ build-guestos-base:
   extends:
     - .build-base-image-job
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/context"
     IMAGE: "guestos-base"
-    REF_FILE: "ic-os/guestos/rootfs/docker-base.prod"
+    REF_FILE: "ic-os/guestos/context/docker-base.prod"
 
 build-guestos-base-dev:
   extends:
     - .build-base-image-job
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/context"
     IMAGE: "guestos-base-dev"
-    REF_FILE: "ic-os/guestos/rootfs/docker-base.dev"
+    REF_FILE: "ic-os/guestos/context/docker-base.dev"
   script:
   - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
   - *build-base-image
-
-build-guestos-base-dev-sev:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    IMAGE: "guestos-base-dev-sev"
-    REF_FILE: "ic-os/guestos/rootfs/docker-base.dev-sev"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
-    - *build-base-image
 
 build-boundaryos-base:
   extends:
     - .build-base-image-job
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/context"
     IMAGE: "boundaryos-base"
-    REF_FILE: "ic-os/boundary-guestos/rootfs/docker-base.prod"
-
-build-boundaryos-base-snp:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    IMAGE: "boundaryos-base-snp"
-    REF_FILE: "ic-os/boundary-guestos/rootfs/docker-base.snp"
-  script:
-  - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
-  - *build-base-image
-
-build-boundaryos-api-guestos-base:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-    IMAGE: "boundary-api-guestos-base"
-    REF_FILE: "ic-os/boundary-api-guestos/rootfs/docker-base.prod"
-
-build-boundaryos-api-guestos-base-snp:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-    IMAGE: "boundary-api-guestos-base-snp"
-    REF_FILE: "ic-os/boundary-api-guestos/rootfs/docker-base.snp"
-  script:
-  - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
-  - *build-base-image
+    REF_FILE: "ic-os/boundary-guestos/context/docker-base.prod"
 
 build-hostos-base:
   extends:
     - .build-base-image-job
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/context"
     IMAGE: "hostos-base"
-    REF_FILE: "ic-os/hostos/rootfs/docker-base.prod"
+    REF_FILE: "ic-os/hostos/context/docker-base.prod"
 
 build-hostos-base-dev:
   extends:
     - .build-base-image-job
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/context"
     IMAGE: "hostos-base-dev"
-    REF_FILE: "ic-os/hostos/rootfs/docker-base.dev"
+    REF_FILE: "ic-os/hostos/context/docker-base.dev"
   script:
   - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
-  - *build-base-image
-
-build-hostos-base-dev-sev:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-    IMAGE: "hostos-base-dev-sev"
-    REF_FILE: "ic-os/hostos/rootfs/docker-base.dev-sev"
-  script:
-  - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
   - *build-base-image
 
 build-setupos-base:
   extends:
     - .build-base-image-job
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/context"
     IMAGE: "setupos-base"
-    REF_FILE: "ic-os/setupos/rootfs/docker-base.prod"
+    REF_FILE: "ic-os/setupos/context/docker-base.prod"
 
 build-setupos-base-dev:
   extends:
     - .build-base-image-job
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/context"
     IMAGE: "setupos-base-dev"
-    REF_FILE: "ic-os/setupos/rootfs/docker-base.dev"
-  script:
-  - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
-  - *build-base-image
-
-build-setupos-base-dev-sev:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-    IMAGE: "setupos-base-dev-sev"
-    REF_FILE: "ic-os/setupos/rootfs/docker-base.dev-sev"
+    REF_FILE: "ic-os/setupos/context/docker-base.dev"
   script:
   - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
   - *build-base-image
 
 build-base-images-ref-update:
   extends:
-    - .build-k8s
     - .rules-build-base-images
   needs:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
-    - build-boundaryos-base-snp
-    - build-boundaryos-api-guestos-base
-    - build-boundaryos-api-guestos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   dependencies:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
-    - build-boundaryos-base-snp
-    - build-boundaryos-api-guestos-base
-    - build-boundaryos-api-guestos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   script:
    - |
      set -euo pipefail
@@ -236,8 +158,8 @@ build-base-images-ref-update:
          echo "No changes to commit."
          exit 0
      fi
-     git commit -m "Updating container base image refs"
+     git commit -m "Update container base image refs"
      git push \
          -o merge_request.create \
-         -o merge_request.title="Updating container base images refs [$TAG]" \
+         -o merge_request.title="Chore: Update container base images refs [$TAG]" \
          origin "base-image-refs-update-${TAG}" 2>&1 | tee push.info

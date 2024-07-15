@@ -7,39 +7,44 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+ic-system-test-driver = { path = "./driver" }
+anyhow = { workspace = true }
+axum = { workspace = true }
 assert-json-diff = "2.0.1"
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 async-recursion = { workspace = true }
-async-trait = "0.1.41"
+async-trait = { workspace = true }
+backon = "0.4.1"
 base64 = { workspace = true }
-bincode = "1.3.3"
+bincode = { workspace = true }
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
 deterministic_ips = { path = "../ic_os/deterministic_ips" }
-discower_bowndary = { path = "../boundary_node/discower_bowndary"}
-proxy_canister = { path = "../rust_canisters/proxy_canister" }
+discower_bowndary = { path = "../boundary_node/discower_bowndary" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 chrono = { workspace = true }
-clap = { workspace = true }
-crossbeam-channel = "0.5.5"
-crossbeam-utils = "0.8.11"
+clap = { version = "3.2.25", features = ["derive"] }
+crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
-flate2 = "1.0.22"
+ed25519-dalek = { workspace = true }
+flate2 = { workspace = true }
 futures = { workspace = true }
 humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
-hex = "0.4.2"
+ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
+hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-async-utils = { path = "../async_utils" }
 ic-backup = { path = "../backup" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
+ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
@@ -55,13 +60,16 @@ ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der"
 ic-cup-explorer = { path = "../cup_explorer" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-http-utils = { path = "../http_utils" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }
+ic-icrc1-index-ng = { path = "../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../rosetta-api/ledger_core" }
 rosetta-core = { path = "../rosetta-api/rosetta_core" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-suite-orchestrator = { path = "../ethereum/ledger-suite-orchestrator" }
 ic-message = { path = "./test_canisters/message" }
+ic-nervous-system-clients = { path = "../nervous_system/clients" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../nervous_system/common/test_keys" }
 ic-nervous-system-proto = { path = "../nervous_system/proto" }
@@ -100,20 +108,24 @@ ic-sns-swap = { path = "../sns/swap" }
 ic-sns-root = { path = "../sns/root" }
 ic-sns-governance = { path = "../sns/governance" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
+ic-sys = { path = "../sys" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
+ic-wasm-types = { path = "../types/wasm_types" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 indoc = "1.0.9"
 json5 = "0.4.1"
 k256 = { workspace = true }
-k8s = { path = "k8s" }
-hyper = "0.14.18"
-hyper-rustls = "0.24.0"
-lazy_static = "1.4.0"
+k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
+kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
+http = "0.2.12"
+lazy_static = { workspace = true }
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
 libflate = "1.3.0"
@@ -123,39 +135,46 @@ maplit = "1.0.2"
 nix = { workspace = true }
 num_cpus = "1.13.1"
 on_wire = { path = "../rust_canisters/on_wire" }
+once_cell = "1.18.0"
 openssh-keys = "0.5.0"
 pem = "1.0.1"
 phantom_newtype = { path = "../phantom_newtype" }
 proptest = "1.0"
 prost = { workspace = true }
 quickcheck = "1.0.3"
-rand = "0.8"
-rand_chacha = "0.3"
-rayon = "1"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rayon = { workspace = true }
 rcgen = { workspace = true }
-regex = "1.5.0"
+regex = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
-ring = { version = "0.16.11", features = ["std"] }
+ring = { version = "0.17.7", features = ["std"] }
 rsa = { version = "0.9.2", features = ["sha2"] }
-rustls = "0.21.0"
 rust_decimal = "1.25"
+schnorr_fun = "0.10"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = "0.10"
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-term = "2.6.0"
-ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", rev = "f842906afaa2443206b8365d51950ed3ef85c940"}
-tempfile = "3.1.0"
-thiserror = "1.0"
-time = "^0.3.20"
-walkdir = "2.3.1"
+slog-async = { workspace = true }
+slog-term = { workspace = true }
+ssh2 = "0.9.4"
+strum = { workspace = true }
+strum_macros = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+walkdir = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
-utils = { path = "../utils", package = "ic-utils" }
 wat = "1.0.52"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
@@ -183,44 +202,12 @@ name = "ic-systest-rotate-ecdsa-idkg-key"
 path = "consensus/orchestrator/rotate_ecdsa_idkg_key_test.rs"
 
 [[bin]]
-name = "ic-systest-canister-http"
-path = "networking/canister_http_test.rs"
-
-[[bin]]
-name = "ic-systest-canister-http-socks"
-path = "networking/canister_http_socks_test.rs"
-
-[[bin]]
-name = "ic-systest-canister-http-correctness"
-path = "networking/canister_http_correctness_test.rs"
-
-[[bin]]
-name = "ic-systest-spec-compliance-application-subnet"
-path = "testing_verification/spec_compliance_application_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-spec-compliance-system-subnet"
-path = "testing_verification/spec_compliance_system_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-spec-compliance-group-01-application-subnet"
-path = "testing_verification/spec_compliance_group_01_application_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-spec-compliance-group-01-system-subnet"
-path = "testing_verification/spec_compliance_group_01_system_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-spec-compliance-group-02-application-subnet"
-path = "testing_verification/spec_compliance_group_02_application_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-spec-compliance-group-02-system-subnet"
-path = "testing_verification/spec_compliance_group_02_system_subnet_test.rs"
-
-[[bin]]
 name = "ic-systest-tecdsa-add-nodes"
 path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-tschnorr-message-sizes"
+path = "consensus/tecdsa/tschnorr_message_sizes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-key-rotation"
@@ -253,6 +240,10 @@ path = "consensus/tecdsa/tecdsa_signature_same_subnet_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-signature-timeout"
 path = "consensus/tecdsa/tecdsa_signature_timeout_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-two-signing-subnets"
+path = "consensus/tecdsa/tecdsa_two_signing_subnets_test.rs"
 
 [[bin]]
 name = "ic-systest-btc-get-balance"
@@ -423,10 +414,6 @@ name = "ic-systest-boundary-node-integration-on-playnet"
 path = "boundary_nodes/boundary_node_integration_on_playnet_test.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-snp"
-path = "boundary_nodes/boundary_nodes_snp_test.rs"
-
-[[bin]]
 name = "ic-systest-boundary-node-update-workload-test"
 path = "boundary_nodes/boundary_node_update_workload_test.rs"
 
@@ -447,6 +434,14 @@ name = "ic-systest-upgrade-downgrade-nns-subnet"
 path = "consensus/orchestrator/upgrade_downgrade_nns_subnet_test.rs"
 
 [[bin]]
+name = "ic-systest-upgrade-app-subnet"
+path = "consensus/orchestrator/upgrade_app_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-downgrade-app-subnet"
+path = "consensus/orchestrator/downgrade_app_subnet_test.rs"
+
+[[bin]]
 name = "ic-systest-backup-manager"
 path = "consensus/backup_manager_test.rs"
 
@@ -461,6 +456,10 @@ path = "testing_verification/replicable_mock_test.rs"
 [[bin]]
 name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
+
+[[bin]]
+name = "ic-systest-cup-compatibility"
+path = "consensus/orchestrator/cup_compatibility_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
@@ -507,16 +506,16 @@ name = "ic-systest-subnet-recovery-nns-same-nodes"
 path = "consensus/orchestrator/sr_nns_same_nodes_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-nns-failover-nodes"
-path = "consensus/orchestrator/sr_nns_failover_nodes_test.rs"
-
-[[bin]]
 name = "ic-systest-subnet-splitting"
 path = "consensus/subnet_splitting_test.rs"
 
 [[bin]]
 name = "ic-systest-network-reliability"
 path = "networking/network_reliability_test.rs"
+
+[[bin]]
+name = "ic-systest-network-large"
+path = "networking/network_large_test.rs"
 
 [[bin]]
 name = "ic-systest-unstuck-subnet"
@@ -559,6 +558,10 @@ name = "ic-systest-xnet-malicious-slices"
 path = "message_routing/xnet/xnet_malicious_slices.rs"
 
 [[bin]]
+name = "ic-systest-state-sync-malicious-chunk-test"
+path = "message_routing/state_sync_malicious_chunk_test.rs"
+
+[[bin]]
 name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
 
@@ -569,10 +572,6 @@ path = "gix/nns_dapp_test.rs"
 [[bin]]
 name = "ic-systest-small"
 path = "testing_verification/testnets/small.rs"
-
-[[bin]]
-name = "ic-systest-small-api"
-path = "testing_verification/testnets/small_api_boundary.rs"
 
 [[bin]]
 name = "ic-systest-small-nns"
@@ -595,14 +594,6 @@ name = "ic-systest-consensus-performance"
 path = "consensus/consensus_performance.rs"
 
 [[bin]]
-name = "ic-systest-consensus-performance-bytes"
-path = "consensus/throughput_with_large_messages.rs"
-
-[[bin]]
-name = "ic-systest-consensus-performance-requests"
-path = "consensus/throughput_with_small_messages.rs"
-
-[[bin]]
 name = "ic-systest-tecdsa-performance"
 path = "consensus/tecdsa/tecdsa_performance.rs"
 
@@ -619,9 +610,14 @@ name = "ic-systest-mainnet-boundary-node-performance"
 path = "boundary_nodes/mainnet_boundary_node_performance_test.rs"
 
 [[bin]]
-name = "ic-systest-nested-registration"
-path = "nested/registration.rs"
-
-[[bin]]
 name = "ic-systest-ipv4-integration"
 path = "node/ipv4_integration_test.rs"
+
+[[bin]]
+name = "ic-xc-ledger-suite-orchestrator"
+path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"
+
+# TODO: wait for clap upgrade in the workspace or downgrade clap
+# [[bin]]
+# name = "tnetctl"
+# path = "src/k8s/main.rs"

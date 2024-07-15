@@ -12,12 +12,14 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
-use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
+use ic_interfaces::execution_environment::{
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
+};
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
+use ic_management_canister_types::{CanisterStatusType, MasterPublicKeyId, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
@@ -28,9 +30,10 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
-    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
+    consensus::idkg::PreSigId,
+    crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, StopCanisterContext},
+    messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
@@ -43,6 +46,7 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
+use strum::IntoEnumIterator;
 
 mod scheduler_metrics;
 use scheduler_metrics::*;
@@ -50,6 +54,8 @@ mod round_schedule;
 use crate::util::debug_assert_or_critical_error;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
+mod threshold_signatures;
+use threshold_signatures::*;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -475,7 +481,7 @@ impl SchedulerImpl {
         ongoing_long_install_code: bool,
         long_running_canister_ids: BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
         loop {
             let mut available_subnet_messages = false;
@@ -502,7 +508,7 @@ impl SchedulerImpl {
                     round_limits,
                     registry_settings,
                     measurement_scope,
-                    ecdsa_subnet_public_keys,
+                    idkg_subnet_public_keys,
                 );
                 state = new_state;
 
@@ -534,7 +540,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         measurement_scope: &MeasurementScope,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -548,7 +554,7 @@ impl SchedulerImpl {
             state,
             instruction_limits,
             csprng,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             registry_settings,
             round_limits,
         );
@@ -590,19 +596,27 @@ impl SchedulerImpl {
                 }
             }
 
-            let global_timer_has_reached_deadline =
-                canister.system_state.global_timer.has_reached_deadline(now);
+            let may_schedule_heartbeat = canister.exports_heartbeat_method();
+            let may_schedule_global_timer = canister.exports_global_timer_method()
+                && canister.system_state.global_timer.has_reached_deadline(now);
+
+            if !may_schedule_heartbeat && !may_schedule_global_timer {
+                // Canister has no heartbeat and no (schedulable) global timer.
+                continue;
+            }
+
             match canister.next_execution() {
                 NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
                     // Do not add a heartbeat task if a long execution
                     // is pending.
                 }
                 NextExecution::None | NextExecution::StartNew => {
-                    for _ in 0..NextScheduledMethod::NUMBER_OF_VARIANTS {
+                    for _ in 0..NextScheduledMethod::iter().count() {
                         let method_chosen = is_next_method_chosen(
                             canister,
                             &mut heartbeat_and_timer_canister_ids,
-                            global_timer_has_reached_deadline,
+                            may_schedule_heartbeat,
+                            may_schedule_global_timer,
                         );
 
                         canister.inc_next_scheduled_method();
@@ -633,7 +647,7 @@ impl SchedulerImpl {
         root_measurement_scope: &MeasurementScope<'a>,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -686,7 +700,7 @@ impl SchedulerImpl {
                         ongoing_long_install_code,
                         long_running_canister_ids,
                         registry_settings,
-                        ecdsa_subnet_public_keys,
+                        idkg_subnet_public_keys,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }
@@ -730,6 +744,7 @@ impl SchedulerImpl {
             }
             drop(preparation_timer);
 
+            let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
             let instructions_before = round_limits.instructions;
             let (executed_canisters, mut loop_ingress_execution_results, heap_delta) = self
                 .execute_canisters_in_inner_round(
@@ -742,6 +757,7 @@ impl SchedulerImpl {
                     registry_settings.subnet_size,
                 );
             let instructions_consumed = instructions_before - round_limits.instructions;
+            drop(execution_timer);
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
@@ -805,7 +821,7 @@ impl SchedulerImpl {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
                     ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
-                    ExecutionTask::PausedExecution(..)
+                    ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. } => true,
@@ -1071,6 +1087,7 @@ impl SchedulerImpl {
     ) {
         let state_time = state.time();
         let mut all_rejects = Vec::new();
+        let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
@@ -1102,6 +1119,7 @@ impl SchedulerImpl {
                     )
                     .is_err()
                 {
+                    uninstalled_canisters.push(canister.canister_id());
                     all_rejects.push(uninstall_canister(
                         &self.log,
                         canister,
@@ -1123,6 +1141,12 @@ impl SchedulerImpl {
                     self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
                 }
             }
+        }
+
+        // Delete any snapshots associated with the canister
+        // that ran out of cycles.
+        for canister_id in uninstalled_canisters {
+            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1147,10 +1171,7 @@ impl SchedulerImpl {
     /// through message routing.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
-        let mut subnet_available_memory = self
-            .exec_env
-            .subnet_available_memory(state)
-            .get_message_memory();
+        let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
 
         let mut canisters = state.take_canister_states();
 
@@ -1233,9 +1254,9 @@ impl SchedulerImpl {
             .inc_by(inducted_messages_to_others as u64);
     }
 
-    // Iterates through the provided canisters and checks if the invariants are still valid.
-    //
-    // Returns `true` if all canisters are valid, `false` otherwise.
+    /// Iterates through the provided canisters and checks if the invariants are still valid.
+    ///
+    /// Returns `true` if all canisters are valid, `false` otherwise.
     fn check_canister_invariants(
         &self,
         round_log: &ReplicaLogger,
@@ -1246,25 +1267,20 @@ impl SchedulerImpl {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
             if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
+                let msg = format!(
+                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
+                    CANISTER_INVARIANT_BROKEN,
+                    current_round,
+                    state.time(),
+                    canister_id,
+                    err
+                );
+
                 // Crash in debug mode if any invariant fails.
-                debug_assert!(false,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                debug_assert!(false, "{}", msg);
+
                 self.metrics.canister_invariants.inc();
-                warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                warn!(round_log, "{}", msg);
                 return false;
             }
         }
@@ -1301,14 +1317,14 @@ impl SchedulerImpl {
             });
     }
 
-    // Code that must be executed unconditionally after each round.
+    /// Code that must be executed unconditionally after each round.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
                 state.metadata.heap_delta_estimate = NumBytes::from(0);
-                // `expected_compiled_wasms` will be cleared upon store and load
-                // of a checkpoint because it doesn't exist in the protobuf
-                // metadata, but we make it explicit here anyway.
+                // The set of compiled Wasms must be cleared when taking a
+                // checkpoint to keep it in sync with the protobuf serialization
+                // of `ReplicatedState` which doesn't store this field.
                 state.metadata.expected_compiled_wasms.clear();
 
                 if self.deterministic_time_slicing == FlagStatus::Enabled {
@@ -1358,7 +1374,7 @@ impl SchedulerImpl {
                             id
                         );
                     }
-                    ExecutionTask::PausedExecution(_) | ExecutionTask::PausedInstallCode(_) => {
+                    ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                         assert_eq!(
                             self.deterministic_time_slicing,
                             FlagStatus::Enabled,
@@ -1376,6 +1392,13 @@ impl SchedulerImpl {
                     }
                 }
             }
+
+            // There should be at most one paused or aborted task left in the task queue.
+            assert!(
+                canister.system_state.task_queue.len() <= 1,
+                "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
+                id, canister.system_state.task_queue
+            );
         }
     }
 }
@@ -1387,8 +1410,10 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
+        round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
@@ -1397,7 +1422,6 @@ impl Scheduler for SchedulerImpl {
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
 
-        let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let mut csprng;
         let long_running_canister_ids: BTreeSet<_>;
@@ -1460,48 +1484,27 @@ impl Scheduler for SchedulerImpl {
                 self.purge_expired_ingress_messages(&mut state);
             }
 
-            // See documentation around definition of `heap_delta_estimate` for an
-            // explanation.
-            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
-                warn!(
-                    round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
-                    current_round,
-                    state.time(),
-                    state.metadata.heap_delta_estimate,
-                    self.config.subnet_heap_delta_capacity
-                );
-                self.finish_round(&mut state, current_round_type);
-                self.metrics
-                    .round_skipped_due_to_current_heap_delta_above_limit
-                    .inc();
-                return state;
-            }
-
-            // Once the subnet messages are executed in threads, each thread will
-            // need its own Csprng instance which is initialized with a distinct
-            // "ExecutionThread". Otherwise, two Csprng instances that are
-            // initialized with the same Randomness and ExecutionThread would
-            // reveal the same bytes and break the guarantees that we provide for
-            // raw_rand method of the virtual canister.
+            // In the future, subnet messages might be executed in threads. In
+            // that case each thread will need its own Csprng instance which
+            // is initialized with a distinct "ExecutionThread". Otherwise,
+            // two Csprng instances that are initialized with the same Randomness
+            // and ExecutionThread would reveal the same bytes and break the
+            // guarantees that we provide for raw_rand method of the virtual canister.
+            //
+            // Currently subnet messages are still executed in a single thread so
+            // passing the number of scheduler cores is ok. It would need to be
+            // updated in case the execution of subnet messages is running across
+            // many threads to ensure a unique execution thread id.
             csprng = Csprng::from_seed_and_purpose(
                 &randomness,
                 &ExecutionThread(self.config.scheduler_cores as u32),
             );
 
-            let default_reserved_balance_limit =
-                self.cycles_account_manager.default_reserved_balance_limit();
-
-            for canister in state.canisters_iter_mut() {
-                cycles_in_sum += canister.system_state.balance();
-                cycles_in_sum += canister.system_state.queues().input_queue_cycles();
-                // TODO(RUN-763): This is needed only for one replica release in
-                // order to initialize the existing canisters. After that it can
-                // be removed.
-                canister
-                    .system_state
-                    .initialize_reserved_balance_limit_if_empty(default_reserved_balance_limit);
-            }
+            // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+            // for canister in state.canisters_iter_mut() {
+            //     cycles_in_sum += canister.system_state.balance();
+            //     cycles_in_sum += canister.system_state.queues().input_queue_cycles();
+            // }
 
             // Set the round limits used when executing canister messages.
             //
@@ -1548,13 +1551,26 @@ impl Scheduler for SchedulerImpl {
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
                 let (new_state, _) = self.execute_subnet_message(
-                    CanisterMessage::Response(response.into()),
+                    // Wrap the callback ID and payload into a Response, to make it easier for
+                    // `execute_subnet_message()` to deal with. All other fields will be ignored by
+                    // `execute_subnet_message()`.
+                    CanisterMessage::Response(
+                        Response {
+                            originator: CanisterId::ic_00(),
+                            respondent: CanisterId::ic_00(),
+                            originator_reply_callback: response.callback,
+                            refund: Cycles::zero(),
+                            response_payload: response.payload,
+                            deadline: NO_DEADLINE,
+                        }
+                        .into(),
+                    ),
                     state,
                     &mut csprng,
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &ecdsa_subnet_public_keys,
+                    &idkg_subnet_public_keys,
                 );
                 state = new_state;
                 if subnet_round_limits.reached() {
@@ -1562,6 +1578,30 @@ impl Scheduler for SchedulerImpl {
                 }
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
+
+            let scheduled_heap_delta_limit = scheduled_heap_delta_limit(
+                current_round,
+                round_summary,
+                self.config.subnet_heap_delta_capacity,
+                self.config.heap_delta_initial_reserve,
+            );
+            if state.metadata.heap_delta_estimate >= scheduled_heap_delta_limit {
+                warn!(
+                    round_log,
+                    "At Round {} @ time {}, current heap delta estimate {} \
+                        exceeds scheduled limit {} out of {}, so not executing any messages.",
+                    current_round,
+                    state.time(),
+                    state.metadata.heap_delta_estimate,
+                    scheduled_heap_delta_limit,
+                    self.config.subnet_heap_delta_capacity,
+                );
+                self.finish_round(&mut state, current_round_type);
+                self.metrics
+                    .round_skipped_due_to_current_heap_delta_above_limit
+                    .inc();
+                return state;
+            }
         }
 
         // Execute postponed `raw_rand` subnet messages.
@@ -1591,7 +1631,7 @@ impl Scheduler for SchedulerImpl {
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &ecdsa_subnet_public_keys,
+                    &idkg_subnet_public_keys,
                 );
                 state = new_state;
             }
@@ -1600,8 +1640,10 @@ impl Scheduler for SchedulerImpl {
 
         // Subnet queues: execute long running install code call if present.
         {
-            let measurement_scope =
-                MeasurementScope::nested(&self.metrics.round_subnet_queue, &root_measurement_scope);
+            let measurement_scope = MeasurementScope::nested(
+                &self.metrics.round_advance_long_install_code,
+                &root_measurement_scope,
+            );
 
             let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
             state = self.advance_long_running_install_code(
@@ -1648,8 +1690,27 @@ impl Scheduler for SchedulerImpl {
             &root_measurement_scope,
             &mut scheduler_round_limits,
             registry_settings,
-            &ecdsa_subnet_public_keys,
+            &idkg_subnet_public_keys,
         );
+
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching quadruples.
+        {
+            let contexts = state
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_threshold_contexts
+                .values_mut()
+                .collect();
+
+            update_signature_request_contexts(
+                current_round,
+                idkg_pre_signature_ids,
+                contexts,
+                &mut csprng,
+                registry_settings,
+                self.metrics.as_ref(),
+            );
+        }
 
         // Finalization.
         {
@@ -1657,7 +1718,6 @@ impl Scheduler for SchedulerImpl {
 
             let mut final_state;
             {
-                let mut cycles_out_sum = Cycles::zero();
                 let mut total_canister_balance = Cycles::zero();
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
@@ -1688,13 +1748,19 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+                    self.metrics
+                        .canister_log_memory_usage
+                        .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
-                    cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+
+                    // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+                    // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
                 }
-                cycles_out_sum += total_canister_balance;
+                // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+                // cycles_out_sum += total_canister_balance;
 
                 self.metrics
                     .total_canister_balance
@@ -1728,14 +1794,14 @@ impl Scheduler for SchedulerImpl {
                 {
                     self.metrics.subnet_memory_usage_invariant.inc();
                     warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
-                    SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    total_canister_memory_usage,
-                    self.exec_env.subnet_memory_capacity()
-                );
+                        round_log,
+                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                        SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
+                        current_round,
+                        state.time(),
+                        total_canister_memory_usage,
+                        self.exec_env.subnet_memory_capacity()
+                    );
                 }
 
                 // Check if the invariants are still valid after the execution for active canisters.
@@ -1955,7 +2021,7 @@ fn execute_canisters_on_thread(
             total_slices_executed.inc_assign();
             canister = new_canister;
             round_limits.instructions -=
-                as_round_instructions(config.instruction_overhead_per_message);
+                as_round_instructions(config.instruction_overhead_per_execution);
             total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
                 canister.scheduler_state.heap_delta_debit += heap_delta;
@@ -2030,7 +2096,7 @@ fn observe_replicated_state_metrics(
     let mut input_queues_message_count = 0;
     let mut input_queues_size_bytes = 0;
     let mut queues_response_bytes = 0;
-    let mut queues_reservations = 0;
+    let mut queues_memory_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
@@ -2053,7 +2119,7 @@ fn observe_replicated_state_metrics(
             CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }
         match canister.next_task() {
-            Some(&ExecutionTask::PausedExecution(_)) => {
+            Some(&ExecutionTask::PausedExecution { .. }) => {
                 num_paused_exec += 1;
             }
             Some(&ExecutionTask::PausedInstallCode(_)) => {
@@ -2067,25 +2133,22 @@ fn observe_replicated_state_metrics(
             }
             Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
         }
-        consumed_cycles_total += canister
-            .system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started;
+        consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases(),
+                .get_consumed_cycles_by_use_cases(),
         );
         let queues = canister.system_state.queues();
         ingress_queue_message_count += queues.ingress_queue_message_count();
         ingress_queue_size_bytes += queues.ingress_queue_size_bytes();
         input_queues_message_count += queues.input_queues_message_count();
         input_queues_size_bytes += queues.input_queues_size_bytes();
-        queues_response_bytes += queues.responses_size_bytes();
-        queues_reservations += queues.reserved_slots();
-        queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
+        queues_response_bytes += queues.guaranteed_responses_size_bytes();
+        queues_memory_reservations += queues.guaranteed_response_memory_reservations();
+        queues_oversized_requests_extra_bytes += queues.oversized_guaranteed_requests_extra_bytes();
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
         }
@@ -2100,7 +2163,7 @@ fn observe_replicated_state_metrics(
                         "Call context on canister {} with origin {:?} has been open for {:?}",
                         canister.canister_id(),
                         origin,
-                        state.time().saturating_sub(*origin_time),
+                        state.time().saturating_duration_since(*origin_time),
                     );
                 }
             }
@@ -2157,6 +2220,13 @@ fn observe_replicated_state_metrics(
         .ecdsa_signature_agreements
         .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
 
+    for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
+        metrics
+            .threshold_signature_agreements
+            .with_label_values(&[&key_id.to_string()])
+            .set(*count as i64);
+    }
+
     let observe_reading = |status: CanisterStatusType, num: i64| {
         metrics
             .registered_canisters
@@ -2190,7 +2260,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_input_queues_size_bytes(MESSAGE_KIND_CANISTER, input_queues_size_bytes);
 
     metrics.observe_queues_response_bytes(queues_response_bytes);
-    metrics.observe_queues_reservations(queues_reservations);
+    metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
     metrics.observe_streams_response_bytes(streams_response_bytes);
 
@@ -2288,7 +2358,9 @@ fn get_instructions_limits_for_subnet_message(
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
-            | ComputeInitialEcdsaDealings
+            | ComputeInitialIDkgDealings
+            | SchnorrPublicKey
+            | SignWithSchnorr
             | StartCanister
             | StopCanister
             | UninstallCode
@@ -2300,6 +2372,7 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister
             | UploadChunk
@@ -2320,84 +2393,111 @@ fn get_instructions_limits_for_subnet_message(
     }
 }
 
+/// If the next execution method (`Message`, `Heartbeat` or `GlobalTimer) may be
+/// scheduled, it is added to the front of the canister's task queue, the
+/// canister ID is added to `heartbeat_and_timer_canister_ids` and `true` is
+/// returned. Otherwise, no mutations are made and `false` is returned.
+///
+/// If either `Heartbeat` or `GlobalTimer` is enqueued, then the other one is
+/// also enqueued in the second position, if it may be scheduled.
 fn is_next_method_chosen(
     canister: &mut CanisterState,
     heartbeat_and_timer_canister_ids: &mut BTreeSet<CanisterId>,
-    global_timer_has_reached_deadline: bool,
+    may_schedule_heartbeat: bool,
+    may_schedule_global_timer: bool,
 ) -> bool {
-    let mut tasks_added = false;
-    let method_chosen = match canister.get_next_scheduled_method() {
+    match canister.get_next_scheduled_method() {
         NextScheduledMethod::Message => canister.has_input(),
+
         NextScheduledMethod::Heartbeat => {
-            tasks_added = try_add_tasks(
-                canister,
-                ExecutionTask::Heartbeat,
-                global_timer_has_reached_deadline,
-            );
-            tasks_added
+            if may_schedule_heartbeat {
+                enqueue_tasks(
+                    ExecutionTask::Heartbeat,
+                    may_schedule_global_timer.then_some(ExecutionTask::GlobalTimer),
+                    canister,
+                );
+                heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+            }
+            may_schedule_heartbeat
         }
+
         NextScheduledMethod::GlobalTimer => {
-            tasks_added = try_add_tasks(
-                canister,
-                ExecutionTask::GlobalTimer,
-                global_timer_has_reached_deadline,
-            );
-            tasks_added
+            if may_schedule_global_timer {
+                enqueue_tasks(
+                    ExecutionTask::GlobalTimer,
+                    may_schedule_heartbeat.then_some(ExecutionTask::Heartbeat),
+                    canister,
+                );
+                heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+            }
+            may_schedule_global_timer
         }
-    };
-
-    if tasks_added {
-        heartbeat_and_timer_canister_ids.insert(canister.canister_id());
     }
-
-    method_chosen
 }
 
-fn try_add_tasks(
+/// Enqueues `task` (optionally followed by `other_task`) at the front of
+/// `canister`'s task queue.
+fn enqueue_tasks(
+    task: ExecutionTask,
+    other_task: Option<ExecutionTask>,
     canister: &mut CanisterState,
-    scheduled_task: ExecutionTask,
-    global_timer_has_reached_deadline: bool,
-) -> bool {
-    if should_add_task(canister, &scheduled_task, global_timer_has_reached_deadline) {
-        // If the conditions for the 'other_task' are satisfied, then we are
-        // adding it as well, because we want to execute as many tasks as
-        // possible on the single canister to avoid context switching.
-        // We are first adding the 'other_task' to the front of the queue and after it
-        // 'scheduled_task' so that the 'scheduled_task' is the first executed.
-        let other_task = get_other_task(scheduled_task.clone());
-        if should_add_task(canister, &other_task, global_timer_has_reached_deadline) {
-            canister.system_state.task_queue.push_front(other_task);
-        }
-        canister.system_state.task_queue.push_front(scheduled_task);
-        return true;
+) {
+    // If the conditions for the 'other_task' are satisfied, then we are
+    // adding it as well, because we want to execute as many tasks as
+    // possible on the single canister to avoid context switching.
+    // We first push the 'other_task' to the front of the queue and then
+    // in front of it 'task' so that 'task' is executed first.
+    if let Some(other_task) = other_task {
+        canister.system_state.task_queue.push_front(other_task);
     }
-    false
+
+    canister.system_state.task_queue.push_front(task);
 }
 
-fn should_add_task(
-    canister: &CanisterState,
-    task: &ExecutionTask,
-    global_timer_has_reached_deadline: bool,
-) -> bool {
-    match task {
-        ExecutionTask::Heartbeat => canister.exports_heartbeat_method(),
-        ExecutionTask::GlobalTimer => {
-            global_timer_has_reached_deadline && canister.exports_global_timer_method()
-        }
-        ExecutionTask::AbortedExecution { .. }
-        | ExecutionTask::AbortedInstallCode { .. }
-        | ExecutionTask::PausedExecution(..)
-        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
-    }
-}
+/// Estimates the heap delta limit for the given round based on the maximum
+/// heap delta limit and the number of rounds between checkpoints.
+///
+/// The scheduler decides whether to execute the current round or not based on
+/// the result of this function. The purpose of this function is to distribute
+/// the heap delta budget equally over all rounds in order to make execution of
+/// rounds more smooth.
+///
+/// Note that this function computes a heuristic, so any positive number
+/// not exceeding the maximum heap delta limit would be a valid result.
+/// The result should be reasonably large to ensure faster progress.
+fn scheduled_heap_delta_limit(
+    current_round: ExecutionRound,
+    round_summary: Option<ExecutionRoundSummary>,
+    subnet_heap_delta_capacity: NumBytes,
+    heap_delta_initial_reserve: NumBytes,
+) -> NumBytes {
+    let Some(round_summary) = round_summary else {
+        // This should happen only in tests.
+        return subnet_heap_delta_capacity;
+    };
+    let next_checkpoint_round = round_summary.next_checkpoint_round;
+    // Plus one is because the interval length is normally 499, not 500.
+    let current_interval_length = round_summary
+        .current_interval_length
+        .get()
+        .saturating_add(1);
+    let remaining_rounds = next_checkpoint_round
+        .get()
+        .saturating_sub(current_round.get());
 
-fn get_other_task(task: ExecutionTask) -> ExecutionTask {
-    match task {
-        ExecutionTask::Heartbeat => ExecutionTask::GlobalTimer,
-        ExecutionTask::GlobalTimer => ExecutionTask::Heartbeat,
-        ExecutionTask::AbortedExecution { .. }
-        | ExecutionTask::AbortedInstallCode { .. }
-        | ExecutionTask::PausedExecution(..)
-        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
-    }
+    // The initial reserve is always available, so it should not be scaled.
+    let heap_delta_capacity_minus_initial_reserve = subnet_heap_delta_capacity
+        .get()
+        .saturating_sub(heap_delta_initial_reserve.get());
+    // The rest of the heap delta capacity is distributed across remaining rounds.
+    let remaining_rounds = remaining_rounds.min(current_interval_length);
+    let remaining_heap_delta_reserve = heap_delta_capacity_minus_initial_reserve
+        .saturating_mul(remaining_rounds)
+        .saturating_div(current_interval_length);
+
+    // The scheduled limit is the capacity minus reserve for the remaining rounds.
+    subnet_heap_delta_capacity
+        .get()
+        .saturating_sub(remaining_heap_delta_reserve)
+        .into()
 }

@@ -60,6 +60,7 @@ module IC.Test.Agent
     code202_or_4xx,
     code2xx,
     code4xx,
+    code403,
     decodeCert',
     defaultSK,
     defaultUser,
@@ -220,12 +221,13 @@ data AgentConfig = AgentConfig
     tc_manager :: Manager,
     tc_endPoint :: String,
     tc_subnets :: [AgentSubnetConfig],
+    tc_httpbin_proto :: String,
     tc_httpbin :: String,
     tc_timeout :: Int
   }
 
-makeAgentConfig :: Bool -> String -> [AgentSubnetConfig] -> String -> Int -> IO AgentConfig
-makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
+makeAgentConfig :: Bool -> String -> [AgentSubnetConfig] -> String -> String -> Int -> IO AgentConfig
+makeAgentConfig allow_self_signed_certs ep' subnets httpbin_proto httpbin' to = do
   let validate = \ca_store -> if allow_self_signed_certs then \_ _ _ -> return [] else C.validateDefault (C.makeCertificateStore $ (C.listCertificates ca_store))
   let client_params =
         (defaultParamsClient "" B.empty)
@@ -253,6 +255,7 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
         tc_manager = manager,
         tc_endPoint = ep,
         tc_subnets = subnets,
+        tc_httpbin_proto = httpbin_proto,
         tc_httpbin = httpbin,
         tc_timeout = to
       }
@@ -270,6 +273,7 @@ fixUrl msg x
 preFlight :: OptionSet -> IO AgentConfig
 preFlight os = do
   let Endpoint ep = lookupOption os
+  let HttpbinProto httpbin_proto = lookupOption os
   let Httpbin httpbin = lookupOption os
   let PollTimeout to = lookupOption os
   let AllowSelfSignedCerts allow_self_signed_certs = lookupOption os
@@ -277,7 +281,7 @@ preFlight os = do
   let test_agent_subnet_config = AgentSubnetConfig (rawEntityId test_id) (map (fixUrl "node") test_nodes) test_ranges
   let PeerSubnet (peer_id, _, _, peer_ranges, peer_nodes) = lookupOption os
   let peer_agent_subnet_config = AgentSubnetConfig (rawEntityId peer_id) (map (fixUrl "node") peer_nodes) peer_ranges
-  makeAgentConfig allow_self_signed_certs ep [test_agent_subnet_config, peer_agent_subnet_config] httpbin to
+  makeAgentConfig allow_self_signed_certs ep [test_agent_subnet_config, peer_agent_subnet_config] httpbin_proto httpbin to
 
 -- Yes, implicit arguments are frowned upon. But they are also very useful.
 
@@ -486,11 +490,11 @@ sync_height cid = forM subnets $ \sub -> do
   let ranges = map (\(a, b) -> (wordToId' a, wordToId' b)) (tc_canister_ranges sub)
   when (any (\(a, b) -> a <= cid && cid <= b) ranges) $ do
     hs <- get_heights (tc_node_addresses sub)
-    let h = maximum hs
     unless (length (nub hs) <= 1) $
-      waitFor $ do
-        hs <- get_heights (tc_node_addresses sub)
-        if h <= minimum hs then return (Just ()) else return Nothing
+      let h = maximum hs
+       in waitFor $ do
+            hs <- get_heights (tc_node_addresses sub)
+            if h <= minimum hs then return (Just ()) else return Nothing
   where
     get_heights ns =
       mapM
@@ -776,6 +780,9 @@ code2xx, code202, code4xx, code202_or_4xx :: (HasCallStack) => Response BS.ByteS
 code2xx = codePred "2xx" $ \c -> 200 <= c && c < 300
 code202 = codePred "202" $ \c -> c == 202
 code4xx = codePred "4xx" $ \c -> 400 <= c && c < 500
+
+code403 = codePred "403" $ \c -> c == 403
+
 code202_or_4xx = codePred "202 or 4xx" $ \c -> c == 202 || 400 <= c && c < 500
 
 -- * CBOR decoding

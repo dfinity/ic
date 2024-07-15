@@ -5,7 +5,7 @@ use ic_message::ForwardParams;
 use std::cell::RefCell;
 
 thread_local! {
-    static MSG: RefCell<Option<String>> = RefCell::new(None);
+    static MSG: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 #[ic_cdk_macros::update]

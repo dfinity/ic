@@ -1,16 +1,11 @@
-use crate::{
-    driver::test_env::TestEnv,
-    rosetta_tests::{
-        ledger_client::LedgerClient,
-        lib::{
-            check_balance, create_ledger_client, do_multiple_txn, one_day_from_now_nanos,
-            NeuronDetails,
-        },
-        rosetta_client::RosettaApiClient,
-        setup::setup,
-        test_neurons::TestNeurons,
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::{
+        check_balance, create_ledger_client, do_multiple_txn, one_day_from_now_nanos, NeuronDetails,
     },
-    util::block_on,
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
 use ic_ledger_core::Tokens;
 use ic_nns_governance::pb::v1::Neuron;
@@ -20,11 +15,12 @@ use ic_rosetta_api::{
     request_types::{ChangeAutoStakeMaturity, StakeMaturity, Status},
 };
 use ic_rosetta_test_utils::RequestInfo;
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use icp_ledger::AccountIdentifier;
 use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8109;
-const VM_NAME: &str = "rosetta-test-neuron-maturity";
+const VM_NAME: &str = "rosetta-neuron-maturity";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -34,7 +30,6 @@ pub fn test(env: TestEnv) {
     // Create neurons.
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
     let neuron_setup = |neuron: &mut Neuron| {
-        neuron.dissolve_state = None;
         neuron.maturity_e8s_equivalent = 420_000_000;
     };
     let neuron1 = neurons.create(neuron_setup);
@@ -54,7 +49,7 @@ pub fn test(env: TestEnv) {
         test_change_auto_stake_maturity(
             &client,
             neuron4.account_id,
-            Arc::new(neuron4.key_pair).clone(),
+            Arc::new(neuron4.key_pair.clone()),
             true,
             neuron4.neuron_subaccount_identifier,
         )
@@ -96,7 +91,7 @@ async fn test_stake_maturity(
 
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
 
     let neuron_acc = neuron_info.neuron_account;
     let balance_before = ledger.get_account_balance(neuron_acc).await;
@@ -164,7 +159,7 @@ async fn test_stake_maturity(
 async fn test_stake_maturity_invalid(ros: &RosettaApiClient, neuron_info: &NeuronDetails) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
 
     let res = do_multiple_txn(
         ros,

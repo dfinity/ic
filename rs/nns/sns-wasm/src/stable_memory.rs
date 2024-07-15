@@ -270,6 +270,7 @@ mod test {
         let sns_wasm = SnsWasm {
             wasm: vec![189, 201, 248],
             canister_type: 1,
+            ..SnsWasm::default()
         };
         let (offset, size) = stable_memory.write_wasm(sns_wasm.clone()).unwrap();
         assert_eq!(stable_memory.read_wasm(offset, size).unwrap(), sns_wasm);

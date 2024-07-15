@@ -1,6 +1,8 @@
 use crate::pb::v1::Canister;
 use ic_base_types::PrincipalId;
-use pb::v1::{Duration, GlobalTimeOfDay, Percentage, Tokens};
+use pb::v1::{Decimal as DecimalPb, Duration, GlobalTimeOfDay, Percentage, Tokens};
+use rust_decimal::Decimal;
+use std::str::FromStr;
 
 pub mod pb;
 
@@ -115,3 +117,49 @@ impl Tokens {
         Some(Tokens { e8s: Some(e8s) })
     }
 }
+
+impl From<Decimal> for DecimalPb {
+    fn from(src: Decimal) -> DecimalPb {
+        let human_readable = Some(src.to_string());
+
+        DecimalPb { human_readable }
+    }
+}
+
+impl TryFrom<DecimalPb> for Decimal {
+    type Error = String;
+
+    fn try_from(src: DecimalPb) -> Result<Decimal, String> {
+        let human_readable = src.human_readable.as_ref();
+
+        const MAX_LEN: usize = 40;
+        let truncate_human_readable = || -> Option<String> {
+            human_readable.map(|human_readable| {
+                let mut human_readable = human_readable.clone();
+                human_readable.truncate(MAX_LEN);
+                human_readable
+            })
+        };
+
+        let is_garbage = human_readable
+            .map(|human_readable| human_readable.len() > MAX_LEN)
+            .unwrap_or(true);
+        if is_garbage {
+            return Err(format!(
+                "Unable to parse {:?} as a Decimal with at most 96 bits of significand.",
+                truncate_human_readable(),
+            ));
+        }
+
+        Decimal::from_str(human_readable.unwrap_or(&String::new())).map_err(|err| {
+            format!(
+                "Invalid DecimalPb: unable to parse {:?} as a Decimal: {:?}",
+                truncate_human_readable(),
+                err,
+            )
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests;

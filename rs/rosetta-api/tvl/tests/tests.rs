@@ -97,7 +97,7 @@ fn test_tvl() {
     let get_tvl_result: TvlResult = tvl.get_tvl(None).unwrap();
     // 3 neurons with respectively 10 ICP, 1 ICP and 0.1 ICP locked.
     // ICP price is 10$, hence tvl should be 111$.
-    assert_eq!(get_tvl_result.tvl, Nat::from(111));
+    assert_eq!(get_tvl_result.tvl, Nat::from(111_u8));
 
     let upgrade_args = TVLInitArgs {
         update_period: Some(30),
@@ -135,10 +135,7 @@ fn test_multiple_currencies() {
             "{}",
             currency.to_string()
         );
-        println!(
-            "Setting exchange rate for currency: {}",
-            currency.to_string()
-        );
+        println!("Setting exchange rate for currency: {}", currency);
 
         let rate: u64 = rng.gen_range(50_000_000_u64..200_000_000_u64);
         tvl.set_exchange_rate(SetExchangeRate {

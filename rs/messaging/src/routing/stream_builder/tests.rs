@@ -1,31 +1,29 @@
 use super::*;
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
-use ic_ic00_types::Method;
+use ic_management_canister_types::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CanisterState, InputQueueType, ReplicatedState, Stream,
 };
-use ic_test_utilities::{
-    mock_time,
-    state::{new_canister_state, register_callback},
-    types::{
-        ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
-        messages::RequestBuilder,
-    },
-};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
     MetricVec,
 };
+use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
+    messages::RequestBuilder,
+};
 use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
     },
+    time::UNIX_EPOCH,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };
@@ -47,6 +45,30 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
+}
+
+#[test]
+fn test_signals_end_metric_exported() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
+
+        let stream = Stream::new(
+            StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+            StreamIndex::new(42),
+        );
+
+        state.with_streams(btreemap![LOCAL_SUBNET => stream]);
+
+        stream_builder.build_streams(state);
+
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())],
+                StreamIndex::new(42).get()
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_SIGNALS_END)
+        );
+    });
 }
 
 #[test]
@@ -80,10 +102,11 @@ fn reject_local_request() {
             msg.sender,
             msg.receiver,
             msg.sender_reply_callback,
+            msg.deadline,
         );
 
         canister_state
-            .push_output_request(msg.clone().into(), mock_time())
+            .push_output_request(msg.clone().into(), UNIX_EPOCH)
             .unwrap();
         canister_state
             .system_state
@@ -122,6 +145,7 @@ fn reject_local_request() {
                     originator_reply_callback: msg.sender_reply_callback,
                     refund: msg.payment,
                     response_payload: Payload::Reject(expected_reject_context),
+                    deadline: msg.deadline,
                 }
                 .into(),
                 &mut (i64::MAX / 2),
@@ -154,7 +178,7 @@ fn reject_local_request_for_subnet() {
 
         state
             .subnet_queues_mut()
-            .push_output_request(msg.clone().into(), mock_time())
+            .push_output_request(msg.clone().into(), UNIX_EPOCH)
             .unwrap();
         state
             .subnet_queues_mut()
@@ -185,6 +209,7 @@ fn reject_local_request_for_subnet() {
                         RejectCode::SysFatal,
                         reject_message,
                     )),
+                    deadline: msg.deadline,
                 }
                 .into(),
                 &mut (i64::MAX / 2),
@@ -220,6 +245,7 @@ fn build_streams_success() {
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
         let expected_stream_begin = expected_stream.messages_begin().get();
+        let expected_signals_end = expected_stream.signals_end().get();
 
         // Set up the provided_canister_states.
         let provided_canister_states = canister_states_with_outputs(msgs);
@@ -272,6 +298,13 @@ fn build_streams_success() {
                 expected_stream_begin
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN)
+        );
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
+                expected_signals_end
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_SIGNALS_END)
         );
     });
 }
@@ -452,7 +485,7 @@ fn build_streams_impl_respects_limits(
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
         let msg_count = msgs.len();
         // All messages returned by `generate_messages_for_test` are of the same size
-        let msg_size = msgs.get(0).unwrap().count_bytes() as u64;
+        let msg_size = msgs.first().unwrap().count_bytes() as u64;
 
         assert!(
             msg_count > expected_messages as usize,
@@ -711,6 +744,7 @@ fn build_streams_with_oversized_payloads() {
             method_name: method_name.clone(),
             method_payload: oversized_request_payload.clone(),
             metadata: None,
+            deadline: NO_DEADLINE,
         };
         assert!(local_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
 
@@ -723,6 +757,7 @@ fn build_streams_with_oversized_payloads() {
             method_name,
             method_payload: oversized_request_payload,
             metadata: None,
+            deadline: NO_DEADLINE,
         };
         assert!(remote_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let remote_request_reject = Response {
@@ -739,6 +774,7 @@ fn build_streams_with_oversized_payloads() {
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                 ),
             )),
+            deadline: NO_DEADLINE,
         };
 
         // Oversized response: will be replaced with a reject response.
@@ -748,6 +784,7 @@ fn build_streams_with_oversized_payloads() {
             originator_reply_callback: CallbackId::from(3),
             refund: Cycles::new(3),
             response_payload: Payload::Data(oversized_response_payload),
+            deadline: NO_DEADLINE,
         };
         assert!(data_response.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let data_response_reject = Response {
@@ -764,6 +801,7 @@ fn build_streams_with_oversized_payloads() {
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                 ),
             )),
+            deadline: NO_DEADLINE,
         };
 
         // Oversized reject response: will be replaced with a reject response.
@@ -777,6 +815,7 @@ fn build_streams_with_oversized_payloads() {
                 RejectCode::SysTransient,
                 oversized_error_message,
             )),
+            deadline: NO_DEADLINE,
         };
         assert!(reject_response.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let reject_response_reject = Response {
@@ -789,6 +828,7 @@ fn build_streams_with_oversized_payloads() {
                 // Long enough message to be properly truncated by the constructor.
                 "x".repeat(10 * 1024),
             )),
+            deadline: NO_DEADLINE,
         };
 
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
@@ -887,7 +927,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
     let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
     state.metadata.batch_time = Time::from_nanos_since_unix_epoch(5);
     let metrics_registry = MetricsRegistry::new();
-    let stream_handler = StreamBuilderImpl::new(
+    let stream_builder = StreamBuilderImpl::new(
         LOCAL_SUBNET,
         &metrics_registry,
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -896,7 +936,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
         log.clone(),
     );
 
-    (stream_handler, state, metrics_registry)
+    (stream_builder, state, metrics_registry)
 }
 
 /// Simulates routing the given requests into a `StreamIndexedQueue` with the
@@ -963,9 +1003,10 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
         let sender = canister_test_id(snd);
         let mut next_callback_id = 0;
         let payment = Cycles::new(100);
-        for rcv in 700..(700 + receivers) {
-            let receiver = canister_test_id(rcv);
-            for i in snd..2 * snd {
+        // Round robin across receivers, to emulate the ordering of `output_into_iter()`.
+        for i in snd..2 * snd {
+            for rcv in 700..(700 + receivers) {
+                let receiver = canister_test_id(rcv);
                 next_callback_id += 1;
                 messages.push(generate_message_for_test(
                     sender,
@@ -1021,11 +1062,10 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                     req.sender,
                     req.receiver,
                     req.sender_reply_callback,
+                    req.deadline,
                 );
 
-                canister_state
-                    .push_output_request(req, mock_time())
-                    .unwrap();
+                canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
             }
 
             RequestOrResponse::Response(rep) => {

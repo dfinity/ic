@@ -19,11 +19,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{
-    ckbtc::lib::ADDRESS_LENGTH,
-    driver::{test_env::TestEnv, universal_vm::UniversalVms},
-    util::UniversalCanister,
-};
+use crate::ckbtc::lib::ADDRESS_LENGTH;
 use assert_matches::assert_matches;
 use bitcoincore_rpc::{
     bitcoin::{Address, Amount, Txid},
@@ -37,6 +33,10 @@ use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::UtxoStatus::Checked;
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_system_test_driver::{
+    driver::{test_env::TestEnv, universal_vm::UniversalVms},
+    util::UniversalCanister,
+};
 use ic_universal_canister::{management, wasm};
 use icrc_ledger_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
 use icrc_ledger_types::{
@@ -113,7 +113,7 @@ pub async fn wait_for_ledger_balance<'a>(
     expected_balance: Nat,
     account: Account,
 ) {
-    let mut balance: Nat = Nat::from(0);
+    let mut balance: Nat = Nat::from(0_u8);
     let start = Instant::now();
     while balance != expected_balance {
         if start.elapsed() >= SHORT_TIMEOUT {
@@ -524,7 +524,7 @@ pub async fn assert_mint_transaction(
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(1, res.transactions.len(), "Expecting one transaction");
-    let transaction = res.transactions.get(0).unwrap();
+    let transaction = res.transactions.first().unwrap();
     assert_eq!("mint", transaction.kind);
     let mint = transaction
         .mint
@@ -561,7 +561,7 @@ pub async fn assert_burn_transaction(
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(1, res.transactions.len(), "Expecting one transaction");
-    let transaction = res.transactions.get(0).unwrap();
+    let transaction = res.transactions.first().unwrap();
     assert_eq!("burn", transaction.kind);
     let burn = transaction
         .burn
@@ -581,14 +581,14 @@ pub async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
     let res = get_ledger_transactions(
         agent,
         GetTransactionsRequest {
-            start: BlockIndex::from(0),
+            start: BlockIndex::from(0_u8),
             length: Nat::from(1_000u32),
         },
     )
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(
-        Nat::from(0),
+        Nat::from(0_u8),
         res.log_length,
         "Ledger expected to not have transactions, got {:?}",
         res

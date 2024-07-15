@@ -522,7 +522,6 @@ impl RoutingTable {
     /// Returns the `SubnetId` that the given `principal_id` is assigned to or
     /// `None` if an assignment cannot be found.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
-        // TODO(EXC-274): Optimize the below search by keeping a set of subnet IDs.
         // Check if the given `principal_id` is a subnet.
         // Note that the following assumes that all known subnets are in the routing
         // table, even if they're empty (i.e. no canister exists on them). In the

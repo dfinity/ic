@@ -1,7 +1,6 @@
 use crate::pb::v1::{
-    CanisterCallError, GovernanceError, SetDappControllersRequest, SetDappControllersResponse,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse,
+    CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
+    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
 };
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
@@ -117,11 +116,6 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
 
 #[async_trait]
 pub trait NnsGovernanceClient {
-    async fn settle_community_fund_participation(
-        &mut self,
-        request: SettleCommunityFundParticipation,
-    ) -> Result<Result<(), GovernanceError>, CanisterCallError>;
-
     async fn settle_neurons_fund_participation(
         &mut self,
         request: SettleNeuronsFundParticipationRequest,
@@ -140,20 +134,6 @@ impl RealNnsGovernanceClient {
 
 #[async_trait]
 impl NnsGovernanceClient for RealNnsGovernanceClient {
-    async fn settle_community_fund_participation(
-        &mut self,
-        request: SettleCommunityFundParticipation,
-    ) -> Result<Result<(), GovernanceError>, CanisterCallError> {
-        dfn_core::api::call(
-            self.canister_id,
-            "settle_community_fund_participation",
-            dfn_candid::candid_one,
-            request,
-        )
-        .await
-        .map_err(CanisterCallError::from)
-    }
-
     async fn settle_neurons_fund_participation(
         &mut self,
         request: SettleNeuronsFundParticipationRequest,

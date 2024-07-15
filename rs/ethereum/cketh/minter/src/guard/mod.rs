@@ -22,11 +22,11 @@ pub trait RequestsGuardedByPrincipal {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PendingRetrieveEthRequests;
+pub struct PendingWithdrawalRequests;
 
-impl RequestsGuardedByPrincipal for PendingRetrieveEthRequests {
+impl RequestsGuardedByPrincipal for PendingWithdrawalRequests {
     fn guarded_principals(state: &mut State) -> &mut BTreeSet<Principal> {
-        &mut state.retrieve_eth_principals
+        &mut state.pending_withdrawal_principals
     }
 
     fn pending_requests_count(state: &State) -> usize {
@@ -74,9 +74,9 @@ impl<PR: RequestsGuardedByPrincipal> Drop for Guard<PR> {
     }
 }
 
-pub fn retrieve_eth_guard(
+pub fn retrieve_withdraw_guard(
     principal: Principal,
-) -> Result<Guard<PendingRetrieveEthRequests>, GuardError> {
+) -> Result<Guard<PendingWithdrawalRequests>, GuardError> {
     Guard::new(principal)
 }
 

@@ -15,7 +15,7 @@ use std::{
 
 thread_local! {
     static CURRENT_TOP_LEVEL_FUTURE: Cell<*mut TopLevelFuture> =
-        Cell::new(std::ptr::null_mut::<TopLevelFuture>());
+        const { Cell::new(std::ptr::null_mut::<TopLevelFuture>()) };
 }
 
 /// This structure holds a future passed to the spawn() function and metadata

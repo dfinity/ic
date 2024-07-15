@@ -10,4 +10,4 @@ documentation.workspace = true
 ic-interfaces-registry = { path = "../" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-types = { path = "../../../types/types" }
-mockall = "0.11.2"
+mockall = { workspace = true }

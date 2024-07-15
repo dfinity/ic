@@ -1,5 +1,4 @@
-use crate::address::Address;
-use std::str::FromStr;
+use crate::address::ecdsa_public_key_to_address;
 
 #[test]
 fn deserialize_block_spec() {
@@ -49,13 +48,12 @@ fn deserialize_json_reply() {
 }
 
 mod eth_get_logs {
-    use crate::address::Address;
-    use crate::eth_logs::ReceivedEthEvent;
-    use crate::eth_rpc::{FixedSizeData, LogEntry};
-    use crate::numeric::{BlockNumber, LogIndex, Wei};
-    use assert_matches::assert_matches;
+    use crate::eth_logs::{ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
+    use crate::eth_rpc::LogEntry;
+    use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
     use candid::Principal;
     use ic_crypto_sha3::Keccak256;
+    use ic_ethereum_types::Address;
     use std::str::FromStr;
 
     #[test]
@@ -100,7 +98,7 @@ mod eth_get_logs {
 
     #[test]
     fn should_have_correct_topic() {
-        use crate::eth_logs::RECEIVED_ETH_EVENT_TOPIC;
+        use crate::deposit::RECEIVED_ETH_EVENT_TOPIC;
 
         //must match event signature in minter.sol
         let event_signature = "ReceivedEth(address,uint256,bytes32)";
@@ -126,7 +124,7 @@ mod eth_get_logs {
             "removed": false
         }"#;
         let parsed_event =
-            ReceivedEthEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
         let expected_event = ReceivedEthEvent {
             transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
                 .parse()
@@ -138,14 +136,58 @@ mod eth_get_logs {
                 .unwrap(),
             value: Wei::from(10_000_000_000_000_000_u128),
             principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
-        };
+        }
+        .into();
+
+        assert_eq!(parsed_event, expected_event);
+    }
+
+    #[test]
+    fn should_parse_received_erc20_event() {
+        let event = r#"{
+            "address": "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
+            "topics": [
+                "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b",
+                "0x0000000000000000000000007439e9bb6d8a84dd3a23fe621a30f95403f87fb9",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000008ac7230489e80000",
+            "blockNumber": "0x5146a4",
+            "transactionHash": "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
+            "transactionIndex": "0x22",
+            "blockHash": "0x0cbfb260e2e589ef110e63314279eb3ef2e307e46fa5409f08c101976858f80a",
+            "logIndex": "0x27",
+            "removed": false
+        }"#;
+        let parsed_event =
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let expected_event = ReceivedErc20Event {
+            transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(5326500),
+            log_index: LogIndex::from(39_u8),
+            from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+                .parse()
+                .unwrap(),
+            value: Erc20Value::from(10_000_000_000_000_000_000_u128),
+            principal: Principal::from_str(
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+            )
+            .unwrap(),
+            erc20_contract_address: "0x7439e9bb6d8a84dd3a23fe621a30f95403f87fb9"
+                .parse()
+                .unwrap(),
+        }
+        .into();
 
         assert_eq!(parsed_event, expected_event);
     }
 
     #[test]
     fn should_not_parse_removed_event() {
-        use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEventError};
+        use crate::eth_logs::{EventSource, EventSourceError, ReceivedEventError};
         let event = r#"{
             "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
             "topics": [
@@ -163,8 +205,8 @@ mod eth_get_logs {
         }"#;
 
         let parsed_event =
-            ReceivedEthEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap());
-        let expected_error = Err(ReceivedEthEventError::InvalidEventSource {
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap());
+        let expected_error = Err(ReceivedEventError::InvalidEventSource {
             source: EventSource {
                 transaction_hash:
                     "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
@@ -177,47 +219,6 @@ mod eth_get_logs {
             ),
         });
         assert_eq!(parsed_event, expected_error);
-    }
-
-    #[test]
-    fn should_deserialize_address_from_32_bytes_hex_string() {
-        let address_hex = FixedSizeData::from_str(
-            "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-        )
-        .unwrap();
-
-        let address = Address::try_from(&address_hex.0).unwrap();
-
-        assert_eq!(
-            format!("{:x}", address),
-            "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string()
-        );
-    }
-
-    #[test]
-    fn should_fail_deserializing_address_when_non_leading_zero() {
-        let address_hex = FixedSizeData::from_str(
-            "0x000000000100000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-        )
-        .unwrap();
-
-        assert_matches!(
-            Address::try_from(&address_hex.0),
-            Err(err) if err.starts_with("address has leading non-zero bytes")
-        );
-    }
-
-    #[test]
-    fn should_fail_deserializing_when_address_larger_than_20_bytes() {
-        let address_hex = FixedSizeData::from_str(
-            "0x000000000100000000000001dd2851cdd40ae6536831558dd46db62fac7a844d",
-        )
-        .unwrap();
-
-        assert_matches!(
-            Address::try_from(&address_hex.0),
-            Err(err) if err.starts_with("address has leading non-zero bytes")
-        );
     }
 }
 
@@ -239,41 +240,17 @@ fn address_from_pubkey() {
     for (pk_bytes, address) in EXAMPLES {
         let sec1_bytes = hex::decode(pk_bytes).unwrap();
         let pk = PublicKey::deserialize_sec1(&sec1_bytes).unwrap();
-        assert_eq!(&Address::from_pubkey(&pk).to_string(), address);
-    }
-}
-
-// See https://eips.ethereum.org/EIPS/eip-55#test-cases
-#[test]
-fn address_display() {
-    use crate::address::*;
-
-    const EXAMPLES: &[&str] = &[
-        // All caps
-        "0x52908400098527886E0F7030069857D2E4169EE7",
-        "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
-        // All Lower
-        "0xde709f2102306220921060314715629080e2fb77",
-        "0x27b1fdb04752bbc536007a920d24acb045561c26",
-        // Normal
-        "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
-        "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
-        "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
-        "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
-    ];
-    for example in EXAMPLES {
-        let addr = Address::from_str(example).unwrap();
-        assert_eq!(&addr.to_string(), example);
+        assert_eq!(&ecdsa_public_key_to_address(&pk).to_string(), address);
     }
 }
 
 mod rlp_encoding {
-    use crate::address::Address;
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
         AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     };
     use ethnum::u256;
+    use ic_ethereum_types::Address;
     use rlp::Encodable;
     use std::str::FromStr;
 

@@ -11,17 +11,23 @@ pub struct OrderHandle(instant_acme::Order);
 
 #[derive(Debug)]
 pub struct ChallengeResponse {
+    #[allow(dead_code)]
     pub token: String,
+    #[allow(dead_code)]
     pub key_authorization: String,
 }
 
 #[async_trait]
 pub trait Order: Sync + Send {
+    // TODO: Only used in specific configurations.
+    #[allow(dead_code)]
     async fn order(&self, name: &str) -> Result<(OrderHandle, ChallengeResponse), Error>;
 }
 
 #[async_trait]
 pub trait Ready: Sync + Send {
+    // TODO: Only used in specific configurations.
+    #[allow(dead_code)]
     async fn ready(&self, order: &mut OrderHandle) -> Result<(), Error>;
 }
 
@@ -71,8 +77,6 @@ impl Acme {
 #[async_trait]
 impl Order for Acme {
     async fn order(&self, name: &str) -> Result<(OrderHandle, ChallengeResponse), Error> {
-        println!("creating order for {name}");
-
         // Get Order
         let mut order = self
             .account
@@ -127,7 +131,8 @@ impl Ready for Acme {
 #[async_trait]
 impl Finalize for Acme {
     async fn finalize(&mut self, order: &mut OrderHandle, csr: &[u8]) -> Result<(), FinalizeError> {
-        let state = (order.0)
+        let state = order
+            .0
             .refresh()
             .await
             .context("failed to refresh order state")?;
@@ -136,7 +141,8 @@ impl Finalize for Acme {
             return Err(FinalizeError::OrderNotReady(format!("{:?}", state.status)));
         }
 
-        (order.0)
+        order
+            .0
             .finalize(csr)
             .await
             .context("failed to finalize order")?;

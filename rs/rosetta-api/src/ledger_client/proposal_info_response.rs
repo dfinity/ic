@@ -6,11 +6,13 @@ use serde_json::Value;
 #[derive(serde::Serialize, serde::Deserialize, std::fmt::Debug, Clone)]
 pub struct ProposalInfoResponse(pub ProposalInfo);
 
-impl From<ProposalInfoResponse> for ObjectMap {
-    fn from(r: ProposalInfoResponse) -> Self {
-        match serde_json::to_value(r) {
-            Ok(Value::Object(o)) => o,
-            _ => ObjectMap::default(),
+impl TryFrom<ProposalInfoResponse> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ProposalInfoResponse) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ProposalInfoResponse to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ProposalInfoResponse to ObjectMap: {:?}",err))),
         }
     }
 }
