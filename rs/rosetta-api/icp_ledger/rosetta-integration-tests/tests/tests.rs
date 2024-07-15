@@ -794,7 +794,9 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
         )
         .unwrap()]
     );
+}
 
+#[tokio::test]
 async fn test_query_block_range() {
     let env = TestEnv::setup_or_panic(false).await;
     env.pocket_ic.auto_progress().await;
