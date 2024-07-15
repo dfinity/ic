@@ -490,7 +490,7 @@ hyper-socks2 = { version = "0.8.0", default-features = false, features = [
     "rustls",
 ] }
 ic-agent = { version = "0.35.0", features = ["hyper"] }
-ic-agent-call-v3 = { git = "https://github.com/dsharifi/agent-rs", rev = "3b6c0e994d94be9e38484f47b8560d613b746e46", features = [
+ic-agent-call-v3 = { package = "ic-agent", git = "https://github.com/dsharifi/agent-rs", rev = "3b6c0e994d94be9e38484f47b8560d613b746e46", features = [
     "sync_call",
 ] }
 ic-cdk = "0.13.2"
@@ -503,7 +503,9 @@ ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.5"
 ic-utils = { version = "0.35.0", features = ["raw"] }
-ic-utils-call-v3 = { version = "0.35.0", features = ["raw"] }
+ic-utils-call-v3 = { package = "ic-utils", git = "https://github.com/dsharifi/agent-rs", rev = "3b6c0e994d94be9e38484f47b8560d613b746e46", features = [
+    "raw",
+] }
 ic-btc-interface = "0.2.0"
 ic-btc-validation = "0.1.0"
 ic-btc-test-utils = "0.1.0"

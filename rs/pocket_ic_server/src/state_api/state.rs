@@ -521,6 +521,10 @@ impl ApiState {
                     post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
+                    "/api/v3/canister/:ecid/call",
+                    post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route(
                     "/api/v2/canister/:ecid/query",
                     post(handler_query)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),

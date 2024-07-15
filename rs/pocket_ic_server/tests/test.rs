@@ -684,3 +684,46 @@ fn canister_state_dir() {
     pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
         .unwrap();
 }
+
+#[test]
+fn test_specified_id_call_v3() {
+    use ic_utils_call_v3::interfaces::ManagementCanister;
+
+    // Create live PocketIc instance.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let endpoint = pic.make_live(None);
+
+    // We define a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    assert!(pic.get_subnet(specified_id).is_none());
+
+    // We create a canister with that specified canister ID: this should succeed
+    // and a new subnet should be created.
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let canister_id = rt.block_on(async {
+        let agent = ic_agent_call_v3::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let ic00 = ManagementCanister::create(&agent);
+
+        let (canister_id,) = ic00
+            .create_canister()
+            .as_provisional_create_with_specified_id(specified_id)
+            .call_and_wait()
+            .await
+            .unwrap();
+
+        canister_id
+    });
+    assert_eq!(canister_id, specified_id);
+}

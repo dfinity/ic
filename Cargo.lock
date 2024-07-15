@@ -1305,7 +1305,7 @@ dependencies = [
  "glob",
  "humantime",
  "hyper 1.4.1",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-utils 0.35.0",
  "indoc",
  "mockall",
@@ -1849,7 +1849,7 @@ dependencies = [
  "cloudflare",
  "flate2",
  "futures",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-http-certification",
  "ic-response-verification",
  "ic-utils 0.35.0",
@@ -3279,7 +3279,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "http 1.1.0",
- "ic-agent",
+ "ic-agent 0.35.0",
  "rand 0.8.5",
  "ring 0.17.8",
  "simple_moving_average",
@@ -3850,7 +3850,7 @@ dependencies = [
  "candid",
  "clap 3.2.25",
  "eyre",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-config",
  "ic-replicated-state",
  "ic-system-api",
@@ -5139,7 +5139,7 @@ dependencies = [
  "hyper-rustls 0.26.0",
  "hyper-util",
  "ic-certification 2.5.0",
- "ic-transport-types",
+ "ic-transport-types 0.35.0",
  "ic-verify-bls-signature",
  "k256",
  "leb128",
@@ -5162,6 +5162,46 @@ dependencies = [
  "time",
  "tokio",
  "tower",
+ "url",
+]
+
+[[package]]
+name = "ic-agent"
+version = "0.36.0"
+source = "git+https://github.com/dsharifi/agent-rs?rev=3b6c0e994d94be9e38484f47b8560d613b746e46#3b6c0e994d94be9e38484f47b8560d613b746e46"
+dependencies = [
+ "async-lock",
+ "backoff",
+ "cached 0.46.1",
+ "candid",
+ "ed25519-consensus",
+ "futures-util",
+ "hex",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "ic-certification 2.5.0",
+ "ic-transport-types 0.36.0",
+ "ic-verify-bls-signature",
+ "k256",
+ "leb128",
+ "p256",
+ "pem 2.0.1",
+ "pkcs8",
+ "rand 0.8.5",
+ "rangemap",
+ "reqwest 0.12.5",
+ "ring 0.17.8",
+ "rustls-webpki 0.101.7",
+ "sec1",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "serde_repr",
+ "sha2 0.10.8",
+ "simple_asn1",
+ "thiserror",
+ "time",
+ "tokio",
  "url",
 ]
 
@@ -5291,7 +5331,7 @@ dependencies = [
  "futures",
  "humantime",
  "hyper 1.4.1",
- "ic-agent",
+ "ic-agent 0.35.0",
  "indoc",
  "mockall",
  "opentelemetry 0.23.0",
@@ -6008,7 +6048,7 @@ name = "ic-ckbtc-agent"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-canisters-http-types",
  "ic-ckbtc-minter",
  "ic-icrc1",
@@ -6105,7 +6145,7 @@ dependencies = [
  "futures",
  "hex",
  "hex-literal",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-canisters-http-types",
@@ -8145,7 +8185,7 @@ dependencies = [
  "clap 4.5.9",
  "futures",
  "hex",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-base-types",
  "ic-certification 2.5.0",
  "ic-constants",
@@ -8207,7 +8247,7 @@ dependencies = [
  "clap 4.5.9",
  "ed25519-consensus",
  "hex",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-ed25519",
  "ic-icrc-rosetta",
@@ -8389,7 +8429,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canister-profiler",
@@ -8495,7 +8535,7 @@ name = "ic-icrc1-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-constants",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-ed25519",
@@ -8707,7 +8747,7 @@ dependencies = [
  "ciborium",
  "clap 3.2.25",
  "dfn_protobuf",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-certification 0.9.0",
  "ic-crypto-sha2",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
@@ -9347,7 +9387,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "colored",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-neurons-fund",
  "ic-sns-governance",
  "ic-sns-swap",
@@ -10706,7 +10746,7 @@ dependencies = [
  "dfn_protobuf",
  "futures",
  "hex",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-base-types",
  "ic-canister-client",
  "ic-constants",
@@ -10819,7 +10859,7 @@ dependencies = [
  "candid",
  "colored",
  "csv",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-nervous-system-common-test-keys",
  "ic-neurons-fund",
  "ic-nns-common",
@@ -11575,7 +11615,7 @@ version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
  "hex",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-base-types",
  "ic-crypto-utils-threshold-sig",
  "ic-crypto-utils-threshold-sig-der",
@@ -11684,7 +11724,7 @@ dependencies = [
  "humantime",
  "hyper 0.14.30",
  "hyper-rustls 0.24.2",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-artifact-pool",
  "ic-base-types",
  "ic-btc-interface",
@@ -12128,6 +12168,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-transport-types"
+version = "0.36.0"
+source = "git+https://github.com/dsharifi/agent-rs?rev=3b6c0e994d94be9e38484f47b8560d613b746e46#3b6c0e994d94be9e38484f47b8560d613b746e46"
+dependencies = [
+ "candid",
+ "hex",
+ "ic-certification 2.5.0",
+ "leb128",
+ "serde",
+ "serde_bytes",
+ "serde_repr",
+ "serde_with 3.9.0",
+ "sha2 0.10.8",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-tvl-canister"
 version = "0.9.0"
 dependencies = [
@@ -12244,7 +12301,28 @@ dependencies = [
  "async-trait",
  "candid",
  "futures-util",
- "ic-agent",
+ "ic-agent 0.35.0",
+ "once_cell",
+ "semver",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.8",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "thiserror",
+ "time",
+ "tokio",
+]
+
+[[package]]
+name = "ic-utils"
+version = "0.36.0"
+source = "git+https://github.com/dsharifi/agent-rs?rev=3b6c0e994d94be9e38484f47b8560d613b746e46#3b6c0e994d94be9e38484f47b8560d613b746e46"
+dependencies = [
+ "async-trait",
+ "candid",
+ "futures-util",
+ "ic-agent 0.36.0",
  "once_cell",
  "semver",
  "serde",
@@ -12697,7 +12775,7 @@ name = "icp-rosetta-integration-tests"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-client",
  "ic-icrc1",
@@ -12726,7 +12804,7 @@ dependencies = [
  "candid",
  "ciborium",
  "hex",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-cbor",
  "ic-certification 2.5.0",
  "icrc-ledger-types",
@@ -12816,7 +12894,7 @@ dependencies = [
  "hyper-rustls 0.27.2",
  "hyper-util",
  "hyperlocal-next",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-http-certification",
  "ic-response-verification",
  "ic-utils 0.35.0",
@@ -15593,7 +15671,8 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-util",
- "ic-agent",
+ "ic-agent 0.35.0",
+ "ic-agent 0.36.0",
  "ic-boundary",
  "ic-canister-sandbox-backend-lib",
  "ic-cdk 0.13.2",
@@ -15618,6 +15697,7 @@ dependencies = [
  "ic-test-utilities-registry",
  "ic-types",
  "ic-utils 0.35.0",
+ "ic-utils 0.36.0",
  "ic-utils-thread",
  "ic-validator-ingress-message",
  "icx-proxy",
@@ -16992,7 +17072,7 @@ dependencies = [
  "anyhow",
  "candid",
  "hex",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-ed25519",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
@@ -17843,6 +17923,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_with"
+version = "3.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69cecfa94848272156ea67b2b1a53f20fc7bc638c4a46d2f8abde08f05f4b857"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "hex",
+ "indexmap 1.9.3",
+ "indexmap 2.2.6",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_with_macros 3.9.0",
+ "time",
+]
+
+[[package]]
 name = "serde_with_macros"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17859,6 +17957,18 @@ name = "serde_with_macros"
 version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
+dependencies = [
+ "darling 0.20.10",
+ "proc-macro2 1.0.86",
+ "quote 1.0.36",
+ "syn 2.0.71",
+]
+
+[[package]]
+name = "serde_with_macros"
+version = "3.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8fee4991ef4f274617a51ad4af30519438dacb2f56ac773b08a1922ff743350"
 dependencies = [
  "darling 0.20.10",
  "proc-macro2 1.0.86",
@@ -18572,7 +18682,7 @@ dependencies = [
  "candid",
  "colored",
  "futures",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-base-types",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
@@ -18885,7 +18995,7 @@ dependencies = [
  "humantime",
  "hyper 0.14.30",
  "hyper-rustls 0.24.2",
- "ic-agent",
+ "ic-agent 0.35.0",
  "ic-artifact-pool",
  "ic-backup",
  "ic-base-types",

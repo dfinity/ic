@@ -90,10 +90,7 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
 
 MACRO_DEPENDENCIES = []
 
-ALIASES = {
-    "@crate_index//:ic-agent-call-v3" : "ic-agent-call-v3",
-    "@crate_index//:ic-utils-call-v3" : "ic-utils-call-v3",
-}
+ALIASES = {}
 
 cargo_build_script(
     name = "build_script",
@@ -140,7 +137,10 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
-    aliases = ALIASES,
+    aliases = {
+        "@crate_index//:ic_agent_call_v3" : "ic_agent_call_v3",
+        "@crate_index//:ic_utils_call_v3" : "ic_utils_call_v3",
+    },
     data = [
         ":pocket-ic-server",
         "@ii_dev_canister//file",
@@ -150,7 +150,7 @@ rust_test(
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     tags = ["cpu:8"],
-    deps = TEST_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES + ["@crate_index//:ic_agent_call_v3", "@crate_index//:ic_utils_call_v3"],
 )
 
 rust_test(
