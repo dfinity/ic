@@ -14,8 +14,6 @@ on:
       - '**/Dockerfile.base'
       - '**/packages.common'
       - '**/packages.dev'
-  repository_dispatch:
-    types: [dependency-management-trivy-scan]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}

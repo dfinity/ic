@@ -58,10 +58,9 @@ class GithubApi:
 
     def run_workflow(self, workflow: GithubWorklow) -> bool:
         try:
-            # optional payload that can be used under github.event in the respective workflow
-            client_payload = {}
             repo = self.github.get_repo(workflow.value.project)
-            repo.create_repository_dispatch(workflow.value.dispatch_event, client_payload)
+            base_build_workflow = repo.get_workflow(workflow.value.workflow_name)
+            base_build_workflow.create_dispatch(ref="master")
             return True
         except GithubException:
             logging.error(f"Could not run workflow {workflow}.")
