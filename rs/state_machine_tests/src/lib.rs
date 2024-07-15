@@ -606,6 +606,7 @@ impl From<u64> for StateMachineNode {
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     public_key: ThresholdSigPublicKey,
     public_key_der: Vec<u8>,
     secret_key: SecretKeyBytes,
@@ -1476,6 +1477,7 @@ impl StateMachine {
 
         Self {
             subnet_id,
+            subnet_type,
             secret_key,
             public_key,
             public_key_der,
@@ -2827,6 +2829,11 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         assert_eq!(next_version, self.registry_client.get_latest_version());
+    }
+
+    /// Returns the subnet type of this state machine.
+    pub fn get_subnet_type(&self) -> SubnetType {
+        self.subnet_type
     }
 
     /// Returns the subnet id of this state machine.
