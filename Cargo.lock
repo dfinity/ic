@@ -713,33 +713,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "aws-lc-rs"
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8a47f2fb521b70c11ce7369a6c5fa4bd6af7e5d62ec06303875bafe7c6ba245"
-dependencies = [
- "aws-lc-sys",
- "mirai-annotations",
- "paste 1.0.14",
- "zeroize",
-]
-
-[[package]]
-name = "aws-lc-sys"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2927c7af777b460b7ccd95f8b67acd7b4c04ec8896bf0c8e80ba30523cffc057"
-dependencies = [
- "bindgen 0.69.4",
- "cc",
- "cmake",
- "dunce",
- "fs_extra",
- "libc",
- "paste 1.0.14",
-]
-
-[[package]]
 name = "axum"
 version = "0.6.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1083,15 +1056,12 @@ dependencies = [
  "itertools 0.12.0",
  "lazy_static",
  "lazycell",
- "log",
- "prettyplease",
  "proc-macro2 1.0.75",
  "quote 1.0.35",
  "regex",
  "rustc-hash 1.1.0",
  "shlex",
  "syn 2.0.48",
- "which",
 ]
 
 [[package]]
@@ -2224,15 +2194,6 @@ dependencies = [
  "thiserror",
  "url",
  "uuid",
-]
-
-[[package]]
-name = "cmake"
-version = "0.1.50"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -3443,12 +3404,6 @@ checksum = "dbaceec3c6e4211c79e7b1800fb9680527106beb2f9c51904a3210c03a448c74"
 dependencies = [
  "dtoa",
 ]
-
-[[package]]
-name = "dunce"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
 name = "dyn-clone"
@@ -4977,7 +4932,6 @@ dependencies = [
  "http 1.1.0",
  "hyper 1.4.1",
  "hyper-util",
- "log",
  "rustls 0.23.10",
  "rustls-native-certs 0.7.0",
  "rustls-pki-types",
@@ -14425,12 +14379,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d07cbe42e2a8dd41df582fb8e00fc24d920b5561cc301fcb6d14e2e0434b500f"
 
 [[package]]
-name = "mirai-annotations"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
-
-[[package]]
 name = "mockall"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17463,8 +17411,6 @@ version = "0.23.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05cff451f60db80f490f3c182b77c35260baace73209e9cdbbe526bfe3a4d402"
 dependencies = [
- "aws-lc-rs",
- "log",
  "once_cell",
  "ring 0.17.8",
  "rustls-pki-types",
@@ -17566,7 +17512,6 @@ version = "0.102.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff448f7e92e913c4b7d4c6d8e4540a1724b319b4152b8aef6d4cf8339712b33e"
 dependencies = [
- "aws-lc-rs",
  "ring 0.17.8",
  "rustls-pki-types",
  "untrusted 0.9.0",

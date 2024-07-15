@@ -488,11 +488,11 @@ hex = { version = "0.4.3", features = ["serde"] }
 http = "1.1.0"
 http-body = "1.0.0"
 http-body-util = "0.1.0"
-hyper = { version = "1.4.0", features = ["full"] }
+hyper = { version = "1.4.1", features = ["full"] }
 hyper-util = { version = "0.1.6", features = ["full"] }
 hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-socks2 = { version = "0.8.0", default-features = false, features = [
-    "rustls"
+    "rustls",
 ] }
 ic-agent = { version = "0.35.0", features = ["hyper"] }
 ic-cdk = "0.13.2"
