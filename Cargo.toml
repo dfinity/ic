@@ -503,6 +503,7 @@ ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.5"
 ic-utils = { version = "0.35.0", features = ["raw"] }
+ic-utils-call-v3 = { version = "0.35.0", features = ["raw"] }
 ic-btc-interface = "0.2.0"
 ic-btc-validation = "0.1.0"
 ic-btc-test-utils = "0.1.0"

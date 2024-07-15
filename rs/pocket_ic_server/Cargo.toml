@@ -20,7 +20,9 @@ serde = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-agent = { workspace = true }
+ic-agent-call-v3 = { workspace = true }
 ic-utils = { workspace = true }
+ic-utils-call-v3 = { workspace = true }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-config = { path = "../config" }

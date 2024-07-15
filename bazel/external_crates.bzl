@@ -616,6 +616,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.35.0",
                 features = ["raw"],
             ),
+            "ic-utils-call-v3": crate.spec(
+                package = "ic-utils",
+                git = "https://github.com/dsharifi/agent-rs",
+                features = ["raw"],
+                rev = IC_AGENT_CALL_V3_REV,
+            ),
             "ic-wasm": crate.spec(
                 version = "^0.7.1",
                 features = [

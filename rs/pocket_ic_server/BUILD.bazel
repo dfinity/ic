@@ -90,7 +90,10 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
 
 MACRO_DEPENDENCIES = []
 
-ALIASES = {}
+ALIASES = {
+    "@crate_index//:ic-agent-call-v3" : "ic-agent-call-v3",
+    "@crate_index//:ic-utils-call-v3" : "ic-utils-call-v3",
+}
 
 cargo_build_script(
     name = "build_script",
@@ -137,6 +140,7 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
+    aliases = ALIASES,
     data = [
         ":pocket-ic-server",
         "@ii_dev_canister//file",

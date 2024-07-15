@@ -3000,7 +3000,8 @@ dependencies = [
  "ic-response-verification",
  "ic-stable-structures",
  "ic-test-state-machine-client",
- "ic-utils",
+ "ic-utils 0.35.0",
+ "ic-utils 0.36.0",
  "ic-wasm",
  "ic-xrc-types",
  "ic0 0.18.11",
@@ -5135,6 +5136,27 @@ dependencies = [
  "candid",
  "futures-util",
  "ic-agent 0.35.0",
+ "once_cell",
+ "semver",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.8",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "thiserror",
+ "time",
+ "tokio",
+]
+
+[[package]]
+name = "ic-utils"
+version = "0.36.0"
+source = "git+https://github.com/dsharifi/agent-rs?rev=3b6c0e994d94be9e38484f47b8560d613b746e46#3b6c0e994d94be9e38484f47b8560d613b746e46"
+dependencies = [
+ "async-trait",
+ "candid",
+ "futures-util",
+ "ic-agent 0.36.0",
  "once_cell",
  "semver",
  "serde",

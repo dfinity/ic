@@ -1,5 +1,5 @@
 {
-  "checksum": "3b00db6019a796ab27d75b618e4d270c8892a4f64e09f3a77b9979bb38dcc556",
+  "checksum": "27c9b56ef5840a257865a32ae6247aad5029ea5ac59a9cd99d834a9cf6f86906",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17417,6 +17417,11 @@
               "target": "ic_utils"
             },
             {
+              "id": "ic-utils 0.36.0",
+              "target": "ic_utils",
+              "alias": "ic_utils_call_v3"
+            },
+            {
               "id": "ic-wasm 0.7.1",
               "target": "ic_wasm"
             },
@@ -29355,6 +29360,119 @@
           "selects": {}
         },
         "version": "0.35.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-utils 0.36.0": {
+      "name": "ic-utils",
+      "version": "0.36.0",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dsharifi/agent-rs",
+          "commitish": {
+            "Rev": "3b6c0e994d94be9e38484f47b8560d613b746e46"
+          },
+          "strip_prefix": "ic-utils"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_utils",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_utils",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "raw"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "ic-agent 0.36.0",
+              "target": "ic_agent"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.14",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "strum 0.24.1",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
+            },
+            {
+              "id": "tokio 1.38.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            },
+            {
+              "id": "strum_macros 0.24.3",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.36.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -77299,6 +77417,7 @@
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.35.0",
+    "ic-utils 0.36.0",
     "ic-wasm 0.7.1",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
