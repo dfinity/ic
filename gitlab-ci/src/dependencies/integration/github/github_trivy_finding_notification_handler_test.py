@@ -1,8 +1,8 @@
 from copy import deepcopy
 from unittest.mock import Mock
 
-from integration.github.github_workflow_config import GithubWorklow
 from integration.github.github_trivy_finding_notification_handler import GithubTrivyFindingNotificationHandler
+from integration.github.github_workflow_config import GithubWorklow
 from model.dependency import Dependency
 from model.finding import Finding
 from model.security_risk import SecurityRisk
