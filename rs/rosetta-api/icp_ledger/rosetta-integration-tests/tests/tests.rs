@@ -696,7 +696,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
         .unwrap()]
     );
 
-    // chec block 2
+    // check block 2
     let block2 = env
         .rosetta
         .block_or_panic(PartialBlockIdentifier {
