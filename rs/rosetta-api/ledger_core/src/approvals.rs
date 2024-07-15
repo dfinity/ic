@@ -63,14 +63,6 @@ pub trait AllowancesData {
     #[allow(clippy::type_complexity)]
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
-    #[allow(clippy::type_complexity)]
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
-
-    #[allow(clippy::type_complexity)]
-    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
-
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 
     fn len_allowances(&self) -> usize;
@@ -168,16 +160,6 @@ where
 
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         self.expiration_queue.pop_first()
-    }
-
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        self.allowances.pop_first()
-    }
-
-    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        self.arrival_queue.pop_first()
     }
 
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
