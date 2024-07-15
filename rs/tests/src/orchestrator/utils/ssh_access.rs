@@ -1,5 +1,5 @@
 /// SSH Key Utilities
-use crate::{
+use ic_system_test_driver::{
     nns::{
         get_governance_canister, submit_external_proposal_with_test_id,
         vote_execute_proposal_assert_executed, vote_execute_proposal_assert_failed,

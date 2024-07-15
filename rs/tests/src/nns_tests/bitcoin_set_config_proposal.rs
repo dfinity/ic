@@ -1,15 +1,6 @@
 use slog::info;
 
 use crate::ckbtc::lib::install_bitcoin_canister_with_network;
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::{SshKeyGen, TestEnv};
-use crate::driver::test_env_api::{
-    retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-};
-use crate::nns::{get_governance_canister, vote_execute_proposal_assert_failed};
-use crate::retry_with_msg_async;
-use crate::util::{block_on, runtime_from_url};
 use candid::{Decode, Encode};
 use canister_test::Canister;
 use ic_agent::Agent;
@@ -21,6 +12,14 @@ use ic_nns_test_utils::governance::{
     bitcoin_set_config_by_proposal, invalid_bitcoin_set_config_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnv};
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
+use ic_system_test_driver::nns::{get_governance_canister, vote_execute_proposal_assert_failed};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use std::str::FromStr;
 
 pub fn config(env: TestEnv) {
@@ -104,7 +103,7 @@ pub fn test(env: TestEnv) {
         // Check that the config has been updated per the proposal.
         block_on(async {
             // We retry several times in case the proposal took some time to be executed.
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 "check if the bitcoin config has been updated per proposal",
                 &logger,
                 READY_WAIT_TIMEOUT,

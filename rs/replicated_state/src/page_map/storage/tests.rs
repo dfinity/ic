@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "fuzzing_code", allow(dead_code, unused_imports))]
 use std::{
     collections::BTreeMap,
     fs::File,

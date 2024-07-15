@@ -18,6 +18,7 @@ impl FromStr for ParsedSnsNeuron {
 
 #[derive(Debug, Parser)]
 pub struct NeuronIdToCandidSubaccountArgs {
+    /// The SNS neuron ID to be converted to a candid subaccount blob.
     pub neuron_id: ParsedSnsNeuron,
 
     /// If true, print an escaped version of the candid, useful for pasting into

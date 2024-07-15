@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::tecdsa::tecdsa_signature_test::{
     config, test_threshold_ecdsa_signature_fails_without_cycles,
 };

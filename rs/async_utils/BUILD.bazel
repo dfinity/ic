@@ -8,13 +8,17 @@ rust_library(
     crate_name = "ic_async_utils",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
+        "@crate_index//:anyhow",
         "@crate_index//:async-stream",
+        "@crate_index//:axum",
         "@crate_index//:byte-unit",
         "@crate_index//:bytes",
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:hyper_0_14_27",
         "@crate_index//:slog",
+        "@crate_index//:sync_wrapper",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
@@ -25,6 +29,7 @@ rust_test(
     name = "async_utils_test",
     crate = ":async_utils",
     deps = [
+        # Keep sorted.
         "@crate_index//:rand",
     ],
 )

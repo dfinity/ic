@@ -795,8 +795,7 @@ pub fn make_genesis_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_utils::complement_state_manager_with_remote_dkg_requests;
-    use super::*;
+    use super::{super::test_utils::complement_state_manager_with_remote_dkg_requests, *};
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies,

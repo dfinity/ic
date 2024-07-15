@@ -631,6 +631,64 @@ fn test_get_neuron_ids_readable_by_caller() {
 }
 
 #[test]
+fn test_get_non_empty_neuron_ids_readable_by_caller() {
+    // Prepare the neurons.
+    let controller = PrincipalId::new_user_test_id(1);
+    let hot_key = PrincipalId::new_user_test_id(2);
+    let neuron_builder = |i| {
+        simple_neuron_builder(i)
+            .with_controller(controller)
+            .with_hot_keys(vec![hot_key])
+    };
+    let neuron_empty = neuron_builder(1).build();
+    let neuron_empty_with_fees = neuron_builder(2)
+        .with_cached_neuron_stake_e8s(1)
+        .with_neuron_fees_e8s(1)
+        .build();
+    let neuron_with_stake = neuron_builder(3).with_cached_neuron_stake_e8s(1).build();
+    let neuron_with_maturity = neuron_builder(4).with_maturity_e8s_equivalent(1).build();
+    let neuron_with_staked_maturity = neuron_builder(5)
+        .with_staked_maturity_e8s_equivalent(1)
+        .build();
+    let neuron_store = NeuronStore::new(btreemap! {
+        1 => neuron_empty,
+        2 => neuron_empty_with_fees,
+        3 => neuron_with_stake,
+        4 => neuron_with_maturity,
+        5 => neuron_with_staked_maturity,
+    });
+
+    // Verify that the non-empty neurons readable by the controller and hot key are neurons 3, 4 and
+    // 5, while a principal that's not controller or hot key can't read any.
+    let neuron_id_vec_to_u64_hash_set = |neuron_ids: Vec<NeuronId>| -> HashSet<u64> {
+        neuron_ids
+            .into_iter()
+            .map(|neuron_id| neuron_id.id)
+            .collect()
+    };
+
+    assert_eq!(
+        neuron_id_vec_to_u64_hash_set(
+            neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller)
+        ),
+        hashset! { 3, 4, 5 }
+    );
+    assert_eq!(
+        neuron_id_vec_to_u64_hash_set(
+            neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key)
+        ),
+        hashset! { 3, 4, 5 }
+    );
+    assert_eq!(
+        neuron_id_vec_to_u64_hash_set(
+            neuron_store
+                .get_non_empty_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(3))
+        ),
+        hashset! {}
+    );
+}
+
+#[test]
 fn test_get_full_neuron() {
     let principal_id = PrincipalId::new_user_test_id(42);
     let neuron_controlled = simple_neuron_builder(1)

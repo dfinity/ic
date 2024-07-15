@@ -1,4 +1,4 @@
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     log_events,
     report::{SystemGroupSummary, TaskReport},
     test_env_api::FarmBaseUrl,

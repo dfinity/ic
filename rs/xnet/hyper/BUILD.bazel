@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_xnet_hyper",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/tls_interfaces",
         "//rs/crypto/utils/tls",
         "//rs/interfaces/registry",
@@ -15,6 +16,6 @@ rust_library(
         "@crate_index//:hyper_0_14_27",
         "@crate_index//:socket2",
         "@crate_index//:tokio",
-        "@crate_index//:tokio_rustls_0_24_1",
+        "@crate_index//:tokio-rustls",
     ],
 )

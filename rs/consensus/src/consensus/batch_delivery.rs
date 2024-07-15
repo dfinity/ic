@@ -24,14 +24,16 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
-use ic_types::{batch::BatchSummary, crypto::threshold_sig::ThresholdSigPublicKey};
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse},
+    batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
         idkg::{self, CompletedSignature},
         Block,
     },
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    crypto::threshold_sig::{
+        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        ThresholdSigPublicKey,
+    },
     messages::{CallbackId, Payload, RejectContext},
     Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
 };
@@ -432,10 +434,10 @@ fn generate_dkg_response_payload(
 /// Creates responses to `SignWithECDSA` system calls with the computed
 /// signature.
 pub fn generate_responses_to_sign_with_ecdsa_calls(
-    ecdsa_payload: &idkg::EcdsaPayload,
+    idkg_payload: &idkg::IDkgPayload,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
-    for completed in ecdsa_payload.signature_agreements.values() {
+    for completed in idkg_payload.signature_agreements.values() {
         if let CompletedSignature::Unreported(response) = completed {
             consensus_responses.push(response.clone());
         }
@@ -443,13 +445,13 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
     consensus_responses
 }
 
-/// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
+/// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
-    ecdsa_payload: &idkg::EcdsaPayload,
+    idkg_payload: &idkg::IDkgPayload,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
-    for agreement in ecdsa_payload.xnet_reshare_agreements.values() {
+    for agreement in idkg_payload.xnet_reshare_agreements.values() {
         if let idkg::CompletedReshareRequest::Unreported(response) = agreement {
             consensus_responses.push(response.clone());
         }

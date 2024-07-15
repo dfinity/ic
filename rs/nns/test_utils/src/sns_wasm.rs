@@ -6,17 +6,14 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{
-        manage_neuron::{Command, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-        ProposalInfo, ProposalStatus,
-    },
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    ProposalInfo, ProposalStatus,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{

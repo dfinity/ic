@@ -203,7 +203,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         &self,
         params: &IDkgTranscriptParams,
     ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -242,7 +242,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -280,7 +280,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -319,7 +319,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         params: &IDkgTranscriptParams,
         initial_dealings: &InitialIDkgDealings,
     ) -> Result<(), IDkgVerifyInitialDealingsError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -357,7 +357,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         params: &IDkgTranscriptParams,
         dealings: &BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -405,7 +405,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         params: &IDkgTranscriptParams,
         transcript: &IDkgTranscript,
     ) -> Result<(), IDkgVerifyTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -449,7 +449,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         &self,
         transcript: &IDkgTranscript,
     ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -527,7 +527,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyComplaintError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -574,7 +574,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -625,7 +625,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         opening: &IDkgOpening,
         complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyOpeningError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -667,7 +667,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         transcript: &IDkgTranscript,
         openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
@@ -712,7 +712,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         &self,
         active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainKeysError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",

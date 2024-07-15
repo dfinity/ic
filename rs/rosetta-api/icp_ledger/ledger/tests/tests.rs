@@ -13,9 +13,9 @@ use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
     GetEncodedBlocksResult, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp,
-    UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -59,6 +59,10 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterI
         .accounts_overflow_trim_quantity(args.accounts_overflow_trim_quantity)
         .build()
         .unwrap()
+}
+
+fn encode_upgrade_args() -> LedgerCanisterUpgradePayload {
+    LedgerCanisterUpgradePayload(LedgerCanisterPayload::Upgrade(None))
 }
 
 fn query_blocks(
@@ -314,8 +318,13 @@ fn check_memo() {
     }
 
     for memo_size_bytes in 33..40 {
-        assert_eq!(Err(UserError::new(ErrorCode::CanisterCalledTrap, "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: the memo field is too large")),
-            mint_with_memo(memo_size_bytes));
+        mint_with_memo(memo_size_bytes)
+            .unwrap_err()
+            .assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
+                `ic0.trap` with message: the memo field is too large",
+            );
     }
 }
 
@@ -1325,7 +1334,7 @@ fn test_icrc21_standard() {
 }
 
 mod metrics {
-    use crate::{encode_init_args, ledger_wasm};
+    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -1350,6 +1359,15 @@ mod metrics {
             ledger_wasm(),
             encode_init_args,
             LedgerSuiteType::ICP,
+        );
+    }
+
+    #[test]
+    fn should_set_ledger_upgrade_instructions_consumed_metric() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
+            ledger_wasm(),
+            encode_init_args,
+            encode_upgrade_args,
         );
     }
 }

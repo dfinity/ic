@@ -2348,6 +2348,49 @@ fn ic0_call_perform_enqueues_request() {
 }
 
 #[test]
+fn wasm64_ic0_call_perform_enqueues_request() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i64 i64)
+                    (param $method_name_src i64)    (param $method_name_len i64)
+                    (param $reply_fun i64)          (param $reply_env i64)
+                    (param $reject_fun i64)         (param $reject_env i64)
+                )
+            )
+            (import "ic0" "call_data_append"
+                (func $ic0_call_data_append (param $src i64) (param $size i64))
+            )
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i64.const 100) (i64.const 10)  ;; callee canister id = 777
+                    (i64.const 0) (i64.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i64.const 11) (i64.const 22)   ;; fictive on_reply closure
+                    (i64.const 33) (i64.const 44)   ;; fictive on_reject closure
+                )
+                (call $ic0_call_data_append
+                    (i64.const 19) (i64.const 3)    ;; refers to "XYZ" on the heap
+                )
+                (call $ic0_call_perform)
+                drop
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "some_remote_method XYZ")
+            (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+    let canister_state = test.canister_state(canister_id);
+    assert_eq!(1, canister_state.system_state.queues().output_queues_len());
+}
+
+#[test]
 fn ic0_trap_works() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -2361,10 +2404,12 @@ fn ic0_trap_works() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
-    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
-    assert_eq!(
-        format!("Error from Canister {canister_id}: Canister called `ic0.trap` with message: Hi!"),
-        err.description()
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        &format!(
+            "Error from Canister {canister_id}: Canister called `ic0.trap` \
+        with message: Hi!"
+        ),
     );
 }
 
@@ -2803,6 +2848,63 @@ fn ic0_msg_cycles_available_works_for_calls() {
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
+}
+
+#[test]
+fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_cycles_available128" (func $msg_cycles_available128 (param i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+              (func $ic0_msg_reply_data_append (param i64) (param i64)))
+            (func (export "canister_update test")
+                (call $msg_cycles_available128 (i64.const 0))
+                (call $ic0_msg_reply_data_append (i64.const 0) (i64.const 16))
+                (call $msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+    let callee_id = test.canister_from_wat(wat).unwrap();
+    let caller_id = test.universal_canister().unwrap();
+    let caller = wasm()
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+
+    let x = 50u128;
+    let x = Vec::from(x.to_le_bytes());
+    assert_eq!(WasmResult::Reply(x), result);
+}
+
+#[test]
+fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_cycles_accept128"
+              (func $ic0_msg_cycles_accept128 (param i64) (param i64) (param i64)))
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (import "ic0" "msg_reply_data_append"
+              (func $ic0_msg_reply_data_append (param i64) (param i64)))
+            (func (export "canister_update test")
+                (call $ic0_msg_cycles_accept128 (i64.const 0) (i64.const 22) (i64.const 0))
+                (call $ic0_msg_reply_data_append (i64.const 0) (i64.const 16))
+                (call $ic0_msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+    let callee_id = test.canister_from_wat(wat).unwrap();
+    let caller_id = test.universal_canister().unwrap();
+    let caller = wasm()
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+
+    let x = 22u128;
+    let x = Vec::from(x.to_le_bytes());
+    assert_eq!(WasmResult::Reply(x), result);
 }
 
 #[test]
@@ -4765,10 +4867,14 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             - a_to_b_accepted
     );
 
+    // Call canister b to get the "canister contains no Wasm module" without hard-coding it.
+    let (ingress_id, _) = test.ingress_raw(b_id, "foo", vec![]);
+    test.induct_messages();
+    test.execute_all();
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
     // The reject message from method #2 of B to method #1.
-    let reject_message_b_2_to_1 = format!(
-        "IC0537: Error from canister {b_id}: Attempted to execute a message, but the canister contains no Wasm module.",
-    );
+    let reject_message_b_2_to_1 = format!("IC0537: {}", result.description(),);
 
     // Canister B gets the cycles it accepted from A.
     assert_eq!(
@@ -5680,51 +5786,45 @@ fn memory_out_of_bounds_accesses() {
     assert_empty_reply(result);
 
     let err = test.ingress(canister_id, "read_heap1", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds"),
     );
 
     let err = test
         .ingress(canister_id, "write_heap1", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds"),
     );
 
     let err = test.ingress(canister_id, "read_heap2", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds"),
     );
 
     let err = test
         .ingress(canister_id, "write_heap2", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds"),
     );
 
     let err = test.ingress(canister_id, "read_heap3", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds"),
     );
 
     let err = test
         .ingress(canister_id, "write_heap3", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: heap out of bounds"),
     );
 
     let result = test.ingress(canister_id, "read_stable0", vec![]);
@@ -5736,54 +5836,60 @@ fn memory_out_of_bounds_accesses() {
     let err = test
         .ingress(canister_id, "read_stable1", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: stable memory out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {canister_id}: Canister trapped: stable memory out of bounds"
+        ),
     );
 
     let err = test
         .ingress(canister_id, "write_stable1", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: stable memory out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {canister_id}: Canister trapped: stable memory out of bounds"
+        ),
     );
 
     let err = test
         .ingress(canister_id, "read_stable2", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: stable memory out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {canister_id}: Canister trapped: stable memory out of bounds"
+        ),
     );
 
     let err = test
         .ingress(canister_id, "write_stable2", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: stable memory out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {canister_id}: Canister trapped: stable memory out of bounds"
+        ),
     );
 
     let err = test
         .ingress(canister_id, "read_stable3", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: stable memory out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {canister_id}: Canister trapped: stable memory out of bounds"
+        ),
     );
     let err = test
         .ingress(canister_id, "write_stable3", vec![])
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: stable memory out of bounds")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {canister_id}: Canister trapped: stable memory out of bounds"
+        ),
     );
 }
 
@@ -5844,31 +5950,27 @@ fn division_by_zero() {
     }
 
     let err = test.ingress(canister_id, "div_u_i32", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: integer division by 0")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: integer division by 0"),
     );
 
     let err = test.ingress(canister_id, "div_s_i32", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: integer division by 0")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: integer division by 0"),
     );
 
     let err = test.ingress(canister_id, "div_u_i64", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: integer division by 0")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: integer division by 0"),
     );
 
     let err = test.ingress(canister_id, "div_s_i64", vec![]).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
-    assert_eq!(
-        err.description(),
-        format!("Error from Canister {canister_id}: Canister trapped: integer division by 0")
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!("Error from Canister {canister_id}: Canister trapped: integer division by 0"),
     );
 }
 
@@ -6332,7 +6434,7 @@ fn call_perform_checks_freezing_threshold_in_update() {
         .with_initial_canister_cycles(1_000_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_500_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_500_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -6357,7 +6459,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reply() {
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_200_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -6391,7 +6493,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reject() {
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_200_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(

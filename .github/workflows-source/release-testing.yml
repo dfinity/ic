@@ -1,7 +1,10 @@
 name: Release Testing
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI Main"]
+    types:
+      - completed
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
@@ -16,6 +19,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
@@ -27,16 +31,23 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+    image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+    with:
+      ref: ${{ github.event.workflow_run.head_branch }}
   before-script: &before-script
     name: Before script
     id: before-script
@@ -44,9 +55,20 @@ anchors:
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
 
 jobs:
+  ci-main-failure:
+    name: Check CI Main Failure
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - run: |
+          echo 'CI Main workflow failed'
+          echo "CI Main URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
+          exit 1
+
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     <<: *dind-large-setup
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -64,6 +86,7 @@ jobs:
     name: Bazel System Test Staging
     continue-on-error: True
     <<: *dind-large-setup
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -81,6 +104,7 @@ jobs:
     name: Bazel System Test Hotfix
     <<: *dind-large-setup
     timeout-minutes: 90
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script

@@ -10,6 +10,7 @@ py_library(
     name = "dfinity_gitlab_config",
     srcs = ["dfinity_gitlab_config.py"],
     deps = [
+        # Keep sorted.
         ":utils",
         requirement("gitpython"),
         requirement("python-gitlab"),
@@ -29,6 +30,7 @@ py_test(
     imports = ["../../src/"],  # this specifies the PYTHONPATH
     main = "main.py",
     deps = [
+        # Keep sorted.
         ":dfinity_gitlab_config",
     ],
 )
@@ -45,6 +47,7 @@ py_test(
     imports = ["../../src/"],
     main = "main.py",
     deps = [
+        # Keep sorted.
         ":dfinity_gitlab_config",
     ],
 )
@@ -67,6 +70,7 @@ py_test(
         "requires-network",
     ],
     deps = [
+        # Keep sorted.
         ":dfinity_gitlab_config",
     ],
 )

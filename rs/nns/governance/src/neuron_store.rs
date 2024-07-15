@@ -34,7 +34,7 @@ use std::{
 };
 
 pub mod metrics;
-pub use metrics::NeuronMetrics;
+pub(crate) use metrics::NeuronMetrics;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
@@ -913,6 +913,26 @@ impl NeuronStore {
                 .into_iter()
                 .collect()
         })
+    }
+
+    /// Returns non-empty neuron ids readable by the caller. The definition of "empty" is that the
+    /// neuron doesn't have any stake, maturity, or staked maturity.
+    pub fn get_non_empty_neuron_ids_readable_by_caller(
+        &self,
+        caller: PrincipalId,
+    ) -> Vec<NeuronId> {
+        let is_non_empty = |neuron_id: &NeuronId| {
+            // If the neuron does not exist on the heap, then it must be inactive and empty.
+            self.heap_neurons
+                .get(&neuron_id.id)
+                .map(|neuron| neuron.is_funded())
+                .unwrap_or(false)
+        };
+
+        self.get_neuron_ids_readable_by_caller(caller)
+            .into_iter()
+            .filter(is_non_empty)
+            .collect()
     }
 
     // Returns whether the known neuron name already exists.

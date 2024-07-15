@@ -1,6 +1,6 @@
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use rustls::{sign::CertifiedKey, Certificate};
+use rustls::{pki_types::CertificateDer, sign::CertifiedKey};
 use std::sync::Arc;
 
 mod cert_resolver;
@@ -14,9 +14,8 @@ fn certified_key(
     csp_server_signing_key: CspServerEd25519SigningKey,
 ) -> CertifiedKey {
     CertifiedKey {
-        cert: vec![Certificate(self_tls_cert.as_der().clone())],
+        cert: vec![CertificateDer::from(self_tls_cert.as_der().clone())],
         key: Arc::new(csp_server_signing_key),
         ocsp: None,
-        sct_list: None,
     }
 }

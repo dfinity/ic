@@ -265,39 +265,39 @@ fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
     (module
       (import "ic0" "msg_reply" (func $msg_reply))
       (import "ic0" "msg_reply_data_append"
-        (func $msg_reply_data_append (param i32) (param i32)))
+        (func $msg_reply_data_append (param i64) (param i64)))
       (import "ic0" "msg_arg_data_copy"
-        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+        (func $ic0_msg_arg_data_copy (param i64) (param i64) (param i64)))
       (import "ic0" "msg_arg_data_size"
-        (func $ic0_msg_arg_data_size (result i32)))
+        (func $ic0_msg_arg_data_size (result i64)))
       (import "ic0" "msg_caller_copy"
-        (func $ic0_msg_caller_copy (param i32) (param i32) (param i32)))
+        (func $ic0_msg_caller_copy (param i64) (param i64) (param i64)))
       (import "ic0" "msg_caller_size"
-        (func $ic0_msg_caller_size (result i32)))
+        (func $ic0_msg_caller_size (result i64)))
       (import "ic0" "canister_self_copy"
-        (func $ic0_canister_self_copy (param i32) (param i32) (param i32)))
+        (func $ic0_canister_self_copy (param i64) (param i64) (param i64)))
       (import "ic0" "canister_self_size"
-        (func $ic0_canister_self_size (result i32)))
+        (func $ic0_canister_self_size (result i64)))
 
       (import "ic0" "canister_cycle_balance128"
-        (func $ic0_canister_cycle_balance128 (param i32)))
+        (func $ic0_canister_cycle_balance128 (param i64)))
 
-      (import "ic0" "stable_grow"
-        (func $ic0_stable_grow (param $pages i32) (result i32)))
+      (import "ic0" "stable64_grow"
+        (func $ic0_stable64_grow (param $pages i64) (result i64)))
       (import "ic0" "stable64_read"
         (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
       (import "ic0" "stable64_write"
         (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
       (func $touch_heap_with_api_calls
-        (call $ic0_msg_caller_copy (i32.const 4096) (i32.const 0) (call $ic0_msg_caller_size))
-        (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
-        (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
-        (call $ic0_canister_cycle_balance128 (i32.const 36864))
+        (call $ic0_msg_caller_copy (i64.const 4096) (i64.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i64.const 12288) (i64.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i64.const 20480) (i64.const 0) (call $ic0_canister_self_size))
+        (call $ic0_canister_cycle_balance128 (i64.const 36864))
 
         (; Write some data to page 10 using stable_read, by first copying 4
         bytes from the second page to stable memory, then copying back ;)
-        (drop (call $ic0_stable_grow (i32.const 1)))
+        (drop (call $ic0_stable64_grow (i64.const 1)))
         (call $ic0_stable64_write (i64.const 0) (i64.const 4096) (i64.const 4))
         (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
       )

@@ -169,32 +169,32 @@
 //!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
 //!   signatures with the signing request and the 4-tuple.
 
-use crate::consensus::metrics::{
+use crate::ecdsa::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
+use crate::ecdsa::metrics::{
     timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
     CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
 };
-use crate::ecdsa::complaints::{EcdsaComplaintHandler, EcdsaComplaintHandlerImpl};
-use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
-use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
-use crate::ecdsa::utils::EcdsaBlockReaderImpl;
+use crate::ecdsa::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
+use crate::ecdsa::signer::{ThresholdSigner, ThresholdSignerImpl};
+use crate::ecdsa::utils::IDkgBlockReaderImpl;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
-    ecdsa::{EcdsaChangeSet, EcdsaPool},
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    ecdsa::{IDkgChangeSet, IDkgPool},
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_types::consensus::idkg::IDkgMessage;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
-    artifact::{EcdsaMessageId, Priority, PriorityFn},
-    artifact_kind::EcdsaArtifact,
-    consensus::idkg::{EcdsaBlockReader, EcdsaMessageAttribute, RequestId},
+    artifact::IDkgMessageId,
+    consensus::idkg::{IDkgBlockReader, IDkgMessageAttribute, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
@@ -208,6 +208,7 @@ use std::time::{Duration, Instant};
 pub(crate) mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
 pub mod malicious_pre_signer;
+pub(crate) mod metrics;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
@@ -221,9 +222,9 @@ pub(crate) use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,
 };
 pub(crate) use payload_verifier::{
-    validate_payload, EcdsaPayloadValidationFailure, InvalidEcdsaPayloadReason,
+    validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
 };
-pub use stats::EcdsaStatsImpl;
+pub use stats::IDkgStatsImpl;
 
 use self::utils::get_context_request_id;
 
@@ -237,9 +238,9 @@ pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(
 /// ECDSA payloads.
 pub struct EcdsaImpl {
     /// The Pre-Signer subcomponent
-    pub pre_signer: Box<EcdsaPreSignerImpl>,
-    signer: Box<dyn EcdsaSigner>,
-    complaint_handler: Box<dyn EcdsaComplaintHandler>,
+    pub pre_signer: Box<IDkgPreSignerImpl>,
+    signer: Box<dyn ThresholdSigner>,
+    complaint_handler: Box<dyn IDkgComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
@@ -261,14 +262,14 @@ impl EcdsaImpl {
         logger: ReplicaLogger,
         malicious_flags: MaliciousFlags,
     ) -> Self {
-        let pre_signer = Box::new(EcdsaPreSignerImpl::new(
+        let pre_signer = Box::new(IDkgPreSignerImpl::new(
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
-        let signer = Box::new(EcdsaSignerImpl::new(
+        let signer = Box::new(ThresholdSignerImpl::new(
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
@@ -276,7 +277,7 @@ impl EcdsaImpl {
             metrics_registry.clone(),
             logger.clone(),
         ));
-        let complaint_handler = Box::new(EcdsaComplaintHandlerImpl::new(
+        let complaint_handler = Box::new(IDkgComplaintHandlerImpl::new(
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
@@ -298,7 +299,7 @@ impl EcdsaImpl {
     }
 
     /// Purges the transcripts that are no longer active.
-    fn purge_inactive_transcripts(&self, block_reader: &dyn EcdsaBlockReader) {
+    fn purge_inactive_transcripts(&self, block_reader: &dyn IDkgBlockReader) {
         let mut active_transcripts = HashSet::new();
         let mut error_count = 0;
         for transcript_ref in block_reader.active_transcripts() {
@@ -368,17 +369,17 @@ impl EcdsaImpl {
     }
 }
 
-impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
-    type ChangeSet = EcdsaChangeSet;
+impl<T: IDkgPool> ChangeSetProducer<T> for EcdsaImpl {
+    type ChangeSet = IDkgChangeSet;
 
-    fn on_state_change(&self, ecdsa_pool: &T) -> EcdsaChangeSet {
+    fn on_state_change(&self, idkg_pool: &T) -> IDkgChangeSet {
         let metrics = self.metrics.clone();
         let pre_signer = || {
             let changeset = timed_call(
                 "pre_signer",
                 || {
                     self.pre_signer
-                        .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
+                        .on_state_change(idkg_pool, self.complaint_handler.as_transcript_loader())
                 },
                 &metrics.on_state_change_duration,
             );
@@ -397,7 +398,7 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
                 "signer",
                 || {
                     self.signer
-                        .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
+                        .on_state_change(idkg_pool, self.complaint_handler.as_transcript_loader())
                 },
                 &metrics.on_state_change_duration,
             )
@@ -405,17 +406,17 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
         let complaint_handler = || {
             timed_call(
                 "complaint_handler",
-                || self.complaint_handler.on_state_change(ecdsa_pool),
+                || self.complaint_handler.on_state_change(idkg_pool),
                 &metrics.on_state_change_duration,
             )
         };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] = [&pre_signer, &signer, &complaint_handler];
+        let calls: [&'_ dyn Fn() -> IDkgChangeSet; 3] = [&pre_signer, &signer, &complaint_handler];
         let ret = self.schedule.call_next(&calls);
 
         if self.last_transcript_purge_ts.borrow().elapsed() >= INACTIVE_TRANSCRIPT_PURGE_SECS {
             let block_reader =
-                EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+                IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
             timed_call(
                 "purge_inactive_transcripts",
                 || self.purge_inactive_transcripts(&block_reader),
@@ -464,7 +465,7 @@ struct EcdsaPriorityFnArgs {
 
 impl EcdsaPriorityFnArgs {
     fn new(
-        block_reader: &dyn EcdsaBlockReader,
+        block_reader: &dyn IDkgBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
     ) -> Self {
         let mut requested_transcripts = BTreeSet::new();
@@ -500,30 +501,30 @@ impl EcdsaPriorityFnArgs {
     }
 }
 
-impl<Pool: EcdsaPool> PriorityFnAndFilterProducer<EcdsaArtifact, Pool> for EcdsaGossipImpl {
+impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for EcdsaGossipImpl {
     fn get_priority_function(
         &self,
-        _ecdsa_pool: &Pool,
-    ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
-        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+        _idkg_pool: &Pool,
+    ) -> PriorityFn<IDkgMessageId, IDkgMessageAttribute> {
+        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = EcdsaPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
         let metrics = self.metrics.clone();
-        Box::new(move |_, attr: &'_ EcdsaMessageAttribute| {
+        Box::new(move |_, attr: &'_ IDkgMessageAttribute| {
             compute_priority(attr, subnet_id, &args, &metrics)
         })
     }
 }
 
 fn compute_priority(
-    attr: &EcdsaMessageAttribute,
+    attr: &IDkgMessageAttribute,
     subnet_id: SubnetId,
     args: &EcdsaPriorityFnArgs,
     metrics: &EcdsaGossipMetrics,
 ) -> Priority {
     match attr {
-        EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id)
-        | EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id) => {
+        IDkgMessageAttribute::Dealing(transcript_id)
+        | IDkgMessageAttribute::DealingSupport(transcript_id) => {
             // For xnet dealings(target side), always fetch the artifacts,
             // as the source_height from different subnet cannot be compared
             // anyways.
@@ -548,8 +549,8 @@ fn compute_priority(
                 Priority::Stash
             }
         }
-        EcdsaMessageAttribute::EcdsaSigShare(request_id)
-        | EcdsaMessageAttribute::SchnorrSigShare(request_id) => {
+        IDkgMessageAttribute::EcdsaSigShare(request_id)
+        | IDkgMessageAttribute::SchnorrSigShare(request_id) => {
             if request_id.height <= args.certified_height {
                 if args.requested_signatures.contains(request_id) {
                     Priority::FetchNow
@@ -566,8 +567,8 @@ fn compute_priority(
                 Priority::Stash
             }
         }
-        EcdsaMessageAttribute::EcdsaComplaint(transcript_id)
-        | EcdsaMessageAttribute::EcdsaOpening(transcript_id) => {
+        IDkgMessageAttribute::Complaint(transcript_id)
+        | IDkgMessageAttribute::Opening(transcript_id) => {
             let height = transcript_id.source_height();
             if height <= args.finalized_height {
                 if args.active_transcripts.contains(transcript_id)
@@ -594,12 +595,12 @@ fn compute_priority(
 mod tests {
     use self::test_utils::{
         fake_completed_signature_request_context, fake_signature_request_context_with_pre_sig,
-        fake_state_with_signature_requests, TestEcdsaBlockReader,
+        fake_state_with_signature_requests, TestIDkgBlockReader,
     };
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::{EcdsaUIDGenerator, PreSigId};
+    use ic_types::consensus::idkg::{IDkgUIDGenerator, PreSigId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
     use test_utils::fake_ecdsa_master_public_key_id;
@@ -632,7 +633,7 @@ mod tests {
         assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
         assert_eq!(expected_request_id.pre_signature_id, pre_sig_id);
 
-        let block_reader = TestEcdsaBlockReader::for_signer_test(
+        let block_reader = TestIDkgBlockReader::for_signer_test(
             height,
             vec![(expected_request_id.clone(), create_sig_inputs(0, &key_id))],
         );
@@ -674,44 +675,44 @@ mod tests {
         let tests = vec![
             // Signed dealings
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(xnet_transcript_id),
+                IDkgMessageAttribute::Dealing(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_1),
+                IDkgMessageAttribute::Dealing(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_drop),
+                IDkgMessageAttribute::Dealing(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_2),
+                IDkgMessageAttribute::Dealing(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_stash),
+                IDkgMessageAttribute::Dealing(transcript_id_stash),
                 Priority::Stash,
             ),
             // Dealing support
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(xnet_transcript_id),
+                IDkgMessageAttribute::DealingSupport(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_1),
+                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_drop),
+                IDkgMessageAttribute::DealingSupport(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_2),
+                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_stash),
+                IDkgMessageAttribute::DealingSupport(transcript_id_stash),
                 Priority::Stash,
             ),
         ];
@@ -728,7 +729,7 @@ mod tests {
     #[test]
     fn test_ecdsa_priority_fn_sig_shares() {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
-        let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, Height::new(0));
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
             pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [1; 32],
@@ -765,35 +766,35 @@ mod tests {
 
         let tests = vec![
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
+                IDkgMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::SchnorrSigShare(request_id_fetch_1.clone()),
+                IDkgMessageAttribute::SchnorrSigShare(request_id_fetch_1.clone()),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
+                IDkgMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
                 Priority::Drop,
             ),
             (
-                EcdsaMessageAttribute::SchnorrSigShare(request_id_drop.clone()),
+                IDkgMessageAttribute::SchnorrSigShare(request_id_drop.clone()),
                 Priority::Drop,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_2.clone()),
+                IDkgMessageAttribute::EcdsaSigShare(request_id_fetch_2.clone()),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::SchnorrSigShare(request_id_fetch_2.clone()),
+                IDkgMessageAttribute::SchnorrSigShare(request_id_fetch_2.clone()),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_stash.clone()),
+                IDkgMessageAttribute::EcdsaSigShare(request_id_stash.clone()),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::SchnorrSigShare(request_id_stash.clone()),
+                IDkgMessageAttribute::SchnorrSigShare(request_id_stash.clone()),
                 Priority::Stash,
             ),
         ];
@@ -834,44 +835,44 @@ mod tests {
         let tests = vec![
             // Complaints
             (
-                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_1),
+                IDkgMessageAttribute::Complaint(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_drop),
+                IDkgMessageAttribute::Complaint(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_2),
+                IDkgMessageAttribute::Complaint(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_stash),
+                IDkgMessageAttribute::Complaint(transcript_id_stash),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_3),
+                IDkgMessageAttribute::Complaint(transcript_id_fetch_3),
                 Priority::FetchNow,
             ),
             // Openings
             (
-                EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_1),
+                IDkgMessageAttribute::Opening(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(transcript_id_drop),
+                IDkgMessageAttribute::Opening(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_2),
+                IDkgMessageAttribute::Opening(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(transcript_id_stash),
+                IDkgMessageAttribute::Opening(transcript_id_stash),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_3),
+                IDkgMessageAttribute::Opening(transcript_id_fetch_3),
                 Priority::FetchNow,
             ),
         ];

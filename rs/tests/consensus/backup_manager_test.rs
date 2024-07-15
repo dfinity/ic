@@ -33,27 +33,27 @@ use ic_management_canister_types::{
 };
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::{
+use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    orchestrator::utils::{
-        rw_message::install_nns_and_check_progress,
-        ssh_access::{
-            generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-            wait_until_authentication_is_granted, AuthMean,
-        },
-        subnet_recovery::{enable_chain_key_on_subnet, run_chain_key_signature_test},
-        upgrade::{
-            assert_assigned_replica_version, bless_public_replica_version,
-            deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
-        },
-    },
     systest,
     util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
+};
+use ic_tests::orchestrator::utils::{
+    rw_message::install_nns_and_check_progress,
+    ssh_access::{
+        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted, AuthMean,
+    },
+    subnet_recovery::{enable_chain_key_on_subnet, run_chain_key_signature_test},
+    upgrade::{
+        assert_assigned_replica_version, bless_public_replica_version,
+        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    },
 };
 use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};

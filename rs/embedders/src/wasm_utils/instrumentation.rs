@@ -254,39 +254,39 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I64GeS { .. }
         | Operator::I64GeU { .. } => 1,
 
-        // All floating point instructions (32 and 64 bit) are of cost 50 because they are expensive CPU operations.
-        //The exception is neg, abs, and copysign, which are cost 2, as they are more efficient.
-        // Comparing floats is cost 1. Validated in Benchmarks.
-        // The cost is adjusted to 20 after benchmarking with real canisters.
+        // Weights determined by benchmarking.
+        // Simple float operations for both sizes.
+        Operator::F32Abs { .. }
+        | Operator::F32Neg { .. }
+        | Operator::F64Abs { .. }
+        | Operator::F64Neg { .. } => 1,
         Operator::F32Add { .. }
         | Operator::F32Sub { .. }
         | Operator::F32Mul { .. }
-        | Operator::F32Div { .. }
-        | Operator::F32Min { .. }
-        | Operator::F32Max { .. }
         | Operator::F32Ceil { .. }
         | Operator::F32Floor { .. }
         | Operator::F32Trunc { .. }
         | Operator::F32Nearest { .. }
-        | Operator::F32Sqrt { .. }
         | Operator::F64Add { .. }
         | Operator::F64Sub { .. }
         | Operator::F64Mul { .. }
-        | Operator::F64Div { .. }
-        | Operator::F64Min { .. }
-        | Operator::F64Max { .. }
         | Operator::F64Ceil { .. }
         | Operator::F64Floor { .. }
         | Operator::F64Trunc { .. }
-        | Operator::F64Nearest { .. }
-        | Operator::F64Sqrt { .. } => 20,
+        | Operator::F64Nearest { .. } => 2,
 
-        Operator::F32Abs { .. }
-        | Operator::F32Neg { .. }
-        | Operator::F32Copysign { .. }
-        | Operator::F64Abs { .. }
-        | Operator::F64Neg { .. }
-        | Operator::F64Copysign { .. } => 2,
+        // Weights determined by benchmarking.
+        // More expensive float operations for both sizes.
+        Operator::F32Div { .. } => 3,
+        Operator::F64Div { .. } => 5,
+        Operator::F32Min { .. }
+        | Operator::F32Max { .. }
+        | Operator::F64Min { .. }
+        | Operator::F64Max { .. } => 18,
+        Operator::F32Copysign { .. } => 2,
+        Operator::F64Copysign { .. } => 3,
+        Operator::F32Sqrt { .. } => 5,
+        Operator::F64Sqrt { .. } => 8,
 
         // Comparison operations for floats are of cost 3 because they are usually implemented
         // as arithmetic operations on integers (the individual components, sign, exp, mantissa,

@@ -29,15 +29,13 @@ Coverage::
 
 end::catalog[] */
 
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry, GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-    SshSession,
-};
-use crate::retry_with_msg;
 use ic_fstrim_tool::FsTrimMetrics;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
+};
 use slog::{info, Logger};
 use std::io::{BufRead, BufReader};
 use std::time::Duration;
@@ -86,7 +84,7 @@ pub fn ic_crypto_fstrim_tool_test(env: TestEnv) {
 }
 
 fn wait_for_initial_metrics_existence(node: &IcNodeSnapshot, logger: &Logger) {
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "check if initial metrics exist",
         logger.clone(),
         Duration::from_secs(500),

@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:askama",
     "@crate_index//:candid",
     "@crate_index//:candid_parser",
@@ -12,10 +13,12 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:assert_matches",
 ]
 

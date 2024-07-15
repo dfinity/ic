@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.1.0"
+version = "1.1.1"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -36,7 +36,7 @@ icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 indicatif = "0.17.3"
 lazy_static = { workspace = true }
-num-bigint = "0.4.4"
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = "1.0"
 rand = { workspace = true }

@@ -545,6 +545,18 @@ impl UserError {
     pub fn count_bytes(&self) -> usize {
         std::mem::size_of_val(self) + self.description.len()
     }
+
+    /// Panics if the error doesn't have the expected code and description.
+    /// Useful for tests to avoid matching exact error messages.
+    pub fn assert_contains(&self, code: ErrorCode, description: &str) {
+        assert_eq!(self.code, code);
+        assert!(
+            self.description.contains(description),
+            "Error matching description \"{}\" with \"{}\"",
+            self.description,
+            description
+        );
+    }
 }
 
 impl std::error::Error for UserError {

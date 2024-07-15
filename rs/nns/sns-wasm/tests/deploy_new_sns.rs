@@ -215,7 +215,10 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
             error: Some(SnsWasmError {
                 message: "Error installing Governance WASM: Failed to install WASM on canister \
                 qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Error from Canister qsgjb-riaaa-aaaaa-aaaga-cai: \
-                Canister called `ic0.trap` with message: did not find blob on stack"
+                Canister called `ic0.trap` with message: did not find blob on stack.\n\
+                Consider gracefully handling failures from this canister or altering the canister to \
+                handle exceptions. See documentation: \
+                http://internetcomputer.org/docs/current/references/execution-errors#trapped-explicitly"
                     .to_string()
             }),
             dapp_canisters_transfer_result: Some(DappCanistersTransferResult {

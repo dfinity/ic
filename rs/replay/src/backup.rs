@@ -15,10 +15,9 @@ use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    artifact_kind::ConsensusArtifact,
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, HasHeight,
-        Notarization, RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
+        HasHeight, Notarization, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId,
@@ -83,7 +82,7 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet = ChangeSet>,
+    pool: &mut dyn MutablePool<ConsensusMessage, ChangeSet = ChangeSet>,
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {

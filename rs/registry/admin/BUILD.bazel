@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/config",
@@ -15,8 +16,8 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
-    "//rs/nervous_system/root",
     "//rs/nervous_system/proto",
+    "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -79,14 +80,16 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 # ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
+    # Keep sorted.
     "//rs/registry/admin-derive",
+    "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/pocket-ic",
-    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/admin:ic-admin",
 ]
 

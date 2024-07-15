@@ -169,13 +169,6 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialEcdsaDealings => ic00::ComputeInitialEcdsaDealingsArgs::new(
-            into_inner_ecdsa(key_id),
-            subnet_id,
-            nodes,
-            registry_version,
-        )
-        .encode(),
         Method::ComputeInitialIDkgDealings => {
             ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
                 .encode()
@@ -2162,10 +2155,6 @@ fn into_inner_schnorr(key_id: MasterPublicKeyId) -> SchnorrKeyId {
 fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
     vec![
         (
-            Method::ComputeInitialEcdsaDealings,
-            make_ecdsa_key("some_key"),
-        ),
-        (
             Method::ComputeInitialIDkgDealings,
             make_ecdsa_key("some_key"),
         ),
@@ -2255,7 +2244,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
         assert_eq!(
             get_reject_message(response),
             format!(
-                "Subnet {} does not hold iDKG key {}.",
+                "Subnet {} does not hold threshold key {}.",
                 own_subnet, unknown_key
             ),
         )
@@ -2314,34 +2303,23 @@ fn test_sign_with_threshold_key_fee_charged() {
             }
         );
 
-        match method {
-            Method::SignWithECDSA => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment.get(), payment - fee);
-
-                assert_eq!(
-                    test.state()
-                        .metadata
-                        .subnet_metrics
-                        .consumed_cycles_ecdsa_outcalls,
-                    NominalCycles::from(fee)
-                );
-            }
-            Method::SignWithSchnorr => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_schnorr_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment.get(), payment - fee);
-            }
+        let subnet_call_context_manager = &test.state().metadata.subnet_call_context_manager;
+        let contexts = match method {
+            Method::SignWithECDSA => subnet_call_context_manager.sign_with_ecdsa_contexts(),
+            Method::SignWithSchnorr => subnet_call_context_manager.sign_with_schnorr_contexts(),
             _ => panic!("Unexpected method"),
+        };
+        let (_, context) = contexts.iter().next().unwrap();
+        assert_eq!(context.request.payment.get(), payment - fee);
+
+        if let Method::SignWithECDSA = method {
+            assert_eq!(
+                test.state()
+                    .metadata
+                    .subnet_metrics
+                    .consumed_cycles_ecdsa_outcalls,
+                NominalCycles::from(fee)
+            );
         }
 
         assert_eq!(
@@ -2438,7 +2416,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         assert_eq!(
             WasmResult::Reject(
                 format!(
-                    "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys with signing enabled: [{}]\")",
+                    "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: [{}]\")",
                     method,
                     wrong_key,
                     correct_key,
@@ -2449,52 +2427,61 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
 }
 
 #[test]
-fn test_threshold_key_signature_request_with_disabled_key_rejected() {
+fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
+    // Test the disabled key succeeds for public key request but fails for signing,
+    // and the unknown key fails for both.
     let test_cases = vec![
         (
             Method::ECDSAPublicKey,
             Method::SignWithECDSA,
-            make_ecdsa_key("disabled_key"),
-            make_ecdsa_key("wrong_key"),
+            make_ecdsa_key("signing_disabled_key"),
+            make_ecdsa_key("unknown_key"),
         ),
         (
             Method::SchnorrPublicKey,
             Method::SignWithSchnorr,
-            make_schnorr_key("disabled_key"),
-            make_schnorr_key("wrong_key"),
+            make_schnorr_key("signing_disabled_key"),
+            make_schnorr_key("unknown_key"),
         ),
     ];
-    for (public_key_method, sign_with_method, disabled_key, wrong_key) in test_cases {
+    for (public_key_method, sign_with_method, signing_disabled_key, unknown_key) in test_cases {
         let canister_id = canister_test_id(0x10);
         let own_subnet_id = subnet_test_id(1);
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(SubnetType::System)
             .with_own_subnet_id(own_subnet_id)
             .with_nns_subnet_id(subnet_test_id(2))
-            .with_disabled_idkg_key(disabled_key.clone())
+            .with_signing_disabled_idkg_key(signing_disabled_key.clone())
             .with_caller(own_subnet_id, canister_id)
             .with_ic00_schnorr_public_key(FlagStatus::Enabled)
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
 
-        // Requesting disabled public key (should succeed)
+        // Requesting disabled public key (should succeed).
         test.inject_call_to_ic00(
             public_key_method,
-            threshold_public_key_payload(public_key_method, disabled_key.clone()),
+            threshold_public_key_payload(public_key_method, signing_disabled_key.clone()),
             Cycles::from(100_000_000_000u128),
         );
 
-        // Signing with disabled key (should fail)
+        // Signing with disabled key (should fail).
         test.inject_call_to_ic00(
             sign_with_method,
-            sign_with_threshold_key_payload(sign_with_method, disabled_key.clone()),
+            sign_with_threshold_key_payload(sign_with_method, signing_disabled_key.clone()),
             Cycles::from(100_000_000_000u128),
         );
 
-        // Signing with non-existant key (should fail)
+        // Requesting non-existent public key (should fail).
+        test.inject_call_to_ic00(
+            public_key_method,
+            threshold_public_key_payload(public_key_method, unknown_key.clone()),
+            Cycles::from(100_000_000_000u128),
+        );
+
+        // Signing with non-existent key (should fail).
         test.inject_call_to_ic00(
             sign_with_method,
-            sign_with_threshold_key_payload(sign_with_method, wrong_key.clone()),
+            sign_with_threshold_key_payload(sign_with_method, unknown_key.clone()),
             Cycles::from(100_000_000_000u128),
         );
         test.execute_all();
@@ -2503,8 +2490,12 @@ fn test_threshold_key_signature_request_with_disabled_key_rejected() {
             // Note this fails with internal error as the test environment doesn't hold a valid key.
             // However, this is enough to assert that the correct endpoint is reached.
             "InternalError(\"InvalidPoint\")".to_string(),
-            format!("invalid or disabled key {}", disabled_key),
-            format!("does not hold iDKG key {}", wrong_key),
+            format!(
+                "unknown or signing disabled threshold key {}",
+                signing_disabled_key
+            ),
+            format!("does not hold threshold key {}", unknown_key),
+            format!("does not hold threshold key {}", unknown_key),
         ];
 
         for (i, expected) in expected.iter().enumerate() {
@@ -2512,9 +2503,7 @@ fn test_threshold_key_signature_request_with_disabled_key_rejected() {
             let message = get_reject_message(result);
             assert!(
                 message.contains(expected),
-                "Expected: {} \nActual: {}",
-                expected,
-                message
+                "Expected: {expected}\nActual: {message}",
             );
         }
     }
@@ -2558,7 +2547,7 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
         assert_eq!(
         WasmResult::Reject(
             format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys: [{}]\")",
+                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown threshold key: {}, existing keys: [{}]\")",
                 method,
                 wrong_key,
                 correct_key,
@@ -2615,36 +2604,25 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
                 state: IngressState::Processing,
             }
         );
-        match method {
-            Method::SignWithECDSA => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment, Cycles::zero());
 
-                assert_eq!(
-                    test.state()
-                        .metadata
-                        .subnet_metrics
-                        .consumed_cycles_ecdsa_outcalls,
-                    NominalCycles::from(0)
-                );
-            }
-            Method::SignWithSchnorr => {
-                let contexts = test
-                    .state()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_schnorr_contexts();
-                let (_, context) = contexts.iter().next().unwrap();
-                assert_eq!(context.request.payment, Cycles::zero());
-            }
+        let subnet_call_context_manager = &test.state().metadata.subnet_call_context_manager;
+        let contexts = match method {
+            Method::SignWithECDSA => subnet_call_context_manager.sign_with_ecdsa_contexts(),
+            Method::SignWithSchnorr => subnet_call_context_manager.sign_with_schnorr_contexts(),
             _ => panic!("Unexpected method"),
-        }
+        };
+        let (_, context) = contexts.iter().next().unwrap();
+        assert_eq!(context.request.payment, Cycles::zero());
 
+        if let Method::SignWithECDSA = method {
+            assert_eq!(
+                test.state()
+                    .metadata
+                    .subnet_metrics
+                    .consumed_cycles_ecdsa_outcalls,
+                NominalCycles::from(0)
+            );
+        }
         assert_eq!(
             test.state()
                 .metadata
@@ -2732,12 +2710,15 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
         let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
         if i > DEFAULT_QUEUE_CAPACITY {
-            assert_eq!(
-                test.ingress_state(&message_id),
-                IngressState::Failed(UserError::new(
-                    ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
-                ))
+            let IngressState::Failed(ingress_state) = test.ingress_state(&message_id) else {
+                panic!("Unexpected state {:?}", test.ingress_state(&message_id));
+            };
+            ingress_state.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                &format!(
+                    "Error from Canister {uc}: Canister called `ic0.trap` \
+                    with message: call_perform failed"
+                ),
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
@@ -2780,12 +2761,15 @@ fn send_messages_to_bitcoin_canister_until_capacity(
         let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
         if i > DEFAULT_QUEUE_CAPACITY {
-            assert_eq!(
-                test.ingress_state(&message_id),
-                IngressState::Failed(UserError::new(
-                    ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
-                ))
+            let IngressState::Failed(ingress_state) = test.ingress_state(&message_id) else {
+                panic!("Unexpected state {:?}", test.ingress_state(&message_id));
+            };
+            ingress_state.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                &format!(
+                    "Error from Canister {uc}: Canister called `ic0.trap` \
+                    with message: call_perform failed"
+                ),
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);

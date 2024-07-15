@@ -178,20 +178,51 @@ pub struct StreamHeader {
 
 /// Reasons for why inter canister messages may fail to be inducted into the state.
 ///
-/// This type is defined here because it's used in `StreamHeader`; it is otherwise
-/// part of the Replicated State. Protocol buffer conversions are defined here due
-/// to Rust rules for implementing traits; round trip and compatibility tests are in
-/// 'replicated_state/metadata_state/tests.rs'.
+/// All reason are applicable to `Request`, whereas only `CanisterMigrating` is
+/// applicable to `Response`.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, EnumIter)]
 pub enum RejectReason {
-    /// Message enqueuing failed to migrating canister.
+    /// Message enqueuing failed due to migrating canister. In contrast to
+    /// `CanisterNotFound` this is mapped to `RejectCode::SysTransient`, i.e.
+    /// the canister will be available again shortly.
+    ///
+    /// This is the only reject reason that (also) applies to to responses.
     CanisterMigrating = 1,
+
+    /// Message enqueuing failed due to no matching canister ID. In contrast to
+    /// `CanisterMigrating` this is mapped to `RejectCode::DestinationInvalid`, i.e.
+    /// the canister was not found in any capacity on the IC.
+    CanisterNotFound = 2,
+
+    /// Canister is stopped, not accepting any messages.
+    CanisterStopped = 3,
+
+    /// Canister is stopping, only accepting responses.
+    CanisterStopping = 4,
+
+    /// Message enqueuing failed due to full in/out queue.
+    QueueFull = 5,
+
+    /// Message enqueuing would have caused the canister or subnet to run over
+    /// their memory limit.
+    OutOfMemory = 6,
+
+    /// Message enqueuing failed due to an unknown error. This is used to map
+    /// `StateError` variants that shouldn't be possible to occur for requests.
+    /// It is not expected that this reason will ever be used.
+    Unknown = 7,
 }
 
 impl From<RejectReason> for pb_queues::RejectReason {
     fn from(item: RejectReason) -> Self {
         match item {
             RejectReason::CanisterMigrating => Self::CanisterMigrating,
+            RejectReason::CanisterNotFound => Self::CanisterNotFound,
+            RejectReason::CanisterStopped => Self::CanisterStopped,
+            RejectReason::CanisterStopping => Self::CanisterStopping,
+            RejectReason::QueueFull => Self::QueueFull,
+            RejectReason::OutOfMemory => Self::OutOfMemory,
+            RejectReason::Unknown => Self::Unknown,
         }
     }
 }
@@ -205,6 +236,12 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
                 "bad reject reason {} received".into(),
             )),
             pb_queues::RejectReason::CanisterMigrating => Ok(Self::CanisterMigrating),
+            pb_queues::RejectReason::CanisterNotFound => Ok(Self::CanisterNotFound),
+            pb_queues::RejectReason::CanisterStopped => Ok(Self::CanisterStopped),
+            pb_queues::RejectReason::CanisterStopping => Ok(Self::CanisterStopping),
+            pb_queues::RejectReason::QueueFull => Ok(Self::QueueFull),
+            pb_queues::RejectReason::OutOfMemory => Ok(Self::OutOfMemory),
+            pb_queues::RejectReason::Unknown => Ok(Self::Unknown),
         }
     }
 }

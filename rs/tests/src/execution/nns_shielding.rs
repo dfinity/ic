@@ -1,10 +1,6 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use candid::{Decode, Encode, Principal};
 use ic_agent::{
     agent::{RejectCode, RejectResponse},
@@ -14,6 +10,10 @@ use ic_base_types::RegistryVersion;
 use ic_management_canister_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use ic_types::Cycles;
 use ic_types_test_utils::ids::node_test_id;
 use lazy_static::lazy_static;

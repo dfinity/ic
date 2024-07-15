@@ -26,14 +26,10 @@ end::catalog[] */
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::subnet_recovery::{
     enable_chain_key_on_subnet, run_chain_key_signature_test,
 };
-use crate::retry_with_msg;
 use crate::tecdsa::make_key_ids_for_all_schemes;
-use crate::util::{block_on, get_nns_node, MessageCanister};
 use anyhow::bail;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_registry::RegistryValue;
@@ -41,6 +37,9 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::util::{block_on, get_nns_node, MessageCanister};
 use ic_types::crypto::KeyPurpose;
 use ic_types::Height;
 use slog::{info, warn, Logger};
@@ -114,7 +113,7 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
     // wait until all keys are registered with time stamps for the first time
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "check if all keys are registered with time stamps for the first time",
         logger.clone(),
         secs(60),
@@ -152,7 +151,7 @@ pub fn test(env: TestEnv) {
 
     // Wait until all keys are rotated, verify for each that at least gamma and delta has passed
     // (both wall time and timestamp)
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "check if all keys are rotated and verify for each that at least gamma and delta has passed",
         logger.clone(),
         secs(360),

@@ -1,4 +1,4 @@
-use ic_tests::driver::test_env::RequiredHostFeaturesFromCmdLine;
+use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -10,16 +10,17 @@ use std::{env, fs};
 
 use anyhow::Result;
 
-use ic_tests::driver::constants::SSH_USERNAME;
-use ic_tests::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
-use ic_tests::driver::farm::HostFeature;
-use ic_tests::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
-use ic_tests::driver::ic::VmResources;
-use ic_tests::driver::test_env::{TestEnv, TestEnvAttribute};
-use ic_tests::driver::test_env_api::{retry, FarmBaseUrl, HasDependencies, SshSession};
-use ic_tests::driver::test_setup::GroupSetup;
-use ic_tests::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
-use ic_tests::retry_with_msg;
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
+use ic_system_test_driver::driver::driver_setup::{
+    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
+};
+use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
+use ic_system_test_driver::driver::ic::VmResources;
+use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
+use ic_system_test_driver::driver::test_env_api::{FarmBaseUrl, HasDependencies, SshSession};
+use ic_system_test_driver::driver::test_setup::GroupSetup;
+use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use slog::{debug, error, info};
 use ssh2::Session;
 
@@ -123,7 +124,7 @@ fn setup(env: TestEnv) {
         env_tar_path,
         size / 1024,
     );
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!(
             "scp-ing {:?} of {:?} KiB to {UVM_NAME}:{to:?}",
             env_tar_path,

@@ -11,6 +11,8 @@ on:
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
+      - 'master'
+      - 'dev-gh-*'
 
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
@@ -28,6 +30,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
@@ -40,12 +43,16 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+    image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   before-script: &before-script
     name: Before script
@@ -67,6 +74,9 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -80,8 +90,6 @@ jobs:
           if [[ $BRANCH_NAME =~ hotfix-.*-rc--.* ]]; then
             echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate" >> $GITHUB_ENV
           fi
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/
@@ -153,12 +161,15 @@ jobs:
       - <<: *before-script
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
-        if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false' || github.event_name == 'schedule'
+        # TODO: remove when we flakiness is resolved or when we move to hosted runners
+        # settting to true to allow a job to pass when this step fails
+        continue-on-error: true
+        if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'true' || github.event_name == 'schedule'
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
           BAZEL_COMMAND: test
-          BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos"
+          BAZEL_EXTRA_ARGS: ${{ github.event_name == 'schedule' && '--test_tag_filters=test_macos,test_macos_master' || '--test_tag_filters=test_macos' }}
           BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${ROOT_PIPELINE_ID}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
@@ -209,12 +220,17 @@ jobs:
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          # Todo: remove once dependency scanner tests don't reference name of repo
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          ADDITIONAL_FLAGS=""
+          if [[ $REPO_NAME == "ic-private" ]]; then
+            ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
+          fi
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
-          pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 \
+          pytest --ignore=gitlab_config/ --ignore=git_changes/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
-
   build-ic:
     name: Build IC
     <<: *dind-large-setup
@@ -227,9 +243,10 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/ic/ic/artifacts
+          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"

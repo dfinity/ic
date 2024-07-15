@@ -12,9 +12,10 @@ rust_library(
     crate_name = "ic_btc_adapter_client",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/async_utils",
+        "//rs/bitcoin/replica_types",
         "//rs/bitcoin/service",
-        "//rs/bitcoin/types/internal",
         "//rs/config",
         "//rs/interfaces/adapter_client",
         "//rs/monitoring/adapter_metrics/client",
@@ -27,5 +28,6 @@ rust_library(
         "@crate_index//:tokio",
         "@crate_index//:tonic",
         "@crate_index//:tower",
+        "@crate_index//:tracing",
     ],
 )

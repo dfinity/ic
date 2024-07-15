@@ -13,8 +13,6 @@ ic-ledger-canister-blocks-synchronizer = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../icp_ledger" }
-log = "0.4.14"
-log4rs = "1.1.1"
 rand = { workspace = true }
 rand_distr = "0.4"
 serde = { workspace = true }

@@ -35,7 +35,7 @@
 //!         println!("{}, {:?}, {:?}", message, context, metadata)
 //!     }
 //!
-//!     fn is_enabled_at(&self, _: slog::Level, _: &'static str) -> bool { true }
+//!     fn is_enabled_at(&self, _: slog::Level) -> bool { true }
 //!//!
 //!     fn is_n_seconds<T: Into<i32>>(&self, _seconds: T, _metadata: LogMetadata) -> bool { false }
 //! }
@@ -243,7 +243,7 @@ macro_rules! fatal {
 #[macro_export(local_inner_macros)]
 macro_rules! log {
     ($logger:expr, $level:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
-        if $logger.is_enabled_at($level, std::module_path!()) {
+        if $logger.is_enabled_at($level) {
             let mut context = $logger.get_context();
             update_context!(context; $($field $( . $sub_field)* => $value),*);
 
@@ -252,7 +252,7 @@ macro_rules! log {
         }
     }};
     ($logger:expr, $level:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
-        if $logger.is_enabled_at($level, std::module_path!()) {
+        if $logger.is_enabled_at($level) {
             let mut context = $logger.get_context();
             update_context!(context; $($field $( . $sub_field)* => $value),*);
 
@@ -260,7 +260,7 @@ macro_rules! log {
         }
     }};
     ($logger:expr, $level:expr, $message:expr $(,$args:expr)* $(,)*) => {{
-        if $logger.is_enabled_at($level, std::module_path!()) {
+        if $logger.is_enabled_at($level) {
             let message = std::format!($message $(,$args)*);
             $logger.log(message, $logger.get_context(), log_metadata!($level))
         }

@@ -307,20 +307,18 @@ impl RegistryClient for RegistryClientImpl {
             .filter(|r| r.version <= version) // (2)
             .take_while(|r| r.key.starts_with(key_prefix)); // (3)
 
-        let mut results = vec![];
+        // For each key, keep only the record values for the latest record versions. We rely upon
+        // the fact that for a fixed key, the records are sorted by version.
+        let mut effective_records = BTreeMap::new();
         for record in records {
-            let has_value = record.value.is_some();
-            let last_result_is_current_key =
-                results.last().map(|k| k == &record.key).unwrap_or(false);
-            if has_value {
-                if !last_result_is_current_key {
-                    results.push(record.key.clone());
-                }
-            } else if last_result_is_current_key {
-                results.pop();
-            }
+            effective_records.insert(record.key.clone(), &record.value);
         }
-        Ok(results)
+        // Finally, remove empty records, i.e., those for which `value` is `None`.
+        let result = effective_records
+            .into_iter()
+            .filter_map(|(key, value)| value.is_some().then_some(key))
+            .collect();
+        Ok(result)
     }
 
     fn get_latest_version(&self) -> RegistryVersion {

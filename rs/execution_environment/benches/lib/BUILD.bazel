@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+BENCH_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/constants",
+    "//rs/cycles_account_manager",
+    "//rs/execution_environment",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/nns/constants",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/system_api",
+    "//rs/test_utilities",
+    "//rs/test_utilities/execution_environment",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
+    "//rs/types/error_types",
+    "//rs/types/types",
+    "//rs/types/wasm_types",
+    "@crate_index//:criterion",
+    "@crate_index//:lazy_static",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:wat",
+]
+
+rust_library(
+    name = "execution_environment_bench",
+    testonly = True,
+    srcs = glob(["src/*.rs"]),
+    version = "0.9.0",
+    deps = BENCH_DEPENDENCIES,
+)

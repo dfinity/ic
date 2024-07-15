@@ -1,10 +1,10 @@
 //! ECDSA specific stats.
 
-use crate::consensus::metrics::{
-    EcdsaPreSignatureMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
+use crate::ecdsa::metrics::{
+    IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
 };
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_types::consensus::idkg::{EcdsaBlockReader, EcdsaStats, PreSigId, RequestId};
+use ic_types::consensus::idkg::{IDkgBlockReader, IDkgStats, PreSigId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
 };
@@ -15,15 +15,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// Implementation of EcdsaStats
-pub struct EcdsaStatsImpl {
-    state: Mutex<EcdsaStatsInternal>,
-    transcript_metrics: EcdsaTranscriptMetrics,
-    pre_signature_metrics: EcdsaPreSignatureMetrics,
-    signature_metrics: EcdsaSignatureMetrics,
+/// Implementation of IDkgStats
+pub struct IDkgStatsImpl {
+    state: Mutex<IDkgStatsInternal>,
+    transcript_metrics: IDkgTranscriptMetrics,
+    pre_signature_metrics: IDkgPreSignatureMetrics,
+    signature_metrics: ThresholdSignatureMetrics,
 }
 
-struct EcdsaStatsInternal {
+struct IDkgStatsInternal {
     transcript_stats: HashMap<IDkgTranscriptId, TranscriptStats>,
     pre_signature_stats: HashMap<PreSigId, PreSignatureStats>,
     signature_stats: HashMap<RequestId, SignatureStats>,
@@ -48,18 +48,18 @@ struct SignatureStats {
     sig_share_aggregation_duration: Vec<Duration>,
 }
 
-impl EcdsaStatsImpl {
-    /// Creates EcdsaStatsImpl
+impl IDkgStatsImpl {
+    /// Creates IDkgStatsImpl
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            state: Mutex::new(EcdsaStatsInternal {
+            state: Mutex::new(IDkgStatsInternal {
                 transcript_stats: HashMap::new(),
                 pre_signature_stats: HashMap::new(),
                 signature_stats: HashMap::new(),
             }),
-            transcript_metrics: EcdsaTranscriptMetrics::new(metrics_registry.clone()),
-            pre_signature_metrics: EcdsaPreSignatureMetrics::new(metrics_registry.clone()),
-            signature_metrics: EcdsaSignatureMetrics::new(metrics_registry),
+            transcript_metrics: IDkgTranscriptMetrics::new(metrics_registry.clone()),
+            pre_signature_metrics: IDkgPreSignatureMetrics::new(metrics_registry.clone()),
+            signature_metrics: ThresholdSignatureMetrics::new(metrics_registry),
         }
     }
 
@@ -152,8 +152,8 @@ impl EcdsaStatsImpl {
     }
 }
 
-impl EcdsaStats for EcdsaStatsImpl {
-    fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader) {
+impl IDkgStats for IDkgStatsImpl {
+    fn update_active_transcripts(&self, block_reader: &dyn IDkgBlockReader) {
         let mut active_transcripts = HashSet::new();
         let mut state = self.state.lock().unwrap();
         for transcript_params_ref in block_reader.requested_transcripts() {
@@ -187,7 +187,7 @@ impl EcdsaStats for EcdsaStatsImpl {
             .set(state.transcript_stats.len() as i64);
     }
 
-    fn update_active_pre_signatures(&self, block_reader: &dyn EcdsaBlockReader) {
+    fn update_active_pre_signatures(&self, block_reader: &dyn IDkgBlockReader) {
         let mut active_pre_signatures = HashSet::new();
         let mut state = self.state.lock().unwrap();
         for (pre_sig_id, key_id) in block_reader.pre_signatures_in_creation() {

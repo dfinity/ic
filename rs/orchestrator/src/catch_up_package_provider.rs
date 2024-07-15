@@ -33,9 +33,12 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
+    utils::http_endpoint_to_url,
 };
-use hyper::{body, Body, Client, Method, Request};
+use http_body_util::{BodyExt, Full};
+use hyper::{body::Bytes, Method, Request};
 use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -176,10 +179,7 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let uri = format!(
-            "https://[{}]:{}/_/catch_up_package",
-            http.ip_addr, http.port
-        );
+        let uri = http_endpoint_to_url(&http, &self.logger)?.to_string();
 
         let protobuf = self
             .fetch_catch_up_package(node_id, uri.clone(), param)
@@ -221,9 +221,11 @@ impl CatchUpPackageProvider {
         url: String,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
-        let body = param
-            .and_then(|param| serde_cbor::to_vec(&param).ok())
-            .unwrap_or_default();
+        let body = Bytes::from(
+            param
+                .and_then(|param| serde_cbor::to_vec(&param).ok())
+                .unwrap_or_default(),
+        );
 
         let client_config = self
             .crypto_tls_config
@@ -237,27 +239,35 @@ impl CatchUpPackageProvider {
             .enable_all_versions()
             .build();
 
-        let client = Client::builder()
+        let client = Client::builder(TokioExecutor::new())
             .http2_only(true)
             .pool_idle_timeout(tokio::time::Duration::from_secs(600))
             .pool_max_idle_per_host(1)
-            .build(https);
+            .build::<_, Full<Bytes>>(https);
 
-        let res = client
-            .request(
+        let req = tokio::time::timeout(
+            tokio::time::Duration::from_secs(10),
+            client.request(
                 Request::builder()
                     .method(Method::POST)
                     .header("content-type", "application/cbor")
                     .uri(url)
-                    .body(Body::from(body))
+                    .body(Full::from(body))
                     .map_err(|e| warn!(self.logger, "Failed to create request: {:?}", e))
                     .ok()?,
-            )
+            ),
+        );
+
+        let res = req
             .await
+            .map_err(|e| warn!(self.logger, "Querying CUP endpoint timed out: {:?}", e))
+            .ok()?
             .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
             .ok()?;
 
-        let bytes = body::to_bytes(res.into_body())
+        let bytes = res
+            .into_body()
+            .collect()
             .await
             .map_err(|e| {
                 warn!(
@@ -265,7 +275,8 @@ impl CatchUpPackageProvider {
                     "Failed to convert the response body to bytes: {:?}", e
                 )
             })
-            .ok()?;
+            .ok()?
+            .to_bytes();
 
         if bytes.is_empty() {
             None

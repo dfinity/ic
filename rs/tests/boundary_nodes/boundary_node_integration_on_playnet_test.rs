@@ -2,6 +2,8 @@
 
 use anyhow::Result;
 
+use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
+use ic_system_test_driver::systest;
 use ic_tests::boundary_nodes::boundary_nodes_integration::{
     canister_allowlist_test, canister_test, denylist_test, direct_to_replica_options_test,
     direct_to_replica_rosetta_test, direct_to_replica_test, http_canister_test, http_endpoint_test,
@@ -11,8 +13,6 @@ use ic_tests::boundary_nodes::boundary_nodes_integration::{
 };
 use ic_tests::boundary_nodes::setup::setup_ic_with_bn;
 use ic_tests::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
-use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     let setup = |env| {
