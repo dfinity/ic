@@ -18,8 +18,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder, IngressValidatorBuilder,
-    QueryServiceBuilder,
+    metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
+    IngressValidatorBuilder, QueryServiceBuilder,
 };
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_state_manager::StateReader;
@@ -27,6 +27,7 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
     Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
 };
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -1325,7 +1326,8 @@ impl Operation for CallRequest {
                     CallRequestVersion::V2 => CallServiceV2::new_service(ingress_validator),
                     CallRequestVersion::V3 => {
                         let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-                        let metrics = subnet.http_handler_metrics.clone();
+                        let metrics_registry = MetricsRegistry::new();
+                        let metrics = HttpHandlerMetrics::new(metrics_registry);
 
                         CallServiceV3::new_service(
                             ingress_validator,

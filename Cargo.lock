@@ -15669,6 +15669,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-management-canister-types",
+ "ic-metrics",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",

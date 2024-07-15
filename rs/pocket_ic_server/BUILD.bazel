@@ -20,6 +20,7 @@ LIB_DEPENDENCIES = [
     "//rs/http_endpoints/public",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
+    "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",

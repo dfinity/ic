@@ -645,7 +645,6 @@ pub struct StateMachine {
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
     certified_height_tx: watch::Sender<Height>,
     pub ingress_watcher_handle: IngressWatcherHandle,
-    pub http_handler_metrics: HttpHandlerMetrics,
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     // This field must be the last one so that the temporary directory is deleted at the very end.
@@ -1345,11 +1344,10 @@ impl StateMachine {
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
         let ingress_watcher_drop_guard = cancellation_token.drop_guard();
-        let http_handler_metrics = HttpHandlerMetrics::new(&metrics_registry);
         let (ingress_watcher_handle, _join_handle) = IngressWatcher::start(
             runtime.handle().clone(),
             replica_logger.clone(),
-            http_handler_metrics.clone(),
+            HttpHandlerMetrics::new(&metrics_registry),
             certified_height_rx,
             completed_execution_messages_rx,
             cancellation_token_clone,
@@ -1493,7 +1491,6 @@ impl StateMachine {
                 TowerBuffer::new(execution_services.query_execution_service, 1)
             }),
             ingress_watcher_handle,
-            http_handler_metrics,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,
             runtime,
