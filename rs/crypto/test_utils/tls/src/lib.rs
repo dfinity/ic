@@ -1,5 +1,5 @@
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tls_interfaces::{TlsConfig, TlsPublicKeyCert};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::KeyManager;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
