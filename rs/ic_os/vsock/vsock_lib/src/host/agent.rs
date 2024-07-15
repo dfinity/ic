@@ -99,33 +99,32 @@ fn notify(notify_data: &NotifyData) -> Response {
     Ok(Payload::NoPayload)
 }
 
-fn create_hostos_upgrade_file(upgrade_url: &str) -> Result<(), String> {
+fn create_hostos_upgrade_file(upgrade_url: &str, file_path: &str) -> Result<(), String> {
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(60 * 5))
         .build()
         .map_err(|err| format!("Could not build download client: {}", err))?;
 
-    let response = client
+    let mut response = client
         .get(upgrade_url)
         .send()
         .map_err(|err| format!("Could not download url: {}", err))?;
-
-    let hostos_upgrade_contents = response
-        .bytes()
-        .map_err(|err| format!("Could not read downloaded contents: {}", err))?;
 
     let mut upgrade_file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
-        .open(UPGRADE_FILE_PATH)
+        .open(file_path)
         .map_err(|err| format!("Could not open upgrade file: {}", err))?;
-    upgrade_file
-        .write_all(&hostos_upgrade_contents)
-        .map_err(|err| format!("Could not write to upgrade file: {}", err))?;
-    upgrade_file
-        .flush()
-        .map_err(|err| format!("Could not flush upgrade file: {}", err))?;
+
+    if let Err(copy_err) = std::io::copy(&mut response, &mut upgrade_file) {
+        // Report on file download progress
+        match upgrade_file.metadata() {
+            Ok(metadata) => println!("Write error, '{}' bytes written", metadata.len()),
+            Err(metadata_err) => println!("Could not check file metadata: {}", metadata_err),
+        }
+
+        return Err(format!("Could not write upgrade file: {}", copy_err));
+    }
 
     Ok(())
 }
@@ -180,7 +179,7 @@ fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     // hash matches.
     if verify_hash(&upgrade_data.target_hash).is_err() {
         println!("Creating hostos upgrade file...");
-        create_hostos_upgrade_file(&upgrade_data.url)?;
+        create_hostos_upgrade_file(&upgrade_data.url, UPGRADE_FILE_PATH)?;
 
         println!("Verifying hostos upgrade file hash...");
         verify_hash(&upgrade_data.target_hash)?;
