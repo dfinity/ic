@@ -1085,9 +1085,7 @@ impl Operation for Query {
     }
 }
 
-pub struct DashboardRequest {
-    pub runtime: Arc<Runtime>,
-}
+pub struct DashboardRequest {}
 
 impl Operation for DashboardRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
@@ -1137,7 +1135,7 @@ impl Operation for DashboardRequest {
                 .iter()
                 .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                 .collect(),
-            self.runtime
+            pic.runtime
                 .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                 .unwrap()
                 .to_vec(),
@@ -1155,7 +1153,6 @@ impl Operation for DashboardRequest {
 
 pub struct StatusRequest {
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 struct PocketHealth;
@@ -1226,7 +1223,7 @@ impl Operation for StatusRequest {
         let root_key_bytes = pic.nns_subnet().map(|nns_subnet| nns_subnet.root_key_der());
         let root_key = PocketRootKey(root_key_bytes);
 
-        let resp = self
+        let resp = pic
             .runtime
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
@@ -1237,7 +1234,7 @@ impl Operation for StatusRequest {
                 .iter()
                 .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                 .collect(),
-            self.runtime
+            pic.runtime
                 .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                 .unwrap()
                 .to_vec(),
@@ -1259,7 +1256,6 @@ impl Operation for StatusRequest {
 pub struct CallRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 #[derive(Clone)]
@@ -1328,7 +1324,7 @@ impl Operation for CallRequest {
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
                 if let Ok(UnvalidatedArtifactMutation::Insert((msg, _node_id))) = r.try_recv() {
                     subnet.push_signed_ingress(msg);
@@ -1340,7 +1336,7 @@ impl Operation for CallRequest {
                         .iter()
                         .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                         .collect(),
-                    self.runtime
+                    pic.runtime
                         .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                         .unwrap()
                         .to_vec(),
@@ -1364,7 +1360,6 @@ impl Operation for CallRequest {
 pub struct QueryRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 #[derive(Clone)]
@@ -1425,7 +1420,7 @@ impl Operation for QueryRequest {
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
                 OpOut::RawResponse((
                     resp.status().into(),
@@ -1433,7 +1428,7 @@ impl Operation for QueryRequest {
                         .iter()
                         .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                         .collect(),
-                    self.runtime
+                    pic.runtime
                         .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                         .unwrap()
                         .to_vec(),
@@ -1458,7 +1453,6 @@ impl Operation for QueryRequest {
 pub struct ReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 impl Operation for ReadStateRequest {
@@ -1489,7 +1483,7 @@ impl Operation for ReadStateRequest {
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
                 OpOut::RawResponse((
                     resp.status().into(),
@@ -1497,7 +1491,7 @@ impl Operation for ReadStateRequest {
                         .iter()
                         .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                         .collect(),
-                    self.runtime
+                    pic.runtime
                         .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                         .unwrap()
                         .to_vec(),
