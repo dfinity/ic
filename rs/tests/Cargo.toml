@@ -594,8 +594,8 @@ name = "ic-systest-consensus-performance"
 path = "consensus/consensus_performance.rs"
 
 [[bin]]
-name = "ic-systest-tecdsa-performance"
-path = "consensus/tecdsa/tecdsa_performance.rs"
+name = "ic-systest-tecdsa-performance-test"
+path = "consensus/tecdsa/tecdsa_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-performance"
