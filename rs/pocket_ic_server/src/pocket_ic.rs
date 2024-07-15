@@ -174,12 +174,19 @@ impl Drop for PocketIc {
 impl PocketIc {
     pub(crate) fn topology(&self) -> Topology {
         let mut topology = Topology(BTreeMap::new());
+        let subnets = self.subnets.read().unwrap();
         for (subnet_seed, config) in self.topology.0.iter() {
             // What will be returned to the client:
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_seed: *subnet_seed,
-                size: subnet_size(config.subnet_kind),
+                node_ids: subnets
+                    .get(&config.subnet_id)
+                    .unwrap()
+                    .nodes
+                    .iter()
+                    .map(|n| n.node_id.get().0.into())
+                    .collect(),
                 canister_ranges: config.ranges.iter().map(from_range).collect(),
                 instruction_config: config.instruction_config.clone(),
             };
