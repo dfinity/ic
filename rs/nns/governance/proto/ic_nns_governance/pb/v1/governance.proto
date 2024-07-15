@@ -2586,7 +2586,7 @@ message SettleNeuronsFundParticipationRequest {
 // A list of principals.
 // Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
 message Principals {
-  repeated ic_base_types.pb.v1.PrincipalId principals = 7;
+  repeated ic_base_types.pb.v1.PrincipalId principals = 1;
 }
 
 // Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
