@@ -351,18 +351,13 @@ impl ApiState {
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
+        self.stop_progress(instance_id).await;
         let instances = self.instances.read().await;
         let mut instance_state = instances[instance_id].lock().await;
         if let InstanceState::Available(pocket_ic) =
             std::mem::replace(&mut *instance_state, InstanceState::Deleted)
         {
             std::mem::drop(pocket_ic);
-        }
-        let progress_threads = self.progress_threads.read().await;
-        let mut progress_thread = progress_threads[instance_id].lock().await;
-        if let Some(t) = progress_thread.take() {
-            t.sender.send(()).await.unwrap();
-            t.handle.await.unwrap();
         }
     }
 
@@ -629,6 +624,12 @@ impl ApiState {
                                 break false;
                             }
                             sleep(POLL_TICK_STATUS_DELAY).await;
+                            match rx.try_recv() {
+                                Ok(_) | Err(TryRecvError::Disconnected) => {
+                                    return;
+                                }
+                                Err(TryRecvError::Empty) => {}
+                            };
                         },
                         Err(_) => true,
                     };
@@ -638,7 +639,7 @@ impl ApiState {
                     }
                     match rx.try_recv() {
                         Ok(_) | Err(TryRecvError::Disconnected) => {
-                            break;
+                            return;
                         }
                         Err(TryRecvError::Empty) => {}
                     }
