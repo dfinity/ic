@@ -881,7 +881,7 @@ mod tests {
         let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
 
         let (crypto, _) =
-            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node);
+            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node, false);
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),
