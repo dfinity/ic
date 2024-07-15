@@ -4,6 +4,7 @@
 //! distributed key generation using said block chain to hold the state of the
 //! algorithm, and a component responsible for certifying state hashes produced
 //! by the upper layers of the internet computer.
+//! Just some change to trigger a rebuild and rerun of most tests.
 
 pub mod certification;
 pub mod consensus;
