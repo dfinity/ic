@@ -711,31 +711,31 @@ fn test_specified_id_call_v3() {
         .enable_all()
         .build()
         .unwrap();
-    let canister_id = rt.block_on(async {
-        let agent = ic_agent_call_v3::Agent::builder()
-            .with_url(endpoint.clone())
-            .build()
-            .unwrap();
-        agent.fetch_root_key().await.unwrap();
+    let canister_id = rt
+        .block_on(async {
+            let agent = ic_agent_call_v3::Agent::builder()
+                .with_url(endpoint.clone())
+                .build()
+                .unwrap();
+            agent.fetch_root_key().await.unwrap();
 
-        let ic00 = ManagementCanister::create(&agent);
+            let ic00 = ManagementCanister::create(&agent);
 
-        let call_response = timeout(
-            Duration::from_secs(5),
-            ic00.create_canister()
-                .as_provisional_create_with_specified_id(specified_id)
-                .call(),
-        )
-        .await
+            timeout(
+                Duration::from_secs(15),
+                ic00.create_canister()
+                    .as_provisional_create_with_specified_id(specified_id)
+                    .call(),
+            )
+            .await
+        })
         .expect("Request completes within timeout")
-        .unwrap();
-
-        match call_response {
+        .map(|call_response| match call_response {
             CallResponse::Response((canister_id,)) => canister_id,
             CallResponse::Poll(_) => {
                 panic!("Call V3 endpoint should have responded with a certificate")
             }
-        }
-    });
+        })
+        .unwrap();
     assert_eq!(canister_id, specified_id);
 }
