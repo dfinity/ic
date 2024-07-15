@@ -22,7 +22,7 @@ use tracing::instrument;
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
+        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
     utils::{read_request, write_response},
     ConnId,
@@ -177,11 +177,18 @@ async fn handle_bi_stream(
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
             .inc();
     }
-    if let Err(e) = bi_tx.finish().await {
+    if let Err(e) = bi_tx.finish() {
         info!(every_n_seconds => 60, log, "Failed to finish stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
+            .inc();
+    }
+    if let Err(e) = bi_tx.stopped().await {
+        info!(every_n_seconds => 60, log, "Failed to stop stream: {}", e.to_string());
+        metrics
+            .request_handle_errors_total
+            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
             .inc();
     }
 }

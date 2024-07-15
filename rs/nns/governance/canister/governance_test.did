@@ -445,7 +445,9 @@ type NeuronsFundNeuron = record {
   amount_icp_e8s : opt nat64;
 };
 type NeuronsFundNeuronPortion = record {
+  controller : opt principal;
   hotkey_principal : opt principal;
+  hotkeys : vec principal;
   is_capped : opt bool;
   maturity_equivalent_icp_e8s : opt nat64;
   nns_neuron_id : opt NeuronId;

@@ -179,8 +179,10 @@ async fn validate_neurons_fund_sns_swap_participation(
     let refunded_neuron_portions = neurons_fund_refunds.neurons_fund_neuron_portions;
     let mut refunded_amounts_per_controller = BTreeMap::<String, _>::new();
     for refunded_neuron_portion in refunded_neuron_portions.iter() {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let hotkey_principal = refunded_neuron_portion
-            .hotkey_principal
+            .controller
+            .or(refunded_neuron_portion.hotkey_principal)
             .unwrap()
             .to_string();
         let new_amount_icp_e8s = refunded_neuron_portion.amount_icp_e8s.unwrap();
@@ -199,7 +201,12 @@ async fn validate_neurons_fund_sns_swap_participation(
         .neurons_fund_neuron_portions;
     let mut initial_amounts_per_controller: BTreeMap<String, _> = BTreeMap::new();
     for initial_neuron_portion in initial_neuron_portions.iter() {
-        let hotkey_principal = initial_neuron_portion.hotkey_principal.unwrap().to_string();
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+        let hotkey_principal = initial_neuron_portion
+            .controller
+            .or(initial_neuron_portion.hotkey_principal)
+            .unwrap()
+            .to_string();
         let new_amount_icp_e8s = initial_neuron_portion.amount_icp_e8s.unwrap();
         initial_amounts_per_controller
             .entry(hotkey_principal)
@@ -216,7 +223,12 @@ async fn validate_neurons_fund_sns_swap_participation(
         .neurons_fund_neuron_portions;
     let mut final_amounts_per_controller: BTreeMap<String, _> = BTreeMap::new();
     for final_neuron_portion in final_neuron_portions.iter() {
-        let hotkey_principal = final_neuron_portion.hotkey_principal.unwrap().to_string();
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+        let hotkey_principal = final_neuron_portion
+            .controller
+            .or(final_neuron_portion.hotkey_principal)
+            .unwrap()
+            .to_string();
         let new_amount_icp_e8s = final_neuron_portion.amount_icp_e8s.unwrap();
         final_amounts_per_controller
             .entry(hotkey_principal)
@@ -284,8 +296,10 @@ async fn validate_neurons_fund_sns_swap_participation(
 
     let mut investment_per_controller_icp_e8s = BTreeMap::<String, Vec<u64>>::new();
     for expected_neuron_portion in final_neuron_portions {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let hotkey_principal = expected_neuron_portion
-            .hotkey_principal
+            .controller
+            .or(expected_neuron_portion.hotkey_principal)
             .unwrap()
             .to_string();
         let amount_icp_e8s = expected_neuron_portion.amount_icp_e8s.unwrap();

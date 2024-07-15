@@ -8,7 +8,10 @@ use crate::TlsVersion;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use rand::{CryptoRng, Rng};
-use rustls;
+use rustls::{
+    pki_types::{CertificateDer, PrivateKeyDer},
+    SupportedCipherSuite, SupportedProtocolVersion,
+};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
@@ -104,21 +107,23 @@ impl CustomServer {
         let cipher_suites: Vec<_> = self
             .allowed_cipher_suites
             .iter()
-            .map(rustls::SupportedCipherSuite::from)
+            .map(SupportedCipherSuite::from)
             .collect();
         let protocol_versions: Vec<_> = self
             .protocol_versions
             .iter()
-            .map(<&rustls::SupportedProtocolVersion>::from)
+            .map(<&SupportedProtocolVersion>::from)
             .collect();
-        let cert_chain = vec![rustls::Certificate(self.server_cert.cert_der())];
-        let key_der = rustls::PrivateKey(self.server_cert.key_pair().serialize_for_rustls());
+        let cert_chain = vec![CertificateDer::from(self.server_cert.cert_der())];
+        let key_der =
+            PrivateKeyDer::try_from(self.server_cert.key_pair().serialize_for_rustls()).unwrap();
 
-        let config = ServerConfig::builder()
-            .with_cipher_suites(&cipher_suites)
-            .with_safe_default_kx_groups()
+        let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
+        ring_crypto_provider.cipher_suites = cipher_suites;
+
+        let config = ServerConfig::builder_with_provider(Arc::new(ring_crypto_provider))
             .with_protocol_versions(&protocol_versions)
-            .expect("invalid rustls server config")
+            .expect("Valid rustls server config.")
             .with_no_client_auth()
             .with_single_cert(cert_chain, key_der)
             .expect("failed to build rustls server config");

@@ -72,6 +72,7 @@ pub struct PocketIcBuilder {
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     state_dir: Option<PathBuf>,
+    nonmainnet_features: bool,
 }
 
 #[allow(clippy::new_without_default)]
@@ -82,26 +83,29 @@ impl PocketIcBuilder {
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             state_dir: None,
+            nonmainnet_features: false,
         }
     }
 
     pub fn build(self) -> PocketIc {
-        let server_url = self.server_url.unwrap_or(crate::start_or_reuse_server());
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIc::from_components(
             self.config,
             server_url,
             self.max_request_time_ms,
             self.state_dir,
+            self.nonmainnet_features,
         )
     }
 
     pub async fn build_async(self) -> PocketIcAsync {
-        let server_url = self.server_url.unwrap_or(crate::start_or_reuse_server());
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIcAsync::from_components(
             self.config,
             server_url,
             self.max_request_time_ms,
             self.state_dir,
+            self.nonmainnet_features,
         )
         .await
     }
@@ -123,6 +127,13 @@ impl PocketIcBuilder {
     pub fn with_state_dir(self, state_dir: PathBuf) -> Self {
         Self {
             state_dir: Some(state_dir),
+            ..self
+        }
+    }
+
+    pub fn with_nonmainnet_features(self, nonmainnet_features: bool) -> Self {
+        Self {
+            nonmainnet_features,
             ..self
         }
     }
@@ -279,7 +290,13 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS), None)
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
@@ -290,7 +307,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None)
+        Self::from_components(config, server_url, max_request_time_ms, None, false)
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -299,7 +316,13 @@ impl PocketIc {
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
     ) -> Self {
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS), None)
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
     }
 
     pub(crate) fn from_components(
@@ -307,6 +330,7 @@ impl PocketIc {
         server_url: Url,
         max_request_time_ms: Option<u64>,
         state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -324,6 +348,7 @@ impl PocketIc {
                 server_url,
                 max_request_time_ms,
                 state_dir,
+                nonmainnet_features,
             )
             .await
         });

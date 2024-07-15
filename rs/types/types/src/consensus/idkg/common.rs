@@ -644,7 +644,7 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 pub type TranscriptLookupError = String;
 
 /// Wrapper to access the ECDSA related info from the blocks.
-pub trait EcdsaBlockReader: Send + Sync {
+pub trait IDkgBlockReader: Send + Sync {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;
 
@@ -705,7 +705,7 @@ impl IDkgTranscriptOperationRef {
     /// Resolves the refs to get the IDkgTranscriptOperation.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptOperation, TranscriptOperationError> {
         match self {
             Self::Random => Ok(IDkgTranscriptOperation::Random),
@@ -940,7 +940,7 @@ impl IDkgTranscriptParamsRef {
     /// Resolves the refs to get the IDkgTranscriptParams.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptParams, TranscriptParamsError> {
         let operation_type = self
             .operation_type_ref
@@ -1146,7 +1146,7 @@ impl ThresholdSigInputsRef {
         }
     }
 
-    pub fn translate(&self, resolver: &dyn EcdsaBlockReader) -> ThresholdSigInputsResult {
+    pub fn translate(&self, resolver: &dyn IDkgBlockReader) -> ThresholdSigInputsResult {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs_ref) => inputs_ref
                 .translate(resolver)

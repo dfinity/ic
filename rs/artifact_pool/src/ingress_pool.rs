@@ -13,7 +13,7 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactWithOpt, ChangeResult, MutablePool, PriorityFnAndFilterProducer,
+        ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn, PriorityFnFactory,
         UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
@@ -21,7 +21,7 @@ use ic_interfaces::{
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{IngressMessageId, Priority, PriorityFn},
+    artifact::IngressMessageId,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, NodeId, Time,
 };
@@ -418,7 +418,7 @@ impl IngressPrioritizer {
     }
 }
 
-impl PriorityFnAndFilterProducer<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
+impl PriorityFnFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
     fn get_priority_function(&self, pool: &IngressPoolImpl) -> PriorityFn<IngressMessageId, ()> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to

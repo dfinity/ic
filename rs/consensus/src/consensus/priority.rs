@@ -3,11 +3,8 @@
 
 use ic_consensus_utils::{pool_reader::PoolReader, ACCEPTABLE_VALIDATION_CUP_GAP};
 use ic_interfaces::consensus_pool::ConsensusPool;
-use ic_types::{
-    artifact::{ConsensusMessageId, Priority, Priority::*, PriorityFn},
-    consensus::ConsensusMessageHash,
-    Height,
-};
+use ic_interfaces::p2p::consensus::{Priority, Priority::*, PriorityFn};
+use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
 /// Return a priority function that matches the given consensus pool.
 pub fn get_priority_function(

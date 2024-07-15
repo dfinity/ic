@@ -62,7 +62,7 @@ message Block {
   IngressPayload ingress_payload = 9;
   XNetPayload xnet_payload = 10;
   SelfValidatingPayload self_validating_payload = 12;
-  EcdsaPayload ecdsa_payload = 13;
+  IDkgPayload idkg_payload = 13;
   reserved 14;
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;

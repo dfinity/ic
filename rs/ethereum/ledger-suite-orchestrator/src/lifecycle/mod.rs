@@ -22,21 +22,28 @@ pub fn init(init_arg: InitArg) {
 
 pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
     if let Some(arg) = upgrade_arg {
-        if arg.upgrade_icrc1_ledger_suite() {
-            let git_commit = GitCommitHash::from_str(
-                arg.git_commit_hash
-                    .as_ref()
-                    .expect("ERROR: missing git commit hash"),
-            )
-            .expect("ERROR: invalid git commit hash");
-            mutate_wasm_store(|s| {
-                record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time(), git_commit)
+        if let Some(git_commit_hash) = &arg.git_commit_hash {
+            let git_commit_hash =
+                GitCommitHash::from_str(git_commit_hash).expect("ERROR: invalid git commit hash");
+            let ledger_suite_version = mutate_wasm_store(|s| {
+                record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time(), git_commit_hash)
             })
             .expect("BUG: failed to record icrc1 ledger suite wasms during upgrade");
+            mutate_state(|s| s.init_ledger_suite_version(ledger_suite_version));
         }
         match read_wasm_store(|w| UpgradeOrchestratorArgs::validate_upgrade_arg(w, arg.clone())) {
             Ok(valid_upgrade_args) => {
                 if valid_upgrade_args.upgrade_ledger_suite() {
+                    let current_ledger_suite_version =
+                        read_state(|s| s.ledger_suite_version().cloned())
+                            .expect("BUG: missing ledger suite version");
+                    mutate_state(|s| {
+                        s.update_ledger_suite_version(
+                            valid_upgrade_args
+                                .clone()
+                                .new_ledger_suite_version(current_ledger_suite_version),
+                        )
+                    });
                     for erc20 in
                         read_state(|s| s.managed_erc20_tokens_iter().cloned().collect::<Vec<_>>())
                     {
@@ -63,10 +70,6 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
 }
 
 pub fn add_erc20(token: AddErc20Arg) {
-    let git_commit =
-        GitCommitHash::from_str(&token.git_commit_hash).expect("ERROR: invalid git commit hash");
-    mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time(), git_commit))
-        .expect("BUG: failed to record icrc1 ledger suite wasms when adding new ERC-20 token");
     match read_state(|s| {
         read_wasm_store(|w| InstallLedgerSuiteArgs::validate_add_erc20(s, w, token.clone()))
     }) {
