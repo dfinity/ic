@@ -381,7 +381,6 @@ impl CkErc20Setup {
             )])
         }
     }
-
 }
 
 pub struct CkErc20DepositParams {

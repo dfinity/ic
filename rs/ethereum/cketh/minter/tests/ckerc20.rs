@@ -14,8 +14,7 @@ use ic_cketh_test_utils::ckerc20::{CkErc20DepositParams, CkErc20Setup, Erc20Toke
 use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
-    all_eth_get_logs_response_size_estimates, block_response, empty_logs,
-    multi_logs_for_single_transaction, Erc20LogEntry,
+    block_response, empty_logs, multi_logs_for_single_transaction, Erc20LogEntry,
 };
 use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
@@ -1798,7 +1797,7 @@ fn should_skip_single_block_containing_too_many_events() {
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
             "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
-        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .with_max_response_bytes(ckerc20.as_ref().all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&ckerc20.cketh);

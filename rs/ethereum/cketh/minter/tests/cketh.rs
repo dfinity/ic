@@ -18,9 +18,8 @@ use ic_cketh_test_utils::flow::{
 };
 use ic_cketh_test_utils::mock::{JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
-    all_eth_get_logs_response_size_estimates, block_response, decode_transaction,
-    default_signed_eip_1559_transaction, empty_logs, hash_transaction,
-    multi_logs_for_single_transaction,
+    block_response, decode_transaction, default_signed_eip_1559_transaction, empty_logs,
+    hash_transaction, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
     CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT,
@@ -912,7 +911,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [cketh.received_eth_event_topic()]
         }]))
-        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .with_max_response_bytes(cketh.all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
@@ -988,7 +987,7 @@ fn should_skip_single_block_containing_too_many_events() {
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [cketh.received_eth_event_topic()]
         }]))
-        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .with_max_response_bytes(cketh.all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);

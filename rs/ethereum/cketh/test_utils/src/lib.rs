@@ -77,9 +77,9 @@ pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
 pub const ERC20_HELPER_CONTRACT_ADDRESS: &str = "0xe1788e4834c896f1932188645cc36c54d1b80ac1";
-pub const RECEIVED_ETH_EVENT_TOPIC: &str =
+const RECEIVED_ETH_EVENT_TOPIC: &str =
     "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
-pub const RECEIVED_ERC20_EVENT_TOPIC: &str =
+const RECEIVED_ERC20_EVENT_TOPIC: &str =
     "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b";
 pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
@@ -604,10 +604,14 @@ impl CkEthSetup {
         }
     }
 
+    fn eth_get_logs_response_size_initial_estimate(&self) -> u64 {
+        100 + HEADER_SIZE_LIMIT
+    }
+
     pub fn all_eth_get_logs_response_size_estimates(&self) -> Vec<u64> {
         if self.evm_rpc_id.is_none() {
             vec![
-                100 + HEADER_SIZE_LIMIT,
+                self.eth_get_logs_response_size_initial_estimate(),
                 2048 + HEADER_SIZE_LIMIT,
                 4096 + HEADER_SIZE_LIMIT,
                 8192 + HEADER_SIZE_LIMIT,
@@ -624,18 +628,18 @@ impl CkEthSetup {
             // The EVM RPC canister has a different adjustment mechanism for the response size limit.
             // In contrast to the ckETH minter, the HEADER_SIZE_LIMIT is not added to the adjusted response size,
             // which simply consists in doubling the estimate (the result is capped by 2_000_000 - HEADER_SIZE_LIMIT).
-            const INITIAL_ESTIMATE: u64 = 100 + HEADER_SIZE_LIMIT;
+            let initial_estimate = self.eth_get_logs_response_size_initial_estimate();
             vec![
-                INITIAL_ESTIMATE,
-                INITIAL_ESTIMATE << 1,
-                INITIAL_ESTIMATE << 2,
-                INITIAL_ESTIMATE << 3,
-                INITIAL_ESTIMATE << 4,
-                INITIAL_ESTIMATE << 5,
-                INITIAL_ESTIMATE << 6,
-                INITIAL_ESTIMATE << 7,
-                INITIAL_ESTIMATE << 8,
-                INITIAL_ESTIMATE << 9,
+                initial_estimate,
+                initial_estimate << 1,
+                initial_estimate << 2,
+                initial_estimate << 3,
+                initial_estimate << 4,
+                initial_estimate << 5,
+                initial_estimate << 6,
+                initial_estimate << 7,
+                initial_estimate << 8,
+                initial_estimate << 9,
                 2_000_000 - HEADER_SIZE_LIMIT,
             ]
         }
