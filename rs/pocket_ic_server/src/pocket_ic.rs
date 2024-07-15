@@ -1314,7 +1314,9 @@ impl Operation for CallRequest {
                 .build();
 
                 let subnet_clone = subnet.clone();
-                let artifact_insertion_handle = self.runtime.spawn(async move {
+                // The task completes when a message is received,
+                // or at the end of the function when the sender is dropped.
+                let _ = self.runtime.spawn(async move {
                     if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
                         r.recv().await
                     {
@@ -1327,7 +1329,7 @@ impl Operation for CallRequest {
                     CallRequestVersion::V3 => {
                         let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                         let metrics_registry = MetricsRegistry::new();
-                        let metrics = HttpHandlerMetrics::new(metrics_registry);
+                        let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
                         CallServiceV3::new_service(
                             ingress_validator,
@@ -1356,7 +1358,6 @@ impl Operation for CallRequest {
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
-                let _ = self.runtime.block_on(artifact_insertion_handle).unwrap();
 
                 OpOut::RawResponse((
                     resp.status().into(),
