@@ -9,12 +9,14 @@ build:
     - rs/nns/common/proto
     - rs/nns/gtc/proto Temporarily removed because a PR was reverted and then un-reverted
     - rs/nns/handlers/root/impl/proto
-    - rs/nns/governance/proto
+    # Temporarily disabling to work around buf. Remove ASAP after merge.
+    # - rs/nns/governance/proto
     - rs/protobuf/def
     - rs/rosetta-api/icp_ledger/proto
     - rs/sns/governance/proto
     - rs/sns/root/proto
-    - rs/sns/swap/proto
+    # Temporarily disabling to work around buf. Remove ASAP after merge.
+    # rs/sns/swap/proto
     - rs/types/base_types/proto
 lint:
   use:
