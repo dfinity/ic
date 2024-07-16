@@ -271,7 +271,10 @@ impl ConsentMessageBuilder {
                     |expected_allowance| format!("\n\n**Current withdrawal allowance:**\n{} e8s {}", expected_allowance.to_string().replace('_', "'"),token_symbol))
                     .unwrap_or_else(|| format!("\u{26A0} The allowance will be set to {} e8s {} independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",amount,token_symbol)));
                 message.push_str(&format!("\n\n**Expiration date:**\n{}", expires_at));
-                message.push_str(&format!("\n\n**Approval fee:**\n{} e8s {}", fee, token_symbol));
+                message.push_str(&format!(
+                    "\n\n**Approval fee:**\n{} e8s {}",
+                    fee, token_symbol
+                ));
                 if approver_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**Transaction fees to be paid by your subaccount:**\n{}",
