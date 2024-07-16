@@ -60,6 +60,8 @@ const RETRY_TIMEOUT_S: u64 = 300;
 
 // The minimum delay between consecutive ticks in auto progress mode.
 const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
+// The timeout of an operation in auto progress mode.
+const AUTO_PROGRESS_OP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct AppState {
@@ -1087,10 +1089,18 @@ pub async fn auto_progress(
             let old = std::mem::replace(&mut now, Instant::now());
             advance_time += now.duration_since(old);
             let cur_op = AdvanceTimeAndTick(advance_time);
-            if let (_, ApiResponse::Success(_)) =
-                run_operation::<()>(api_state_clone.clone(), id, None, cur_op).await
+            match run_operation::<()>(
+                api_state_clone.clone(),
+                id,
+                Some(AUTO_PROGRESS_OP_TIMEOUT),
+                cur_op,
+            )
+            .await
             {
-                advance_time = Duration::default();
+                (_, ApiResponse::Success(_)) | (_, ApiResponse::Started { .. }) => {
+                    advance_time = Duration::default();
+                }
+                _ => {}
             };
             let duration = start.elapsed();
             sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
