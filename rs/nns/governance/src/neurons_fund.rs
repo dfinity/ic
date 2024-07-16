@@ -346,6 +346,9 @@ pub struct NeuronsFundNeuronPortion {
     pub maturity_equivalent_icp_e8s: u64,
     /// Controller of the neuron from which this portion is taken.
     pub controller: PrincipalId,
+    /// Hotkeys of the neuron from which this portion is taken.
+    /// TOOD(NNS1-3198): This field is not currently populated.
+    pub hotkeys: Vec<PrincipalId>,
     /// Indicates whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
     /// participation constraints.
     pub is_capped: bool,
@@ -423,6 +426,7 @@ impl NeuronsFundNeuronPortionPb {
         let controller = self.controller.or(self.hotkey_principal).ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("hotkey_principal".to_string())
         })?;
+        let hotkeys = self.hotkeys.clone();
         let is_capped = self.is_capped.ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("is_capped".to_string())
         })?;
@@ -431,6 +435,7 @@ impl NeuronsFundNeuronPortionPb {
             amount_icp_e8s,
             maturity_equivalent_icp_e8s,
             controller,
+            hotkeys,
             is_capped,
         })
     }
@@ -549,7 +554,7 @@ impl NeuronsFundSnapshot {
             .neurons
             .into_iter()
             .filter_map(|(id, left)| {
-                let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, is_capped) =
+                let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, hotkeys, is_capped) =
                     if let Some(right) = deductible_neurons.remove(&id) {
                         let err_prefix =
                             || format!("Cannot compute diff of two portions of neuron {:?}: ", id);
@@ -587,6 +592,17 @@ impl NeuronsFundSnapshot {
                             };
                             right.controller
                         };
+                        let hotkeys = {
+                            if left.hotkeys != right.hotkeys {
+                                return Some(Err(format!(
+                                    "{}left.hotkeys={:?}, right.hotkeys={:?}.",
+                                    err_prefix(),
+                                    left.hotkeys,
+                                    right.hotkeys,
+                                )));
+                            };
+                            right.hotkeys
+                        };
                         let is_capped = {
                             if !left.is_capped && right.is_capped {
                                 return Some(Err(format!(
@@ -603,6 +619,7 @@ impl NeuronsFundSnapshot {
                             amount_icp_e8s,
                             maturity_equivalent_icp_e8s,
                             controller,
+                            hotkeys,
                             is_capped,
                         )
                     } else {
@@ -610,6 +627,7 @@ impl NeuronsFundSnapshot {
                             left.amount_icp_e8s,
                             left.maturity_equivalent_icp_e8s,
                             left.controller,
+                            left.hotkeys,
                             // The effectively taken portion of this neuron is zero, so it cannot
                             // be capped.
                             false,
@@ -621,8 +639,9 @@ impl NeuronsFundSnapshot {
                 } else {
                     let portion = NeuronsFundNeuronPortion {
                         id,
-                        controller,
                         amount_icp_e8s,
+                        controller,
+                        hotkeys,
                         maturity_equivalent_icp_e8s,
                         is_capped,
                     };
@@ -989,12 +1008,14 @@ where
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                      ..
                  }| {
                     NeuronsFundNeuron {
                         id: *id,
                         maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
                         controller: *controller,
+                        hotkeys: hotkeys.clone(),
                     }
                 },
             )
@@ -1095,6 +1116,7 @@ where
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                  }| {
                     // Division is safe, as `total_maturity_equivalent_icp_e8s != 0` in this branch.
                     let proportion_to_overall_neurons_fund = u64_to_dec(maturity_equivalent_icp_e8s)?
@@ -1160,6 +1182,7 @@ where
                         amount_icp_e8s,
                         maturity_equivalent_icp_e8s,
                         controller,
+                        hotkeys,
                         is_capped,
                     };
                     if let Some(old_neuron_portion) = overall_neuron_portions.insert(id, new_neuron_portion) {
@@ -1551,12 +1574,14 @@ impl PolynomialNeuronsFundParticipation {
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                      ..
                  }| {
                     NeuronsFundNeuron {
                         id: *id,
                         maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
                         controller: *controller,
+                        hotkeys: hotkeys.clone(),
                     }
                 },
             )

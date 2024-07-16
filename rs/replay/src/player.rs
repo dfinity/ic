@@ -757,11 +757,10 @@ impl Player {
                 )
             }
         };
-        let batch_number = message_routing.expected_batch_height();
         let mut extra_batch = Batch {
-            batch_number,
+            batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
-            requires_full_state_hash: true,
+            requires_full_state_hash: false,
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
@@ -784,16 +783,44 @@ impl Player {
                 .collect::<Vec<_>>();
             println!("extra_batch created with new ingress");
         }
-        let batch_number = extra_batch.batch_number;
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
-                    println!("Delivered batch {}", batch_number);
-                    break;
+                    println!("Delivered batch {}", extra_batch.batch_number);
+                    self.wait_for_state(extra_batch.batch_number);
+
+                    // We are done once we delivered a batch for a new checkpoint
+                    if extra_batch.requires_full_state_hash {
+                        break;
+                    }
+
+                    // If we have messages that could not be completed, we need to keep delivering
+                    // empty batches. If all messages could be completed, we need to deliver one
+                    // more batch triggering checkpoint creation.
+                    let msg_status = self.ingress_history_reader.get_latest_status();
+                    let incomplete_msgs_exists =
+                        extra_msgs
+                            .iter()
+                            .any(|msg| match msg_status(&msg.ingress.id()) {
+                                IngressStatus::Unknown => true,
+                                IngressStatus::Known { state, .. } => !state.is_terminal(),
+                            });
+
+                    extra_batch = extra_batch.clone();
+                    extra_batch.messages.signed_ingress_msgs = Default::default();
+                    extra_batch.batch_number = message_routing.expected_batch_height();
+                    extra_batch.time += Duration::from_nanos(1);
+
+                    if !incomplete_msgs_exists {
+                        extra_batch.requires_full_state_hash = true;
+                    }
                 }
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {
-                    unreachable!("Unexpected error on a valid batch number {}", batch_number);
+                    unreachable!(
+                        "Unexpected error on a valid batch number {}",
+                        extra_batch.batch_number
+                    );
                 }
             }
         }

@@ -14,7 +14,6 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::{
-    consensus::tecdsa_performance_test::ChainSignatureRequest,
     orchestrator::utils::{
         rw_message::{
             can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
@@ -23,7 +22,7 @@ use crate::{
         subnet_recovery::{enable_chain_key_signing_on_subnet, run_chain_key_signature_test},
         upgrade::*,
     },
-    tecdsa::make_key_ids_for_all_schemes,
+    tecdsa::{make_key_ids_for_all_schemes, ChainSignatureRequest},
 };
 use candid::Principal;
 use futures::future::join_all;
@@ -54,6 +53,7 @@ const DKG_INTERVAL: u64 = 9;
 
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
+const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
 
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -141,7 +141,7 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
 
     let requests = key_ids
         .iter()
-        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone()))
+        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone(), SCHNORR_MSG_SIZE_BYTES))
         .collect::<Vec<_>>();
 
     let rt: Runtime = Builder::new_multi_thread()
