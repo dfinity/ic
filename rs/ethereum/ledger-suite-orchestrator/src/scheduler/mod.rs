@@ -509,6 +509,7 @@ impl UpgradeOrchestratorArgs {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct InstallLedgerSuiteArgs {
     contract: Erc20Token,
+    minter_id: Principal,
     ledger_init_arg: LedgerInitArg,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
@@ -537,6 +538,7 @@ pub enum InvalidAddErc20ArgError {
     InvalidErc20Contract(String),
     Erc20ContractAlreadyManaged(Erc20Token),
     WasmHashError(WasmHashError),
+    InternalError(String),
 }
 
 impl InstallLedgerSuiteArgs {
@@ -547,6 +549,13 @@ impl InstallLedgerSuiteArgs {
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
         let contract = Erc20Token::try_from(args.contract.clone())
             .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
+        let minter_id =
+            state
+                .minter_id()
+                .cloned()
+                .ok_or(InvalidAddErc20ArgError::InternalError(
+                    "ERROR: minter principal not set in state".to_string(),
+                ))?;
         if let Some(_canisters) = state.managed_canisters(&contract) {
             return Err(InvalidAddErc20ArgError::Erc20ContractAlreadyManaged(
                 contract,
@@ -578,6 +587,7 @@ impl InstallLedgerSuiteArgs {
         };
         Ok(Self {
             contract,
+            minter_id,
             ledger_init_arg: args.ledger_init_arg,
             ledger_compressed_wasm_hash,
             index_compressed_wasm_hash,

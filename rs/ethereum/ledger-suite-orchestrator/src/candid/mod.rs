@@ -13,7 +13,7 @@ pub enum OrchestratorArg {
     AddErc20Arg(AddErc20Arg),
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct InitArg {
     pub more_controller_ids: Vec<Principal>,
     pub minter_id: Option<Principal>,

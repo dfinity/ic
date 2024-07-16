@@ -7,11 +7,11 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
     ManagedCanisters, OrchestratorArg, OrchestratorInfo, UpdateCyclesManagement, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
+use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
 use ic_ledger_suite_orchestrator_test_utils::{
     assert_reply, default_init_arg, ledger_suite_orchestrator_wasm, new_state_machine,
     supported_erc20_tokens, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
-    GIT_COMMIT_HASH_UPGRADE, NNS_ROOT_PRINCIPAL,
+    GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -32,7 +32,8 @@ proptest! {
             .. ProptestConfig::default()
         })]
     #[test]
-    fn should_install_orchestrator_and_add_supported_erc20_tokens(init_arg in arb_init_arg()) {
+    fn should_install_orchestrator_and_add_supported_erc20_tokens(mut init_arg in arb_init_arg(), minter_id in arb_principal()) {
+        init_arg.minter_id = Some(minter_id);
         let more_controllers = init_arg.more_controller_ids.clone();
         let mut orchestrator = LedgerSuiteOrchestrator::new(Arc::new(new_state_machine()), init_arg).register_embedded_wasms();
         let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id.get().into();
@@ -408,7 +409,7 @@ fn should_retrieve_orchestrator_info() {
                 cycles_top_up_increment: Nat::from(10000000000000_u64),
             },
             more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
-            minter_id: None,
+            minter_id: Some(MINTER_PRINCIPAL),
             ledger_suite_version: Some(LedgerSuiteVersion {
                 ledger_compressed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
                 index_compressed_wasm_hash: embedded_index_wasm_hash.to_string(),

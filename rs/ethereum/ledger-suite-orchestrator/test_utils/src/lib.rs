@@ -33,6 +33,8 @@ pub const GIT_COMMIT_HASH_UPGRADE: &str = "b7fef0f57ca246b18deda3efd34a24bb605c8
 pub const CKERC20_TRANSFER_FEE: u64 = 4_000; //0.004 USD for ckUSDC/ckUSDT
 
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
+pub const MINTER_PRINCIPAL: Principal =
+    Principal::from_slice(&[0_u8, 0, 0, 0, 2, 48, 0, 156, 1, 1]);
 
 pub struct LedgerSuiteOrchestrator {
     pub env: Arc<StateMachine>,
@@ -295,7 +297,7 @@ impl LedgerSuiteOrchestrator {
 pub fn default_init_arg() -> InitArg {
     InitArg {
         more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
-        minter_id: None,
+        minter_id: Some(MINTER_PRINCIPAL),
         cycles_management: None,
     }
 }
