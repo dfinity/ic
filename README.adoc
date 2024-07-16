@@ -140,3 +140,4 @@ To make the mono repository a success, there needs to be some basic rules to mak
 ** The crate is well maintained and comes from reputable authors.
 * When bumping the semantic version of an external crate, please do it for the whole repository. Avoid importing the same crate with multiple versions.
 * Keep the rust-lang up-to-date for Bazel and Cargo.
+* Use Cargo workspace for inferring external crate versions.
