@@ -186,8 +186,6 @@ pub fn init_ic(
                 test_env.get_mainnet_ic_os_update_img_url()?,
             )
         } else if let Some(iv) = &ic.initial_version {
-            // Potential security issue?
-            // Technically here anything can be placed and will be downloaded
             (iv.replica_hash.clone(), iv.replica_url.clone())
         } else {
             (
