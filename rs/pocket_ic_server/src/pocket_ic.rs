@@ -13,9 +13,9 @@ use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey};
-use ic_config::execution_environment;
-use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::{
+    execution_environment, flag_status::FlagStatus, http_handler, subnet_config::SubnetConfig,
+};
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
     metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
@@ -88,10 +88,6 @@ pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 /// The interval that pocket-ic should try to execute rounds on all subnets,
 /// when running synchronous update calls for the [`CallRequest`] operation.
 const EXECUTE_ROUND_INTERVAL: Duration = Duration::from_millis(50);
-
-/// The duration the v3 call service will wait for certification of a message,
-/// before returning early with a 202 Accepted response.
-const INGRESS_MESSAGE_CERTIFICATION_TIMEOUT_SECONDS: u64 = 10;
 
 fn compute_subnet_seed(
     ranges: Vec<CanisterIdRange>,
@@ -1357,7 +1353,8 @@ impl Operation for CallRequest {
                             ingress_validator,
                             subnet.ingress_watcher_handle.clone(),
                             metrics,
-                            INGRESS_MESSAGE_CERTIFICATION_TIMEOUT_SECONDS,
+                            http_handler::Config::default()
+                                .ingress_message_certificate_timeout_seconds,
                             Arc::new(RwLock::new(delegation)),
                             subnet.state_manager.clone(),
                         )
@@ -1386,14 +1383,18 @@ impl Operation for CallRequest {
                     let cancellation_token = CancellationToken::new();
                     let cancellation_token_clone = cancellation_token.clone();
 
-                    s.spawn(move || {
-                        while !&cancellation_token_clone.is_cancelled() {
-                            for subnet in pic.subnets.read().unwrap().values() {
-                                subnet.execute_round();
+                    // We have to execute rounds for V3 calls, since the endpoint
+                    // waits for message to be executed and certified.
+                    if let CallRequestVersion::V3 = self.version {
+                        s.spawn(move || {
+                            while !&cancellation_token_clone.is_cancelled() {
+                                for subnet in pic.subnets.read().unwrap().values() {
+                                    subnet.execute_round();
+                                }
+                                std::thread::sleep(EXECUTE_ROUND_INTERVAL);
                             }
-                            std::thread::sleep(EXECUTE_ROUND_INTERVAL);
-                        }
-                    });
+                        });
+                    }
 
                     let response = self.runtime.block_on(svc.oneshot(request)).unwrap();
                     cancellation_token.cancel();
