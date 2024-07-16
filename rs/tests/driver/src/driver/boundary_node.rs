@@ -80,7 +80,7 @@ pub struct BoundaryNodeCustomDomainsConfig {
 }
 
 /// A builder for the initial configuration of an IC boundary node.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct BoundaryNode {
     pub name: String,
     pub vm_resources: VmResources,
