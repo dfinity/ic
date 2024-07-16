@@ -6,9 +6,11 @@ from notification.notification_creator import NotificationCreator
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyManager
 from scanner.scanner_job_type import ScannerJobType
+from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
+from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.DEBUG)
     scanner_job = ScannerJobType.MERGE_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:
@@ -22,8 +24,8 @@ if __name__ == "__main__":
         notify_on_scan_job_failed=notify_on_scan_job_failed,
     )
     notifier = NotificationCreator(config)
-    finding_data_source_subscribers = [notifier]
-    scanner_subscribers = [notifier]
+    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber()]
+    scanner_subscribers = [ConsoleLoggerScannerSubscriber()]
     scanner_job = DependencyScanner(
         BazelRustDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers), scanner_subscribers
     )
