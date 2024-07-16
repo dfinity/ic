@@ -1911,7 +1911,6 @@ mod tests {
                         Randomness::from([0; 32]),
                         &derivation_path,
                         algorithm,
-                        false,
                         &mut rng,
                     ))
                 }
