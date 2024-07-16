@@ -85,6 +85,8 @@ include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 
+/// The interval that pocket-ic should try to execute rounds on all subnets,
+/// when running synchronous update calls for the [`CallRequest`] operation.
 const EXECUTE_ROUND_INTERVAL: Duration = Duration::from_millis(50);
 
 fn compute_subnet_seed(
