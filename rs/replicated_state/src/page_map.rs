@@ -1103,7 +1103,7 @@ impl std::fmt::Debug for PageMap {
 /// It contains sufficient information to reconstruct `PageMap`
 /// in another process. Note that canister sandboxing does not
 /// need `unflushed_delta`, but the field is kept for consistency here.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PageMapSerialization {
     pub storage: StorageSerialization,
     pub base_height: Option<Height>,
