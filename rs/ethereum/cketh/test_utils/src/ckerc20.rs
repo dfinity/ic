@@ -99,7 +99,7 @@ impl CkErc20Setup {
     }
 
     pub fn add_supported_erc20_tokens(mut self) -> Self {
-        self.supported_erc20_tokens = supported_erc20_tokens(self.cketh.minter_id.into());
+        self.supported_erc20_tokens = supported_erc20_tokens();
         for token in self.supported_erc20_tokens.iter() {
             self.orchestrator = self
                 .orchestrator

@@ -1404,24 +1404,12 @@ fn usdc_install_args() -> InstallLedgerSuiteArgs {
 }
 
 fn ledger_init_arg() -> LedgerInitArg {
-    use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-
     LedgerInitArg {
-        minting_account: LedgerAccount {
-            owner: Principal::anonymous(),
-            subaccount: None,
-        },
-        fee_collector_account: None,
-        initial_balances: vec![],
         transfer_fee: 10_000_u32.into(),
-        decimals: None,
+        decimals: 6,
         token_name: "Chain Key USDC".to_string(),
         token_symbol: "ckUSDC".to_string(),
         token_logo: "".to_string(),
-        max_memo_length: None,
-        feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 
@@ -1681,7 +1669,7 @@ mod install_ledger_suite_args {
     };
     use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
     use assert_matches::assert_matches;
-    use candid::{Nat, Principal};
+    use candid::Nat;
     use proptest::collection::vec;
     use proptest::{prop_assert_eq, proptest};
 
@@ -1858,29 +1846,17 @@ mod install_ledger_suite_args {
     }
 
     fn valid_add_erc20_arg() -> AddErc20Arg {
-        use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-
         AddErc20Arg {
             contract: crate::candid::Erc20Contract {
                 chain_id: Nat::from(1_u8),
                 address: ERC20_CONTRACT_ADDRESS.to_string(),
             },
             ledger_init_arg: LedgerInitArg {
-                minting_account: LedgerAccount {
-                    owner: Principal::anonymous(),
-                    subaccount: None,
-                },
-                fee_collector_account: None,
-                initial_balances: vec![],
                 transfer_fee: 10_000_u32.into(),
-                decimals: None,
+                decimals: 6,
                 token_name: "USD Coin".to_string(),
                 token_symbol: "USDC".to_string(),
                 token_logo: "".to_string(),
-                max_memo_length: None,
-                feature_flags: None,
-                maximum_number_of_accounts: None,
-                accounts_overflow_trim_quantity: None,
             },
         }
     }
