@@ -98,7 +98,7 @@ k256 = { workspace = true }
 k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
 kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
 hyper = "0.14.18"
-hyper-rustls = { workspace = true }
+hyper-rustls = { version = "0.24.2", features = ["http2"] }
 http = "0.2.12"
 lazy_static = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }

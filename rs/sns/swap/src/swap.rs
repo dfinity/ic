@@ -2499,9 +2499,8 @@ impl Swap {
                     continue;
                 }
             };
-            let cf_neurons: &mut Vec<CfNeuron> = cf_participant_map
-                .entry(np.hotkey_principal)
-                .or_insert(vec![]);
+            let cf_neurons: &mut Vec<CfNeuron> =
+                cf_participant_map.entry(np.controller).or_insert(vec![]);
 
             let cf_neuron = match CfNeuron::try_new(np.nns_neuron_id, np.amount_icp_e8s) {
                 Ok(cfn) => cfn,

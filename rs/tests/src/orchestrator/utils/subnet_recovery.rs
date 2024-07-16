@@ -294,7 +294,7 @@ pub fn enable_chain_key_on_subnet(
 
 /// Pre-condition: subnet has the Chain key and no other subnet has signing enabled for that key.
 /// Enables Chain key signing on the given subnet and returns a public key for the given canister.
-pub(crate) fn enable_chain_key_signing_on_subnet(
+pub fn enable_chain_key_signing_on_subnet(
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
     subnet_id: SubnetId,
