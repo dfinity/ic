@@ -629,7 +629,7 @@ pub struct StateMachine {
         tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
-    pub metrics_registry: MetricsRegistry,
+    metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler:
         tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
