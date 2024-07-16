@@ -1078,43 +1078,45 @@ pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    let (tx, mut rx) = mpsc::channel::<()>(1);
-    let api_state_clone = api_state.clone();
-    let handle = spawn(async move {
-        use std::time::Instant;
-        let mut now = Instant::now();
-        let mut advance_time = Duration::default();
-        loop {
-            let start = Instant::now();
-            let old = std::mem::replace(&mut now, Instant::now());
-            advance_time += now.duration_since(old);
-            let cur_op = AdvanceTimeAndTick(advance_time);
-            match run_operation::<()>(
-                api_state_clone.clone(),
-                id,
-                Some(AUTO_PROGRESS_OP_TIMEOUT),
-                cur_op,
-            )
-            .await
-            {
-                (_, ApiResponse::Success(_)) | (_, ApiResponse::Started { .. }) => {
-                    advance_time = Duration::default();
+    let create_progress_thread = || {
+        let (tx, mut rx) = mpsc::channel::<()>(1);
+        let api_state_clone = api_state.clone();
+        let handle = spawn(async move {
+            use std::time::Instant;
+            let mut now = Instant::now();
+            let mut advance_time = Duration::default();
+            loop {
+                let start = Instant::now();
+                let old = std::mem::replace(&mut now, Instant::now());
+                advance_time += now.duration_since(old);
+                let cur_op = AdvanceTimeAndTick(advance_time);
+                match run_operation::<()>(
+                    api_state_clone.clone(),
+                    id,
+                    Some(AUTO_PROGRESS_OP_TIMEOUT),
+                    cur_op,
+                )
+                .await
+                {
+                    (_, ApiResponse::Success(_)) | (_, ApiResponse::Started { .. }) => {
+                        advance_time = Duration::default();
+                    }
+                    _ => {}
+                };
+                let duration = start.elapsed();
+                sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                match rx.try_recv() {
+                    Ok(_) | Err(TryRecvError::Disconnected) => {
+                        return;
+                    }
+                    Err(TryRecvError::Empty) => {}
                 }
-                _ => {}
-            };
-            let duration = start.elapsed();
-            sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
-            match rx.try_recv() {
-                Ok(_) | Err(TryRecvError::Disconnected) => {
-                    return;
-                }
-                Err(TryRecvError::Empty) => {}
             }
-        }
-    });
-    let progress_thread = ProgressThread { handle, sender: tx };
+        });
+        ProgressThread { handle, sender: tx }
+    };
 
-    api_state.auto_progress(id, progress_thread).await;
+    api_state.auto_progress(id, create_progress_thread).await;
     (StatusCode::OK, Json(ApiResponse::Success(())))
 }
 

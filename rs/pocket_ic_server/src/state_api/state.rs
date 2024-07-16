@@ -581,14 +581,14 @@ impl ApiState {
         }
     }
 
-    pub async fn auto_progress(&self, instance_id: InstanceId, progress_thread: ProgressThread) {
+    pub async fn auto_progress<F>(&self, instance_id: InstanceId, create_progress_thread: F)
+    where
+        F: FnOnce() -> ProgressThread,
+    {
         let progress_threads = self.progress_threads.read().await;
-        let mut progress_thread_ref = progress_threads[instance_id].lock().await;
-        if progress_thread_ref.is_none() {
-            *progress_thread_ref = Some(progress_thread);
-        } else {
-            progress_thread.sender.send(()).await.unwrap();
-            progress_thread.handle.await.unwrap();
+        let mut progress_thread = progress_threads[instance_id].lock().await;
+        if progress_thread.is_none() {
+            *progress_thread = Some(create_progress_thread());
         }
     }
 
