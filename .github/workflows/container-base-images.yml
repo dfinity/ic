@@ -86,7 +86,7 @@ jobs:
           file: ${{ matrix.CONTEXT }}/Dockerfile.base
           # push: ${{ github.ref_name == 'master' }} # TODO: uncomment
           push: true
-          tags: dfinity/${{ matrix.IMAGE }}:${{ env.DATE }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}:${{ env.DATE }}
           build-args: ${{ matrix.BUILD_ARGS }}
 
       - name: Collect SHA256 Digest
