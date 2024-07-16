@@ -1977,8 +1977,11 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             nns_neuron_id: item.nns_neuron_id.map(|x| x.into()),
             amount_icp_e8s: item.amount_icp_e8s,
             maturity_equivalent_icp_e8s: item.maturity_equivalent_icp_e8s,
+            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
+            controller: item.controller.map(|x| x.into()),
+            hotkeys: item.hotkeys.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
@@ -1990,8 +1993,11 @@ impl From<pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             nns_neuron_id: item.nns_neuron_id.map(|x| x.into()),
             amount_icp_e8s: item.amount_icp_e8s,
             maturity_equivalent_icp_e8s: item.maturity_equivalent_icp_e8s,
+            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
+            controller: item.controller.map(|x| x.into()),
+            hotkeys: item.hotkeys.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
@@ -3733,6 +3739,22 @@ impl From<pb_api::settle_community_fund_participation::Result>
     }
 }
 
+impl From<pb::Principals> for pb_api::Principals {
+    fn from(item: pb::Principals) -> Self {
+        Self {
+            principals: item.principals.into_iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<pb_api::Principals> for pb::Principals {
+    fn from(item: pb_api::Principals) -> Self {
+        Self {
+            principals: item.principals.into_iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
 impl From<pb::SettleNeuronsFundParticipationRequest>
     for pb_api::SettleNeuronsFundParticipationRequest
 {
@@ -3847,8 +3869,11 @@ impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
         Self {
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
+            controller: item.controller.map(|x| x.into()),
+            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
+            hotkeys: item.hotkeys.map(|x| x.into()),
         }
     }
 }
@@ -3859,8 +3884,11 @@ impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
         Self {
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
+            controller: item.controller.map(|x| x.into()),
+            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
+            hotkeys: item.hotkeys.map(|x| x.into()),
         }
     }
 }
@@ -4243,6 +4271,10 @@ impl From<pb::Topic> for pb_api::Topic {
             pb::Topic::SnsAndCommunityFund => pb_api::Topic::SnsAndCommunityFund,
             pb::Topic::ApiBoundaryNodeManagement => pb_api::Topic::ApiBoundaryNodeManagement,
             pb::Topic::SubnetRental => pb_api::Topic::SubnetRental,
+            pb::Topic::ProtocolCanisterManagement => pb_api::Topic::ProtocolCanisterManagement,
+            pb::Topic::ServiceNervousSystemManagement => {
+                pb_api::Topic::ServiceNervousSystemManagement
+            }
         }
     }
 }
@@ -4265,6 +4297,10 @@ impl From<pb_api::Topic> for pb::Topic {
             pb_api::Topic::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
             pb_api::Topic::ApiBoundaryNodeManagement => pb::Topic::ApiBoundaryNodeManagement,
             pb_api::Topic::SubnetRental => pb::Topic::SubnetRental,
+            pb_api::Topic::ProtocolCanisterManagement => pb::Topic::ProtocolCanisterManagement,
+            pb_api::Topic::ServiceNervousSystemManagement => {
+                pb::Topic::ServiceNervousSystemManagement
+            }
         }
     }
 }
