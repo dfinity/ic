@@ -1329,8 +1329,10 @@ impl Operation for CallRequest {
                 .build();
 
                 let subnet_clone = subnet.clone();
-                // The task completes when a message is received,
-                // or at the end of the function when the sender is dropped.
+
+                // Task that waits for call service to submit the ingress message, and
+                // forward it to the state machine. The task will automatically terminate
+                // once the call service sends a message, or if the call service is dropped.
                 let _ = self.runtime.spawn(async move {
                     if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
                         r.recv().await

@@ -687,7 +687,7 @@ fn canister_state_dir() {
         .unwrap();
 }
 
-/// Test that the PocketIC can handle update calls to the new
+/// Test that PocketIC can handle synchronous update calls, i.e. `/v3/.../call`.
 #[test]
 fn test_specified_id_call_v3() {
     use ic_agent_call_v3::agent::CallResponse;
