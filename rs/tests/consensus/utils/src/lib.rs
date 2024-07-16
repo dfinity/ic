@@ -4,7 +4,7 @@ use std::time::Duration;
  * 1. Delete existing tc rules (if present).
  * 2. Add a root qdisc (queueing discipline) for an htb (hierarchical token bucket).
  * 3. Add a class with bandwidth limit.
- * 4. Add a qdisc to introduce latency with jitter.
+ * 4. Add a qdisc to introduce latency.
  * 5. Add a filter to associate IPv6 traffic with the class and specific port.
  * 6. Read the active tc rules.
  */
