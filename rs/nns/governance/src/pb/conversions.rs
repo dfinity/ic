@@ -570,6 +570,7 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::CreateServiceNervousSystem(v) => {
                 pb_api::proposal::Action::CreateServiceNervousSystem(v.into())
             }
+            pb::proposal::Action::InstallCode(v) => pb_api::proposal::Action::InstallCode(v.into()),
         }
     }
 }
@@ -613,6 +614,7 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
             }
+            pb_api::proposal::Action::InstallCode(v) => pb::proposal::Action::InstallCode(v.into()),
         }
     }
 }
@@ -2717,6 +2719,66 @@ impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRe
             initial_reward_rate: item.initial_reward_rate,
             final_reward_rate: item.final_reward_rate,
             reward_rate_transition_duration: item.reward_rate_transition_duration,
+        }
+    }
+}
+
+impl From<pb::InstallCode> for pb_api::InstallCode {
+    fn from(item: pb::InstallCode) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            install_mode: item.install_mode,
+            wasm_module: item.wasm_module.map(|x| x.into()),
+            arg: item.arg.map(|x| x.into()),
+            skip_stopping_before_installing: item.skip_stopping_before_installing,
+        }
+    }
+}
+impl From<pb_api::InstallCode> for pb::InstallCode {
+    fn from(item: pb_api::InstallCode) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            install_mode: item.install_mode,
+            wasm_module: item.wasm_module.map(|x| x.into()),
+            arg: item.arg.map(|x| x.into()),
+            skip_stopping_before_installing: item.skip_stopping_before_installing,
+        }
+    }
+}
+
+impl From<pb::install_code::CanisterInstallMode> for pb_api::install_code::CanisterInstallMode {
+    fn from(item: pb::install_code::CanisterInstallMode) -> Self {
+        match item {
+            pb::install_code::CanisterInstallMode::Unspecified => {
+                pb_api::install_code::CanisterInstallMode::Unspecified
+            }
+            pb::install_code::CanisterInstallMode::Install => {
+                pb_api::install_code::CanisterInstallMode::Install
+            }
+            pb::install_code::CanisterInstallMode::Reinstall => {
+                pb_api::install_code::CanisterInstallMode::Reinstall
+            }
+            pb::install_code::CanisterInstallMode::Upgrade => {
+                pb_api::install_code::CanisterInstallMode::Upgrade
+            }
+        }
+    }
+}
+impl From<pb_api::install_code::CanisterInstallMode> for pb::install_code::CanisterInstallMode {
+    fn from(item: pb_api::install_code::CanisterInstallMode) -> Self {
+        match item {
+            pb_api::install_code::CanisterInstallMode::Unspecified => {
+                pb::install_code::CanisterInstallMode::Unspecified
+            }
+            pb_api::install_code::CanisterInstallMode::Install => {
+                pb::install_code::CanisterInstallMode::Install
+            }
+            pb_api::install_code::CanisterInstallMode::Reinstall => {
+                pb::install_code::CanisterInstallMode::Reinstall
+            }
+            pb_api::install_code::CanisterInstallMode::Upgrade => {
+                pb::install_code::CanisterInstallMode::Upgrade
+            }
         }
     }
 }
