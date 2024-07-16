@@ -118,7 +118,8 @@ jobs:
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
-    runs-on: zrh-hydra-builder-darwin-2
+    runs-on:
+      labels: darwin-2
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
