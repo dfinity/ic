@@ -449,11 +449,9 @@ where
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &ConsensusManagerMetrics,
         mut peer_rx: &mut watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: &mut watch::Receiver<
-            PriorityFn<Artifact::Id>,
-        >,
+        mut priority_fn_watcher: &mut watch::Receiver<PriorityFn<Artifact::Id>>,
     ) -> Result<(), Aborted> {
-        let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
+        let mut priority = priority_fn_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
         if let Priority::Stash = priority {
@@ -611,7 +609,6 @@ where
             Self::download_artifact(
                 log,
                 &id,
-                &attr,
                 artifact,
                 &mut peer_rx,
                 priority_fn_watcher,

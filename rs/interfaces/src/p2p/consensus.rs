@@ -70,8 +70,7 @@ pub enum Priority {
 }
 
 /// Priority function used by `ArtifactClient`.
-pub type PriorityFn<Id> =
-    Box<dyn Fn(&Id) -> Priority + Send + Sync + 'static>;
+pub type PriorityFn<Id> = Box<dyn Fn(&Id) -> Priority + Send + Sync + 'static>;
 
 pub trait PriorityFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
