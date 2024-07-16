@@ -708,7 +708,7 @@ fn test_specified_id_call_v3() {
         .unwrap();
 
     // retrieve the first canister ID on the application subnet
-    // which will be the effective and expected canister ID for canister creation
+    // which will be the effective canister ID for canister creation
     let topology = pic.topology();
 
     let app_subnet = topology.get_app_subnets()[0];
