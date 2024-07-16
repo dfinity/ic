@@ -50,6 +50,8 @@ use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
+use ic_system_test_driver::driver::test_env_api::SshSession;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
@@ -59,12 +61,14 @@ use ic_system_test_driver::driver::{
         HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
     },
 };
-use ic_system_test_driver::generic_workload_engine::engine::Engine;
+use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
-    LoadTestMetricsProvider, RequestOutcome,
+    LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::assert_canister_counter_with_retries;
+use ic_system_test_driver::util::{
+    assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
+};
 use ic_tests::nns_dapp::set_authorized_subnets;
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_types::Height;
@@ -72,18 +76,28 @@ use ic_types::Height;
 use anyhow::Result;
 use futures::future::join_all;
 use slog::info;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::runtime::{Builder, Runtime};
 
+const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const NODES_COUNT: usize = 13;
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TESTING_PERIOD: Duration = Duration::from_secs(60);
+const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
 const DKG_INTERVAL: u64 = 999;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
+
+const INGRESS_BYTES_COUNT_METRIC: &str = "consensus_ingress_message_bytes_delivered_count";
+const INGRESS_BYTES_SUM_METRIC: &str = "consensus_ingress_message_bytes_delivered_sum";
+const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_sum";
+
+// Network parameters
+const DEVICE_NAME: &str = "enp1s0"; // network interface name
+const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
+const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -120,13 +134,22 @@ fn setup(env: TestEnv) {
     );
     set_authorized_subnets(&env);
     env.sync_with_prometheus();
+
+    let topology_snapshot = env.topology_snapshot();
+    let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
+    for node in app_subnet.nodes() {
+        let session = node
+            .block_on_ssh_session()
+            .expect("Failed to ssh into node");
+        node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command())
+            .expect("Failed to execute bash script from session");
+    }
 }
 
 fn test(env: TestEnv, message_size: usize, rps: f64) {
     let log = env.logger();
 
     let canister_count: usize = 4;
-    let duration: Duration = TESTING_PERIOD;
 
     let app_node = env
         .topology_snapshot()
@@ -168,24 +191,20 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     let agents = rt.block_on(async {
         join_all(
             nodes
-                .into_iter()
+                .iter()
+                .cloned()
                 .map(|n| async move { n.build_canister_agent().await }),
         )
         .await
     });
 
     for _ in 0..canister_count {
-        const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
-        canisters.push(app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None));
+        canisters.push(
+            app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, /*arg=*/ None),
+        );
     }
     info!(log, "{} canisters installed successfully.", canisters.len());
-    assert_eq!(
-        canisters.len(),
-        canister_count,
-        "Not all canisters deployed successfully, installed {:?} expected {:?}",
-        canisters.len(),
-        canister_count
-    );
+
     info!(log, "Step 2: Instantiate and start the workload..");
     let payload: Vec<u8> = vec![0; message_size];
     let generator = {
@@ -206,18 +225,34 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
             }
         }
     };
+
+    let consensus_metrics_before = rt.block_on(get_consensus_metrics(&nodes));
+    let now = Instant::now();
+
     let metrics = rt.block_on(
-        Engine::new(log.clone(), generator, rps, duration)
+        generic_workload_engine::engine::Engine::new(log.clone(), generator, rps, TEST_DURATION)
             .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
             .execute_simply(log.clone()),
     );
+
+    let duration = now.elapsed();
+    let consensus_metrics_after = rt.block_on(get_consensus_metrics(&nodes));
+
+    let test_metrics = TestMetrics::compute(
+        consensus_metrics_before,
+        consensus_metrics_after,
+        &metrics,
+        duration,
+    );
+
     info!(log, "Reporting workload execution results ...");
-    env.emit_report(format!("{}", metrics));
+    env.emit_report(format!("{}", test_metrics));
+
     info!(
         log,
         "Step 3: Assert expected number of success update calls on each canister.."
     );
-    let requests_count = rps * duration.as_secs_f64();
+    let requests_count = rps * TEST_DURATION.as_secs_f64();
     let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
     info!(
         log,
@@ -248,12 +283,137 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 }
 
+#[derive(Copy, Clone)]
+struct TestMetrics {
+    success_rate: f64,
+    blocks_per_second: f64,
+    throughput_bytes_per_second: f64,
+    throughput_messages_per_second: f64,
+}
+
+impl TestMetrics {
+    fn compute(
+        before: ConsensusMetrics,
+        after: ConsensusMetrics,
+        load_metrics: &LoadTestMetrics,
+        duration: Duration,
+    ) -> Self {
+        let metrics_difference = after - before;
+        let blocks_per_second = metrics_difference.delivered_blocks as f64 / duration.as_secs_f64();
+        let throughput_bytes_per_second =
+            metrics_difference.delivered_ingress_messages_bytes as f64 / duration.as_secs_f64();
+        let throughput_messages_per_second =
+            metrics_difference.delivered_ingress_messages as f64 / duration.as_secs_f64();
+
+        Self {
+            blocks_per_second,
+            success_rate: (load_metrics.success_calls() as f64)
+                / (load_metrics.total_calls() as f64),
+            throughput_bytes_per_second,
+            throughput_messages_per_second,
+        }
+    }
+}
+
+impl std::fmt::Display for TestMetrics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Success rate: {:.1}%", 100. * self.success_rate)?;
+        writeln!(f, "Block rate: {:.1} blocks/s", self.blocks_per_second)?;
+        write!(
+            f,
+            "Throughput: {:.1} MiB/s, {:.1} messages/s",
+            self.throughput_bytes_per_second / (1024. * 1024.),
+            self.throughput_messages_per_second
+        )
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct ConsensusMetrics {
+    delivered_blocks: u64,
+    delivered_ingress_messages: u64,
+    delivered_ingress_messages_bytes: u64,
+}
+
+impl std::ops::Sub for ConsensusMetrics {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self {
+            delivered_blocks: self.delivered_blocks - other.delivered_blocks,
+            delivered_ingress_messages: self.delivered_ingress_messages
+                - other.delivered_ingress_messages,
+            delivered_ingress_messages_bytes: self.delivered_ingress_messages_bytes
+                - other.delivered_ingress_messages_bytes,
+        }
+    }
+}
+
+async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
+    let fetcher = MetricsFetcher::new(
+        nodes.iter().cloned(),
+        vec![
+            INGRESS_BYTES_COUNT_METRIC.to_string(),
+            INGRESS_BYTES_SUM_METRIC.to_string(),
+            INGRESS_MESSAGES_SUM_METRIC.to_string(),
+        ],
+    );
+
+    let metrics = fetcher
+        .fetch::<u64>()
+        .await
+        .expect("Should be able to fetch the metrics");
+
+    let avg_blocks = average(&metrics[INGRESS_BYTES_COUNT_METRIC]);
+    let avg_ingress_messages = average(&metrics[INGRESS_MESSAGES_SUM_METRIC]);
+    let avg_ingress_bytes = average(&metrics[INGRESS_BYTES_SUM_METRIC]);
+
+    ConsensusMetrics {
+        delivered_blocks: avg_blocks,
+        delivered_ingress_messages: avg_ingress_messages,
+        delivered_ingress_messages_bytes: avg_ingress_bytes,
+    }
+}
+
+/**
+ * 1. Delete existing tc rules (if present).
+ * 2. Add a root qdisc (queueing discipline) for an htb (hierarchical token bucket).
+ * 3. Add a class with bandwidth limit.
+ * 4. Add a qdisc to introduce latency with jitter.
+ * 5. Add a filter to associate IPv6 traffic with the class and specific port.
+ * 6. Read the active tc rules.
+ */
+fn limit_tc_ssh_command() -> String {
+    let cfg = ic_system_test_driver::util::get_config();
+    let p2p_listen_port = cfg.transport.unwrap().listening_port;
+    format!(
+        r#"set -euo pipefail
+sudo tc qdisc del dev {device} root 2> /dev/null || true
+sudo tc qdisc add dev {device} root handle 1: htb default 10
+sudo tc class add dev {device} parent 1: classid 1:10 htb rate {bandwidth_mbit}mbit ceil {bandwidth_mbit}mbit
+sudo tc qdisc add dev {device} parent 1:10 handle 10: netem delay {latency_ms}ms
+sudo tc filter add dev {device} parent 1: protocol ipv6 prio 1 u32 match ip6 dport {p2p_listen_port} 0xFFFF flowid 1:10
+sudo tc qdisc show dev {device}
+"#,
+        device = DEVICE_NAME,
+        bandwidth_mbit = BANDWIDTH_MBITS,
+        latency_ms = LATENCY.as_millis(),
+        p2p_listen_port = p2p_listen_port
+    )
+}
+
+fn average(nums: &[u64]) -> u64 {
+    assert!(!nums.is_empty());
+
+    nums.iter().sum::<u64>() / (nums.len() as u64)
+}
+
 fn test_small_messages(env: TestEnv) {
-    test(env, 3_600, 1000.0)
+    test(env, 4_000, 500.0)
 }
 
 fn test_large_messages(env: TestEnv) {
-    test(env, 900_000, 4.0)
+    test(env, 1_950_000, 2.0)
 }
 
 fn main() -> Result<()> {

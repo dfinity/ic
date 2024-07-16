@@ -273,7 +273,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.3.4",
             ),
             "bytes": crate.spec(
-                version = "^1.6.0",
+                version = "^1.6.1",
             ),
             "cached": crate.spec(
                 version = "^0.49",
@@ -509,7 +509,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper": crate.spec(
-                version = "^1.4.0",
+                version = "^1.4.1",
                 features = [
                     "full",
                 ],
@@ -522,21 +522,21 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.3",
+                version = "^0.1.6",
                 features = [
                     "full",
                 ],
             ),
-            "hyper-rustls": crate.spec(
+            "hyper_rustls_0_24_2": crate.spec(
                 version = "^0.24.2",
+                package = "hyper-rustls",
                 features = [
                     "http2",
                 ],
             ),
-            "hyper-rustls_0_27_x": crate.spec(
+            "hyper-rustls": crate.spec(
                 default_features = False,
-                package = "hyper-rustls",
-                version = "^0.27.1",
+                version = "^0.27.2",
                 features = [
                     "http1",
                     "http2",
@@ -796,11 +796,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "nix": crate.spec(
                 version = "^0.24.3",
             ),
-            "num": crate.spec(
-                version = "^0.4.0",
-            ),
             "num-bigint": crate.spec(
-                version = "^0.4.0",
+                version = "^0.4.6",
             ),
             "num-bigint-dig": crate.spec(
                 version = "^0.8",
@@ -963,7 +960,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "quinn": crate.spec(
                 git = "https://github.com/quinn-rs/quinn",
                 rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
-                features = ["ring"],
+                default_features = False,
+                features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
                 git = "https://github.com/quinn-rs/quinn",
@@ -1088,7 +1086,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustls": crate.spec(
                 default_features = False,
-                version = "^0.23.10",
+                version = "^0.23.11",
                 features = [
                     "ring",
                 ],
@@ -1164,7 +1162,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.10.8",
             ),
             "sha3": crate.spec(
-                version = "^0.10",
+                version = "^0.10.8",
             ),
             "signal-hook": crate.spec(
                 version = "^0.3.6",
@@ -1270,7 +1268,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.57",
+                version = "^1.0.62",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
