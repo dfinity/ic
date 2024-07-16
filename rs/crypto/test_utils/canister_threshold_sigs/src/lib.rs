@@ -1886,14 +1886,8 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     algorithm_id: AlgorithmId,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple = generate_ecdsa_presig_quadruple(
-        env,
-        dealers,
-        receivers,
-        algorithm_id,
-        key_transcript,
-        rng,
-    );
+    let quadruple =
+        generate_ecdsa_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,
