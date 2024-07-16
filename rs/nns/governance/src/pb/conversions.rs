@@ -4,16 +4,16 @@ use ic_nns_governance_api::pb::v1 as pb_api;
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
         Self {
-            id: item.id.map(|x| x.into()),
-            reward_account: item.reward_account.map(|x| x.into()),
+            id: item.id,
+            reward_account: item.reward_account,
         }
     }
 }
 impl From<pb_api::NodeProvider> for pb::NodeProvider {
     fn from(item: pb_api::NodeProvider) -> Self {
         Self {
-            id: item.id.map(|x| x.into()),
-            reward_account: item.reward_account.map(|x| x.into()),
+            id: item.id,
+            reward_account: item.reward_account,
         }
     }
 }
@@ -21,14 +21,14 @@ impl From<pb_api::NodeProvider> for pb::NodeProvider {
 impl From<pb::UpdateNodeProvider> for pb_api::UpdateNodeProvider {
     fn from(item: pb::UpdateNodeProvider) -> Self {
         Self {
-            reward_account: item.reward_account.map(|x| x.into()),
+            reward_account: item.reward_account,
         }
     }
 }
 impl From<pb_api::UpdateNodeProvider> for pb::UpdateNodeProvider {
     fn from(item: pb_api::UpdateNodeProvider) -> Self {
         Self {
-            reward_account: item.reward_account.map(|x| x.into()),
+            reward_account: item.reward_account,
         }
     }
 }
@@ -36,7 +36,7 @@ impl From<pb_api::UpdateNodeProvider> for pb::UpdateNodeProvider {
 impl From<pb::BallotInfo> for pb_api::BallotInfo {
     fn from(item: pb::BallotInfo) -> Self {
         Self {
-            proposal_id: item.proposal_id.map(|x| x.into()),
+            proposal_id: item.proposal_id,
             vote: item.vote,
         }
     }
@@ -44,7 +44,7 @@ impl From<pb::BallotInfo> for pb_api::BallotInfo {
 impl From<pb_api::BallotInfo> for pb::BallotInfo {
     fn from(item: pb_api::BallotInfo) -> Self {
         Self {
-            proposal_id: item.proposal_id.map(|x| x.into()),
+            proposal_id: item.proposal_id,
             vote: item.vote,
         }
     }
@@ -89,7 +89,7 @@ impl From<pb::NeuronStakeTransfer> for pb_api::NeuronStakeTransfer {
     fn from(item: pb::NeuronStakeTransfer) -> Self {
         Self {
             transfer_timestamp: item.transfer_timestamp,
-            from: item.from.map(|x| x.into()),
+            from: item.from,
             from_subaccount: item.from_subaccount,
             to_subaccount: item.to_subaccount,
             neuron_stake_e8s: item.neuron_stake_e8s,
@@ -102,7 +102,7 @@ impl From<pb_api::NeuronStakeTransfer> for pb::NeuronStakeTransfer {
     fn from(item: pb_api::NeuronStakeTransfer) -> Self {
         Self {
             transfer_timestamp: item.transfer_timestamp,
-            from: item.from.map(|x| x.into()),
+            from: item.from,
             from_subaccount: item.from_subaccount,
             to_subaccount: item.to_subaccount,
             neuron_stake_e8s: item.neuron_stake_e8s,
@@ -115,10 +115,10 @@ impl From<pb_api::NeuronStakeTransfer> for pb::NeuronStakeTransfer {
 impl From<pb::Neuron> for pb_api::Neuron {
     fn from(item: pb::Neuron) -> Self {
         Self {
-            id: item.id.map(|x| x.into()),
+            id: item.id,
             account: item.account,
-            controller: item.controller.map(|x| x.into()),
-            hot_keys: item.hot_keys.into_iter().map(|x| x.into()).collect(),
+            controller: item.controller,
+            hot_keys: item.hot_keys,
             cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
             neuron_fees_e8s: item.neuron_fees_e8s,
             created_timestamp_seconds: item.created_timestamp_seconds,
@@ -127,7 +127,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
             followees: item
                 .followees
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
             kyc_verified: item.kyc_verified,
@@ -146,10 +146,10 @@ impl From<pb::Neuron> for pb_api::Neuron {
 impl From<pb_api::Neuron> for pb::Neuron {
     fn from(item: pb_api::Neuron) -> Self {
         Self {
-            id: item.id.map(|x| x.into()),
+            id: item.id,
             account: item.account,
-            controller: item.controller.map(|x| x.into()),
-            hot_keys: item.hot_keys.into_iter().map(|x| x.into()).collect(),
+            controller: item.controller,
+            hot_keys: item.hot_keys,
             cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
             neuron_fees_e8s: item.neuron_fees_e8s,
             created_timestamp_seconds: item.created_timestamp_seconds,
@@ -158,7 +158,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
             followees: item
                 .followees
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
             kyc_verified: item.kyc_verified,
@@ -178,14 +178,14 @@ impl From<pb_api::Neuron> for pb::Neuron {
 impl From<pb::neuron::Followees> for pb_api::neuron::Followees {
     fn from(item: pb::neuron::Followees) -> Self {
         Self {
-            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            followees: item.followees,
         }
     }
 }
 impl From<pb_api::neuron::Followees> for pb::neuron::Followees {
     fn from(item: pb_api::neuron::Followees) -> Self {
         Self {
-            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            followees: item.followees,
         }
     }
 }
@@ -1973,11 +1973,11 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
     for pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion
 {
     fn from(item: pb::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
+        #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id.map(|x| x.into()),
             amount_icp_e8s: item.amount_icp_e8s,
             maturity_equivalent_icp_e8s: item.maturity_equivalent_icp_e8s,
-            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
             controller: item.controller.map(|x| x.into()),
@@ -1989,11 +1989,11 @@ impl From<pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
     for pb::neurons_fund_snapshot::NeuronsFundNeuronPortion
 {
     fn from(item: pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
+        #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id.map(|x| x.into()),
             amount_icp_e8s: item.amount_icp_e8s,
             maturity_equivalent_icp_e8s: item.maturity_equivalent_icp_e8s,
-            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
             controller: item.controller.map(|x| x.into()),
@@ -3866,11 +3866,11 @@ impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
     for pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron
 {
     fn from(item: pb::settle_neurons_fund_participation_response::NeuronsFundNeuron) -> Self {
+        #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
             controller: item.controller.map(|x| x.into()),
-            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
             hotkeys: item.hotkeys.map(|x| x.into()),
@@ -3881,11 +3881,11 @@ impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
     for pb::settle_neurons_fund_participation_response::NeuronsFundNeuron
 {
     fn from(item: pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron) -> Self {
+        #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
             controller: item.controller.map(|x| x.into()),
-            #[allow(deprecated)]
             hotkey_principal: item.hotkey_principal.map(|x| x.into()),
             is_capped: item.is_capped,
             hotkeys: item.hotkeys.map(|x| x.into()),
