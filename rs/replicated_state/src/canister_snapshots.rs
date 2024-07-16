@@ -27,10 +27,14 @@ pub struct CanisterSnapshots {
 }
 
 impl CanisterSnapshots {
-    pub fn new(
-        snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
-        snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
-    ) -> Self {
+    pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
+        let mut snapshot_ids = BTreeMap::default();
+        for snapshot_id in snapshots.keys() {
+            let canister_id = snapshot_id.get_canister_id();
+            let canister_snapshot_ids: &mut BTreeSet<SnapshotId> =
+                snapshot_ids.entry(canister_id).or_default();
+            canister_snapshot_ids.insert(*snapshot_id);
+        }
         Self {
             snapshots,
             unflushed_changes: vec![],
@@ -75,6 +79,9 @@ impl CanisterSnapshots {
                 let snapshot_ids = self.snapshot_ids.get_mut(&canister_id).unwrap();
                 debug_assert!(snapshot_ids.contains(&snapshot_id));
                 snapshot_ids.remove(&snapshot_id);
+                if snapshot_ids.is_empty() {
+                    self.snapshot_ids.remove(&canister_id);
+                }
 
                 Some(snapshot)
             }
@@ -357,14 +364,6 @@ mod tests {
         let unflushed_changes = snapshot_manager.take_unflushed_changes();
         assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
         assert_eq!(unflushed_changes.len(), 1);
-        assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
-        assert_eq!(
-            snapshot_manager
-                .snapshot_ids
-                .get(&canister_id)
-                .unwrap()
-                .len(),
-            0
-        );
+        assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
     }
 }
