@@ -71,8 +71,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tempfile::TempDir;
-use tokio::runtime::Runtime;
-use tokio::sync::mpsc;
+use tokio::{runtime::Runtime, sync::mpsc};
+use tokio_util::sync::CancellationToken;
 use tower::{
     service_fn,
     util::{BoxCloneService, ServiceExt},
@@ -84,6 +84,8 @@ include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
+
+const EXECUTE_ROUND_INTERVAL: Duration = Duration::from_millis(50);
 
 fn compute_subnet_seed(
     ranges: Vec<CanisterIdRange>,
@@ -1370,7 +1372,26 @@ impl Operation for CallRequest {
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+
+                // This doesn't allow parallelism for multiple concurrent V3 calls,
+                // but fine for now to unblock agent-rs.
+                let resp = std::thread::scope(|s| {
+                    let cancellation_token = CancellationToken::new();
+                    let cancellation_token_clone = cancellation_token.clone();
+
+                    s.spawn(move || {
+                        while !&cancellation_token_clone.is_cancelled() {
+                            for subnet in pic.subnets.read().unwrap().values() {
+                                subnet.execute_round();
+                            }
+                            std::thread::sleep(EXECUTE_ROUND_INTERVAL);
+                        }
+                    });
+
+                    let response = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                    cancellation_token.cancel();
+                    response
+                });
 
                 OpOut::RawResponse((
                     resp.status().into(),

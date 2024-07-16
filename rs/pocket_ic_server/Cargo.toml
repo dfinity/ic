@@ -16,6 +16,7 @@ hyper-util = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 serde = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }

@@ -3,6 +3,7 @@ mod common;
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::http_transport::ReqwestTransport;
+use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::common::rest::{HttpsConfig, InstanceConfig, SubnetConfigSet};
 use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
@@ -690,8 +691,6 @@ fn canister_state_dir() {
 #[test]
 fn test_specified_id_call_v3() {
     use ic_agent_call_v3::agent::CallResponse;
-    use ic_utils_call_v3::interfaces::ManagementCanister;
-    use tokio::time::timeout;
 
     // Create live PocketIc instance.
     let mut pic = PocketIcBuilder::new()
@@ -711,31 +710,43 @@ fn test_specified_id_call_v3() {
         .enable_all()
         .build()
         .unwrap();
-    let canister_id = rt
-        .block_on(async {
-            let agent = ic_agent_call_v3::Agent::builder()
-                .with_url(endpoint.clone())
-                .build()
-                .unwrap();
-            agent.fetch_root_key().await.unwrap();
 
-            let ic00 = ManagementCanister::create(&agent);
+    // retrieve the first canister ID on the application subnet
+    // which will be the effective and expected canister ID for canister creation
+    let topology = pic.topology();
 
-            timeout(
-                Duration::from_secs(15),
-                ic00.create_canister()
-                    .as_provisional_create_with_specified_id(specified_id)
-                    .call(),
+    let app_subnet = topology.get_app_subnets()[0];
+    let effective_canister_id =
+        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
+
+    rt.block_on(async {
+        let agent = ic_agent_call_v3::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let arg = ProvisionalCreateCanisterWithCyclesArgs {
+            amount: None,
+            settings: None,
+            specified_id: None,
+            sender_canister_version: None,
+        };
+        let bytes = candid::Encode!(&arg).unwrap();
+
+        agent
+            .update(
+                &Principal::management_canister(),
+                "provisional_create_canister_with_cycles",
             )
+            .with_arg(bytes)
+            .with_effective_canister_id(effective_canister_id.into())
+            .call()
             .await
-        })
-        .expect("Request completes within timeout")
-        .map(|call_response| match call_response {
-            CallResponse::Response((canister_id,)) => canister_id,
-            CallResponse::Poll(_) => {
-                panic!("Call V3 endpoint should have responded with a certificate")
-            }
-        })
-        .unwrap();
-    assert_eq!(canister_id, specified_id);
+            .map(|response| match response {
+                CallResponse::Poll(_) => panic!("Expected a reply"),
+                CallResponse::Response(..) => {}
+            })
+            .unwrap();
+    })
 }

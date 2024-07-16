@@ -60,6 +60,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
     "@crate_index//:tracing",
@@ -70,6 +71,7 @@ LIB_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/types/management_canister_types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/registry/routing_table",
     "//rs/types/types",
