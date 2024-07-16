@@ -699,7 +699,6 @@ fn test_specified_id_call_v3() {
         .build();
     let endpoint = pic.make_live(None);
 
-
     // We create a canister with that specified canister ID: this should succeed
     // and a new subnet should be created.
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -730,6 +729,7 @@ fn test_specified_id_call_v3() {
         };
         let bytes = candid::Encode!(&arg).unwrap();
 
+        // This is an agent that targets /api/v3/.../call for ingress messages.
         agent
             .update(
                 &Principal::management_canister(),
