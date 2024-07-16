@@ -3097,6 +3097,15 @@ pub mod settle_neurons_fund_participation_request {
         Aborted(Aborted),
     }
 }
+/// A list of principals.
+/// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Principals {
+    #[prost(message, repeated, tag = "7")]
+    pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 /// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 /// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -3132,13 +3141,20 @@ pub mod settle_neurons_fund_participation_response {
         /// The amount of Neurons' Fund participation associated with this neuron.
         #[prost(uint64, optional, tag = "2")]
         pub amount_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can vote on behalf of this neuron.
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
+        /// The principal that can manage this neuron.
+        #[prost(message, optional, tag = "6")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The principals that can vote, propose, and follow on behalf of this neuron.
+        #[prost(message, optional, tag = "7")]
+        pub hotkeys: ::core::option::Option<super::Principals>,
         /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
+        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+        #[deprecated]
+        #[prost(string, optional, tag = "3")]
+        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

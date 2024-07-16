@@ -158,6 +158,8 @@ fn test_neurons_fund_neuron_portion_anonymization() {
     let amount_icp_e8s = 100_000_000_000;
     let maturity_equivalent_icp_e8s = 100_000_000_000;
     let controller = PrincipalId::default();
+    // TODO(NNS1-3199): Populate this field if it is relevant for this test
+    let hotkeys = Vec::new();
     let is_capped = false;
 
     #[allow(deprecated)] // TODO(NNS1-3198): remove hotkey_principal
@@ -179,6 +181,7 @@ fn test_neurons_fund_neuron_portion_anonymization() {
             amount_icp_e8s,
             maturity_equivalent_icp_e8s,
             controller,
+            hotkeys,
             is_capped,
         })
     );
