@@ -89,6 +89,10 @@ pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 /// when running synchronous update calls for the [`CallRequest`] operation.
 const EXECUTE_ROUND_INTERVAL: Duration = Duration::from_millis(50);
 
+/// The duration the v3 call service will wait for certification of a message,
+/// before returning early with a 202 Accepted response.
+const INGRESS_MESSAGE_CERTIFICATION_TIMEOUT_SECONDS: u64 = 10;
+
 fn compute_subnet_seed(
     ranges: Vec<CanisterIdRange>,
     alloc_range: Option<CanisterIdRange>,
@@ -1274,7 +1278,6 @@ pub struct CallRequest {
     pub version: CallRequestVersion,
 }
 
-const INGRESS_MESSAGE_CERTIFICATION_TIMEOUT_SECONDS: u64 = 10;
 #[derive(Clone)]
 struct PocketIngressPoolThrottler;
 
