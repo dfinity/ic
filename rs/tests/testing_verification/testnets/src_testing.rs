@@ -67,9 +67,6 @@ use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
 
 const DEFAULT_XRC_PRINCIPAL_STR: &str = "uf6dk-hyaaa-aaaaq-qaaaq-cai";
 
-pub const EXCHANGE_RATE_CANISTER_WASM: &str =
-    "rs/rosetta-api/tvl/xrc_mock/xrc_mock_canister.wasm.gz";
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -193,7 +190,7 @@ pub fn setup(env: TestEnv) {
     // we set the exchange rate to 12 XDR per 1 ICP
     let xrc_payload = new_icp_cxdr_mock_exchange_rate_canister_init_payload(12_000_000_000);
     let xrc_canister_id = xrc_node.create_and_install_canister_with_arg(
-        EXCHANGE_RATE_CANISTER_WASM,
+        &env::var("XRC_WASM_PATH").unwrap(),
         Some(Encode!(&xrc_payload).unwrap()),
     );
     assert_eq!(xrc_canister_id, default_xrc_principal_id.into());
