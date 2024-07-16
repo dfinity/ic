@@ -45,22 +45,6 @@ pub fn malicious_inputs(env: TestEnv) {
                 (func $msg_caller_size (result i32)))
               (import "ic0" "msg_caller_copy"
                 (func $msg_caller_copy (param i32) (param i32) (param i32)))
-              (import "ic0" "data_certificate_copy"
-                (func $data_certificate_copy (param i32) (param i32) (param i32)))
-              (import "ic0" "data_certificate_size"
-                (func $data_certificate_size (result i32)))
-              (import "ic0" "data_certificate_present"
-                (func $data_certificate_present (result i32)))
-              (import "ic0" "certified_data_set"
-                (func $certified_data_set (param i32) (param i32)))
-              (import "ic0" "call_new"
-                (func $ic0_call_new
-                (param i32 i32)
-                (param $method_name_src i32)    (param $method_name_len i32)
-                (param $reply_fun i32)          (param $reply_env i32)
-                (param $reject_fun i32)         (param $reject_env i32)
-              ))
-              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $proxy_msg_arg_data_copy_last_10_bytes
                 (call $msg_arg_data_copy (i32.const 0) (i32.sub (call $msg_arg_data_size) (i32.const 10)) (i32.const 10))
@@ -83,16 +67,6 @@ pub fn malicious_inputs(env: TestEnv) {
                 (call $msg_reply_data_append (i32.const 1) (i32.load (i32.const 65532)))
                 (call $msg_reply))
 
-              ;; All the function below are not used
-
-              (func $f_100 (result i32)
-                i32.const 100)
-              (func $f_200 (result i32)
-                i32.const 200)
-
-              (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
-
-              (table funcref (elem $f_100 $f_200))
               (memory $memory 1)
               (export "memory" (memory $memory))
               (export "canister_query proxy_msg_arg_data_copy_last_10_bytes" (func $proxy_msg_arg_data_copy_last_10_bytes))
