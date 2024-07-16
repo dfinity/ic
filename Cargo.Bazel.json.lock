@@ -1,5 +1,5 @@
 {
-  "checksum": "82988fb10c601e8767c857c8de301417b1374bf601cd4348ad0d7c37873935a2",
+  "checksum": "2b588cb5753139a9bb141139d4adf274288b2e71fe06899c2157e7b4f877744b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17643,7 +17643,7 @@
               "alias": "reqwest_0_11_27"
             },
             {
-              "id": "reqwest 0.12.4",
+              "id": "reqwest 0.12.5",
               "target": "reqwest"
             },
             {
@@ -26754,7 +26754,136 @@
             "rustls-native-certs",
             "tls12"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-apple-ios": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-apple-ios-sim": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-fuchsia": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-linux-android": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-unknown-nto-qnx710": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "armv7-linux-androideabi": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "i686-apple-darwin": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "i686-linux-android": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "i686-pc-windows-msvc": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "i686-unknown-freebsd": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "i686-unknown-linux-gnu": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "riscv32imc-unknown-none-elf": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "riscv64gc-unknown-none-elf": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "thumbv7em-none-eabi": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "thumbv8m.main-none-eabi": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-apple-darwin": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-apple-ios": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-fuchsia": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-linux-android": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-unknown-freebsd": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-unknown-none": [
+              "webpki-roots",
+              "webpki-tokio"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -26798,6 +26927,10 @@
             {
               "id": "tower-service 0.3.2",
               "target": "tower_service"
+            },
+            {
+              "id": "webpki-roots 0.26.1",
+              "target": "webpki_roots"
             }
           ],
           "selects": {}
@@ -27430,7 +27563,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.12.4",
+              "id": "reqwest 0.12.5",
               "target": "reqwest"
             },
             {
@@ -44671,7 +44804,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "reqwest 0.12.4",
+              "id": "reqwest 0.12.5",
               "target": "reqwest"
             },
             {
@@ -47904,12 +48037,9 @@
       "version": "0.11.2",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/quinn-rs/quinn",
-          "commitish": {
-            "Rev": "fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
-          },
-          "strip_prefix": "quinn"
+        "Http": {
+          "url": "https://static.crates.io/crates/quinn/0.11.2/download",
+          "sha256": "e4ceeeeabace7857413798eb1ffa1e9c905a9946a57d81fb69b4b71c4d8eb3ad"
         }
       },
       "targets": [
@@ -47961,7 +48091,7 @@
               "alias": "udp"
             },
             {
-              "id": "rustc-hash 2.0.0",
+              "id": "rustc-hash 1.1.0",
               "target": "rustc_hash"
             },
             {
@@ -47998,12 +48128,9 @@
       "version": "0.11.3",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/quinn-rs/quinn",
-          "commitish": {
-            "Rev": "fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
-          },
-          "strip_prefix": "quinn-proto"
+        "Http": {
+          "url": "https://static.crates.io/crates/quinn-proto/0.11.3/download",
+          "sha256": "ddf517c03a109db8100448a4be38d498df8a210a99fe0e1b9eaf39e78c640efe"
         }
       },
       "targets": [
@@ -48048,7 +48175,7 @@
               "target": "ring"
             },
             {
-              "id": "rustc-hash 2.0.0",
+              "id": "rustc-hash 1.1.0",
               "target": "rustc_hash"
             },
             {
@@ -48089,12 +48216,9 @@
       "version": "0.5.2",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/quinn-rs/quinn",
-          "commitish": {
-            "Rev": "fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
-          },
-          "strip_prefix": "quinn-udp"
+        "Http": {
+          "url": "https://static.crates.io/crates/quinn-udp/0.5.2/download",
+          "sha256": "9096629c45860fc7fb143e125eb826b5e721e10be3263160c7d60ca832cf8c46"
         }
       },
       "targets": [
@@ -51039,14 +51163,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.4": {
+    "reqwest 0.12.5": {
       "name": "reqwest",
-      "version": "0.12.4",
+      "version": "0.12.5",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.4/download",
-          "sha256": "566cafdd92868e0939d3fb961bd0dc25fcfaaed179291093b3d43e6b3150ea10"
+          "url": "https://static.crates.io/crates/reqwest/0.12.5/download",
+          "sha256": "c7d6d2a27d57148378eb5e111173f4276ad26340ecc5c49a4a2152167a2d6a37"
         }
       },
       "targets": [
@@ -51071,117 +51195,20 @@
         "crate_features": {
           "common": [
             "__rustls",
+            "__rustls-ring",
             "__tls",
             "blocking",
             "h2",
             "http2",
             "json",
             "multipart",
-            "rustls-pki-types",
             "rustls-tls",
             "rustls-tls-native-roots",
             "rustls-tls-webpki-roots",
             "socks",
             "stream"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "futures-channel"
-            ],
-            "aarch64-apple-ios": [
-              "futures-channel"
-            ],
-            "aarch64-apple-ios-sim": [
-              "futures-channel"
-            ],
-            "aarch64-fuchsia": [
-              "futures-channel"
-            ],
-            "aarch64-linux-android": [
-              "futures-channel"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "futures-channel"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "futures-channel"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "futures-channel"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "futures-channel"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "futures-channel"
-            ],
-            "armv7-linux-androideabi": [
-              "futures-channel"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "futures-channel"
-            ],
-            "i686-apple-darwin": [
-              "futures-channel"
-            ],
-            "i686-linux-android": [
-              "futures-channel"
-            ],
-            "i686-pc-windows-msvc": [
-              "futures-channel"
-            ],
-            "i686-unknown-freebsd": [
-              "futures-channel"
-            ],
-            "i686-unknown-linux-gnu": [
-              "futures-channel"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "futures-channel"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "futures-channel"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "futures-channel"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "futures-channel"
-            ],
-            "thumbv7em-none-eabi": [
-              "futures-channel"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "futures-channel"
-            ],
-            "x86_64-apple-darwin": [
-              "futures-channel"
-            ],
-            "x86_64-apple-ios": [
-              "futures-channel"
-            ],
-            "x86_64-fuchsia": [
-              "futures-channel"
-            ],
-            "x86_64-linux-android": [
-              "futures-channel"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "futures-channel"
-            ],
-            "x86_64-unknown-freebsd": [
-              "futures-channel"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "futures-channel"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "futures-channel"
-            ],
-            "x86_64-unknown-none": [
-              "futures-channel"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -51222,7 +51249,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "sync_wrapper 0.1.2",
+              "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
             },
             {
@@ -51257,7 +51284,7 @@
                 "target": "hyper"
               },
               {
-                "id": "hyper-rustls 0.26.0",
+                "id": "hyper-rustls 0.27.2",
                 "target": "hyper_rustls"
               },
               {
@@ -51289,7 +51316,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "rustls 0.22.2",
+                "id": "rustls 0.23.11",
                 "target": "rustls"
               },
               {
@@ -51309,7 +51336,7 @@
                 "target": "tokio"
               },
               {
-                "id": "tokio-rustls 0.25.0",
+                "id": "tokio-rustls 0.26.0",
                 "target": "tokio_rustls"
               },
               {
@@ -51356,7 +51383,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.4"
+        "version": "0.12.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -53770,7 +53797,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "log",
             "logging",
             "ring",
@@ -64167,9 +64193,7 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "logging",
-            "ring",
             "tls12"
           ],
           "selects": {}
@@ -77190,7 +77214,7 @@
     "rcgen 0.13.1",
     "regex 1.10.5",
     "reqwest 0.11.27",
-    "reqwest 0.12.4",
+    "reqwest 0.12.5",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",

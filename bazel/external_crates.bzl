@@ -1020,7 +1020,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "reqwest": crate.spec(
-                version = "^0.12.3",
+                version = "^0.12.5",
                 default_features = False,
                 features = [
                     "blocking",
