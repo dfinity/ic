@@ -67,7 +67,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
-use ic_tests::nns_dapp::set_authorized_subnets;
 use ic_tests::orchestrator::utils::subnet_recovery::{
     enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
 };
@@ -157,7 +156,6 @@ pub fn setup(env: TestEnv) {
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
-    set_authorized_subnets(&env);
     env.sync_with_prometheus();
 }
 
