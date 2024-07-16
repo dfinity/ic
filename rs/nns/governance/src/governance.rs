@@ -50,9 +50,9 @@ use crate::{
         Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
-        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
-        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary,
-        RewardEvent, RewardNodeProvider, RewardNodeProviders,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Principals,
+        Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus,
+        RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse, Tally,
         Topic, UpdateNodeProvider, Vote, WaitForQuietState,
         XdrConversionRate as XdrConversionRatePb,
@@ -291,11 +291,14 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPortionPb {
 
 impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
     fn from(neuron: NeuronsFundNeuronPortion) -> Self {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         Self {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
-            hotkey_principal: Some(neuron.controller.to_string()),
+            controller: Some(neuron.controller),
+            hotkeys: Some(neuron.hotkeys.into()),
             is_capped: Some(neuron.is_capped),
+            hotkey_principal: Some(neuron.controller.to_string()),
         }
     }
 }
@@ -1242,6 +1245,17 @@ impl ProposalInfo {
     }
 }
 
+impl From<Vec<PrincipalId>> for Principals {
+    fn from(principals: Vec<PrincipalId>) -> Self {
+        Self { principals }
+    }
+}
+
+impl From<Principals> for Vec<PrincipalId> {
+    fn from(principals: Principals) -> Self {
+        principals.principals
+    }
+}
 #[cfg(test)]
 mod test_wait_for_quiet {
     use crate::pb::v1::{ProposalData, Tally, WaitForQuietState};

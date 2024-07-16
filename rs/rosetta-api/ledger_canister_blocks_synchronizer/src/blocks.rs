@@ -1,13 +1,14 @@
 use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
 use crate::rosetta_block::RosettaBlock;
 use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
+use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
 use rusqlite::{named_params, params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
@@ -1414,17 +1415,22 @@ impl Blocks {
             transaction,
         } = Block::decode(self.get_hashed_block(&block_index)?.block)?;
 
+        let transaction_hash = transaction.hash();
         let mut rosetta_block = RosettaBlock {
             index: next_block_indices.rosetta_block_index,
             parent_hash: parent_hash.map(|h| h.into_bytes()),
             timestamp,
             transactions: [(block_index, transaction)].into_iter().collect(),
         };
+        let mut transactions_hashes = HashSet::new();
+        transactions_hashes.insert(transaction_hash);
         for block_index in block_indices {
             let block = self.get_hashed_block(&block_index)?;
             let transaction = Block::decode(block.block)?.transaction;
-            // TODO: check for duplicates too and create new rosetta block if there are
-            if block.timestamp == rosetta_block.timestamp {
+            let transaction_hash = transaction.hash();
+            if block.timestamp == rosetta_block.timestamp
+                && !transactions_hashes.contains(&transaction_hash)
+            {
                 rosetta_block.transactions.insert(block_index, transaction);
             } else {
                 let next_rosetta_block_index = rosetta_block.index + 1;
@@ -1436,8 +1442,10 @@ impl Blocks {
                     parent_hash: Some(parent_hash),
                     timestamp: block.timestamp,
                     transactions: [(block_index, transaction)].into_iter().collect(),
-                }
+                };
+                transactions_hashes.clear();
             }
+            transactions_hashes.insert(transaction_hash);
         }
         num_rosetta_blocks_created += 1;
         let last_rosetta_block_index = rosetta_block.index;
