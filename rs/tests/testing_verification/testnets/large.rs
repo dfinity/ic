@@ -49,6 +49,7 @@ use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
+    simulate_network::{simulate_network, NetworkSimulation, ProductionSubnetTopology},
     test_env::TestEnv,
     test_env_api::{
         await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
@@ -64,6 +65,8 @@ use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_a
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
 const NUM_BN: u64 = 1;
+
+const TOPOLOGY: ProductionSubnetTopology = ProductionSubnetTopology::IO67;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
