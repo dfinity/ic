@@ -1690,7 +1690,7 @@ mod incompatible_token_type_upgrade {
         let allowance_2 = get_allowance(&env, ledger_id, account(1), account(2));
         assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
         assert_eq!(allowance_2.allowance, Nat::from(big_amount));
-        assert!(allowance_2.allowance > Nat::from(u64::MAX));
+        assert!(allowance_2.allowance > u64::MAX);
 
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
         assert_matches!(
