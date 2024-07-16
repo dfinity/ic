@@ -6,7 +6,7 @@ use crate::{
     proposals::call_canister::CallCanister,
 };
 
-use candid::Encode;
+use candid::{CandidType, Deserialize, Encode};
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
@@ -16,6 +16,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
+use serde::Serialize;
 
 const PROTOCOL_CANISTER_IDS: [&CanisterId; 12] = [
     &REGISTRY_CANISTER_ID,
@@ -32,6 +33,15 @@ const PROTOCOL_CANISTER_IDS: [&CanisterId; 12] = [
     &EXCHANGE_RATE_CANISTER_ID,
 ];
 
+// The paylod type for the upgrade_root method in the lifeline canister. Should be kept in sync with
+// `rs/nns/handlers/lifeline/impl/lifeline.mo`.
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize, Serialize)]
+struct UpgradeRootProposalPayload {
+    wasm_module: Vec<u8>,
+    module_arg: Vec<u8>,
+    stop_upgrade_start: bool,
+}
+
 impl InstallCode {
     pub fn validate(&self) -> Result<(), GovernanceError> {
         if !cfg!(feature = "test") {
@@ -44,6 +54,7 @@ impl InstallCode {
         let _ = self.valid_canister_id()?;
         let _ = self.valid_install_mode()?;
         let _ = self.valid_topic()?;
+        let _ = self.canister_and_function()?;
 
         if self.wasm_module.is_none() {
             return Err(Self::invalid_proposal_error("Wasm module is required"));
@@ -58,14 +69,7 @@ impl InstallCode {
             .ok_or(Self::invalid_proposal_error("Canister ID is required"))?;
         let canister_id = CanisterId::try_from(canister_principal_id)
             .map_err(|_| Self::invalid_proposal_error("Invalid canister ID"))?;
-        if canister_id == ROOT_CANISTER_ID {
-            // TODO(NNS1-3190): support changing root canister
-            Err(Self::invalid_proposal_error(
-                "InstallCode for root canister is not supported yet",
-            ))
-        } else {
-            Ok(canister_id)
-        }
+        Ok(canister_id)
     }
 
     fn valid_install_mode(&self) -> Result<RootCanisterInstallMode, GovernanceError> {
@@ -102,21 +106,21 @@ impl InstallCode {
             format!("InstallCode proposal invalid because of {}", reason),
         )
     }
-}
 
-impl CallCanister for InstallCode {
-    fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
-        let canister_id = self.valid_canister_id()?;
-        if canister_id == ROOT_CANISTER_ID {
-            // TODO(NNS1-3190): support changing root canister
-            return Err(Self::invalid_proposal_error(
-                "InstallCode for root canister is not supported yet",
-            ));
-        }
-        Ok((ROOT_CANISTER_ID, "change_nns_canister"))
+    fn payload_to_upgrade_root(&self) -> Result<Vec<u8>, GovernanceError> {
+        let stop_upgrade_start = !self.skip_stopping_before_installing.unwrap_or(false);
+        let wasm_module = vec![];
+        let module_arg = self.arg.clone().unwrap_or_default();
+
+        Encode!(&UpgradeRootProposalPayload {
+            stop_upgrade_start,
+            wasm_module,
+            module_arg,
+        })
+        .map_err(|e| Self::invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
     }
 
-    fn payload(&self) -> Result<Vec<u8>, GovernanceError> {
+    fn payload_to_upgrade_non_root(&self) -> Result<Vec<u8>, GovernanceError> {
         let stop_before_installing = !self.skip_stopping_before_installing.unwrap_or(false);
         let mode = self.valid_install_mode()?;
         let canister_id = self.valid_canister_id()?;
@@ -138,6 +142,37 @@ impl CallCanister for InstallCode {
             memory_allocation,
         })
         .map_err(|e| Self::invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+    }
+}
+
+impl CallCanister for InstallCode {
+    fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
+        let canister_id = self.valid_canister_id()?;
+        if canister_id != ROOT_CANISTER_ID {
+            return Ok((ROOT_CANISTER_ID, "change_nns_canister"));
+        }
+
+        let install_mode = self.valid_install_mode()?;
+        match install_mode {
+            RootCanisterInstallMode::Install | RootCanisterInstallMode::Reinstall => {
+                Err(Self::invalid_proposal_error(&format!(
+                    "InstallCode mode {:?} is not supported for root canister, consider using \
+                     HardResetNnsRootToVersion proposal instead",
+                    install_mode
+                )))
+            }
+            RootCanisterInstallMode::Upgrade => Ok((LIFELINE_CANISTER_ID, "upgrade_root")),
+        }
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, GovernanceError> {
+        let canister_id = self.valid_canister_id()?;
+
+        if canister_id == ROOT_CANISTER_ID {
+            self.payload_to_upgrade_root()
+        } else {
+            self.payload_to_upgrade_non_root()
+        }
     }
 }
 
@@ -239,13 +274,28 @@ mod tests {
         assert_eq!(
             InstallCode {
                 canister_id: Some(ROOT_CANISTER_ID.get()),
+                install_mode: Some(CanisterInstallMode::Install as i32),
                 ..valid_install_code.clone()
             }
             .validate(),
             Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of InstallCode for root canister is not \
-                 supported yet"
+                "InstallCode proposal invalid because of InstallCode mode Install is not supported for root canister, \
+                consider using HardResetNnsRootToVersion proposal instead"
+                    .to_string(),
+            ))
+        );
+        assert_eq!(
+            InstallCode {
+                canister_id: Some(ROOT_CANISTER_ID.get()),
+                install_mode: Some(CanisterInstallMode::Reinstall as i32),
+                ..valid_install_code.clone()
+            }
+            .validate(),
+            Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "InstallCode proposal invalid because of InstallCode mode Reinstall is not supported for root canister, \
+                consider using HardResetNnsRootToVersion proposal instead"
                     .to_string(),
             ))
         );
@@ -295,6 +345,38 @@ mod tests {
                 arg: vec![4, 5, 6],
                 compute_allocation: None,
                 memory_allocation: None,
+            }
+        );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn test_upgrade_root_protocol_canister() {
+        let install_code = InstallCode {
+            canister_id: Some(ROOT_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            install_mode: Some(CanisterInstallMode::Upgrade as i32),
+            arg: Some(vec![4, 5, 6]),
+            skip_stopping_before_installing: None,
+        };
+
+        assert_eq!(install_code.validate(), Ok(()));
+        assert_eq!(
+            install_code.valid_topic(),
+            Ok(Topic::ProtocolCanisterManagement)
+        );
+        assert_eq!(
+            install_code.canister_and_function(),
+            Ok((LIFELINE_CANISTER_ID, "upgrade_root"))
+        );
+        let decoded_payload =
+            Decode!(&install_code.payload().unwrap(), UpgradeRootProposalPayload).unwrap();
+        assert_eq!(
+            decoded_payload,
+            UpgradeRootProposalPayload {
+                stop_upgrade_start: true,
+                wasm_module: vec![1, 2, 3],
+                module_arg: vec![4, 5, 6],
             }
         );
     }
