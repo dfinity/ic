@@ -6565,6 +6565,7 @@ dependencies = [
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "thiserror",
  "wycheproof",
  "zeroize",
 ]
@@ -6691,7 +6692,6 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "curve25519-dalek",
- "ed25519-consensus",
  "hex",
  "ic-crypto-ed25519",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -8275,7 +8275,6 @@ dependencies = [
  "anyhow",
  "candid",
  "clap 4.4.6",
- "ed25519-consensus",
  "hex",
  "ic-agent",
  "ic-crypto-ecdsa-secp256k1",

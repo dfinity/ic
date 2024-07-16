@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:hkdf",
     "@crate_index//:pem",
     "@crate_index//:rand",
+    "@crate_index//:thiserror",
     "@crate_index//:zeroize",
 ]
 
