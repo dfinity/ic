@@ -23,8 +23,6 @@ use std::collections::HashMap;
 
 use std::env;
 
-pub const SNS_AGGREGATOR_WASM: &str = "external/sns_aggregator/file/sns_aggregator_dev.wasm.gz";
-
 /// Init and post_upgrade arguments for SNS aggregator.
 #[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub struct Config {
@@ -87,7 +85,7 @@ pub fn install_sns_aggregator(
     let farm_url = boundary_node.get_playnet().unwrap();
 
     let sns_agent = sns_node.build_default_agent();
-    let sns_aggregator_wasm = env.load_wasm(SNS_AGGREGATOR_WASM);
+    let sns_aggregator_wasm = env.load_wasm(env::var("SNS_AGGREGATOR_WASM_PATH").unwrap());
     let logger = env.logger();
     block_on(async move {
         let sns_aggregator_canister_id =
