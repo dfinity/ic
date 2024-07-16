@@ -34,7 +34,7 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let non_nns_node = env.get_first_healthy_system_but_not_nns_node_snapshot();
     let ii_canister_id =
-        non_nns_node.create_and_install_canister_with_arg(INTERNET_IDENTITY_WASM, None);
+        non_nns_node.create_and_install_canister_with_arg(&INTERNET_IDENTITY_WASM, None);
     info!(
         log,
         "II canister with id={ii_canister_id} installed on subnet with id={}",
