@@ -10936,7 +10936,9 @@ lazy_static! {
         PolynomialMatchingFunction::new(2_000_000 * E8, *NEURONS_FUND_PARTICIPATION_LIMITS).unwrap().serialize()
     );
 
-    static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
+    static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> =
+    #[allow(deprecated)] // TODO[#NNS-2338]: Remove this once hotkey_principal is removed.
+    Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
                 serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
@@ -10957,10 +10959,14 @@ lazy_static! {
                         maturity_equivalent_icp_e8s: Some(
                             1_200_000 * E8,
                         ),
-                        hotkey_principal: Some(principal(1)),
+                        controller: Some(principal(1)),
+                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
+                        hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
                         ),
+                        // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
+                        hotkey_principal: Some(principal(1)),
                     },
                     NeuronsFundNeuronPortion {
                         nns_neuron_id: Some(
@@ -10974,10 +10980,15 @@ lazy_static! {
                         maturity_equivalent_icp_e8s: Some(
                             600_000 * E8,
                         ),
-                        hotkey_principal: Some(principal(2)),
+                        controller: Some(principal(2)),
+                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
+                        hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
                         ),
+
+                        // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
+                        hotkey_principal: Some(principal(2)),
                     },
                 ],
             },
@@ -11015,7 +11026,9 @@ lazy_static! {
         ),
     });
 
-    static ref INITIAL_NEURONS_FUND_PARTICIPATION_ABORT: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
+    static ref INITIAL_NEURONS_FUND_PARTICIPATION_ABORT: Option<NeuronsFundParticipation> =
+    #[allow(deprecated)] // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
+    Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
                 serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
@@ -11059,7 +11072,9 @@ lazy_static! {
         ),
     });
 
-    static ref INITIAL_NEURONS_FUND_PARTICIPATION_COMMIT: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
+    static ref INITIAL_NEURONS_FUND_PARTICIPATION_COMMIT: Option<NeuronsFundParticipation> =
+    #[allow(deprecated)] // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
+    Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
                 serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
@@ -11080,10 +11095,15 @@ lazy_static! {
                         maturity_equivalent_icp_e8s: Some(
                             120000000000000,
                         ),
-                        hotkey_principal: Some(principal(1)),
+                        controller: Some(principal(1)),
+                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
+                        hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
                         ),
+
+                        // TODO[NNS-2338]: Remove this once hotkey_principal is removed.
+                        hotkey_principal: Some(principal(1)),
                     },
                     NeuronsFundNeuronPortion {
                         nns_neuron_id: Some(
@@ -11097,10 +11117,15 @@ lazy_static! {
                         maturity_equivalent_icp_e8s: Some(
                             60000000000000,
                         ),
-                        hotkey_principal: Some(principal(2)),
+                        controller: Some(principal(2)),
+                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
+                        hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
                         ),
+
+                        // TODO[NNS-2338]: Remove this once hotkey_principal is removed.
+                        hotkey_principal: Some(principal(2)),
                     },
                 ],
             },
@@ -11138,7 +11163,9 @@ lazy_static! {
         ),
     });
 
-    static ref NEURONS_FUND_FULL_REFUNDS: Option<NeuronsFundSnapshot> = Some(NeuronsFundSnapshot {
+    static ref NEURONS_FUND_FULL_REFUNDS: Option<NeuronsFundSnapshot> =
+    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
+    Some(NeuronsFundSnapshot {
         neurons_fund_neuron_portions: vec![
             NeuronsFundNeuronPortion {
                 nns_neuron_id: Some(
@@ -11152,10 +11179,16 @@ lazy_static! {
                 maturity_equivalent_icp_e8s: Some(
                     120000000000000,
                 ),
-                hotkey_principal: Some(principal(1)),
+                controller: Some(principal(1)),
+                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
+                hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
                 ),
+
+
+                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
+                hotkey_principal: Some(principal(1)),
             },
             NeuronsFundNeuronPortion {
                 nns_neuron_id: Some(
@@ -11169,15 +11202,22 @@ lazy_static! {
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,
                 ),
-                hotkey_principal: Some(principal(2)),
+                controller: Some(principal(2)),
+                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
+                hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
                 ),
+
+                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
+                hotkey_principal: Some(principal(2)),
             },
         ],
     });
 
-    static ref NEURONS_FUND_PARTIAL_REFUNDS: Option<NeuronsFundSnapshot> = Some(NeuronsFundSnapshot {
+    static ref NEURONS_FUND_PARTIAL_REFUNDS: Option<NeuronsFundSnapshot> =
+    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
+    Some(NeuronsFundSnapshot {
         neurons_fund_neuron_portions: vec![
             NeuronsFundNeuronPortion {
                 nns_neuron_id: Some(
@@ -11188,13 +11228,18 @@ lazy_static! {
                 amount_icp_e8s: Some(
                     15666666667,
                 ),
+                controller: Some(principal(1)),
+                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
+                hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     120000000000000,
                 ),
-                hotkey_principal: Some(principal(1)),
                 is_capped: Some(
                     false,
                 ),
+
+                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
+                hotkey_principal: Some(principal(1)),
             },
             NeuronsFundNeuronPortion {
                 nns_neuron_id: Some(
@@ -11205,13 +11250,18 @@ lazy_static! {
                 amount_icp_e8s: Some(
                     7833333333,
                 ),
+                controller: Some(principal(2)),
+                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
+                hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,
                 ),
-                hotkey_principal: Some(principal(2)),
                 is_capped: Some(
                     false,
                 ),
+
+                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
+                hotkey_principal: Some(principal(2)),
             },
         ],
     });

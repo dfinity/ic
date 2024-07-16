@@ -1282,7 +1282,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
-            ecdsa_payload,
+            idkg_payload,
         ) = if payload.is_summary() {
             (
                 pb::DkgPayload::from(&payload.as_summary().dkg),
@@ -1323,7 +1323,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
-            ecdsa_payload,
+            idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
     }
@@ -1371,7 +1371,7 @@ impl TryFrom<pb::Block> for Block {
                 // height value (e.g. when a new CUP is created), then a call to
                 // ecdsa.update_refs(height) should be manually called.
                 let ecdsa = block
-                    .ecdsa_payload
+                    .idkg_payload
                     .as_ref()
                     .map(|ecdsa| ecdsa.try_into())
                     .transpose()
@@ -1384,7 +1384,7 @@ impl TryFrom<pb::Block> for Block {
             }
             dkg::Payload::Dealings(dealings) => {
                 let ecdsa = block
-                    .ecdsa_payload
+                    .idkg_payload
                     .as_ref()
                     .map(|ecdsa| ecdsa.try_into())
                     .transpose()

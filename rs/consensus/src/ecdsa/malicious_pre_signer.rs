@@ -1,8 +1,8 @@
 //! The malicious pre signature process manager
 
-use crate::ecdsa::metrics::EcdsaPreSignerMetrics;
+use crate::ecdsa::metrics::IDkgPreSignerMetrics;
 use crate::ecdsa::{
-    pre_signer::EcdsaPreSignerImpl, utils::transcript_op_summary, EcdsaBlockReaderImpl,
+    pre_signer::IDkgPreSignerImpl, utils::transcript_op_summary, IDkgBlockReaderImpl,
 };
 use ic_interfaces::{
     crypto::BasicSigner,
@@ -11,7 +11,7 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::node::RegistryVersion;
 use ic_types::{
-    consensus::idkg::{EcdsaBlockReader, IDkgMessage},
+    consensus::idkg::{IDkgBlockReader, IDkgMessage},
     crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams, SignedIDkgDealing},
     crypto::{BasicSigOf, CryptoResult},
     malicious_flags::MaliciousFlags,
@@ -33,7 +33,7 @@ use std::collections::BTreeSet;
 // https://articles.bchlr.de/traits-dynamic-dispatch-upcasting.
 // As workaround a trivial implementation of BasicSigner<IDkgDealing> is provided by delegating to
 // self.crypto.
-impl BasicSigner<IDkgDealing> for EcdsaPreSignerImpl {
+impl BasicSigner<IDkgDealing> for IDkgPreSignerImpl {
     fn sign_basic(
         &self,
         message: &IDkgDealing,
@@ -47,11 +47,10 @@ impl BasicSigner<IDkgDealing> for EcdsaPreSignerImpl {
 /// Modify the given changeset with malicious behavior.
 pub fn maliciously_alter_changeset(
     changeset: IDkgChangeSet,
-    pre_signer: &EcdsaPreSignerImpl,
+    pre_signer: &IDkgPreSignerImpl,
     malicious_flags: &MaliciousFlags,
 ) -> IDkgChangeSet {
-    let block_reader =
-        EcdsaBlockReaderImpl::new(pre_signer.consensus_block_cache.finalized_chain());
+    let block_reader = IDkgBlockReaderImpl::new(pre_signer.consensus_block_cache.finalized_chain());
 
     changeset
         .into_iter()
@@ -85,12 +84,12 @@ pub fn maliciously_alter_changeset(
 
 /// Helper to corrupt the signed crypto dealing for malicious testing
 fn maliciously_corrupt_ecdsa_dealings(
-    pre_signer: &EcdsaPreSignerImpl,
+    pre_signer: &IDkgPreSignerImpl,
     node_id: NodeId,
     idkg_dealing: SignedIDkgDealing,
     transcript_params: &IDkgTranscriptParams,
     log: &ReplicaLogger,
-    metrics: &EcdsaPreSignerMetrics,
+    metrics: &IDkgPreSignerMetrics,
 ) -> SignedIDkgDealing {
     let mut rng = rand::thread_rng();
     let mut exclude_set = BTreeSet::new();

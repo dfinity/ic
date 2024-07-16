@@ -31,6 +31,10 @@ anchors:
       labels: dind-large
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
   checkout: &checkout
     name: Checkout
@@ -74,7 +78,7 @@ jobs:
     container:
       <<: *image
       # running on bare metal machine using ubuntu user
-      options: --user ubuntu
+      options: --user ubuntu -v /cache:/cache
     timeout-minutes: 720 # 12 hours
     strategy:
       matrix:
@@ -169,3 +173,42 @@ jobs:
           # note: there's just one performance cluster, so the job can't be parallelized
           BAZEL_EXTRA_ARGS: "--//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+
+  dependency-scan-nightly:
+    name: Dependency Scan Nightly
+    <<: *dind-large-setup
+    timeout-minutes: 60
+    permissions:
+      actions: write
+    env:
+      SHELL_WRAPPER: "/usr/bin/time"
+      CARGO_WASMPACK_VERSION: "0.12.1"
+      DEFAULT_NODE_VERSION : "20"
+      CI_PROJECT_PATH: ${{ github.repository }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - name: Setup environment deps
+        id: setup-environment-deps
+        shell: bash
+        run: |
+          pip3 install --ignore-installed -r requirements.txt
+          cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
+          source "${NVM_DIR}/nvm.sh"
+          nvm use ${DEFAULT_NODE_VERSION}
+          node --version
+          npm --version
+      - name: Run Dependency Scan Nightly
+        id: dependency-scan-nightly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          cd gitlab-ci/src/dependencies/
+          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
+          $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
+          $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py

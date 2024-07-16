@@ -3,6 +3,7 @@ use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::vault::api::CspTlsSignError;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use rustls::{self, Error as TLSError, SignatureAlgorithm, SignatureScheme};
+use std::fmt;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -12,6 +13,7 @@ mod tests;
 /// `CspServerEd25519Signer` in `choose_scheme`. The signing operation is
 /// delegated to the `TlsHandshakeCspServer` which may perform the signing
 /// operation in a separate process or remotely on an HSM.
+#[derive(Debug)]
 pub struct CspServerEd25519SigningKey {
     signer: CspServerEd25519Signer,
 }
@@ -51,6 +53,12 @@ impl rustls::sign::SigningKey for CspServerEd25519SigningKey {
 struct CspServerEd25519Signer {
     key_id: KeyId,
     tls_csp_vault: Arc<dyn TlsHandshakeCspVault>,
+}
+
+impl fmt::Debug for CspServerEd25519Signer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CspServerEd25519Signer{{ key_id: {} }}", self.key_id)
+    }
 }
 
 impl rustls::sign::Signer for CspServerEd25519Signer {

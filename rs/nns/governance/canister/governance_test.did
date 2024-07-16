@@ -10,7 +10,7 @@ type Action = variant {
   SetDefaultFollowees : SetDefaultFollowees;
   RewardNodeProviders : RewardNodeProviders;
   ManageNetworkEconomics : NetworkEconomics;
-  ApproveGenesisKyc : ApproveGenesisKyc;
+  ApproveGenesisKyc : Principals;
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
 };
@@ -439,13 +439,17 @@ type NeuronsFundMatchedFundingCurveCoefficients = record {
   full_participation_milestone_xdr : opt Decimal;
 };
 type NeuronsFundNeuron = record {
+  controller : opt principal;
   hotkey_principal : opt text;
+  hotkeys : opt Principals;
   is_capped : opt bool;
   nns_neuron_id : opt nat64;
   amount_icp_e8s : opt nat64;
 };
 type NeuronsFundNeuronPortion = record {
+  controller : opt principal;
   hotkey_principal : opt principal;
+  hotkeys : vec principal;
   is_capped : opt bool;
   maturity_equivalent_icp_e8s : opt nat64;
   nns_neuron_id : opt NeuronId;
@@ -500,6 +504,7 @@ type Params = record {
   max_direct_participation_icp_e8s : opt nat64;
 };
 type Percentage = record { basis_points : opt nat64 };
+type Principals = record { principals : vec principal };
 type Progress = variant { LastNeuronId : NeuronId };
 type Proposal = record {
   url : text;

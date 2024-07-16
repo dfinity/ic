@@ -1,7 +1,6 @@
 //! Types used by the Xnet component.
 use crate::ProxyDecodeError;
 use crate::{consensus::certification::Certification, messages::RequestOrResponse};
-use ic_error_types::RejectCode;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::queues::v1 as pb_queues;
@@ -243,20 +242,6 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
             pb_queues::RejectReason::QueueFull => Ok(Self::QueueFull),
             pb_queues::RejectReason::OutOfMemory => Ok(Self::OutOfMemory),
             pb_queues::RejectReason::Unknown => Ok(Self::Unknown),
-        }
-    }
-}
-
-impl From<RejectReason> for RejectCode {
-    fn from(reason: RejectReason) -> RejectCode {
-        match reason {
-            RejectReason::CanisterMigrating => RejectCode::SysTransient,
-            RejectReason::CanisterNotFound => RejectCode::DestinationInvalid,
-            RejectReason::CanisterStopped => RejectCode::CanisterError,
-            RejectReason::CanisterStopping => RejectCode::CanisterError,
-            RejectReason::QueueFull => RejectCode::SysTransient,
-            RejectReason::OutOfMemory => RejectCode::CanisterError,
-            RejectReason::Unknown => RejectCode::SysFatal,
         }
     }
 }

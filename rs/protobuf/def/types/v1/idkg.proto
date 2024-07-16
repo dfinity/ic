@@ -8,7 +8,7 @@ import "state/queues/v1/queues.proto";
 import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
-message EcdsaPayload {
+message IDkgPayload {
   reserved 2, 3, 4, 9, 11, 12;
   repeated CompletedSignature signature_agreements = 1;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;

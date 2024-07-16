@@ -2,7 +2,7 @@
 
 use crate::artifact::{IdentifiableArtifact, PbArtifact};
 pub use crate::consensus::idkg::common::{
-    unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptAttributes,
+    unpack_reshare_of_unmasked_params, IDkgBlockReader, IDkgTranscriptAttributes,
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript, PreSigId,
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
     ReshareOfMaskedParams, ReshareOfUnmaskedParams, TranscriptAttributes, TranscriptCastError,
@@ -64,11 +64,11 @@ pub enum CompletedSignature {
     Unreported(crate::batch::ConsensusResponse),
 }
 
-/// Common data that is carried in both `EcdsaSummaryPayload` and `EcdsaDataPayload`.
+/// Common data that is carried in both `IDkgSummaryPayload` and `IDkgDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaPayload {
+pub struct IDkgPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
 
@@ -79,7 +79,7 @@ pub struct EcdsaPayload {
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
 
     /// Generator of unique ids.
-    pub uid_generator: EcdsaUIDGenerator,
+    pub uid_generator: IDkgUIDGenerator,
 
     /// Transcripts created at this height.
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
@@ -94,8 +94,8 @@ pub struct EcdsaPayload {
     pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
 }
 
-impl EcdsaPayload {
-    /// Creates an empty ECDSA payload.
+impl IDkgPayload {
+    /// Creates an empty IDkg payload.
     pub fn empty(
         height: Height,
         subnet_id: SubnetId,
@@ -106,7 +106,7 @@ impl EcdsaPayload {
                 .into_iter()
                 .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
-            uid_generator: EcdsaUIDGenerator::new(subnet_id, height),
+            uid_generator: IDkgUIDGenerator::new(subnet_id, height),
             signature_agreements: BTreeMap::new(),
             available_pre_signatures: BTreeMap::new(),
             pre_signatures_in_creation: BTreeMap::new(),
@@ -538,16 +538,16 @@ impl TryFrom<&pb::MasterKeyTranscript> for MasterKeyTranscript {
 /// 2. Begin -> ReshareOfUnmasked -> Created
 /// 3. XnetReshareOfUnmaskedParams -> Created (xnet bootstrapping from initial dealings)
 ///
-/// The initial bootstrap will start with an empty 'EcdsaSummaryPayload', and then
+/// The initial bootstrap will start with an empty 'IDkgSummaryPayload', and then
 /// we'll go through the first path to create the key transcript.
 ///
 /// After the initial key transcript is created, we will be able to create the first
-/// 'EcdsaSummaryPayload' by carrying over the key transcript, which will be carried
+/// 'IDkgSummaryPayload' by carrying over the key transcript, which will be carried
 /// over to the next DKG interval if there is no node membership change.
 ///
 /// If in the future there is a membership change, we will create a new key transcript
 /// by going through the second path above. Then the switch-over will happen at
-/// the next 'EcdsaSummaryPayload'.
+/// the next 'IDkgSummaryPayload'.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum KeyTranscriptCreation {
@@ -709,16 +709,16 @@ pub enum CompletedReshareRequest {
     Unreported(crate::batch::ConsensusResponse),
 }
 
-/// To make sure all ids used in ECDSA payload are uniquely generated,
+/// To make sure all ids used in IDkg payload are uniquely generated,
 /// we use a generator to keep track of this state.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct EcdsaUIDGenerator {
+pub struct IDkgUIDGenerator {
     next_unused_transcript_id: IDkgTranscriptId,
     next_unused_pre_signature_id: u64,
 }
 
-impl EcdsaUIDGenerator {
+impl IDkgUIDGenerator {
     pub fn new(subnet_id: SubnetId, height: Height) -> Self {
         Self {
             next_unused_transcript_id: IDkgTranscriptId::new(subnet_id, 0, height),
@@ -1560,9 +1560,6 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
     }
 }
 
-/// The final output of the transcript creation sequence
-pub type EcdsaTranscript = IDkgTranscript;
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IDkgMessageAttribute {
     Dealing(IDkgTranscriptId),
@@ -1704,12 +1701,12 @@ impl TryFrom<IDkgMessage> for SignedIDkgOpening {
     }
 }
 
-pub type Summary = Option<EcdsaPayload>;
+pub type Summary = Option<IDkgPayload>;
 
-pub type Payload = Option<EcdsaPayload>;
+pub type Payload = Option<IDkgPayload>;
 
-impl From<&EcdsaPayload> for pb::EcdsaPayload {
-    fn from(payload: &EcdsaPayload) -> Self {
+impl From<&IDkgPayload> for pb::IDkgPayload {
+    fn from(payload: &IDkgPayload) -> Self {
         // signature_agreements
         let mut signature_agreements = Vec::new();
         for (pseudo_random_id, completed) in &payload.signature_agreements {
@@ -1796,18 +1793,18 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
     }
 }
 
-impl TryFrom<(&pb::EcdsaPayload, Height)> for EcdsaPayload {
+impl TryFrom<(&pb::IDkgPayload, Height)> for IDkgPayload {
     type Error = ProxyDecodeError;
-    fn try_from((payload, height): (&pb::EcdsaPayload, Height)) -> Result<Self, Self::Error> {
-        let mut ret = EcdsaPayload::try_from(payload)?;
+    fn try_from((payload, height): (&pb::IDkgPayload, Height)) -> Result<Self, Self::Error> {
+        let mut ret = IDkgPayload::try_from(payload)?;
         ret.update_refs(height);
         Ok(ret)
     }
 }
 
-impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
+impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
     type Error = ProxyDecodeError;
-    fn try_from(payload: &pb::EcdsaPayload) -> Result<Self, Self::Error> {
+    fn try_from(payload: &pb::IDkgPayload) -> Result<Self, Self::Error> {
         let mut key_transcripts = BTreeMap::new();
 
         for key_transcript_proto in &payload.key_transcripts {
@@ -1846,7 +1843,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             let pre_signature_id = PreSigId(available_pre_signature.pre_signature_id);
             let pre_signature: PreSignatureRef = try_from_option_field(
                 available_pre_signature.pre_signature.as_ref(),
-                "EcdsaPayload::available_pre_signature::pre_signature",
+                "IDkgPayload::available_pre_signature::pre_signature",
             )?;
             available_pre_signatures.insert(pre_signature_id, pre_signature);
         }
@@ -1857,17 +1854,17 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             let pre_signature_id = PreSigId(pre_signature_in_creation.pre_signature_id);
             let pre_signature: PreSignatureInCreation = try_from_option_field(
                 pre_signature_in_creation.pre_signature.as_ref(),
-                "EcdsaPayload::pre_signature_in_creation::pre_signature",
+                "IDkgPayload::pre_signature_in_creation::pre_signature",
             )?;
             pre_signatures_in_creation.insert(pre_signature_id, pre_signature);
         }
 
         let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
             payload.next_unused_transcript_id.as_ref(),
-            "EcdsaPayload::next_unused_transcript_id",
+            "IDkgPayload::next_unused_transcript_id",
         )?;
 
-        let uid_generator = EcdsaUIDGenerator {
+        let uid_generator = IDkgUIDGenerator {
             next_unused_transcript_id,
             next_unused_pre_signature_id: payload.next_unused_pre_signature_id,
         };
@@ -1877,7 +1874,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         for proto in &payload.idkg_transcripts {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
                 ProxyDecodeError::Other(format!(
-                    "EcdsaPayload:: Failed to convert transcript: {:?}",
+                    "IDkgPayload:: Failed to convert transcript: {:?}",
                     err
                 ))
             })?;
@@ -1889,11 +1886,11 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         let mut ongoing_xnet_reshares = BTreeMap::new();
         for reshare in &payload.ongoing_xnet_reshares {
             let request: IDkgReshareRequest =
-                try_from_option_field(reshare.request.as_ref(), "EcdsaPayload::reshare::request")?;
+                try_from_option_field(reshare.request.as_ref(), "IDkgPayload::reshare::request")?;
 
             let transcript: ReshareOfUnmaskedParams = try_from_option_field(
                 reshare.transcript.as_ref(),
-                "EcdsaPayload::reshare::transcript",
+                "IDkgPayload::reshare::transcript",
             )?;
             ongoing_xnet_reshares.insert(request, transcript);
         }
@@ -1903,14 +1900,14 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         for agreement in &payload.xnet_reshare_agreements {
             let request: IDkgReshareRequest = try_from_option_field(
                 agreement.request.as_ref(),
-                "EcdsaPayload::agreement::request",
+                "IDkgPayload::agreement::request",
             )?;
 
             let completed = match &agreement.initial_dealings {
                 Some(response) => {
                     let unreported = response.clone().try_into().map_err(|err| {
                         ProxyDecodeError::Other(format!(
-                            "EcdsaPayload:: failed to convert initial dealing: {:?}",
+                            "IDkgPayload:: failed to convert initial dealing: {:?}",
                             err
                         ))
                     })?;
@@ -1937,21 +1934,21 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
 ///
 /// Processing/updates for a particular entity like TranscriptId is scattered across
 /// several paths, called from different contexts (e.g)
-///     - EcdsaPreSigner builds the dealings/support shares (ECDSA component context),
+///     - IDkgPreSigner builds the dealings/support shares (ECDSA component context),
 ///       across several calls to on_state_change()
-///     - EcdsaTranscriptBuilder builds the verified dealings/transcripts (payload builder context),
+///     - IDkgTranscriptBuilder builds the verified dealings/transcripts (payload builder context),
 ///       across possibly several calls to get_completed_transcript()
 ///
-/// The ECDSA stats unifies the relevant metrics for an entity, so that these can be accessed
+/// The IDkg stats unifies the relevant metrics for an entity, so that these can be accessed
 /// from the different paths. This helps answer higher level queries
 /// (e.g) total time spent in stages like support share validation/ aggregation, per transcript.
 ///
 pub trait IDkgStats: Send + Sync {
     /// Updates the set of transcripts being tracked currently.
-    fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader);
+    fn update_active_transcripts(&self, block_reader: &dyn IDkgBlockReader);
 
     /// Updates the set of pre-signatures being tracked currently.
-    fn update_active_pre_signatures(&self, block_reader: &dyn EcdsaBlockReader);
+    fn update_active_pre_signatures(&self, block_reader: &dyn IDkgBlockReader);
 
     /// Records the time taken to verify the support share received for a dealing.
     fn record_support_validation(&self, support: &IDkgDealingSupport, duration: Duration);
@@ -2175,7 +2172,7 @@ mod tests {
     #[test]
     fn uid_generator_pre_signature_ids_are_globally_unique_test() {
         let mut uid_generator =
-            EcdsaUIDGenerator::new(ic_types_test_utils::ids::SUBNET_0, Height::new(100));
+            IDkgUIDGenerator::new(ic_types_test_utils::ids::SUBNET_0, Height::new(100));
 
         let pre_sig_id_0 = uid_generator.next_pre_signature_id();
         let pre_sig_id_1 = uid_generator.next_pre_signature_id();
