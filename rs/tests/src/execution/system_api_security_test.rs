@@ -32,7 +32,6 @@ pub fn config(env: TestEnv) {
 const ENABLE_DEBUG_LOG: bool = false;
 
 pub fn malicious_inputs(env: TestEnv) {
-    let logger = &env.logger();
     let wasm = wat::parse_str(
         r#"(module
               (import "ic0" "msg_reply" (func $msg_reply))
@@ -63,21 +62,9 @@ pub fn malicious_inputs(env: TestEnv) {
               ))
               (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
-              (func $proxy_msg_reply_data_append
-                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
-                (call $msg_reply_data_append (i32.load (i32.const 0)) (i32.load (i32.const 4)))
-                (call $msg_reply))
-
-              (func $proxy_msg_arg_data_copy_from_buffer_without_input
-                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
-
               (func $proxy_msg_arg_data_copy_last_10_bytes
                 (call $msg_arg_data_copy (i32.const 0) (i32.sub (call $msg_arg_data_size) (i32.const 10)) (i32.const 10))
                 (call $msg_reply_data_append (i32.const 0) (i32.const 10))
-                (call $msg_reply))
-
-              (func $proxy_msg_arg_data_copy_to_oob_buffer
-                (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
                 (call $msg_reply))
 
               (func $proxy_msg_arg_data_copy_return_last_4_bytes
@@ -97,23 +84,6 @@ pub fn malicious_inputs(env: TestEnv) {
                 (call $msg_reply))
 
               ;; All the function below are not used
-              (func $proxy_data_certificate_present
-                (i32.const 0)
-                (call $data_certificate_present)
-                (i32.store)
-                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
-                (call $msg_reply))
-
-              (func $proxy_certified_data_set
-                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
-                (call $certified_data_set (i32.const 0) (call $msg_arg_data_size))
-                (call $msg_reply_data_append (i32.const 0) (call $msg_arg_data_size))
-                (call $msg_reply))
-
-              (func $proxy_data_certificate_copy
-                (call $data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 32))
-                (call $msg_reply_data_append (i32.const 0) (i32.const 32))
-                (call $msg_reply))
 
               (func $f_100 (result i32)
                 i32.const 100)
@@ -121,25 +91,12 @@ pub fn malicious_inputs(env: TestEnv) {
                 i32.const 200)
 
               (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
-              (func $callByIndex
-                (i32.const 0)
-                (call_indirect (type $return_i32) (i32.const 0))
-                (i32.store)
-                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
-                (call $msg_reply))
 
               (table funcref (elem $f_100 $f_200))
               (memory $memory 1)
               (export "memory" (memory $memory))
-              (export "canister_query callByIndex" (func $callByIndex))
-              (export "canister_query proxy_msg_reply_data_append" (func $proxy_msg_reply_data_append))
-              (export "canister_query proxy_msg_arg_data_copy_from_buffer_without_input" (func $proxy_msg_arg_data_copy_from_buffer_without_input))
               (export "canister_query proxy_msg_arg_data_copy_last_10_bytes" (func $proxy_msg_arg_data_copy_last_10_bytes))
-              (export "canister_query proxy_msg_arg_data_copy_to_oob_buffer" (func $proxy_msg_arg_data_copy_to_oob_buffer))
               (export "canister_query proxy_msg_caller" (func $proxy_msg_caller))
-              (export "canister_query proxy_data_certificate_present" (func $proxy_data_certificate_present))
-              (export "canister_update proxy_certified_data_set" (func $proxy_certified_data_set))
-              (export "canister_query proxy_data_certificate_copy" (func $proxy_data_certificate_copy))
               )"#,
     ).unwrap();
 

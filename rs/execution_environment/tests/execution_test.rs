@@ -2065,11 +2065,6 @@ fn test_malicious_input() {
                   (func $proxy_msg_arg_data_copy_from_buffer_without_input
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
     
-                  (func $proxy_msg_arg_data_copy_last_10_bytes
-                    (call $msg_arg_data_copy (i32.const 0) (i32.sub (call $msg_arg_data_size) (i32.const 10)) (i32.const 10))
-                    (call $msg_reply_data_append (i32.const 0) (i32.const 10))
-                    (call $msg_reply))
-    
                   (func $proxy_msg_arg_data_copy_to_oob_buffer
                     (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
                     (call $msg_reply))
@@ -2077,17 +2072,6 @@ fn test_malicious_input() {
                   (func $proxy_msg_arg_data_copy_return_last_4_bytes
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 65536))
                     (call $msg_reply_data_append (i32.const 65532) (i32.const 4))
-                    (call $msg_reply))
-    
-                  (func $proxy_msg_caller
-                    ;; Message caller size in normal case is 29
-                    ;; This can be verified by uncommenting the below line
-                    ;; (i32.store (i32.const 0) (call $msg_caller_size))
-                    (call $msg_arg_data_copy (i32.const 65532) (i32.const 0) (i32.const 4))
-                    (i32.store (i32.const 0) (i32.load (i32.const 65532)))
-                    (call $msg_caller_copy (i32.const 1) (i32.const 0) (i32.load (i32.const 65532)))
-                    (call $msg_reply_data_append (i32.const 0) (i32.const 1))
-                    (call $msg_reply_data_append (i32.const 1) (i32.load (i32.const 65532)))
                     (call $msg_reply))
     
                   ;; All the function below are not used
@@ -2128,9 +2112,7 @@ fn test_malicious_input() {
                   (export "canister_query callByIndex" (func $callByIndex))
                   (export "canister_query proxy_msg_reply_data_append" (func $proxy_msg_reply_data_append))
                   (export "canister_query proxy_msg_arg_data_copy_from_buffer_without_input" (func $proxy_msg_arg_data_copy_from_buffer_without_input))
-                  (export "canister_query proxy_msg_arg_data_copy_last_10_bytes" (func $proxy_msg_arg_data_copy_last_10_bytes))
                   (export "canister_query proxy_msg_arg_data_copy_to_oob_buffer" (func $proxy_msg_arg_data_copy_to_oob_buffer))
-                  (export "canister_query proxy_msg_caller" (func $proxy_msg_caller))
                   (export "canister_query proxy_data_certificate_present" (func $proxy_data_certificate_present))
                   (export "canister_update proxy_certified_data_set" (func $proxy_certified_data_set))
                   (export "canister_query proxy_data_certificate_copy" (func $proxy_data_certificate_copy))
