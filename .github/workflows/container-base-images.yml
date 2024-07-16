@@ -109,7 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-base-image]
-    if: ${{ github.ref_name == 'master' }}
+    # if: ${{ github.ref_name == 'master' }} # TODO: change me
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -141,4 +141,4 @@ jobs:
           delete-branch: true
           title: Update Base Image Refs [${{ env.DATE }}]
           body: Updating base container image references.
-          draft: true
+          draft: true # TODO: changeme
