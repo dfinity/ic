@@ -129,7 +129,8 @@ pub fn test(env: TestEnv) {
 }
 
 fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
-    let ii_canister_id = ii_node.create_and_install_canister_with_arg(&INTERNET_IDENTITY_WASM, None);
+    let ii_canister_id =
+        ii_node.create_and_install_canister_with_arg(&INTERNET_IDENTITY_WASM, None);
     info!(
         env.logger(),
         "II canister with id={ii_canister_id} installed on subnet with id={}",
