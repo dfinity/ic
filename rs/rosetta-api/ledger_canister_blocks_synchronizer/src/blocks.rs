@@ -6,13 +6,13 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
-use rusqlite::{named_params, params, OptionalExtension, Row};
+use rusqlite::{named_params, params, CachedStatement, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
-use tracing::info;
+use tracing::{info, span, Level};
 
 mod database_access {
     use super::{sql_bytes_to_block, vec_into_array};
@@ -1391,6 +1391,9 @@ impl Blocks {
         &self,
         certified_tip_index: BlockIndex,
     ) -> Result<(), BlockStoreError> {
+        let rosetta_span = span!(Level::INFO, "make_rosetta_blocks");
+        let _w = rosetta_span.enter();
+
         let next_block_indices = match self.rosetta_blocks_mode {
             RosettaBlocksMode::Disabled => return Ok(()),
             RosettaBlocksMode::Enabled {
@@ -1409,11 +1412,14 @@ impl Blocks {
             None => return Ok(()),
             Some(index) => index,
         };
+        let get_block_span = span!(Level::INFO, "get_block");
+        let get_block_w = get_block_span.enter();
         let Block {
             parent_hash,
             timestamp,
             transaction,
         } = Block::decode(self.get_hashed_block(&block_index)?.block)?;
+        drop(get_block_w);
 
         let transaction_hash = transaction.hash();
         let mut rosetta_block = RosettaBlock {
@@ -1424,32 +1430,68 @@ impl Blocks {
         };
         let mut transactions_hashes = HashSet::new();
         transactions_hashes.insert(transaction_hash);
-        for block_index in block_indices {
-            let block = self.get_hashed_block(&block_index)?;
-            let transaction = Block::decode(block.block)?.transaction;
-            let transaction_hash = transaction.hash();
-            if block.timestamp == rosetta_block.timestamp
-                && !transactions_hashes.contains(&transaction_hash)
-            {
-                rosetta_block.transactions.insert(block_index, transaction);
-            } else {
-                let next_rosetta_block_index = rosetta_block.index + 1;
-                let parent_hash = rosetta_block.hash();
-                num_rosetta_blocks_created += 1;
-                self.store_rosetta_block(rosetta_block)?;
-                rosetta_block = RosettaBlock {
-                    index: next_rosetta_block_index,
-                    parent_hash: Some(parent_hash),
-                    timestamp: block.timestamp,
-                    transactions: [(block_index, transaction)].into_iter().collect(),
-                };
-                transactions_hashes.clear();
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+
+        let mut transaction = connection
+            .transaction()
+            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
+        let last_rosetta_block_index = {
+            let mut statement1 = transaction
+                .prepare_cached(
+                    r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
+                VALUES (:idx, :hash, :timestamp)"#,
+                )
+                .unwrap();
+            let mut statement2 = transaction
+                .prepare_cached(
+                    r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
+        VALUES (:idx, :block_idx)"#,
+                )
+                .unwrap();
+            for block_index in block_indices {
+                let get_block_span = span!(Level::INFO, "get_block");
+                let get_block_w = get_block_span.enter();
+                let block = self.get_hashed_block(&block_index)?;
+                let transaction = Block::decode(block.block)?.transaction;
+                drop(get_block_w);
+                let transaction_hash = transaction.hash();
+                if block.timestamp == rosetta_block.timestamp
+                    && !transactions_hashes.contains(&transaction_hash)
+                {
+                    rosetta_block.transactions.insert(block_index, transaction);
+                } else {
+                    let next_rosetta_block_index = rosetta_block.index + 1;
+                    let parent_hash = rosetta_block.hash();
+                    num_rosetta_blocks_created += 1;
+
+                    let store_rosetta_block_span = span!(Level::INFO, "store_rosetta_block");
+                    let store_rosetta_block_w = store_rosetta_block_span.enter();
+
+                    self.store_rosetta_block(rosetta_block, &mut statement1, &mut statement2)?;
+                    drop(store_rosetta_block_w);
+                    rosetta_block = RosettaBlock {
+                        index: next_rosetta_block_index,
+                        parent_hash: Some(parent_hash),
+                        timestamp: block.timestamp,
+                        transactions: [(block_index, transaction)].into_iter().collect(),
+                    };
+                    transactions_hashes.clear();
+                }
+                transactions_hashes.insert(transaction_hash);
             }
-            transactions_hashes.insert(transaction_hash);
+            num_rosetta_blocks_created += 1;
+            let last_rosetta_block_index = rosetta_block.index;
+            let store_rosetta_block_span = span!(Level::INFO, "store_rosetta_block");
+            let store_rosetta_block_w = store_rosetta_block_span.enter();
+            self.store_rosetta_block(rosetta_block, &mut statement1, &mut statement2)?;
+            drop(store_rosetta_block_w);
+            Ok::<_, BlockStoreError>(last_rosetta_block_index)
         }
-        num_rosetta_blocks_created += 1;
-        let last_rosetta_block_index = rosetta_block.index;
-        self.store_rosetta_block(rosetta_block)?;
+        .unwrap();
+        transaction.commit().unwrap();
 
         info!(
             "Created {num_rosetta_blocks_created} Rosetta Block{}. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {last_rosetta_block_index}",
@@ -1467,25 +1509,12 @@ impl Blocks {
     pub(crate) fn store_rosetta_block(
         &self,
         rosetta_block: RosettaBlock,
+        statement1: &mut CachedStatement,
+        statement2: &mut CachedStatement,
     ) -> Result<(), BlockStoreError> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-
-        let transaction = connection
-            .transaction()
-            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
-
         // Store the metainfo of the rosetta block
         {
-            let mut statement = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
-                                VALUES (:idx, :hash, :timestamp)"#,
-                )
-                .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
-            let _ = statement
+            let _ = statement1
                 .execute(named_params! {
                     ":idx": rosetta_block.index,
                     ":hash": rosetta_block.hash(),
@@ -1496,16 +1525,8 @@ impl Blocks {
 
         // Store the blocks that form this rosetta block
         {
-            let mut statement = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
-                    VALUES (:idx, :block_idx)"#,
-                )
-                .map_err(|e| {
-                    format!("Unable to insert into rosetta_blocks_transactions table: {e:?}")
-                })?;
             for block_index in rosetta_block.transactions.keys() {
-                let _ = statement
+                let _ = statement2
                     .execute(named_params! {
                         ":idx": rosetta_block.index,
                         ":block_idx": block_index,
@@ -1516,9 +1537,6 @@ impl Blocks {
             }
         }
 
-        transaction.commit().map_err(|e| {
-            format!("Error while finishing the transaction to store a rosetta block: {e:?}")
-        })?;
         Ok(())
     }
 
