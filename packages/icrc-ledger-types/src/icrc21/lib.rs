@@ -42,10 +42,11 @@ pub struct ConsentMessageBuilder {
     expected_allowance: Option<Nat>,
     expires_at: Option<u64>,
     utc_offset_minutes: Option<i16>,
+    decimals: u8,
 }
 
 impl ConsentMessageBuilder {
-    pub fn new(icrc21_function: &str) -> Result<Self, Icrc21Error> {
+    pub fn new(icrc21_function: &str,decimals:u8) -> Result<Self, Icrc21Error> {
         let icrc21_function =
             icrc21_function
                 .parse::<Icrc21Function>()
@@ -68,6 +69,7 @@ impl ConsentMessageBuilder {
             memo: None,
             expected_allowance: None,
             expires_at: None,
+            decimals,
         })
     }
 
@@ -319,14 +321,12 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Token Symbol must be specified.".to_owned(),
                 })?;
-                let amount = self
+                let amount = convert_tokens_to_string_representation(self
                     .amount
                     .ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Amount has to be specified.".to_owned(),
-                    })?
-                    .to_string()
-                    .replace('_', "'");
+                    }.0.)?,self.decimals);
 
                 message.push_str(&format!("\n\n**Withdrawal Account:**\n{}", from_account));
                 if spender_account.owner == Principal::anonymous() {
@@ -592,4 +592,10 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         metadata,
         consent_message,
     })
+}
+
+fn convert_tokens_to_string_representation(tokens: Nat,decimals:u8) -> String {
+    let decimal_digits = tokens%(decimals as u64);
+    let integer_digits = tokens/(decimals as u64);
+    format!("{}.{}",integer_digits,decimal_digits)
 }
