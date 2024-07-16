@@ -130,6 +130,8 @@ jobs:
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
     steps:
       - <<: *checkout
+        with:
+          fetch-depth: 256
       - <<: *before-script
       - name: Setup python deps
         id: setup-python-deps
