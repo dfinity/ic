@@ -412,6 +412,13 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct InstanceConfig {
+    pub subnet_config_set: ExtendedSubnetConfigSet,
+    pub state_dir: Option<PathBuf>,
+    pub nonmainnet_features: bool,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct ExtendedSubnetConfigSet {
     pub nns: Option<SubnetSpec>,
     pub sns: Option<SubnetSpec>,
@@ -541,11 +548,13 @@ impl SubnetStateConfig {
 
 impl ExtendedSubnetConfigSet {
     // Return the configured named subnets in order.
+    #[allow(clippy::type_complexity)]
     pub fn get_named(
         &self,
     ) -> Vec<(
         SubnetKind,
         Option<PathBuf>,
+        Option<RawSubnetId>,
         SubnetInstructionConfig,
         DtsFlag,
     )> {
@@ -564,6 +573,7 @@ impl ExtendedSubnetConfigSet {
             (
                 kind,
                 spec.get_state_path(),
+                spec.get_subnet_id(),
                 spec.get_instruction_config(),
                 spec.get_dts_flag(),
             )
@@ -611,6 +621,7 @@ impl ExtendedSubnetConfigSet {
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
+    pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
     /// Number of nodes in the subnet.

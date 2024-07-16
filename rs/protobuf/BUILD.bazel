@@ -21,6 +21,7 @@ rust_library(
     }),
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:bincode",
         "@crate_index//:candid",
         "@crate_index//:erased-serde",
@@ -36,6 +37,7 @@ rust_test(
     name = "protobuf_test",
     crate = ":protobuf",
     deps = [
+        # Keep sorted.
         "@crate_index//:maplit",
     ],
 )
@@ -53,6 +55,7 @@ generated_files_check(
     ]) + [":protos"],
     manifest_dir = "rs/protobuf",
     deps = [
+        # Keep sorted.
         "//rs/protobuf/generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

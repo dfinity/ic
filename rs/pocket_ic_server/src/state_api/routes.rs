@@ -35,13 +35,14 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId, RawSetStableMemory,
-    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
+    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig,
+    RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
+    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
+    RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tracing::trace;
 
@@ -970,9 +971,20 @@ pub async fn create_instance(
         runtime,
         blob_store: _,
     }): State<AppState>,
-    extract::Json(subnet_configs): extract::Json<ExtendedSubnetConfigSet>,
+    extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
-    if subnet_configs.validate().is_err() {
+    let subnet_configs = instance_config.subnet_config_set;
+    if (instance_config.state_dir.is_none()
+        || File::open(
+            instance_config
+                .state_dir
+                .clone()
+                .unwrap()
+                .join("topology.json"),
+        )
+        .is_err())
+        && subnet_configs.validate().is_err()
+    {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
@@ -990,11 +1002,18 @@ pub async fn create_instance(
         );
     }
 
-    let pocket_ic = tokio::task::spawn_blocking(move || PocketIc::new(runtime, subnet_configs))
-        .await
-        .expect("Failed to launch PocketIC");
+    let pocket_ic = tokio::task::spawn_blocking(move || {
+        PocketIc::new(
+            runtime,
+            subnet_configs,
+            instance_config.state_dir,
+            instance_config.nonmainnet_features,
+        )
+    })
+    .await
+    .expect("Failed to launch PocketIC");
 
-    let topology = pocket_ic.topology.clone();
+    let topology = pocket_ic.topology().clone();
     let instance_id = api_state.add_instance(pocket_ic).await;
     (
         StatusCode::CREATED,

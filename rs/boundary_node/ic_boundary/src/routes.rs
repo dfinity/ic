@@ -123,7 +123,7 @@ pub enum RequestType {
 pub enum RateLimitCause {
     Normal,
     Bouncer,
-    Canister,
+    Generic,
 }
 
 // Categorized possible causes for request processing failures
@@ -193,13 +193,7 @@ impl ErrorCause {
     }
 
     pub fn retriable(&self) -> bool {
-        matches!(
-            self,
-            Self::ReplicaErrorDNS(_)
-                | Self::ReplicaErrorConnect
-                | Self::ReplicaTLSErrorOther(_)
-                | Self::ReplicaTLSErrorCert(_)
-        )
+        !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
     }
 }
 
@@ -594,7 +588,6 @@ pub async fn validate_request(
     }
 
     let resp = next.run(request).await;
-
     Ok(resp)
 }
 
@@ -736,7 +729,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
         response.headers_mut().insert(
             HEADER_IC_SUBNET_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.id.clone())).unwrap(),
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
         );
     }
 

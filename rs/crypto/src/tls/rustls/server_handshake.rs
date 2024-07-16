@@ -9,8 +9,8 @@ use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert}
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use rustls::{
-    cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
-    server::{ClientCertVerifier, NoClientAuth, ResolvesServerCert},
+    crypto::ring::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
+    server::{danger::ClientCertVerifier, NoClientAuth, ResolvesServerCert},
     sign::CertifiedKey,
     version::TLS13,
     ServerConfig, SignatureScheme,
@@ -74,9 +74,10 @@ fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
     self_tls_cert: TlsPublicKeyCert,
     ed25519_signing_key: CspServerEd25519SigningKey,
 ) -> ServerConfig {
-    ServerConfig::builder()
-        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
-        .with_safe_default_kx_groups()
+    let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
+    ring_crypto_provider.cipher_suites = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
+
+    ServerConfig::builder_with_provider(Arc::new(ring_crypto_provider))
         .with_protocol_versions(&[&TLS13])
         .expect("Valid rustls server config.")
         .with_client_cert_verifier(client_cert_verifier)

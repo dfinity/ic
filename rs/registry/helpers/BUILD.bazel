@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/protobuf",
     "//rs/registry/keys",
@@ -10,8 +11,8 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
-    "//rs/types/management_canister_types",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:serde_cbor",
     "@crate_index//:thiserror",
@@ -20,6 +21,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
     "@crate_index//:assert_matches",

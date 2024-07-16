@@ -571,16 +571,16 @@ fn should_resubmit_new_transaction_when_price_increased() {
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
-    let resubmitted_sent_tx = "0x02f87301808462590080850f0de1e14682520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c088015e728d945289c680c001a0537665ebe010409f026674776c6273ef7af3a79bca42492a263ec405c3869c2ca00a238d29dbf894e7cf85b70d5ecd62fc99e375b754c112bcbe1199fc9f00dff2";
+    let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a03d58ee49c9dce3b3c646eeb18317b46cc852a5384be9026cb0aa3d59f9b16292a007276dfb5e003bd7f527675e15c8512f1324e6434c62e7ffa4c68971d726fa0b";
     let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
     let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
     assert_eq!(
         resubmitted_tx,
         expected_tx
             .clone()
-            .value(98_642_194_253_121_990_u64)
+            .value(99_303_772_126_560_990_u64)
             .max_priority_fee_per_gas(1_650_000_000_u64)
-            .max_fee_per_gas(64_657_416_518_u64)
+            .max_fee_per_gas(33_153_708_259_u64)
     );
     assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -603,7 +603,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
             expected_tx,
             expected_sig,
             &mut double_and_increment_base_fee_per_gas,
-            resubmitted_tx,
+            resubmitted_tx.clone(),
             resubmitted_tx_sig,
         )
         .assert_has_unique_events_in_order(&vec![
@@ -612,11 +612,13 @@ fn should_resubmit_new_transaction_when_price_increased() {
                 transaction: UnsignedTransaction {
                     chain_id: Nat::from(1_u8),
                     nonce: Nat::from(0_u8),
-                    max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
-                    max_fee_per_gas: Nat::from(64_657_416_518_u64),
+                    max_priority_fee_per_gas: Nat::from(
+                        resubmitted_tx.max_priority_fee_per_gas.unwrap().as_u128(),
+                    ),
+                    max_fee_per_gas: Nat::from(resubmitted_tx.max_fee_per_gas.unwrap().as_u128()),
                     gas_limit: Nat::from(21_000_u32),
                     destination: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                    value: Nat::from(98_642_194_253_121_990_u64),
+                    value: Nat::from(resubmitted_tx.value.unwrap().as_u128()),
                     data: Default::default(),
                     access_list: vec![],
                 },

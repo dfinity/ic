@@ -4,8 +4,8 @@ use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::http_transport::ReqwestTransport;
 use ic_utils::interfaces::ManagementCanister;
-use pocket_ic::common::rest::{HttpsConfig, SubnetConfigSet};
-use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic::common::rest::{HttpsConfig, InstanceConfig, SubnetConfigSet};
+use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
 use reqwest::Client as NonblockingClient;
@@ -16,7 +16,7 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, TempDir};
 
 pub const LOCALHOST: &str = "127.0.0.1";
 
@@ -84,15 +84,20 @@ fn test_status() {
 
 #[test]
 fn test_creation_of_instance_extended() {
-    use pocket_ic::common::rest::ExtendedSubnetConfigSet;
     let url = start_server();
     let client = Client::new();
-    let response = client
-        .post(url.join("instances").unwrap())
-        .json(&Into::<ExtendedSubnetConfigSet>::into(SubnetConfigSet {
+    let instance_config = InstanceConfig {
+        subnet_config_set: SubnetConfigSet {
             application: 1,
             ..Default::default()
-        }))
+        }
+        .into(),
+        state_dir: None,
+        nonmainnet_features: false,
+    };
+    let response = client
+        .post(url.join("instances").unwrap())
+        .json(&instance_config)
         .send()
         .unwrap();
 
@@ -502,4 +507,181 @@ fn canister_logs() {
         .read_to_string(&mut stderr)
         .unwrap();
     assert!(stderr.contains("Logging works!"));
+}
+
+const COUNTER_WAT: &str = r#"
+;; Counter with global variable ;;
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append"
+    (func $msg_reply_data_append (param i32 i32)))
+
+  (func $read
+    (i32.store
+      (i32.const 0)
+      (global.get 0)
+    )
+    (call $msg_reply_data_append
+      (i32.const 0)
+      (i32.const 4))
+    (call $msg_reply))
+
+  (func $write
+    (global.set 0
+      (i32.add
+        (global.get 0)
+        (i32.const 1)
+      )
+    )
+    (call $read)
+  )
+
+  (memory $memory 1)
+  (export "memory" (memory $memory))
+  (global (export "counter_global") (mut i32) (i32.const 0))
+  (export "canister_query read" (func $read))
+  (export "canister_query inc_read" (func $write))
+  (export "canister_update write" (func $write))
+)
+    "#;
+
+fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
+    let res = pic
+        .query_call(canister_id, Principal::anonymous(), "read", vec![])
+        .unwrap();
+    match res {
+        WasmResult::Reply(data) => {
+            assert_eq!(u32::from_le_bytes(data.try_into().unwrap()), expected_ctr);
+        }
+        _ => panic!("Unexpected update call response"),
+    };
+}
+
+/// Tests that the PocketIC topology and canister states
+/// can be successfully restored from a `state_dir`
+/// if a PocketIC instance is created with that `state_dir`,
+/// using `with_state_dir` on `PocketIcBuilder`.
+/// Furthermore, tests that the NNS subnet and its canister states
+/// can be successfully restored from the NNS subnet state,
+/// using `with_nns_state` on `PocketIcBuilder`.
+#[test]
+fn canister_state_dir() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with NNS and app subets.
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the NNS and app subnets from the topology.
+    let topology = pic.topology();
+    let nns_subnet = topology.get_nns().unwrap();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a counter canister on the NNS subnet.
+    let nns_canister_id = pic.create_canister_on_subnet(None, None, nns_subnet);
+    pic.add_cycles(nns_canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(nns_canister_id, counter_wasm, vec![], None);
+
+    // Bump the counter twice and check the counter value.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    check_counter(&pic, nns_canister_id, 2);
+
+    // We create a counter canister on the application subnet.
+    let app_canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+    pic.add_cycles(app_canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(app_canister_id, counter_wasm, vec![], None);
+
+    // Bump the counter once and check the counter value.
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    check_counter(&pic, app_canister_id, 1);
+
+    // We create a counter canister with a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    assert!(pic.get_subnet(specified_id).is_none());
+    let spec_canister_id = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap();
+    assert_eq!(spec_canister_id, specified_id);
+    pic.add_cycles(spec_canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(spec_canister_id, counter_wasm, vec![], None);
+
+    // Bump the counter three times and check the counter value.
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    check_counter(&pic, spec_canister_id, 3);
+
+    // Delete the PocketIC instance.
+    drop(pic);
+
+    // Start a new PocketIC server.
+    let (new_server_url, _) = start_server_helper(None, Some(5), false);
+
+    // Create a PocketIC instance mounting the state created so far.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_state_dir(state_dir_path_buf)
+        .build();
+
+    // Check that the topology has been properly restored.
+    let topology = pic.topology();
+    assert_eq!(topology.get_nns().unwrap(), nns_subnet);
+    assert_eq!(topology.get_app_subnets()[0], app_subnet);
+    // We created one app subnet and another one was created dynamically
+    // to host the canister with the "specified" canister ID.
+    assert_eq!(topology.get_app_subnets().len(), 2);
+
+    // Check that the canister states have been properly restored.
+    check_counter(&pic, nns_canister_id, 2);
+    check_counter(&pic, app_canister_id, 1);
+    check_counter(&pic, spec_canister_id, 3);
+
+    // Bump the counter on the NNS subnet.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Delete the PocketIC instance.
+    drop(pic);
+
+    // Start a new PocketIC server.
+    let (newest_server_url, _) = start_server_helper(None, Some(5), false);
+
+    // Create a PocketIC instance mounting the NNS state created so far.
+    let nns_subnet_seed = topology.0.get(&nns_subnet).unwrap().subnet_seed;
+    let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+    let pic = PocketIcBuilder::new()
+        .with_server_url(newest_server_url)
+        .with_nns_state(nns_subnet, nns_state_dir)
+        .build();
+
+    // Check that the topology has been properly restored.
+    let topology = pic.topology();
+    assert_eq!(topology.get_nns().unwrap(), nns_subnet);
+    // We didn't specify to restore any app subnets.
+    assert!(topology.get_app_subnets().is_empty());
+
+    // Check that the canister states have been properly restored.
+    check_counter(&pic, nns_canister_id, 3);
+
+    // Bump the counter on the NNS subnet.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
 }

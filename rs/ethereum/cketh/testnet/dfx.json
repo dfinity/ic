@@ -28,6 +28,15 @@
       "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
       "shrink": false
     },
+    "archive": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister_u256.wasm.gz",
+      "candid": "../../../rosetta-api/icrc1/archive/archive.did",
+      "shrink": false
+    },
     "orchestrator": {
       "type": "custom",
       "build": [

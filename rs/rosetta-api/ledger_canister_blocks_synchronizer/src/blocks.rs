@@ -1,13 +1,14 @@
 use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
 use crate::rosetta_block::RosettaBlock;
 use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
+use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
 use rusqlite::{named_params, params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
@@ -1352,7 +1353,117 @@ impl Blocks {
         }
     }
 
-    #[allow(dead_code)]
+    // Returns the index of the next Rosetta Block and of the first block
+    // to be put inside the next Rosetta Block
+    //
+    // Note: this method requires that the rosetta blocks table exist but
+    // it doesn't need them to be populated.
+    fn get_next_rosetta_block_indices(
+        &self,
+    ) -> Result<Option<RosettaBlockIndices>, BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
+        let last_rosetta_block_index: Option<BlockIndex> = connection
+            .query_row(
+                "SELECT max(rosetta_block_idx) FROM rosetta_blocks",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Unable to get the max index from the rosetta_blocks: {e:?}"))?;
+        let last_rosetta_block_index = match last_rosetta_block_index {
+            None => return Ok(None),
+            Some(last_rosetta_block_index) => last_rosetta_block_index,
+        };
+        let last_block_index_in_rosetta_block: BlockIndex = connection.query_row(
+            "SELECT max(block_idx) FROM rosetta_blocks_transactions WHERE rosetta_block_idx = :idx",
+            named_params! { ":idx": last_rosetta_block_index },
+            |row| row.get(0),
+        ).map_err(|e| format!("Unable to get the max block index for the rosetta block {last_rosetta_block_index}: {e:?}"))?;
+        Ok(Some(RosettaBlockIndices {
+            rosetta_block_index: last_rosetta_block_index + 1,
+            first_block_index: last_block_index_in_rosetta_block + 1,
+        }))
+    }
+
+    pub fn make_rosetta_blocks_if_enabled(
+        &self,
+        certified_tip_index: BlockIndex,
+    ) -> Result<(), BlockStoreError> {
+        let next_block_indices = match self.rosetta_blocks_mode {
+            RosettaBlocksMode::Disabled => return Ok(()),
+            RosettaBlocksMode::Enabled {
+                first_rosetta_block_index,
+            } => self
+                .get_next_rosetta_block_indices()?
+                .unwrap_or(RosettaBlockIndices {
+                    rosetta_block_index: first_rosetta_block_index,
+                    first_block_index: first_rosetta_block_index,
+                }),
+        };
+
+        let mut num_rosetta_blocks_created = 0;
+        let mut block_indices = next_block_indices.first_block_index..=certified_tip_index;
+        let block_index = match block_indices.next() {
+            None => return Ok(()),
+            Some(index) => index,
+        };
+        let Block {
+            parent_hash,
+            timestamp,
+            transaction,
+        } = Block::decode(self.get_hashed_block(&block_index)?.block)?;
+
+        let transaction_hash = transaction.hash();
+        let mut rosetta_block = RosettaBlock {
+            index: next_block_indices.rosetta_block_index,
+            parent_hash: parent_hash.map(|h| h.into_bytes()),
+            timestamp,
+            transactions: [(block_index, transaction)].into_iter().collect(),
+        };
+        let mut transactions_hashes = HashSet::new();
+        transactions_hashes.insert(transaction_hash);
+        for block_index in block_indices {
+            let block = self.get_hashed_block(&block_index)?;
+            let transaction = Block::decode(block.block)?.transaction;
+            let transaction_hash = transaction.hash();
+            if block.timestamp == rosetta_block.timestamp
+                && !transactions_hashes.contains(&transaction_hash)
+            {
+                rosetta_block.transactions.insert(block_index, transaction);
+            } else {
+                let next_rosetta_block_index = rosetta_block.index + 1;
+                let parent_hash = rosetta_block.hash();
+                num_rosetta_blocks_created += 1;
+                self.store_rosetta_block(rosetta_block)?;
+                rosetta_block = RosettaBlock {
+                    index: next_rosetta_block_index,
+                    parent_hash: Some(parent_hash),
+                    timestamp: block.timestamp,
+                    transactions: [(block_index, transaction)].into_iter().collect(),
+                };
+                transactions_hashes.clear();
+            }
+            transactions_hashes.insert(transaction_hash);
+        }
+        num_rosetta_blocks_created += 1;
+        let last_rosetta_block_index = rosetta_block.index;
+        self.store_rosetta_block(rosetta_block)?;
+
+        info!(
+            "Created {num_rosetta_blocks_created} Rosetta Block{}. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {last_rosetta_block_index}",
+            if num_rosetta_blocks_created > 1 {
+                "s"
+            } else {
+                ""
+            },
+            next_block_indices.first_block_index..=certified_tip_index,
+        );
+
+        Ok(())
+    }
+
     pub(crate) fn store_rosetta_block(
         &self,
         rosetta_block: RosettaBlock,
@@ -1486,6 +1597,13 @@ impl Blocks {
         }
         Ok(transactions)
     }
+
+    pub fn contains_block(&self, block_idx: &BlockIndex) -> Result<bool, BlockStoreError> {
+        let mut connection = self.connection.lock().map_err(|e| {
+            BlockStoreError::Other(format!("Unable to acquire the connection mutex: {e:?}"))
+        })?;
+        database_access::contains_block(&mut connection, block_idx)
+    }
 }
 
 fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
@@ -1497,6 +1615,11 @@ fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
             format!("Unable to decode block: {e:?}").into(),
         )
     })
+}
+
+struct RosettaBlockIndices {
+    pub rosetta_block_index: BlockIndex,
+    pub first_block_index: BlockIndex,
 }
 
 #[cfg(test)]

@@ -3,20 +3,22 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/secrets_containers",
     "//rs/types/types",
-    "@crate_index//:rcgen",
     "@crate_index//:rand",
+    "@crate_index//:rcgen",
     "@crate_index//:serde",
     "@crate_index//:time",
     "@crate_index//:zeroize",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/node_key_validation",
-    "//rs/protobuf",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/protobuf",
     "@crate_index//:assert_matches",
     "@crate_index//:hex",
     "@crate_index//:rand_chacha",

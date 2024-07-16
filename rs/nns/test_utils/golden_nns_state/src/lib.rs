@@ -39,7 +39,7 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
     );
     let state_dir = download_and_untar_golden_nns_state_or_panic();
     let state_machine_builder = state_machine_builder
-        .with_state_dir(state_dir)
+        .with_state_machine_state_dir(Box::new(state_dir))
         // Patch StateMachine. This is a bit of a hack that we need because we
         // are initializing from a state_dir.
         .with_nns_subnet_id(nns_subnet_id)

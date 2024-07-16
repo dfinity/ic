@@ -42,13 +42,13 @@ Engineering
 
 
 
-=== Network Dashboards from the community
+=== ICP Dashboard
 
 You can observe the state of the Internet Computer's infrastructure (Nodes, data centers, subnets) and traditional blockchain metrics (blocks/second, Token Supply, etc)
 
-- https://dashboard.internetcomputer.org Network dashboard by the Internet Computer Association
-- https://www.dfinityexplorer.org/# by https://github.com/dylancm4[Dylan Miller]
+- https://dashboard.internetcomputer.org
 
+=== The community
 
 To interact with the community, check out the developer forum: https://forum.dfinity.org/
 
@@ -130,3 +130,14 @@ Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer 
 
 
 While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, please follow the procedure at https://dfinity.org/vulnerability-disclosure-program/.
+
+=== Rust Dependency Policy
+
+To make the mono repository a success, there needs to be some basic rules to make development faster.
+
+* When adding a new external crate dependency please make sure it is necessary. Check that
+** There isn't another already imported crate with similar functionality.
+** The crate is well maintained and comes from reputable authors.
+* When bumping the semantic version of an external crate, please do it for the whole repository. Avoid importing the same crate with multiple versions.
+* Keep the rust-lang up-to-date for Bazel and Cargo.
+* Use Cargo workspace for inferring external crate versions by adding the new crate to the section `[workspace.dependencies]` of the workspace `Cargo.toml` and adding `new-crate = { workspace = true }` to each package-specific `Cargo.toml` that needs it.

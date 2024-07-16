@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "tmpdir",
+    testonly = True,
     srcs = ["src/lib.rs"],
     crate_name = "ic_test_utilities_tmpdir",
     version = "0.9.0",

@@ -22,11 +22,11 @@ use axum::{
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
+use ic_interfaces::p2p::consensus::{Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, SubnetTopology, Transport};
-use ic_types::artifact::{PbArtifact, Priority, PriorityFn, UnvalidatedArtifactMutation};
+use ic_types::artifact::{PbArtifact, UnvalidatedArtifactMutation};
 use prost::Message;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use tokio::{
@@ -192,7 +192,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: PbArtifact, Pool, ReceivedA
     adverts_received: Receiver<ReceivedAdvert>,
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     raw_pool: Arc<RwLock<Pool>>,
-    priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+    priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
 
@@ -222,7 +222,7 @@ where
         rt_handle: Handle,
         adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
-        priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+        priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -297,12 +297,6 @@ where
                     )
                     .len(),
                 "Number of download tasks should always be the same or exceed the number of distinct ids stored."
-            );
-            debug_assert!(
-                self.active_downloads
-                    .iter()
-                    .all(|(k, v)| { v.receiver_count() == 1 }),
-                "Some download task has two node receivers or it was dropped."
             );
         }
     }
@@ -470,7 +464,7 @@ where
         mut priority_fn_watcher: &mut watch::Receiver<
             PriorityFn<Artifact::Id, Artifact::Attribute>,
         >,
-    ) -> Result<(), DownloadStopped> {
+    ) -> Result<(), Aborted> {
         let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
 
         // Clear the artifact from memory if it was pushed.
@@ -480,26 +474,12 @@ where
         }
 
         while let Priority::Stash = priority {
-            select! {
-                Ok(_) = priority_fn_watcher.changed() => {
-                    priority = priority_fn_watcher.borrow_and_update()(id, attr);
-                }
-                res = peer_rx.changed() => {
-                    match res {
-                        Ok(()) if peer_rx.borrow().is_empty() => {
-                            return Err(DownloadStopped::AllPeersDeletedTheArtifact);
-                        },
-                        Ok(()) => {},
-                        Err(_) => {
-                            return Err(DownloadStopped::AllPeersDeletedTheArtifact);
-                        }
-                    }
-                }
-            }
+            let _ = priority_fn_watcher.changed().await;
+            priority = priority_fn_watcher.borrow_and_update()(id, attr);
         }
 
         if let Priority::Drop = priority {
-            return Err(DownloadStopped::PriorityIsDrop);
+            return Err(Aborted);
         }
         Ok(())
     }
@@ -523,7 +503,7 @@ where
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
-    ) -> Result<(Artifact, NodeId), DownloadStopped> {
+    ) -> Result<(Artifact, NodeId), Aborted> {
         // Evaluate priority and wait until we should fetch.
         Self::wait_fetch(
             id,
@@ -548,49 +528,48 @@ where
 
             // Fetch artifact
             None => {
-                let mut result = Err(DownloadStopped::AllPeersDeletedTheArtifact);
-
                 let timer = metrics
                     .download_task_artifact_download_duration
                     .start_timer();
                 let mut rng = SmallRng::from_entropy();
-                while let Some(peer) = {
-                    let peer = peer_rx.borrow().peers().choose(&mut rng).copied();
-                    peer
-                } {
-                    let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
-                    let request = Request::builder()
-                        .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
-                        .body(bytes)
-                        .unwrap();
 
-                    if peer_rx.has_changed().unwrap_or(false) {
-                        artifact_download_timeout.reset();
-                    }
-
+                let result = loop {
                     let next_request_at = Instant::now()
                         + artifact_download_timeout
                             .next_backoff()
                             .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
-                    match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
-                        Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                            let body = response.into_body();
-                            let decoded: Result<Artifact, _> =
-                                Artifact::PbMessage::proxy_decode(&body);
-                            if let Ok(message) = decoded {
-                                if &message.id() == id {
-                                    result = Ok((message, peer));
-                                    break;
-                                } else {
-                                    warn!(
-                                        log,
-                                        "Peer {} responded with wrong artifact for advert", peer
-                                    );
+                    if let Some(peer) = {
+                        let peer = peer_rx.borrow().peers().choose(&mut rng).copied();
+                        peer
+                    } {
+                        let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
+                        let request = Request::builder()
+                            .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
+                            .body(bytes)
+                            .unwrap();
+
+                        if peer_rx.has_changed().unwrap_or(false) {
+                            artifact_download_timeout.reset();
+                        }
+
+                        match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
+                            Ok(Ok(response)) if response.status() == StatusCode::OK => {
+                                let body = response.into_body();
+                                if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
+                                    if &message.id() == id {
+                                        break Ok((message, peer));
+                                    } else {
+                                        warn!(
+                                            log,
+                                            "Peer {} responded with wrong artifact for advert",
+                                            peer
+                                        );
+                                    }
                                 }
                             }
-                        }
-                        _ => {
-                            metrics.download_task_artifact_download_errors_total.inc();
+                            _ => {
+                                metrics.download_task_artifact_download_errors_total.inc();
+                            }
                         }
                     }
 
@@ -605,7 +584,7 @@ where
                         &mut priority_fn_watcher,
                     )
                     .await?;
-                }
+                };
 
                 timer.stop_and_record();
 
@@ -636,48 +615,67 @@ where
         Artifact::Attribute,
     ) {
         let _timer = metrics.download_task_duration.start_timer();
-        let download_result = Self::download_artifact(
-            log,
-            &id,
-            &attr,
-            artifact,
-            &mut peer_rx,
-            priority_fn_watcher,
-            transport,
-            metrics.clone(),
-        )
-        .await;
 
-        match download_result {
-            Ok((artifact, peer_id)) => {
-                // Send artifact to pool
-                sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
-
-                // wait for deletion from peers
-                peer_rx.wait_for(|p| p.is_empty()).await;
-
-                // Purge from the unvalidated pool
-                sender.send(UnvalidatedArtifactMutation::Remove(id.clone()));
-                metrics
-                    .download_task_result_total
-                    .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
-                    .inc();
+        let mut peer_rx_clone = peer_rx.clone();
+        let all_peers_deleted_artifact = async move {
+            loop {
+                match peer_rx_clone.changed().await {
+                    Err(_) => break,
+                    Ok(x) if peer_rx_clone.borrow().is_empty() => break,
+                    _ => {}
+                }
             }
-            Err(DownloadStopped::PriorityIsDrop) => {
-                // wait for deletion from peers
-                peer_rx.wait_for(|p| p.is_empty()).await;
-                metrics
-                    .download_task_result_total
-                    .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
-                    .inc();
+        };
+
+        let download_artifact = async {
+            Self::download_artifact(
+                log,
+                &id,
+                &attr,
+                artifact,
+                &mut peer_rx,
+                priority_fn_watcher,
+                transport,
+                metrics.clone(),
+            )
+            .await
+        };
+
+        select! {
+            download_result = download_artifact => {
+                match download_result {
+                    Ok((artifact, peer_id)) => {
+                        // Send artifact to pool
+                        sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
+
+                        // wait for deletion from peers
+                        peer_rx.wait_for(|p| p.is_empty()).await;
+
+                        // Purge from the unvalidated pool
+                        sender.send(UnvalidatedArtifactMutation::Remove(id.clone()));
+                        metrics
+                            .download_task_result_total
+                            .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
+                            .inc();
+                    }
+                    Err(Aborted) => {
+                        // wait for deletion from peers
+                        peer_rx.wait_for(|p| p.is_empty()).await;
+                        metrics
+                            .download_task_result_total
+                            .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
+                            .inc();
+
+                    },
+                }
             }
-            Err(DownloadStopped::AllPeersDeletedTheArtifact) => {
+            _ = all_peers_deleted_artifact => {
                 metrics
                     .download_task_result_total
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED])
                     .inc();
-            }
-        }
+            },
+        };
 
         (peer_rx, id, attr)
     }
@@ -716,10 +714,7 @@ where
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum DownloadStopped {
-    AllPeersDeletedTheArtifact,
-    PriorityIsDrop,
-}
+struct Aborted;
 
 #[derive(PartialEq, Eq, Debug)]
 struct SlotEntry<T> {
@@ -747,7 +742,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{
         consensus::U64Artifact,
-        mocks::{MockPriorityFnAndFilterProducer, MockTransport, MockValidatedPoolReader},
+        mocks::{MockPriorityFnFactory, MockTransport, MockValidatedPoolReader},
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
@@ -765,7 +760,7 @@ mod tests {
         adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
         raw_pool: MockValidatedPoolReader<U64Artifact>,
         priority_fn_producer:
-            Arc<dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
+            Arc<dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -789,7 +784,7 @@ mod tests {
             let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
             let (_, topology_watcher) = watch::channel(SubnetTopology::default());
 
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            let mut mock_pfn = MockPriorityFnFactory::new();
 
             mock_pfn
                 .expect_get_priority_function()
@@ -811,7 +806,7 @@ mod tests {
         fn with_priority_fn_producer(
             mut self,
             priority_fn_producer: Arc<
-                dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
+                dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
             >,
         ) -> Self {
             self.priority_fn_producer = priority_fn_producer;
@@ -1179,7 +1174,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let mut seq = Sequence::new();
         mock_pfn
             .expect_get_priority_function()
@@ -1243,7 +1238,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let mut seq = Sequence::new();
         mock_pfn
             .expect_get_priority_function()
@@ -1305,7 +1300,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1383,7 +1378,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1515,7 +1510,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1686,7 +1681,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let priorities = Arc::new(Mutex::new(vec![Priority::FetchNow, Priority::Stash]));
         mock_pfn
             .expect_get_priority_function()

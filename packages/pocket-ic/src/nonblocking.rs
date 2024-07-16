@@ -1,8 +1,8 @@
 use crate::common::rest::{
     ApiResponse, BlobCompression, BlobId, CreateHttpGatewayResponse, CreateInstanceResponse,
     ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, HttpsConfig,
-    InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
-    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, RawStableMemory,
+    InstanceConfig, InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult,
+    RawCycles, RawEffectivePrincipal, RawMessageId, RawSetStableMemory, RawStableMemory,
     RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
     Topology,
 };
@@ -20,7 +20,9 @@ use ic_cdk::api::management_canister::main::{
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
+use std::fs::File;
 use std::future::Future;
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -77,7 +79,14 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
+        .await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
@@ -88,7 +97,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms).await
+        Self::from_components(config, server_url, max_request_time_ms, None, false).await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -97,16 +106,34 @@ impl PocketIc {
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
     ) -> Self {
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
+        .await
     }
 
     pub(crate) async fn from_components(
-        config: impl Into<ExtendedSubnetConfigSet>,
+        subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
         max_request_time_ms: Option<u64>,
+        state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
     ) -> Self {
-        let config = config.into();
-        config.validate().unwrap();
+        let subnet_config_set = subnet_config_set.into();
+        if state_dir.is_none()
+            || File::open(state_dir.clone().unwrap().join("topology.json")).is_err()
+        {
+            subnet_config_set.validate().unwrap();
+        }
+        let instance_config = InstanceConfig {
+            subnet_config_set,
+            state_dir,
+            nonmainnet_features,
+        };
 
         let parent_pid = std::os::unix::process::parent_id();
         let log_guard = setup_tracing(parent_pid);
@@ -114,7 +141,7 @@ impl PocketIc {
         let reqwest_client = reqwest::Client::new();
         let instance_id = match reqwest_client
             .post(server_url.join("instances").unwrap())
-            .json(&config)
+            .json(&instance_config)
             .send()
             .await
             .expect("Failed to get result")

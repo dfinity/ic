@@ -15,6 +15,7 @@ filegroup(
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
@@ -30,8 +31,8 @@ BASE_DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/on_wire",
     "//rs/rust_canisters/http_types",
+    "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:build-info",
@@ -55,17 +56,20 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "//rs/rust_canisters/dfn_macro",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 ALIASES = {}
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
     "@crate_index//:pretty_assertions",
@@ -182,6 +186,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/nns/handlers/root/impl",
     deps = [
+        # Keep sorted.
         "//rs/nns/handlers/root/impl/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

@@ -16,8 +16,6 @@ end::catalog[] */
 use anyhow::{bail, Result};
 
 use candid::Principal;
-use hyper::Client;
-use hyper_rustls::HttpsConnectorBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
@@ -76,24 +74,21 @@ fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: 
         secs(30),
         || {
             block_on(async {
-                let https_connector = HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .https_only()
-                    .enable_http1()
-                    .build();
-                let client = Client::builder().build::<_, hyper::Body>(https_connector);
+                let client = reqwest::Client::builder()
+                    .use_rustls_tls()
+                    .https_only(true)
+                    .http1_only()
+                    .build()?;
 
-                let req = hyper::Request::builder()
-                    .method(hyper::Method::GET)
-                    .uri(dapp_url)
+                let resp = client
+                    .get(dapp_url)
                     .header("Accept-Encoding", "gzip")
                     .header("User-Agent", "systest") // to prevent getting the service worker
-                    .body(hyper::Body::from(""))?;
+                    .send()
+                    .await?;
 
-                let resp = client.request(req).await?;
-
-                let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-                if let Ok(body) = String::from_utf8(body_bytes.to_vec()) {
+                let body_bytes = resp.bytes().await?.to_vec();
+                if let Ok(body) = String::from_utf8(body_bytes.clone()) {
                     if body.contains("503 Service Temporarily Unavailable") {
                         bail!("BN is not ready yet!");
                     } else if body.contains(dapp_anchor) {
@@ -103,8 +98,7 @@ fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: 
                     }
                 };
 
-                let body_vec = body_bytes.to_vec();
-                let mut decoder = Decoder::new(&body_vec[..]).unwrap();
+                let mut decoder = Decoder::new(&body_bytes[..]).unwrap();
                 let mut decoded_data = Vec::new();
                 decoder.read_to_end(&mut decoded_data).unwrap();
 

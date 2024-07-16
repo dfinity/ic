@@ -381,7 +381,7 @@ pub struct ThresholdSignatureShare {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaPayload {
+pub struct IDkgPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, optional, tag = "5")]
@@ -428,8 +428,6 @@ pub mod consensus_response {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MasterKeyTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub deprecated_key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "3")]
@@ -683,8 +681,6 @@ pub struct IDkgReshareRequest {
     pub receiving_node_ids: ::prost::alloc::vec::Vec<NodeId>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
-    #[prost(message, optional, tag = "4")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "5")]
     pub master_key_id:
         ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
@@ -800,16 +796,40 @@ pub struct IDkgPrefix {
     pub group_tag: u64,
     #[prost(uint64, tag = "2")]
     pub meta_hash: u64,
-    #[prost(uint64, tag = "3")]
-    pub height: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PrefixHashPair {
-    #[prost(message, optional, tag = "1")]
-    pub prefix: ::core::option::Option<IDkgPrefix>,
+pub struct IDkgArtifactIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub subnet_id: ::core::option::Option<SubnetId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SigShareIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrefixPairIDkg {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<IDkgArtifactIdData>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrefixPairSigShare {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<SigShareIdData>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -823,17 +843,17 @@ pub mod i_dkg_artifact_id {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
         #[prost(message, tag = "1")]
-        Dealing(super::PrefixHashPair),
+        Dealing(super::PrefixPairIDkg),
         #[prost(message, tag = "2")]
-        DealingSupport(super::PrefixHashPair),
+        DealingSupport(super::PrefixPairIDkg),
         #[prost(message, tag = "3")]
-        EcdsaSigShare(super::PrefixHashPair),
+        EcdsaSigShare(super::PrefixPairSigShare),
         #[prost(message, tag = "4")]
-        Complaint(super::PrefixHashPair),
+        Complaint(super::PrefixPairIDkg),
         #[prost(message, tag = "5")]
-        Opening(super::PrefixHashPair),
+        Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
-        SchnorrSigShare(super::PrefixHashPair),
+        SchnorrSigShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -992,7 +1012,7 @@ pub struct Block {
     #[prost(message, optional, tag = "12")]
     pub self_validating_payload: ::core::option::Option<SelfValidatingPayload>,
     #[prost(message, optional, tag = "13")]
-    pub ecdsa_payload: ::core::option::Option<EcdsaPayload>,
+    pub idkg_payload: ::core::option::Option<IDkgPayload>,
     #[prost(bytes = "vec", tag = "15")]
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]
