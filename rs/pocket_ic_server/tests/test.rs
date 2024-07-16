@@ -687,7 +687,7 @@ fn canister_state_dir() {
         .unwrap();
 }
 
-/// Test that PocketIC can handle synchronous update calls, i.e. `/v3/.../call`.
+/// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
 #[test]
 fn test_specified_id_call_v3() {
     use ic_agent_call_v3::agent::CallResponse;
@@ -699,10 +699,6 @@ fn test_specified_id_call_v3() {
         .build();
     let endpoint = pic.make_live(None);
 
-    // We define a "specified" canister ID that exists on the IC mainnet,
-    // but belongs to the canister ranges of no subnet on the PocketIC instance.
-    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
-    assert!(pic.get_subnet(specified_id).is_none());
 
     // We create a canister with that specified canister ID: this should succeed
     // and a new subnet should be created.
@@ -712,7 +708,7 @@ fn test_specified_id_call_v3() {
         .unwrap();
 
     // retrieve the first canister ID on the application subnet
-    // which will be the effective and expected canister ID for canister creation
+    // which will be the effective canister ID for canister creation
     let topology = pic.topology();
 
     let app_subnet = topology.get_app_subnets()[0];
