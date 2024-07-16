@@ -21,7 +21,7 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 const INGRESS_WATCHER_CHANNEL_SIZE: usize = 1000;
 
 #[derive(Debug)]
-pub enum SubscriptionError {
+pub(crate) enum SubscriptionError {
     /// Another subscription for the same message id already exists.
     DuplicateSubscriptionError,
     /// The [`IngressWatcher`] is not running.
@@ -48,7 +48,7 @@ pub struct IngressWatcherHandle {
 impl IngressWatcherHandle {
     /// Subscribes for the certification of an ingress message, and returns a [`IngressCertificationSubscriber`], that can be
     /// used to wait for a message to be certified.
-    pub async fn subscribe_for_certification(
+    pub(crate) async fn subscribe_for_certification(
         self,
         message: MessageId,
     ) -> Result<IngressCertificationSubscriber, SubscriptionError> {
@@ -88,7 +88,7 @@ impl IngressWatcherHandle {
     }
 }
 
-pub struct IngressCertificationSubscriber {
+pub(crate) struct IngressCertificationSubscriber {
     certification_notifier: Arc<Notify>,
     metrics: HttpHandlerMetrics,
     /// Cancels the subscription if the subscriber is dropped.
@@ -96,7 +96,7 @@ pub struct IngressCertificationSubscriber {
 }
 
 impl IngressCertificationSubscriber {
-    pub async fn wait_for_certification(self) {
+    pub(crate) async fn wait_for_certification(self) {
         let _timer = self
             .metrics
             .ingress_watcher_wait_for_certification_duration_seconds
