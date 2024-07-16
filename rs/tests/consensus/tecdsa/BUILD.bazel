@@ -162,7 +162,7 @@ system_test(
 )
 
 system_test(
-    name = "tecdsa_performance",
+    name = "tecdsa_performance_test",
     additional_colocate_tags = [
         "system_test_benchmark",
     ],

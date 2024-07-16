@@ -16,6 +16,7 @@ declare -A teamsMap=(
     ["@dfinity-lab/teams/ic-support"]="@dfinity/ic-support"
     ["@dfinity-lab/teams/ic-testing-verification"]="@dfinity/ic-testing-verification"
     ["@dfinity-lab/teams/idx"]="@dfinity/idx"
+    ["@dfinity-lab/teams/infrasec"]="@dfinity/infrasec"
     ["@dfinity-lab/teams/interface-owners"]="@dfinity/ic-interface-owners"
     ["@dfinity-lab/teams/message-routing-owners"]="@dfinity/ic-message-routing-owners"
     ["@dfinity-lab/teams/networking-team"]="@dfinity/networking"

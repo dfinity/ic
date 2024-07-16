@@ -5,6 +5,7 @@
 # [Misc]
 /.devcontainer/           @dfinity/idx
 /.github/                 @dfinity/idx
+/.github/workflows        @dfinity/idx @dfinity/infrasec
 /.github/CODEOWNERS       @dfinity/ic-owners-owners
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
