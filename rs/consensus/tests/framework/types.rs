@@ -282,7 +282,7 @@ impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
     }
     /// Return the priority of the given message
     pub fn get_priority(&self, msg: &Artifact) -> Priority {
-        (self.priority_fn)(&msg.id(), &msg.attribute())
+        (self.priority_fn)(&msg.id())
     }
 
     /// Compute a new priority function

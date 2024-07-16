@@ -52,23 +52,6 @@ impl EcdsaClientMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaGossipMetrics {
-    pub dropped_adverts: IntCounterVec,
-}
-
-impl EcdsaGossipMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            dropped_adverts: metrics_registry.int_counter_vec(
-                "ecdsa_priority_fn_dropped_adverts",
-                "ECDSA adverts dropped by priority fn",
-                &["type"],
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
 pub struct IDkgPreSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub pre_sign_metrics: IntCounterVec,

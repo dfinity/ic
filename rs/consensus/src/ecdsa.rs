@@ -171,8 +171,7 @@
 
 use crate::ecdsa::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::ecdsa::metrics::{
-    timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
-    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+    timed_call, EcdsaClientMetrics, CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::ecdsa::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
 use crate::ecdsa::signer::{ThresholdSigner, ThresholdSignerImpl};
@@ -193,10 +192,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::consensus::idkg::IDkgMessage;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
-    artifact::IDkgMessageId,
-    consensus::idkg::{IDkgBlockReader, RequestId},
-    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-    malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader, malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 
@@ -434,7 +430,6 @@ pub struct EcdsaGossipImpl {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    metrics: EcdsaGossipMetrics,
 }
 
 impl EcdsaGossipImpl {
@@ -443,13 +438,11 @@ impl EcdsaGossipImpl {
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        metrics_registry: MetricsRegistry,
     ) -> Self {
         Self {
             subnet_id,
             consensus_block_cache,
             state_reader,
-            metrics: EcdsaGossipMetrics::new(metrics_registry),
         }
     }
 }
@@ -458,9 +451,6 @@ struct EcdsaPriorityFnArgs {
     finalized_height: Height,
     #[allow(dead_code)]
     certified_height: Height,
-    requested_transcripts: BTreeSet<IDkgTranscriptId>,
-    requested_signatures: BTreeSet<RequestId>,
-    active_transcripts: BTreeSet<IDkgTranscriptId>,
 }
 
 impl EcdsaPriorityFnArgs {
@@ -478,79 +468,91 @@ impl EcdsaPriorityFnArgs {
             active_transcripts.insert(transcript_ref.transcript_id);
         }
 
-        let (certified_height, requested_signatures) = state_reader
-            .get_certified_state_snapshot()
-            .map_or(Default::default(), |snapshot| {
-                let request_contexts = snapshot
-                    .get_state()
-                    .signature_request_contexts()
-                    .values()
-                    .flat_map(get_context_request_id)
-                    .collect::<BTreeSet<_>>();
+        let (certified_height, _) =
+            state_reader
+                .get_certified_state_snapshot()
+                .map_or(Default::default(), |snapshot| {
+                    let request_contexts = snapshot
+                        .get_state()
+                        .signature_request_contexts()
+                        .values()
+                        .flat_map(get_context_request_id)
+                        .collect::<BTreeSet<_>>();
 
-                (snapshot.get_height(), request_contexts)
-            });
+                    (snapshot.get_height(), request_contexts)
+                });
 
         Self {
             finalized_height: block_reader.tip_height(),
             certified_height,
-            requested_transcripts,
-            requested_signatures,
-            active_transcripts,
         }
     }
 }
 
 impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for EcdsaGossipImpl {
-    fn get_priority_function(
-        &self,
-        _idkg_pool: &Pool,
-    ) -> PriorityFn<IDkgMessageId> {
+    fn get_priority_function(&self, _idkg_pool: &Pool) -> PriorityFn<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = EcdsaPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
-        let metrics = self.metrics.clone();
-        Box::new(move |id: &'_ IDkgMessageId| {
-            compute_priority(id, subnet_id, &args, &metrics)
-        })
+        Box::new(move |id: &'_ IDkgMessageId| compute_priority(id, subnet_id, &args))
     }
 }
 
 fn compute_priority(
-    attr: &IDkgMessageId,
+    id: &IDkgMessageId,
     subnet_id: SubnetId,
     args: &EcdsaPriorityFnArgs,
-    metrics: &EcdsaGossipMetrics,
 ) -> Priority {
-    match attr {
-        IDkgMessageId::Dealing(transcript_id)
-        | IDkgMessageId::DealingSupport(transcript_id) => {
-            // For xnet dealings(target side), always fetch the artifacts,
-            // as the source_height from different subnet cannot be compared
-            // anyways.
-            if *transcript_id.source_subnet() != subnet_id {
+    match id {
+        IDkgMessageId::Dealing(_, data) => {
+            if data.get_ref().subnet_id != subnet_id {
                 return Priority::FetchNow;
             }
 
-            let height = transcript_id.source_height();
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::FetchNow
+            } else {
+                Priority::Stash
+            }
+        }
+        IDkgMessageId::DealingSupport(_, data) => {
+            // For xnet dealings(target side), always fetch the artifacts,
+            // as the source_height from different subnet cannot be compared
+            // anyways.
+            if data.get_ref().subnet_id != subnet_id {
+                return Priority::FetchNow;
+            }
+
+            let height = data.get_ref().height;
             if height <= args.finalized_height + Height::from(LOOK_AHEAD) {
                 Priority::FetchNow
             } else {
                 Priority::Stash
             }
         }
-        IDkgMessageId::EcdsaSigShare(request_id)
-        | IDkgMessageId::SchnorrSigShare(request_id) => {
-            if request_id.height <= args.certified_height + Height::from(LOOK_AHEAD) {
+        IDkgMessageId::EcdsaSigShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
                 Priority::FetchNow
             } else {
                 Priority::Stash
             }
         }
-        IDkgMessageId::Complaint(transcript_id)
-        | IDkgMessageId::Opening(transcript_id) => {
-            let height = transcript_id.source_height();
-            if height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+        IDkgMessageId::SchnorrSigShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
+                Priority::FetchNow
+            } else {
+                Priority::Stash
+            }
+        }
+        IDkgMessageId::Complaint(_, data) => {
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::FetchNow
+            } else {
+                Priority::Stash
+            }
+        }
+        IDkgMessageId::Opening(_, data) => {
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
                 Priority::FetchNow
             } else {
                 Priority::Stash
@@ -635,9 +637,6 @@ mod tests {
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
@@ -795,9 +794,6 @@ mod tests {
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts,
         };
 
         let tests = vec![
