@@ -71,11 +71,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
 
-      - name: Login to Docker Hub
+      - name: Login to GHCR
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
-          username: ${{ secrets.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Base Image
         uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
@@ -83,7 +84,8 @@ jobs:
         with:
           context: ${{ matrix.CONTEXT }}
           file: ${{ matrix.CONTEXT }}/Dockerfile.base
-          push: ${{ github.ref_name == 'master' }}
+          # push: ${{ github.ref_name == 'master' }} # TODO: uncomment
+          push: true
           tags: dfinity/${{ matrix.IMAGE }}:${{ env.DATE }}
           build-args: ${{ matrix.BUILD_ARGS }}
 
