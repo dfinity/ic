@@ -699,8 +699,6 @@ fn test_specified_id_call_v3() {
         .build();
     let endpoint = pic.make_live(None);
 
-    // We create a canister with that specified canister ID: this should succeed
-    // and a new subnet should be created.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
