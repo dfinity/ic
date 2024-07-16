@@ -114,6 +114,8 @@ Thank you for taking the time to learn more about the Internet Computer Protocol
 - https://medium.com/dfinity/understanding-the-internet-computers-network-nervous-system-neurons-and-icp-utility-tokens-730dab65cae8[Understanding the Internet Computer’s Network Nervous System, Neurons, and ICP Utility Tokens]
 - https://github.com/dfinity/nns-proposals[List of NNS Proposals]
 
+=== Hotfixing
+
 === Open Source Policy
 
 The DFINITY Foundation makes the code of the Internet Computer available to
