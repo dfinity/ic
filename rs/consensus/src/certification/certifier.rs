@@ -760,15 +760,12 @@ mod tests {
                     (4, Priority::FetchNow),
                 ] {
                     assert_eq!(
-                        prio_fn(
-                            &CertificationMessageId {
-                                height: Height::from(*height),
-                                hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                                    CryptoHash(Vec::new())
-                                )),
-                            },
-                            &()
-                        ),
+                        prio_fn(&CertificationMessageId {
+                            height: Height::from(*height),
+                            hash: CertificationMessageHash::Certification(CryptoHashOf::from(
+                                CryptoHash(Vec::new())
+                            )),
+                        },),
                         *prio
                     );
                 }

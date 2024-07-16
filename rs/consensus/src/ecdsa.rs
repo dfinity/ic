@@ -630,7 +630,6 @@ mod tests {
         let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
 
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaGossipMetrics::new(metrics_registry);
 
         let mut requested_transcripts = BTreeSet::new();
         requested_transcripts.insert(transcript_id_fetch_1);
@@ -684,11 +683,8 @@ mod tests {
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
         }
     }
 
@@ -719,7 +715,6 @@ mod tests {
         };
 
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaGossipMetrics::new(metrics_registry);
 
         let mut requested_signatures = BTreeSet::new();
         requested_signatures.insert(request_id_fetch_1.clone());
@@ -766,11 +761,8 @@ mod tests {
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
         }
     }
 
@@ -785,7 +777,6 @@ mod tests {
         let transcript_id_fetch_3 = IDkgTranscriptId::new(subnet_id, 5, Height::from(80));
 
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaGossipMetrics::new(metrics_registry);
 
         let mut active_transcripts = BTreeSet::new();
         active_transcripts.insert(transcript_id_fetch_1);
@@ -841,11 +832,8 @@ mod tests {
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
         }
     }
 }
