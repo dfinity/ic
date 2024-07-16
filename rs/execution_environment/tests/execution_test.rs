@@ -2288,25 +2288,6 @@ fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: 
         "Should return error if try to read input buffer on no input"
     );
 
-    /*   // Provide 1 GB of data
-    let ret_val = env
-        .query(
-            *canister_id,
-            "proxy_msg_arg_data_copy_last_10_bytes",
-            vec![1; 1024 * 1024 * 1024],
-        )
-        .unwrap_err();
-
-    assert_eq!(ret_val.code(), ErrorCode::CanisterTrapped);
-
-    let containing_str = "Request is too big. Max allowed size in bytes is: 5242880";
-
-    assert!(
-        ret_val.description().contains(containing_str),
-        "Should return error if 1GB of data sent as input"
-    );
-    */
-
     // copy data from argument buffer to out of bound internal buffer
     let ret_val = env
         .query(
@@ -2324,27 +2305,4 @@ fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: 
         ret_val.description().contains(containing_str),
         "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
     );
-
-    /*
-    // Calls msg caller with correct size = 29 bytes
-    let ret_val = env.query(*canister_id, "proxy_msg_caller", vec![29, 0, 0, 0]);
-
-    assert!(ret_val.is_ok(), "msg_caller with caller length 29 failed");
-    */
-
-    /*
-    // Calls msg caller with larger size
-    let ret_val = env
-        .query(*canister_id, "proxy_msg_caller", vec![128, 0, 0, 0])
-        .unwrap_err();
-
-    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
-
-    let containing_str =
-        "violated contract: ic0.msg_caller_copy id: src=0 + length=128 exceeds the slice size=29";
-
-    assert!(
-        ret_val.description().contains(containing_str),
-        "msg_caller with caller large length 128 was accepted"
-    );*/
 }

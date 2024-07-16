@@ -4,7 +4,7 @@
 */
 
 use core::fmt::Write;
-use ic_agent::{AgentError, RequestId};
+use ic_agent::{agent::RejectResponse, export::Principal, AgentError, RequestId};
 use ic_registry_subnet_type::SubnetType;
 
 use ic_system_test_driver::{
@@ -15,6 +15,7 @@ use ic_system_test_driver::{
     },
     util::*,
 };
+use ic_utils::interfaces::ManagementCanister;
 use slog::{debug, Logger};
 use std::{time::Duration, time::Instant};
 use tokio::time::sleep_until;
@@ -29,6 +30,192 @@ pub fn config(env: TestEnv) {
 
 // Enables additional debug logs
 const ENABLE_DEBUG_LOG: bool = false;
+
+pub fn malicious_inputs(env: TestEnv) {
+    let logger = &env.logger();
+    let wasm = wat::parse_str(
+        r#"(module
+              (import "ic0" "msg_reply" (func $msg_reply))
+              (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32) (param i32)))
+              (import "ic0" "msg_arg_data_size"
+                (func $msg_arg_data_size (result i32)))
+              (import "ic0" "msg_arg_data_copy"
+                (func $msg_arg_data_copy (param i32) (param i32) (param i32)))
+              (import "ic0" "msg_caller_size"
+                (func $msg_caller_size (result i32)))
+              (import "ic0" "msg_caller_copy"
+                (func $msg_caller_copy (param i32) (param i32) (param i32)))
+              (import "ic0" "data_certificate_copy"
+                (func $data_certificate_copy (param i32) (param i32) (param i32)))
+              (import "ic0" "data_certificate_size"
+                (func $data_certificate_size (result i32)))
+              (import "ic0" "data_certificate_present"
+                (func $data_certificate_present (result i32)))
+              (import "ic0" "certified_data_set"
+                (func $certified_data_set (param i32) (param i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                (param i32 i32)
+                (param $method_name_src i32)    (param $method_name_len i32)
+                (param $reply_fun i32)          (param $reply_env i32)
+                (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+
+              (func $proxy_msg_reply_data_append
+                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
+                (call $msg_reply_data_append (i32.load (i32.const 0)) (i32.load (i32.const 4)))
+                (call $msg_reply))
+
+              (func $proxy_msg_arg_data_copy_from_buffer_without_input
+                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
+
+              (func $proxy_msg_arg_data_copy_last_10_bytes
+                (call $msg_arg_data_copy (i32.const 0) (i32.sub (call $msg_arg_data_size) (i32.const 10)) (i32.const 10))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 10))
+                (call $msg_reply))
+
+              (func $proxy_msg_arg_data_copy_to_oob_buffer
+                (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
+                (call $msg_reply))
+
+              (func $proxy_msg_arg_data_copy_return_last_4_bytes
+                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 65536))
+                (call $msg_reply_data_append (i32.const 65532) (i32.const 4))
+                (call $msg_reply))
+
+              (func $proxy_msg_caller
+                ;; Message caller size in normal case is 29
+                ;; This can be verified by uncommenting the below line
+                ;; (i32.store (i32.const 0) (call $msg_caller_size))
+                (call $msg_arg_data_copy (i32.const 65532) (i32.const 0) (i32.const 4))
+                (i32.store (i32.const 0) (i32.load (i32.const 65532)))
+                (call $msg_caller_copy (i32.const 1) (i32.const 0) (i32.load (i32.const 65532)))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                (call $msg_reply_data_append (i32.const 1) (i32.load (i32.const 65532)))
+                (call $msg_reply))
+
+              ;; All the function below are not used
+              (func $proxy_data_certificate_present
+                (i32.const 0)
+                (call $data_certificate_present)
+                (i32.store)
+                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                (call $msg_reply))
+
+              (func $proxy_certified_data_set
+                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
+                (call $certified_data_set (i32.const 0) (call $msg_arg_data_size))
+                (call $msg_reply_data_append (i32.const 0) (call $msg_arg_data_size))
+                (call $msg_reply))
+
+              (func $proxy_data_certificate_copy
+                (call $data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 32))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 32))
+                (call $msg_reply))
+
+              (func $f_100 (result i32)
+                i32.const 100)
+              (func $f_200 (result i32)
+                i32.const 200)
+
+              (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
+              (func $callByIndex
+                (i32.const 0)
+                (call_indirect (type $return_i32) (i32.const 0))
+                (i32.store)
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply))
+
+              (table funcref (elem $f_100 $f_200))
+              (memory $memory 1)
+              (export "memory" (memory $memory))
+              (export "canister_query callByIndex" (func $callByIndex))
+              (export "canister_query proxy_msg_reply_data_append" (func $proxy_msg_reply_data_append))
+              (export "canister_query proxy_msg_arg_data_copy_from_buffer_without_input" (func $proxy_msg_arg_data_copy_from_buffer_without_input))
+              (export "canister_query proxy_msg_arg_data_copy_last_10_bytes" (func $proxy_msg_arg_data_copy_last_10_bytes))
+              (export "canister_query proxy_msg_arg_data_copy_to_oob_buffer" (func $proxy_msg_arg_data_copy_to_oob_buffer))
+              (export "canister_query proxy_msg_caller" (func $proxy_msg_caller))
+              (export "canister_query proxy_data_certificate_present" (func $proxy_data_certificate_present))
+              (export "canister_update proxy_certified_data_set" (func $proxy_certified_data_set))
+              (export "canister_query proxy_data_certificate_copy" (func $proxy_data_certificate_copy))
+              )"#,
+    ).unwrap();
+
+    let topology_snapshot = env.topology_snapshot();
+    let subnet = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let node = subnet.nodes().next().unwrap();
+
+    node.await_status_is_healthy().unwrap_or_else(|e| {
+        panic!(
+            "Node {:?} didn't become healthy in time because {e:?}",
+            node.node_id
+        )
+    });
+
+    let agent = node.build_default_agent();
+
+    block_on(async move {
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(None)
+            .with_effective_canister_id(node.effective_canister_id())
+            .call_and_wait()
+            .await
+            .expect("Error creating canister")
+            .0;
+
+        mgr.install_code(&canister_id, &wasm)
+            .call_and_wait()
+            .await
+            .unwrap();
+
+        tests_for_illegal_data_buffer_access(&agent, &canister_id).await;
+    });
+}
+
+async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_id: &Principal) {
+    // Provide 1 GB of data
+    let ret_val = agent
+        .query(canister_id, "proxy_msg_arg_data_copy_last_10_bytes")
+        .with_arg(vec![1; 1024 * 1024 * 1024])
+        .call()
+        .await;
+    let _containing_str = "Request is too big. Max allowed size in bytes is: 5242880";
+    assert!(
+        ret_val.is_err(),
+        "Should return error if 1GB of data sent as input"
+    );
+
+    // Calls msg caller with correct size = 29 bytes
+    let ret_val = agent
+        .query(canister_id, "proxy_msg_caller")
+        .with_arg(vec![29, 0, 0, 0])
+        .call()
+        .await;
+    assert!(ret_val.is_ok(), "msg_caller with caller length 29 failed");
+
+    // Calls msg caller with larger size
+    let ret_val = agent
+        .query(canister_id, "proxy_msg_caller")
+        .with_arg(vec![128, 0, 0, 0])
+        .call()
+        .await;
+    let containing_str =
+        "violated contract: ic0.msg_caller_copy id: src=0 + length=128 exceeds the slice size=29";
+    assert!(
+        matches!(
+            ret_val,
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+        ),
+        "msg_caller with caller large length 128 was accepted"
+    );
+}
 
 /*
    This test has two canister's A and B. Canister A is the one that will interfaced

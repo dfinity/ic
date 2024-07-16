@@ -12,6 +12,7 @@ fn main() -> Result<()> {
         .add_test(systest!(
             system_api_security_test::malicious_intercanister_calls
         ))
+        .add_test(systest!(system_api_security_test::malicious_inputs))
         .execute_from_args()?;
     Ok(())
 }
