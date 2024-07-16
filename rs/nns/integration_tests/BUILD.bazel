@@ -117,6 +117,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/common/test_utils",
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
 ]

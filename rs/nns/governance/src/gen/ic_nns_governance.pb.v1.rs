@@ -1596,13 +1596,21 @@ pub mod neurons_fund_snapshot {
         /// Overall amount of maturity of the neuron from which this portion is taken.
         #[prost(uint64, optional, tag = "3")]
         pub maturity_equivalent_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can vote on behalf of this neuron.
-        #[prost(message, optional, tag = "4")]
-        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// Whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
         /// participation constraints.
         #[prost(bool, optional, tag = "5")]
         pub is_capped: ::core::option::Option<bool>,
+        /// The principal that can manage this neuron.
+        #[prost(message, optional, tag = "6")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The principals that can vote, propose, and follow on behalf of this neuron.
+        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
+        #[prost(message, repeated, tag = "7")]
+        pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+        #[deprecated]
+        #[prost(message, optional, tag = "4")]
+        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
     }
 }
 /// Absolute constraints of this swap needed that the Neurons' Fund need to be aware of.
@@ -2541,10 +2549,52 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,
         #[prost(uint64, optional, tag = "37")]
         pub total_staked_e8s_non_self_authenticating_controller: ::core::option::Option<u64>,
+        #[prost(message, optional, tag = "38")]
+        pub non_self_authenticating_controller_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+    }
+    /// Nested message and enum types in `GovernanceCachedMetrics`.
+    pub mod governance_cached_metrics {
+        /// Statistics about some subset (not necessarily a proper subset) of
+        /// neurons. So far, these are mostly totals.
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct NeuronSubsetMetrics {
+            /// The values in these fields can be derived from the value in the
+            /// analogous fields (declared a little lower in this message). For
+            /// example, count = count_buckets.values().sum().
+            #[prost(uint64, optional, tag = "1")]
+            pub count: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "2")]
+            pub total_staked_e8s: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "3")]
+            pub total_staked_maturity_e8s_equivalent: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "4")]
+            pub total_maturity_e8s_equivalent: ::core::option::Option<u64>,
+            #[prost(uint64, optional, tag = "5")]
+            pub total_voting_power: ::core::option::Option<u64>,
+            /// These fields are keyed by floor(dissolve delay / 0.5 years). These are
+            /// analogous to the (singular) fields above. Here, the usual definition of
+            /// year for the IC is used: exactly 365.25 days.
+            #[prost(map = "uint64, uint64", tag = "6")]
+            pub count_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "7")]
+            pub staked_e8s_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "8")]
+            pub staked_maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "9")]
+            pub maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "10")]
+            pub voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+        }
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
     /// proposal is in progress. We only want one of these to be happening at the same time,
@@ -2862,10 +2912,30 @@ pub mod claim_or_refresh_neuron_from_account_response {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MonthlyNodeProviderRewards {
+    /// The time when the rewards were calculated.
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
+    /// The Rewards calculated and rewarded.
     #[prost(message, repeated, tag = "2")]
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
+    /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+    /// This field snapshots the actual rate used by governance when the rewards were calculated.
+    #[prost(message, optional, tag = "3")]
+    pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
+    /// The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+    /// why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+    #[prost(uint64, optional, tag = "4")]
+    pub minimum_xdr_permyriad_per_icp: ::core::option::Option<u64>,
+    /// The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+    /// from the value in network economics.
+    #[prost(uint64, optional, tag = "5")]
+    pub maximum_node_provider_rewards_e8s: ::core::option::Option<u64>,
+    /// The registry version used to calculate these rewards at the time the rewards were calculated.
+    #[prost(uint64, optional, tag = "6")]
+    pub registry_version: ::core::option::Option<u64>,
+    /// The list of node_provieders at the time when the rewards were calculated.
+    #[prost(message, repeated, tag = "7")]
+    pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
 }
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
@@ -3027,6 +3097,15 @@ pub mod settle_neurons_fund_participation_request {
         Aborted(Aborted),
     }
 }
+/// A list of principals.
+/// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Principals {
+    #[prost(message, repeated, tag = "7")]
+    pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 /// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 /// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -3062,13 +3141,20 @@ pub mod settle_neurons_fund_participation_response {
         /// The amount of Neurons' Fund participation associated with this neuron.
         #[prost(uint64, optional, tag = "2")]
         pub amount_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can vote on behalf of this neuron.
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
+        /// The principal that can manage this neuron.
+        #[prost(message, optional, tag = "6")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The principals that can vote, propose, and follow on behalf of this neuron.
+        #[prost(message, optional, tag = "7")]
+        pub hotkeys: ::core::option::Option<super::Principals>,
         /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
+        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+        #[deprecated]
+        #[prost(string, optional, tag = "3")]
+        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -3452,6 +3538,12 @@ pub enum Topic {
     ApiBoundaryNodeManagement = 15,
     /// Proposals related to subnet rental.
     SubnetRental = 16,
+    /// Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
+    /// protocol, without which the IC will not be able to function properly.
+    ProtocolCanisterManagement = 17,
+    /// Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
+    /// Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+    ServiceNervousSystemManagement = 18,
 }
 impl Topic {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3476,6 +3568,8 @@ impl Topic {
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
             Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
             Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
+            Topic::ProtocolCanisterManagement => "TOPIC_PROTOCOL_CANISTER_MANAGEMENT",
+            Topic::ServiceNervousSystemManagement => "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3497,6 +3591,8 @@ impl Topic {
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
             "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
             "TOPIC_SUBNET_RENTAL" => Some(Self::SubnetRental),
+            "TOPIC_PROTOCOL_CANISTER_MANAGEMENT" => Some(Self::ProtocolCanisterManagement),
+            "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT" => Some(Self::ServiceNervousSystemManagement),
             _ => None,
         }
     }

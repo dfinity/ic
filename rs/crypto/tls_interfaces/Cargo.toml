@@ -9,8 +9,8 @@ documentation.workspace = true
 [dependencies]
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
+rustls = { workspace = true }
 serde = { workspace = true }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 thiserror = { workspace = true }
 x509-parser = { workspace = true }
 

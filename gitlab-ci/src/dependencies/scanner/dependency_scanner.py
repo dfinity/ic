@@ -9,7 +9,7 @@ import typing
 
 from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
-from integration.gitlab.gitlab_api import GitlabApi
+from integration.github.github_api import GithubApi
 from model.finding import Finding
 from model.repository import Repository
 from model.security_risk import SecurityRisk
@@ -208,8 +208,8 @@ class DependencyScanner:
                     dep for dep in temp_first_level_dependencies if dep in dependency_diff
                 ]
 
-            gitlab_api = GitlabApi()
-            gitlab_api.comment_on_gitlab(info=findings_to_flag)
+            github_api = GithubApi()
+            github_api.comment_on_github(info=findings_to_flag)
 
             merge_request_id = os.environ.get("CI_MERGE_REQUEST_IID", "CI_MERGE_REQUEST_IID")
             for subscriber in self.subscribers:

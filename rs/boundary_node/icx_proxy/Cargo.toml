@@ -34,14 +34,8 @@ http = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-rustls = { version = "0.27.1", default-features = false, features = [
-    "http1",
-    "http2",
-    "native-tokio",
-    "ring",
-    "tls12",
-] }
-hyper-util = { version = "0.1.3", features = ["client"] }
+hyper-rustls = { workspace = true }
+hyper-util = { workspace = true }
 hyperlocal-next = "0.9.0"
 itertools = { workspace = true }
 ic-agent = { workspace = true }
