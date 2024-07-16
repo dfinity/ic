@@ -8522,6 +8522,7 @@ dependencies = [
  "icrc-ledger-client",
  "icrc-ledger-types",
  "leb128",
+ "num-bigint 0.4.6",
  "num-traits",
  "proptest",
  "serde",
