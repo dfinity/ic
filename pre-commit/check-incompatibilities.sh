@@ -9,8 +9,8 @@ fi
 
 MERGE_BRANCH="master"
 
-if [[ "${ORG:-}" == "dfinity-sandbox" ]]; then
-    MERGE_BRANCH="mirroring"
+if [[ "${REPO:-}" == "ic-private" ]]; then
+    MERGE_BRANCH="master-private"
 fi
 
 echo "Fetch the $MERGE_BRANCH branch"
