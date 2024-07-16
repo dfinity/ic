@@ -11,6 +11,7 @@ curve25519-dalek = { workspace = true }
 ed25519-dalek = { workspace = true }
 hkdf = "0.12"
 rand = { workspace = true }
+thiserror = { workspace = true }
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 pem = "1"
 
