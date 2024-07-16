@@ -3441,14 +3441,14 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
         // Create initial state with a single canister.
         let (_height, mut state) = src_state_manager.take_tip();
         populate_original_state(&mut state);
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
         let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
         // Update the canister state.
         let (_height, mut state) = src_state_manager.take_tip();
         update_state(&mut state);
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
@@ -3465,7 +3465,12 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
             |dst_metrics, dst_state_manager, dst_state_sync, restart_fn| {
                 let (_height, mut state) = dst_state_manager.take_tip();
                 populate_original_state(&mut state);
-                dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+                dst_state_manager.commit_and_certify(
+                    state,
+                    height(1),
+                    CertificationScope::Full,
+                    None,
+                );
 
                 let hash_dst_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
                 assert_eq!(hash_1, hash_dst_1);
@@ -3537,7 +3542,12 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 let (_height, mut state) = dst_state_manager.take_tip();
                 update_state(&mut state);
 
-                dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+                dst_state_manager.commit_and_certify(
+                    state,
+                    height(2),
+                    CertificationScope::Full,
+                    None,
+                );
 
                 let hash_dst_2 = wait_for_checkpoint(&*dst_state_manager, height(2));
 
@@ -3567,10 +3577,15 @@ fn can_handle_state_sync_and_commit_race_condition() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
+        src_state_manager.commit_and_certify(
+            state.clone(),
+            height(1),
+            CertificationScope::Full,
+            None,
+        );
 
         let (_height, state) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
         let hash = wait_for_checkpoint(&*src_state_manager, height(2));
 
@@ -3588,7 +3603,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (tip_height, state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(0));
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
             // the state sync is started before the state manager has the state at height 2.
             let mut chunkable =
@@ -3602,7 +3617,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
             assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
 
             let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
             dst_state_manager.flush_tip_channel();
 
             // Continue to perform the state sync after the state manager reaches height 2.
@@ -3615,7 +3630,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
             );
 
             let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
 
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
