@@ -570,6 +570,9 @@ mod tests {
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::consensus::idkg::dealing_prefix;
+    use ic_types::consensus::idkg::dealing_support_prefix;
     use ic_types::consensus::idkg::{IDkgUIDGenerator, PreSigId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
@@ -611,11 +614,6 @@ mod tests {
         // Only the context with matched quadruple should be in "requested"
         let args = EcdsaPriorityFnArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
-        assert_eq!(args.requested_signatures.len(), 1);
-        assert_eq!(
-            args.requested_signatures.first().unwrap(),
-            &expected_request_id
-        );
     }
 
     // Tests the priority computation for dealings/support.
@@ -625,9 +623,21 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
         let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
-        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
+        let transcript_id_drop: IDkgTranscriptId =
+            IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
         let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
         let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
+
+        let dealing_prefix_fetch_1 = dealing_prefix(&transcript_id_fetch_1, &node_test_id(0));
+        let dealing_prefix_fetch_2 = dealing_prefix(&transcript_id_fetch_2, &node_test_id(0));
+        let dealing_prefix_stash = dealing_prefix(&transcript_id_stash, &node_test_id(0));
+
+        let dealing_support_prefix_fetch_1 =
+            dealing_support_prefix(&transcript_id_fetch_1, &node_test_id(0), &node_test_id(1));
+        let dealing_support_prefix_fetch_2 =
+            dealing_support_prefix(&transcript_id_fetch_2, &node_test_id(0), &node_test_id(1));
+        let dealing_support_prefix_stash =
+            dealing_support_prefix(&transcript_id_stash, &node_test_id(0), &node_test_id(1));
 
         let metrics_registry = MetricsRegistry::new();
 
@@ -641,44 +651,38 @@ mod tests {
         let tests = vec![
             // Signed dealings
             (
-                IDkgMessageAttribute::Dealing(xnet_transcript_id),
+                IDkgMessageId::Dealing(dealing_prefix_fetch_1, dealing_prefix_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_1),
+                IDkgMessageId::Dealing(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
+            (IDkgMessageId::Dealing(transcript_id_drop), Priority::Drop),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_drop),
-                Priority::Drop,
-            ),
-            (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_2),
+                IDkgMessageId::Dealing(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
-            (
-                IDkgMessageAttribute::Dealing(transcript_id_stash),
-                Priority::Stash,
-            ),
+            (IDkgMessageId::Dealing(transcript_id_stash), Priority::Stash),
             // Dealing support
             (
-                IDkgMessageAttribute::DealingSupport(xnet_transcript_id),
+                IDkgMessageId::DealingSupport(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_1),
+                IDkgMessageId::DealingSupport(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_drop),
+                IDkgMessageId::DealingSupport(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_2),
+                IDkgMessageId::DealingSupport(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_stash),
+                IDkgMessageId::DealingSupport(transcript_id_stash),
                 Priority::Stash,
             ),
         ];
@@ -716,14 +720,9 @@ mod tests {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let mut requested_signatures = BTreeSet::new();
-        requested_signatures.insert(request_id_fetch_1.clone());
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts: BTreeSet::new(),
-            requested_signatures,
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
