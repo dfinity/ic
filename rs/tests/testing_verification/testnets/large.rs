@@ -38,10 +38,12 @@
 //
 // Happy testing!
 
+use std::time::Duration;
+
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
@@ -62,11 +64,14 @@ use ic_tests::nns_dapp::{
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
+const NUM_NODES_FULL_CONSENSUS_APP_SUBNET: usize = 13;
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
-const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
-const NUM_BN: u64 = 1;
+const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 0;
+const NUM_BN: u64 = 0;
+const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(4 * 60 * 60);
 
-const TOPOLOGY: ProductionSubnetTopology = ProductionSubnetTopology::IO67;
+const NETWORK_SIMULATION: NetworkSimulation =
+    NetworkSimulation::Subnet(ProductionSubnetTopology::IO67);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -84,78 +89,29 @@ pub fn setup(env: TestEnv) {
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(256 * 1024 * 1024)), // <- 512 GB
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
-    let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
-    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
-    for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
-        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
-    }
-    for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
-        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
-    }
-    ic.setup_and_start(&env)
+
+    InternetComputer::new()
+        .with_default_vm_resources(vm_resources)
+        .with_required_host_features(vec![HostFeature::Performance])
+        .add_subnet(
+            Subnet::new(SubnetType::Application).add_nodes(NUM_NODES_FULL_CONSENSUS_APP_SUBNET),
+        )
+        .setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
-    // set up NNS canisters
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        nns_dapp_customizations(),
-    );
+    let app_subnet = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
 
-    // sets the exchange rate to 12 XDR per 1 ICP
-    set_icp_xdr_exchange_rate(&env, 12_0000);
+    println!("Setting topologies.");
+    simulate_network(app_subnet, &NETWORK_SIMULATION);
+    println!("Topologies set.");
 
-    // sets the exchange rate to 12 XDR per 1 ICP
-    set_authorized_subnets(&env);
-
-    // deploys the boundary node(s)
-    let mut farm_url: Option<String> = None;
-    for i in 0..NUM_BN {
-        let bn_name = format!("boundary-node-{}", i);
-        BoundaryNode::new(bn_name.clone())
-            .allocate_vm(&env)
-            .expect("Allocation of BoundaryNode failed.")
-            .for_ic(&env, "")
-            .use_real_certs_and_dns()
-            .start(&env)
-            .expect("failed to setup BoundaryNode VM");
-        if farm_url.is_none() {
-            let boundary_node = env
-                .get_deployed_boundary_node(bn_name.as_str())
-                .unwrap()
-                .get_snapshot()
-                .unwrap();
-            farm_url = Some(boundary_node.get_playnet().unwrap());
-        }
-    }
-    env.sync_with_prometheus_by_name("", farm_url);
-
-    for i in 0..NUM_BN {
-        let bn_name = format!("boundary-node-{}", i);
-        await_boundary_node_healthy(&env, &bn_name);
-        if i == 0 {
-            // pick an SNS subnet among the application subnets
-            let topology = env.topology_snapshot();
-            let mut app_subnets = topology
-                .subnets()
-                .filter(|s| s.subnet_type() == SubnetType::Application);
-            let sns_subnet = app_subnets.next().unwrap();
-
-            // install the SNS aggregator canister onto the SNS subnet
-            let sns_node = sns_subnet.nodes().next().unwrap();
-            let sns_aggregator_canister_id = install_sns_aggregator(&env, &bn_name, sns_node);
-
-            // register the SNS subnet with the NNS
-            set_sns_subnet(&env, sns_subnet.subnet_id);
-
-            // upload SNS canister WASMs to the SNS-W canister
-            add_all_wasms_to_sns_wasm(&env, NnsCanisterWasmStrategy::TakeBuiltFromSources);
-
-            // install II, NNS dapp, and Subnet Rental Canister
-            install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, Some(sns_aggregator_canister_id));
-        }
-    }
+    std::thread::sleep(DOWNLOAD_PROMETHEUS_WAIT_TIME);
+    env.download_prometheus_data_dir_if_exists();
 }
