@@ -61,7 +61,7 @@ def get_merge_base(git_repo):
     else:
         logging.warning("No git remotes found.")
 
-    merge_base = git_repo.merge_base(tb, os.getenv("CI_COMMIT_SHA", "CI_COMMIT_SHA"))
+    merge_base = git_repo.merge_base(tb, git_repo.head.commit)
     if not merge_base:
         logging.error(f"No common merge base exists between HEAD and {tb}")
         ref_name = git_repo.head.ref
