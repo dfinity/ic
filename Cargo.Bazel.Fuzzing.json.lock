@@ -1,5 +1,5 @@
 {
-  "checksum": "e84983332376161541d5d6ac5fc4057de8778ef10e533cfb5195c26519422349",
+  "checksum": "e5605f9cea9a7bcdab4eb382f748c3b41a1cb2cf6ae54bd84aa498e956c85cdc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17201,10 +17201,6 @@
             {
               "id": "dyn-clone 1.0.14",
               "target": "dyn_clone"
-            },
-            {
-              "id": "ed25519-consensus 2.1.0",
-              "target": "ed25519_consensus"
             },
             {
               "id": "ed25519-dalek 2.1.1",
@@ -76858,7 +76854,6 @@
     "cvt 0.1.2",
     "dashmap 5.5.3",
     "dyn-clone 1.0.14",
-    "ed25519-consensus 2.1.0",
     "ed25519-dalek 2.1.1",
     "educe 0.4.23",
     "either 1.9.0",
