@@ -885,7 +885,7 @@ impl EcdsaSignatureProtocolSetup {
         number_of_dealers: usize,
         threshold: usize,
         number_of_dealings_corrupted: usize,
-        seed: Seed
+        seed: Seed,
     ) -> CanisterThresholdResult<Self> {
         let setup = ProtocolSetup::new(cfg, number_of_dealers, threshold, seed)?;
 
@@ -897,7 +897,11 @@ impl EcdsaSignatureProtocolSetup {
         having to change the stability tests (in serialization.rs)
         */
 
-        let kappa = ProtocolRound::random_unmasked(&setup, number_of_dealers, number_of_dealings_corrupted)?;
+        let kappa = ProtocolRound::random_unmasked(
+            &setup,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+        )?;
 
         let lambda =
             ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
