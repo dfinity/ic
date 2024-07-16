@@ -346,7 +346,7 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
@@ -367,35 +367,33 @@ impl ResponseHelper {
 
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let old_balance = self.canister.system_state.balance();
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // Note that we ignore the freezing threshold as required by the spec.
-            if old_balance < requested {
-                let reveal_top_up = self
-                    .canister
-                    .controllers()
-                    .contains(&original.call_origin.get_principal());
-                let err = CanisterOutOfCyclesError {
-                    canister_id: self.canister.canister_id(),
-                    available: old_balance,
-                    requested,
-                    threshold: original.freezing_threshold,
-                    reveal_top_up,
-                };
-                info!(
+        let old_balance = self.canister.system_state.balance();
+        let requested = canister_state_changes.system_state_changes.removed_cycles();
+        // Note that we ignore the freezing threshold as required by the spec.
+        if old_balance < requested {
+            let reveal_top_up = self
+                .canister
+                .controllers()
+                .contains(&original.call_origin.get_principal());
+            let err = CanisterOutOfCyclesError {
+                canister_id: self.canister.canister_id(),
+                available: old_balance,
+                requested,
+                threshold: original.freezing_threshold,
+                reveal_top_up,
+            };
+            info!(
                     round.log,
                     "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
                     self.canister.canister_id(),
                     err,
                 );
-                // Return total instructions: wasm executor leftovers + cleanup reservation.
-                return Err((
-                    self,
-                    HypervisorError::InsufficientCyclesBalance(err),
-                    output.num_instructions_left + reserved_cleanup_instructions,
-                ));
-            }
+            // Return total instructions: wasm executor leftovers + cleanup reservation.
+            return Err((
+                self,
+                HypervisorError::InsufficientCyclesBalance(err),
+                output.num_instructions_left + reserved_cleanup_instructions,
+            ));
         }
 
         apply_canister_state_changes(
@@ -433,7 +431,7 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_cleanup_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         callback_err: HypervisorError,
         original: &OriginalContext,
         round: &RoundContext,
@@ -452,11 +450,9 @@ impl ResponseHelper {
                 round.counters.charging_from_balance_error,
             );
 
-        if let Some(state_changes) = &canister_state_changes {
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // A cleanup callback cannot accept and send cycles.
-            assert_eq!(requested.get(), 0);
-        }
+        let requested = canister_state_changes.system_state_changes.removed_cycles();
+        // A cleanup callback cannot accept and send cycles.
+        assert_eq!(requested.get(), 0);
 
         apply_canister_state_changes(
             canister_state_changes,

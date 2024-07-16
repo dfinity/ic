@@ -264,6 +264,7 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
+        call_context_id: CallContextId,
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
@@ -420,11 +421,17 @@ impl ApiType {
         }
     }
 
-    pub fn replicated_query(time: Time, incoming_payload: Vec<u8>, caller: PrincipalId) -> Self {
+    pub fn replicated_query(
+        time: Time,
+        incoming_payload: Vec<u8>,
+        caller: PrincipalId,
+        call_context_id: CallContextId,
+    ) -> Self {
         Self::ReplicatedQuery {
             time,
             incoming_payload,
             caller,
+            call_context_id,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
@@ -580,12 +587,14 @@ impl ApiType {
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery {
                 query_kind: NonReplicatedQueryKind::Pure,
                 ..
             } => None,
             ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::ReplicatedQuery {
                 call_context_id, ..
             }
             | ApiType::NonReplicatedQuery {
@@ -1365,10 +1374,10 @@ impl SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
@@ -1383,7 +1392,46 @@ impl SystemApiImpl {
     }
 
     pub fn into_system_state_changes(self) -> SystemStateChanges {
-        self.sandbox_safe_system_state.system_state_changes
+        match self.api_type {
+            ApiType::InspectMessage { .. } => SystemStateChanges::default(),
+            ApiType::NonReplicatedQuery { .. } => SystemStateChanges {
+                callback_updates: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .callback_updates
+                    .clone(),
+                requests: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .requests
+                    .clone(),
+                ..SystemStateChanges::default()
+            },
+            ApiType::ReplicatedQuery { .. } => SystemStateChanges {
+                cycles_balance_change: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .cycles_balance_change,
+                call_context_balance_taken: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .call_context_balance_taken,
+                canister_log: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .canister_log
+                    .clone(),
+                ..SystemStateChanges::default()
+            },
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => self.sandbox_safe_system_state.system_state_changes,
+        }
     }
 
     pub fn take_system_state_changes(&mut self) -> SystemStateChanges {
@@ -3268,10 +3316,10 @@ impl SystemApi for SystemApiImpl {
         let method_name = "ic0_cycles_burn128";
         let result = match self.api_type {
             ApiType::Start { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
