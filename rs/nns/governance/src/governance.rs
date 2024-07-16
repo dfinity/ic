@@ -50,9 +50,9 @@ use crate::{
         Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
-        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
-        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary,
-        RewardEvent, RewardNodeProvider, RewardNodeProviders,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Principals,
+        Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus,
+        RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse, Tally,
         Topic, UpdateNodeProvider, Vote, WaitForQuietState,
         XdrConversionRate as XdrConversionRatePb,
@@ -276,23 +276,29 @@ impl From<NervousSystemError> for GovernanceError {
 
 impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPortionPb {
     fn from(neuron: NeuronsFundNeuronPortion) -> Self {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove
         Self {
             nns_neuron_id: Some(neuron.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
-            hotkey_principal: Some(neuron.controller),
+            controller: Some(neuron.controller),
             is_capped: Some(neuron.is_capped),
+            hotkeys: Vec::new(), // TODO(NNS1-3199): populate hotkeys
+            hotkey_principal: Some(neuron.controller),
         }
     }
 }
 
 impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
     fn from(neuron: NeuronsFundNeuronPortion) -> Self {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         Self {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
-            hotkey_principal: Some(neuron.controller.to_string()),
+            controller: Some(neuron.controller),
+            hotkeys: Some(neuron.hotkeys.into()),
             is_capped: Some(neuron.is_capped),
+            hotkey_principal: Some(neuron.controller.to_string()),
         }
     }
 }
@@ -1239,6 +1245,17 @@ impl ProposalInfo {
     }
 }
 
+impl From<Vec<PrincipalId>> for Principals {
+    fn from(principals: Vec<PrincipalId>) -> Self {
+        Self { principals }
+    }
+}
+
+impl From<Principals> for Vec<PrincipalId> {
+    fn from(principals: Principals) -> Self {
+        principals.principals
+    }
+}
 #[cfg(test)]
 mod test_wait_for_quiet {
     use crate::pb::v1::{ProposalData, Tally, WaitForQuietState};
@@ -1321,7 +1338,7 @@ impl Topic {
     pub const MIN: Topic = Topic::Unspecified;
     // A unit test will fail if this value does not stay up to date (e.g. when a new value is
     // added).
-    pub const MAX: Topic = Topic::SubnetRental;
+    pub const MAX: Topic = Topic::ServiceNervousSystemManagement;
 
     /// When voting rewards are distributed, the voting power of
     /// neurons voting on proposals are weighted by this amount. The
@@ -5640,19 +5657,29 @@ impl Governance {
         }
 
         // Validate topic exists
-        Topic::try_from(follow_request.topic).map_err(|_| {
+        let topic = Topic::try_from(follow_request.topic).map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
             )
         })?;
 
+        #[cfg(not(feature = "test"))]
+        if topic == Topic::ProtocolCanisterManagement
+            || topic == Topic::ServiceNervousSystemManagement
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!("Cannot follow the {:?} topic yet", topic),
+            ));
+        }
+
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {
-                neuron.followees.remove(&follow_request.topic)
+                neuron.followees.remove(&(topic as i32))
             } else {
                 neuron.followees.insert(
-                    follow_request.topic,
+                    topic as i32,
                     Followees {
                         followees: follow_request.followees.clone(),
                     },

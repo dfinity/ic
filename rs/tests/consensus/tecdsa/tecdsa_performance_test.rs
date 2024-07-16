@@ -1,12 +1,52 @@
-use crate::nns_dapp::set_authorized_subnets;
-use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::orchestrator::utils::subnet_recovery::{
-    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
-};
-use crate::tecdsa::{make_key, KEY_ID1};
+// This is a template showing how to run performance tests. Once a specific metric of interest
+// is identified, one can create a separate test that displays it in a reproducible manner.
+// For example throughput_with_small_messages.rs or throughput_with_large_messages.rs.
+//
+// Set up a testnet for interactive performance testing allocated in our performance DC (dm1):
+// 26-node System subnet, single boundary node and a p8s (with grafana) VM.
+// All nodes use the following resources: 64 vCPUs, 488GiB of RAM and 500 GiB disk.
+//
+// This test additionally installs the NNS.
+//
+// You can setup this test by executing the following commands:
+//
+//   $ gitlab-ci/container/container-run.sh
+//   $ ict test consensus_performance_test_colocate --keepalive -- --test_tmpdir=./performance
+//
+// The --test_tmpdir=./performance will store the test output in the specified directory.
+// This is useful to have access to in case you need to SSH into an IC node for example like:
+//
+//   $ ssh -i performance/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
+//
+// Note that you can get the $ipv6 address of the IC node by looking for a log line like:
+//
+//   Apr 11 15:34:10.175 INFO[rs/tests/src/driver/farm.rs:94:0]
+//     VM(h2tf2-odxlp-fx5uw-kvn43-bam4h-i4xmw-th7l2-xxwvv-dxxpz-bs3so-iqe)
+//     Host: ln1-dll10.ln1.dfinity.network
+//     IPv6: 2a0b:21c0:4003:2:5051:85ff:feec:6864
+//     vCPUs: 64
+//     Memory: 512142680 KiB
+//
+// To get access to P8s and Grafana look for the following log lines:
+//
+//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
+//     Prometheus Web UI at http://prometheus.performance--1681227226065.testnet.farm.dfinity.systems
+//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
+//     IC Progress Clock at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
+//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
+//     Grafana at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems
+//
+// Happy testing!
+
+use anyhow::Result;
+use futures::future::join_all;
+use ic_consensus_system_test_utils::limit_tc_ssh_command;
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::canister_api::{CallMode, Request};
 use ic_system_test_driver::canister_requests;
+use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, SshSession};
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -21,20 +61,16 @@ use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetricsProvider, RequestOutcome,
 };
+use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
-
-use candid::{Encode, Principal};
-use futures::future::join_all;
-use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
-use ic_management_canister_types::{
-    DerivationPath, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrKeyId, SignWithECDSAArgs,
-    SignWithECDSAReply, SignWithSchnorrArgs,
+use ic_tests::nns_dapp::set_authorized_subnets;
+use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_tests::orchestrator::utils::subnet_recovery::{
+    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
 };
-use ic_message::ForwardParams;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
-use ic_registry_subnet_type::SubnetType;
+use ic_tests::tecdsa::ChainSignatureRequest;
 use ic_types::Height;
 use slog::{error, info};
 use std::fs::create_dir_all;
@@ -53,18 +89,27 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 // Network parameters
-const DEVICE_NAME: &str = "enp1s0"; // network interface name
 const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
-const LATENCY_JITTER: Duration = Duration::from_millis(20);
 
-// ECDSA parameters
-const QUADRUPLES_TO_CREATE: u32 = 30;
+// Signature parameters
+const PRE_SIGNATURES_TO_CREATE: u32 = 30;
 const MAX_QUEUE_SIZE: u32 = 10;
 const CANISTER_COUNT: usize = 4;
 const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
+const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
+
+// The signature schemes and key names to be used during the test.
+// Requests will be sent to each key in round robin order.
+fn make_key_ids() -> Vec<MasterPublicKeyId> {
+    vec![
+        ic_tests::tecdsa::make_ecdsa_key_id(),
+        // ic_tests::tecdsa::make_bip340_key_id(),
+        // ic_tests::tecdsa::make_eddsa_key_id(),
+    ]
+}
 
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -90,11 +135,14 @@ pub fn setup(env: TestEnv) {
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
-                    key_configs: vec![KeyConfig {
-                        max_queue_size: MAX_QUEUE_SIZE,
-                        pre_signatures_to_create_in_advance: QUADRUPLES_TO_CREATE,
-                        key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
-                    }],
+                    key_configs: make_key_ids()
+                        .into_iter()
+                        .map(|key_id| KeyConfig {
+                            max_queue_size: MAX_QUEUE_SIZE,
+                            pre_signatures_to_create_in_advance: PRE_SIGNATURES_TO_CREATE,
+                            key_id,
+                        })
+                        .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 })
@@ -110,77 +158,6 @@ pub fn setup(env: TestEnv) {
     );
     set_authorized_subnets(&env);
     env.sync_with_prometheus();
-}
-
-#[derive(Clone)]
-pub struct ChainSignatureRequest {
-    pub principal: Principal,
-    pub payload: Vec<u8>,
-}
-
-impl ChainSignatureRequest {
-    pub fn new(principal: Principal, key_id: MasterPublicKeyId) -> Self {
-        let params = match key_id {
-            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => Self::ecdsa_params(ecdsa_key_id),
-            MasterPublicKeyId::Schnorr(schnorr_key_id) => Self::schnorr_params(schnorr_key_id),
-        };
-
-        let payload = Encode!(&params).unwrap();
-
-        Self { principal, payload }
-    }
-
-    fn ecdsa_params(ecdsa_key_id: EcdsaKeyId) -> ForwardParams {
-        let signature_request = SignWithECDSAArgs {
-            message_hash: [1; 32],
-            derivation_path: DerivationPath::new(Vec::new()),
-            key_id: ecdsa_key_id,
-        };
-
-        let signature_payload = Encode!(&signature_request).unwrap();
-
-        ForwardParams {
-            receiver: Principal::management_canister(),
-            method: "sign_with_ecdsa".to_string(),
-            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
-            payload: signature_payload,
-        }
-    }
-
-    fn schnorr_params(schnorr_key_id: SchnorrKeyId) -> ForwardParams {
-        let signature_request = SignWithSchnorrArgs {
-            message: [1; 32].to_vec(),
-            derivation_path: DerivationPath::new(Vec::new()),
-            key_id: schnorr_key_id,
-        };
-
-        let signature_payload = Encode!(&signature_request).unwrap();
-
-        ForwardParams {
-            receiver: Principal::management_canister(),
-            method: "sign_with_schnorr".to_string(),
-            cycles: SCHNORR_SIGNATURE_FEE.get() * 2,
-            payload: signature_payload,
-        }
-    }
-}
-
-impl Request<SignWithECDSAReply> for ChainSignatureRequest {
-    fn mode(&self) -> CallMode {
-        CallMode::Update
-    }
-    fn canister_id(&self) -> Principal {
-        self.principal
-    }
-    fn method_name(&self) -> String {
-        "forward".to_string()
-    }
-    fn payload(&self) -> Vec<u8> {
-        self.payload.clone()
-    }
-    fn parse_response(&self, raw_response: &[u8]) -> anyhow::Result<SignWithECDSAReply> {
-        Ok(SignWithECDSAReply::decode(raw_response)?)
-    }
 }
 
 pub fn test(env: TestEnv) {
@@ -208,13 +185,15 @@ pub fn tecdsa_performance_test(
     let (app_subnet, app_node) = get_app_subnet_and_node(&topology_snapshot);
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
 
-    let key_ids = vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))];
-    info!(log, "Step 1: Enabling tECDSA signing and ensuring it works");
+    info!(
+        log,
+        "Step 1: Enabling threshold signing and ensuring it works"
+    );
     let keys = enable_chain_key_signing_on_subnet(
         &nns_node,
         &nns_canister,
         app_subnet.subnet_id,
-        key_ids.clone(),
+        make_key_ids(),
         &log,
     );
 
@@ -223,17 +202,26 @@ pub fn tecdsa_performance_test(
     }
 
     info!(log, "Step 2: Installing Message canisters");
-    let requests = (0..CANISTER_COUNT)
+    let principals = (0..CANISTER_COUNT)
         .map(|_| {
-            let principal = block_on(MessageCanister::new_with_cycles(
+            block_on(MessageCanister::new_with_cycles(
                 &app_agent,
                 app_node.effective_canister_id(),
                 u128::MAX,
             ))
-            .canister_id();
-            ChainSignatureRequest::new(principal, MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)))
+            .canister_id()
         })
         .collect::<Vec<_>>();
+    let mut requests = vec![];
+    for principal in principals {
+        for key_id in make_key_ids() {
+            requests.push(ChainSignatureRequest::new(
+                principal,
+                key_id,
+                SCHNORR_MSG_SIZE_BYTES,
+            ))
+        }
+    }
 
     if apply_network_settings {
         info!(log, "Optional Step: Modify all nodes' traffic using tc");
@@ -242,8 +230,11 @@ pub fn tecdsa_performance_test(
             let session = node
                 .block_on_ssh_session()
                 .expect("Failed to ssh into node");
-            node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command())
-                .expect("Failed to execute bash script from session");
+            node.block_on_bash_script_from_session(
+                &session,
+                &limit_tc_ssh_command(BANDWIDTH_MBITS, LATENCY),
+            )
+            .expect("Failed to execute bash script from session");
         });
     }
 
@@ -373,30 +364,13 @@ pub fn tecdsa_performance_test(
     });
 }
 
-/**
- * 1. Delete existing tc rules (if present).
- * 2. Add a root qdisc (queueing discipline) for an htb (hierarchical token bucket).
- * 3. Add a class with bandwidth limit.
- * 4. Add a qdisc to introduce latency with jitter.
- * 5. Add a filter to associate IPv6 traffic with the class and specific port.
- * 6. Read the active tc rules.
- */
-fn limit_tc_ssh_command() -> String {
-    let cfg = ic_system_test_driver::util::get_config();
-    let p2p_listen_port = cfg.transport.unwrap().listening_port;
-    format!(
-        r#"set -euo pipefail
-sudo tc qdisc del dev {device} root 2> /dev/null || true
-sudo tc qdisc add dev {device} root handle 1: htb default 10
-sudo tc class add dev {device} parent 1: classid 1:10 htb rate {bandwidth_mbit}mbit ceil {bandwidth_mbit}mbit
-sudo tc qdisc add dev {device} parent 1:10 handle 10: netem delay {latency_ms}ms {jitter_ms}ms
-sudo tc filter add dev {device} parent 1: protocol ipv6 prio 1 u32 match ip6 dport {p2p_listen_port} 0xFFFF flowid 1:10
-sudo tc qdisc show dev {device}
-"#,
-        device = DEVICE_NAME,
-        bandwidth_mbit = BANDWIDTH_MBITS,
-        latency_ms = LATENCY.as_millis(),
-        jitter_ms = LATENCY_JITTER.as_millis(),
-        p2p_listen_port = p2p_listen_port
-    )
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        // Since we setup VMs in sequence it takes more than the default timeout
+        // of 10 minutes to setup this large testnet so let's increase the timeout:
+        .with_timeout_per_test(Duration::from_secs(60 * 30))
+        .with_setup(setup)
+        .add_test(systest!(test))
+        .execute_from_args()?;
+    Ok(())
 }

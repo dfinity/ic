@@ -1596,13 +1596,21 @@ pub mod neurons_fund_snapshot {
         /// Overall amount of maturity of the neuron from which this portion is taken.
         #[prost(uint64, optional, tag = "3")]
         pub maturity_equivalent_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can vote on behalf of this neuron.
-        #[prost(message, optional, tag = "4")]
-        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// Whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
         /// participation constraints.
         #[prost(bool, optional, tag = "5")]
         pub is_capped: ::core::option::Option<bool>,
+        /// The principal that can manage this neuron.
+        #[prost(message, optional, tag = "6")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The principals that can vote, propose, and follow on behalf of this neuron.
+        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
+        #[prost(message, repeated, tag = "7")]
+        pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+        #[deprecated]
+        #[prost(message, optional, tag = "4")]
+        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
     }
 }
 /// Absolute constraints of this swap needed that the Neurons' Fund need to be aware of.
@@ -3089,6 +3097,15 @@ pub mod settle_neurons_fund_participation_request {
         Aborted(Aborted),
     }
 }
+/// A list of principals.
+/// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Principals {
+    #[prost(message, repeated, tag = "7")]
+    pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 /// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 /// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -3124,13 +3141,20 @@ pub mod settle_neurons_fund_participation_response {
         /// The amount of Neurons' Fund participation associated with this neuron.
         #[prost(uint64, optional, tag = "2")]
         pub amount_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can vote on behalf of this neuron.
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
+        /// The principal that can manage this neuron.
+        #[prost(message, optional, tag = "6")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The principals that can vote, propose, and follow on behalf of this neuron.
+        #[prost(message, optional, tag = "7")]
+        pub hotkeys: ::core::option::Option<super::Principals>,
         /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
+        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+        #[deprecated]
+        #[prost(string, optional, tag = "3")]
+        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -3514,6 +3538,12 @@ pub enum Topic {
     ApiBoundaryNodeManagement = 15,
     /// Proposals related to subnet rental.
     SubnetRental = 16,
+    /// Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
+    /// protocol, without which the IC will not be able to function properly.
+    ProtocolCanisterManagement = 17,
+    /// Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
+    /// Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+    ServiceNervousSystemManagement = 18,
 }
 impl Topic {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3538,6 +3568,8 @@ impl Topic {
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
             Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
             Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
+            Topic::ProtocolCanisterManagement => "TOPIC_PROTOCOL_CANISTER_MANAGEMENT",
+            Topic::ServiceNervousSystemManagement => "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3559,6 +3591,8 @@ impl Topic {
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
             "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
             "TOPIC_SUBNET_RENTAL" => Some(Self::SubnetRental),
+            "TOPIC_PROTOCOL_CANISTER_MANAGEMENT" => Some(Self::ProtocolCanisterManagement),
+            "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT" => Some(Self::ServiceNervousSystemManagement),
             _ => None,
         }
     }

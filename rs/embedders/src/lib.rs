@@ -46,7 +46,7 @@ pub struct InstanceRunResult {
 
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CompilationResult {
     /// The number of instructions in the canister's largest function.
     pub largest_function_instruction_count: NumInstructions,

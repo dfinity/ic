@@ -69,13 +69,13 @@ impl EcdsaGossipMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaPreSignerMetrics {
+pub struct IDkgPreSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub pre_sign_metrics: IntCounterVec,
     pub pre_sign_errors: IntCounterVec,
 }
 
-impl EcdsaPreSignerMetrics {
+impl IDkgPreSignerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(
@@ -109,13 +109,13 @@ impl EcdsaPreSignerMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaSignerMetrics {
+pub struct ThresholdSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub sign_metrics: IntCounterVec,
     pub sign_errors: IntCounterVec,
 }
 
-impl EcdsaSignerMetrics {
+impl ThresholdSignerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(
@@ -325,7 +325,7 @@ impl IDkgComplaintMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaTranscriptMetrics {
+pub struct IDkgTranscriptMetrics {
     pub active_transcripts: IntGauge,
     pub support_validation_duration: HistogramVec,
     pub support_validation_total_duration: HistogramVec,
@@ -336,7 +336,7 @@ pub struct EcdsaTranscriptMetrics {
     pub transcript_e2e_latency: HistogramVec,
 }
 
-impl EcdsaTranscriptMetrics {
+impl IDkgTranscriptMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             active_transcripts: metrics_registry
@@ -388,11 +388,11 @@ impl EcdsaTranscriptMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaPreSignatureMetrics {
+pub struct IDkgPreSignatureMetrics {
     pub pre_signature_e2e_latency: HistogramVec,
 }
 
-impl EcdsaPreSignatureMetrics {
+impl IDkgPreSignatureMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             pre_signature_e2e_latency: metrics_registry.histogram_vec(
@@ -406,7 +406,7 @@ impl EcdsaPreSignatureMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaSignatureMetrics {
+pub struct ThresholdSignatureMetrics {
     pub active_signatures: IntGauge,
     pub sig_share_validation_duration: Histogram,
     pub sig_share_validation_total_duration: Histogram,
@@ -415,7 +415,7 @@ pub struct EcdsaSignatureMetrics {
     pub signature_e2e_latency: Histogram,
 }
 
-impl EcdsaSignatureMetrics {
+impl ThresholdSignatureMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             active_signatures: metrics_registry
