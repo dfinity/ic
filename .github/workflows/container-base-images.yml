@@ -4,13 +4,12 @@
 name: Container IC Base Images
 
 on:
-  # TODO: Enable prior to migration
-  # schedule:
-  #   - cron: "0 8 * * 4"
+  schedule:
+    - cron: "0 8 * * 4"
   workflow_dispatch:
   pull_request:
     paths:
-      - '.github/workflows/container-base-images.yml' # TODO: remove me
+      - '.github/workflows/container-base-images.yml'
       - '**/Dockerfile.base'
       - '**/packages.common'
       - '**/packages.dev'
@@ -84,7 +83,7 @@ jobs:
         with:
           context: ${{ matrix.CONTEXT }}
           file: ${{ matrix.CONTEXT }}/Dockerfile.base
-          # push: ${{ github.ref_name == 'master' }} # TODO: uncomment
+          push: ${{ github.ref_name == 'master' }}
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}:${{ env.DATE }}
           build-args: ${{ matrix.BUILD_ARGS }}
@@ -109,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-base-image]
-    # if: ${{ github.ref_name == 'master' }} # TODO: change me
+    if: ${{ github.ref_name == 'master' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -140,9 +139,9 @@ jobs:
           base: master
           branch: base-image-refs-update-${{ env.DATE }}
           delete-branch: true
-          title: Update Base Image Refs [${{ env.DATE }}]
+          title: "chore: Update Base Image Refs [${{ env.DATE }}]"
           body: |
             Updating base container image references.
 
             Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          draft: true # TODO: changeme
+          draft: false
