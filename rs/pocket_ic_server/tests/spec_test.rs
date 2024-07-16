@@ -54,6 +54,7 @@ fn subnet_config(
 }
 
 fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included_tests: Vec<&str>) {
+    // start httpbin webserver to test canister HTTP outcalls
     let httpbin_path = std::env::var_os("HTTPBIN_BIN").expect("Missing httpbin binary path");
     let mut cmd = Command::new(httpbin_path);
     let port_file = NamedTempFile::new().unwrap();
