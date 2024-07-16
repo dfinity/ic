@@ -11,11 +11,11 @@ use crate::management::IcCanisterRuntime;
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
     mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index, Ledger,
-    ManageSingleCanister, ManagedCanisterStatus, State, WasmHash,
+    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, WasmHash,
 };
 use crate::storage::{
-    read_wasm_store, validate_wasm_hashes, wasm_store_try_get, StorableWasm, TaskQueue,
-    WasmHashError, WasmStore, WasmStoreError, TASKS,
+    read_wasm_store, validate_wasm_hashes, wasm_store_contain, wasm_store_try_get, StorableWasm,
+    TaskQueue, WasmHashError, WasmStore, WasmStoreError, TASKS,
 };
 use candid::{CandidType, Encode, Nat, Principal};
 use futures::future;
@@ -477,6 +477,20 @@ impl UpgradeOrchestratorArgs {
         })
     }
 
+    pub fn new_ledger_suite_version(self, old: LedgerSuiteVersion) -> LedgerSuiteVersion {
+        LedgerSuiteVersion {
+            ledger_compressed_wasm_hash: self
+                .ledger_compressed_wasm_hash
+                .unwrap_or(old.ledger_compressed_wasm_hash),
+            index_compressed_wasm_hash: self
+                .index_compressed_wasm_hash
+                .unwrap_or(old.index_compressed_wasm_hash),
+            archive_compressed_wasm_hash: self
+                .archive_compressed_wasm_hash
+                .unwrap_or(old.archive_compressed_wasm_hash),
+        }
+    }
+
     pub fn upgrade_ledger_suite(&self) -> bool {
         self.ledger_compressed_wasm_hash.is_some()
             || self.index_compressed_wasm_hash.is_some()
@@ -538,20 +552,35 @@ impl InstallLedgerSuiteArgs {
                 contract,
             ));
         }
-        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, _archive_compressed_wasm_hash] =
-            validate_wasm_hashes(
-                wasm_store,
-                Some(&args.ledger_compressed_wasm_hash),
-                Some(&args.index_compressed_wasm_hash),
-                None,
+        let (ledger_compressed_wasm_hash, index_compressed_wasm_hash) = {
+            let LedgerSuiteVersion {
+                ledger_compressed_wasm_hash,
+                index_compressed_wasm_hash,
+                archive_compressed_wasm_hash: _,
+            } = state
+                .ledger_suite_version()
+                .expect("ERROR: ledger suite version missing");
+            //TODO XC-138: move read method to state and ensure that hash is in store and remove this.
+            assert!(
+                //nothing can be changed in AddErc20Arg to fix this.
+                wasm_store_contain::<Ledger>(wasm_store, ledger_compressed_wasm_hash),
+                "BUG: ledger compressed wasm hash missing"
+            );
+            assert!(
+                //nothing can be changed in AddErc20Arg to fix this.
+                wasm_store_contain::<Index>(wasm_store, index_compressed_wasm_hash),
+                "BUG: index compressed wasm hash missing"
+            );
+            (
+                ledger_compressed_wasm_hash.clone(),
+                index_compressed_wasm_hash.clone(),
             )
-            .map_err(InvalidAddErc20ArgError::WasmHashError)?;
-
+        };
         Ok(Self {
             contract,
             ledger_init_arg: args.ledger_init_arg,
-            ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.unwrap(),
-            index_compressed_wasm_hash: index_compressed_wasm_hash.unwrap(),
+            ledger_compressed_wasm_hash,
+            index_compressed_wasm_hash,
         })
     }
 }

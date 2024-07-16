@@ -61,14 +61,8 @@ fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
 #[test]
 fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
     let mut ckerc20 = CkErc20Setup::default();
-    let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
-    let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
 
-    for token in supported_erc20_tokens(
-        ckerc20.cketh.minter_id.into(),
-        embedded_ledger_wasm_hash,
-        embedded_index_wasm_hash,
-    ) {
+    for token in supported_erc20_tokens(ckerc20.cketh.minter_id.into()) {
         ckerc20.orchestrator = ckerc20
             .orchestrator
             .add_erc20_token(token.clone())
@@ -97,13 +91,7 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
     const RETRY_FREQUENCY: Duration = Duration::from_secs(5);
 
     let mut ckerc20 = CkErc20Setup::default();
-    let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
-    let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(
-        Principal::anonymous(),
-        embedded_ledger_wasm_hash,
-        embedded_index_wasm_hash,
-    );
+    let usdc = usdc(Principal::anonymous());
     let stop_msg_id = ckerc20
         .env
         .stop_canister_non_blocking(ckerc20.cketh.minter_id);
