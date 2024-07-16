@@ -7,12 +7,6 @@ if [[ -n "$(git rev-parse -q --verify MERGE_HEAD)" ]]; then
     exit 0
 fi
 
-MERGE_BRANCH="master"
-
-if [[ "${REPO:-}" == "ic-private" ]]; then
-    MERGE_BRANCH="master-private"
-fi
-
 echo "Fetch the $MERGE_BRANCH branch"
 git fetch origin $MERGE_BRANCH:$MERGE_BRANCH
 MERGE_BASE=$(git merge-base HEAD $MERGE_BRANCH)
