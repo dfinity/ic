@@ -140,5 +140,8 @@ jobs:
           branch: base-image-refs-update-${{ env.DATE }}
           delete-branch: true
           title: Update Base Image Refs [${{ env.DATE }}]
-          body: Updating base container image references.
+          body: |
+            Updating base container image references.
+
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           draft: true # TODO: changeme
