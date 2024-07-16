@@ -2,7 +2,7 @@
 
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
-use ic_consensus::ecdsa::{malicious_pre_signer, EcdsaImpl};
+use ic_consensus::ecdsa::{malicious_pre_signer, IDkgImpl};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
@@ -119,14 +119,14 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusWithMaliciousFlags {
 
 /// Simulate a malicious ecdsa behavior via MaliciousFlags.
 pub struct EcdsaWithMaliciousFlags {
-    ecdsa: RefCell<EcdsaImpl>,
+    ecdsa: RefCell<IDkgImpl>,
     malicious_flags: MaliciousFlags,
 }
 
 impl<T: IDkgPool> ChangeSetProducer<T> for EcdsaWithMaliciousFlags {
     type ChangeSet = IDkgChangeSet;
     fn on_state_change(&self, pool: &T) -> IDkgChangeSet {
-        let changeset = EcdsaImpl::on_state_change(&self.ecdsa.borrow(), pool);
+        let changeset = IDkgImpl::on_state_change(&self.ecdsa.borrow(), pool);
         if self.malicious_flags.is_ecdsa_malicious() {
             malicious_pre_signer::maliciously_alter_changeset(
                 changeset,
@@ -151,7 +151,7 @@ pub fn with_malicious_flags(malicious_flags: MaliciousFlags) -> ComponentModifie
         })
     };
     if malicious_flags.is_ecdsa_malicious() {
-        modifier.ecdsa = Box::new(move |ecdsa: EcdsaImpl| {
+        modifier.ecdsa = Box::new(move |ecdsa: IDkgImpl| {
             Box::new(EcdsaWithMaliciousFlags {
                 ecdsa: RefCell::new(ecdsa),
                 malicious_flags: malicious_flags.clone(),

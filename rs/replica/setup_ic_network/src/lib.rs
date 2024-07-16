@@ -438,7 +438,7 @@ fn start_consensus(
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
 
-        let ecdsa_gossip = Arc::new(ecdsa::EcdsaGossipImpl::new(
+        let ecdsa_gossip = Arc::new(ecdsa::IDkgGossipImpl::new(
             subnet_id,
             Arc::clone(&consensus_block_cache),
             Arc::clone(&state_reader),
@@ -447,7 +447,7 @@ fn start_consensus(
 
         let (client, jh) = create_artifact_handler(
             ecdsa_tx,
-            ecdsa::EcdsaImpl::new(
+            ecdsa::IDkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_block_cache),
                 Arc::clone(&consensus_crypto),

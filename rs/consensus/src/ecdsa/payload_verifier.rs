@@ -95,7 +95,7 @@ pub(crate) enum InvalidIDkgPayloadReason {
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
-    EcdsaConfigNotFound,
+    ChainKeyConfigNotFound,
     SummaryPayloadMismatch,
     DataPayloadMismatch,
     MissingIDkgDataPayload,
@@ -222,7 +222,7 @@ pub(crate) fn validate_payload(
     }
 }
 
-/// Validates a threshold ECDSA summary payload.
+/// Validates an IDKG summary payload.
 /// This is an entirely deterministic operation, so we can just check if
 /// the given summary payload matches what we would have created locally.
 fn validate_summary_payload(
@@ -242,7 +242,7 @@ fn validate_summary_payload(
             .map_err(IDkgPayloadValidationFailure::from)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
-            return Err(InvalidIDkgPayloadReason::EcdsaConfigNotFound.into());
+            return Err(InvalidIDkgPayloadReason::ChainKeyConfigNotFound.into());
         } else {
             return Ok(());
         }

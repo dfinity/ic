@@ -16,7 +16,7 @@ pub(crate) const CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS: &str =
     "ecdsa_retain_active_transcripts_error";
 
 #[derive(Clone)]
-pub struct EcdsaClientMetrics {
+pub struct IDkgClientMetrics {
     pub on_state_change_duration: HistogramVec,
     pub client_metrics: IntCounterVec,
     pub client_errors: IntCounterVec,
@@ -24,25 +24,25 @@ pub struct EcdsaClientMetrics {
     pub critical_error_ecdsa_retain_active_transcripts: IntCounter,
 }
 
-impl EcdsaClientMetrics {
+impl IDkgClientMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(
-                "ecdsa_on_state_change_duration_seconds",
-                "The time it took to execute ECDSA on_state_change(), in seconds",
+                "idkg_on_state_change_duration_seconds",
+                "The time it took to execute IDKG on_state_change(), in seconds",
                 // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),
                 &["sub_component"],
             ),
             client_metrics: metrics_registry.int_counter_vec(
-                "ecdsa_client_metrics",
-                "ECDSA client related metrics",
+                "idkg_client_metrics",
+                "IDkg client related metrics",
                 &["type"],
             ),
             client_errors: metrics_registry.int_counter_vec(
-                "ecdsa_client_errors",
-                "ECDSA client related errors",
+                "idkg_client_errors",
+                "IDkg client related errors",
                 &["type"],
             ),
             critical_error_ecdsa_retain_active_transcripts: metrics_registry
@@ -52,16 +52,16 @@ impl EcdsaClientMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaGossipMetrics {
+pub struct IDkgGossipMetrics {
     pub dropped_adverts: IntCounterVec,
 }
 
-impl EcdsaGossipMetrics {
+impl IDkgGossipMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             dropped_adverts: metrics_registry.int_counter_vec(
-                "ecdsa_priority_fn_dropped_adverts",
-                "ECDSA adverts dropped by priority fn",
+                "idkg_priority_fn_dropped_adverts",
+                "IDKG adverts dropped by priority fn",
                 &["type"],
             ),
         }

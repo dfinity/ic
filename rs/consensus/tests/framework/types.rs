@@ -307,7 +307,7 @@ pub struct ComponentModifier {
     >,
     pub(crate) ecdsa: Box<
         dyn Fn(
-            ecdsa::EcdsaImpl,
+            ecdsa::IDkgImpl,
         )
             -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     >,
@@ -317,7 +317,7 @@ impl Default for ComponentModifier {
     fn default() -> Self {
         Self {
             consensus: Box::new(|x: ConsensusImpl| Box::new(x)),
-            ecdsa: Box::new(|x: ecdsa::EcdsaImpl| Box::new(x)),
+            ecdsa: Box::new(|x: ecdsa::IDkgImpl| Box::new(x)),
         }
     }
 }
@@ -334,7 +334,7 @@ pub fn apply_modifier_consensus(
 
 pub fn apply_modifier_ecdsa(
     modifier: &Option<ComponentModifier>,
-    ecdsa: ecdsa::EcdsaImpl,
+    ecdsa: ecdsa::IDkgImpl,
 ) -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>> {
     match modifier {
         Some(f) => (f.ecdsa)(ecdsa),
