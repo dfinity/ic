@@ -794,7 +794,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4",
             ),
             "nix": crate.spec(
-                version = "^0.24.3",
+                version = "^0.26.4",
             ),
             "num-bigint": crate.spec(
                 version = "^0.4.6",
@@ -1020,7 +1020,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "reqwest": crate.spec(
-                version = "^0.12.5",
+                version = "^0.12.3",
                 default_features = False,
                 features = [
                     "blocking",

@@ -3037,7 +3037,7 @@ dependencies = [
  "moka",
  "more-asserts",
  "nftables",
- "nix 0.24.3",
+ "nix 0.26.4",
  "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-rational",
@@ -3078,8 +3078,8 @@ dependencies = [
  "protobuf",
  "publicsuffix",
  "quickcheck",
- "quinn 0.11.2",
- "quinn-udp 0.5.2",
+ "quinn",
+ "quinn-udp",
  "quote 1.0.35",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -3091,7 +3091,7 @@ dependencies = [
  "rcgen",
  "regex",
  "reqwest 0.11.27",
- "reqwest 0.12.5",
+ "reqwest 0.12.4",
  "rgb",
  "ring 0.17.7",
  "ripemd",
@@ -4661,7 +4661,6 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tower-service",
- "webpki-roots 0.26.1",
 ]
 
 [[package]]
@@ -4781,7 +4780,7 @@ dependencies = [
  "pkcs8",
  "rand 0.8.5",
  "rangemap",
- "reqwest 0.12.5",
+ "reqwest 0.12.4",
  "ring 0.17.7",
  "rustls-webpki 0.101.7",
  "sec1",
@@ -6318,9 +6317,9 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
-version = "0.6.5"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
 dependencies = [
  "autocfg 1.1.0",
 ]
@@ -6608,18 +6607,6 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.24.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa52e972a9a719cecb6864fb88568781eb706bac2cd1d4f04a648542dbf78069"
-dependencies = [
- "bitflags 1.3.2",
- "cfg-if 1.0.0",
- "libc",
- "memoffset 0.6.5",
-]
-
-[[package]]
-name = "nix"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
@@ -6627,6 +6614,8 @@ dependencies = [
  "bitflags 1.3.2",
  "cfg-if 1.0.0",
  "libc",
+ "memoffset 0.7.1",
+ "pin-utils",
 ]
 
 [[package]]
@@ -7695,7 +7684,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-cdk 0.13.2",
- "reqwest 0.12.5",
+ "reqwest 0.12.4",
  "schemars",
  "serde",
  "serde_bytes",
@@ -8219,50 +8208,16 @@ dependencies = [
 [[package]]
 name = "quinn"
 version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4ceeeeabace7857413798eb1ffa1e9c905a9946a57d81fb69b4b71c4d8eb3ad"
-dependencies = [
- "bytes",
- "pin-project-lite",
- "quinn-proto 0.11.3",
- "quinn-udp 0.5.2",
- "rustc-hash 1.1.0",
- "rustls 0.23.11",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "quinn"
-version = "0.11.2"
 source = "git+https://github.com/quinn-rs/quinn?rev=fb63829dd1f78a98cb7da0fc757db44d14afd9ff#fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
 dependencies = [
  "bytes",
  "pin-project-lite",
- "quinn-proto 0.11.3",
- "quinn-udp 0.5.2",
+ "quinn-proto",
+ "quinn-udp",
  "rustc-hash 2.0.0",
  "rustls 0.23.11",
  "thiserror",
  "tokio",
- "tracing",
-]
-
-[[package]]
-name = "quinn-proto"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddf517c03a109db8100448a4be38d498df8a210a99fe0e1b9eaf39e78c640efe"
-dependencies = [
- "bytes",
- "rand 0.8.5",
- "ring 0.17.7",
- "rustc-hash 1.1.0",
- "rustls 0.23.11",
- "slab",
- "thiserror",
- "tinyvec",
  "tracing",
 ]
 
@@ -8280,19 +8235,6 @@ dependencies = [
  "thiserror",
  "tinyvec",
  "tracing",
-]
-
-[[package]]
-name = "quinn-udp"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9096629c45860fc7fb143e125eb826b5e721e10be3263160c7d60ca832cf8c46"
-dependencies = [
- "libc",
- "once_cell",
- "socket2 0.5.7",
- "tracing",
- "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8774,9 +8716,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.5"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7d6d2a27d57148378eb5e111173f4276ad26340ecc5c49a4a2152167a2d6a37"
+checksum = "566cafdd92868e0939d3fb961bd0dc25fcfaaed179291093b3d43e6b3150ea10"
 dependencies = [
  "base64 0.22.0",
  "bytes",
@@ -8788,7 +8730,7 @@ dependencies = [
  "http-body 1.0.0",
  "http-body-util",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.26.0",
  "hyper-util",
  "ipnet",
  "js-sys",
@@ -8798,17 +8740,16 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "quinn 0.11.2",
- "rustls 0.23.11",
+ "rustls 0.22.2",
  "rustls-native-certs 0.7.0",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "serde",
  "serde_json",
  "serde_urlencoded",
- "sync_wrapper 1.0.1",
+ "sync_wrapper 0.1.2",
  "tokio",
- "tokio-rustls 0.26.0",
+ "tokio-rustls 0.25.0",
  "tokio-socks",
  "tokio-util",
  "tower-service",
