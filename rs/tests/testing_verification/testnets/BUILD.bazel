@@ -93,6 +93,12 @@ system_test(
 
 system_test(
     name = "small_with_query_stats",
+    env = {
+        "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -106,17 +112,18 @@ system_test(
         "@nns_dapp_canister//file",
         "@subnet_rental_canister//file",
     ],
-    env = {
-           "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-           "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-           "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-           "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "sns_testing",
+    env = {
+        "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -131,13 +138,6 @@ system_test(
         "@sns_aggregator//file",
         "@subnet_rental_canister//file",
     ],
-    env = {
-           "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-           "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-           "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-           "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-           "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -156,6 +156,13 @@ system_test(
 
 system_test(
     name = "large",
+    env = {
+        "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -170,18 +177,19 @@ system_test(
         "@sns_aggregator//file",
         "@subnet_rental_canister//file",
     ],
-    env = {
-           "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-           "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-           "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-           "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-           "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "src_testing",
+    env = {
+        "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -197,14 +205,6 @@ system_test(
         "@sns_aggregator//file",
         "@subnet_rental_canister//file",
     ],
-    env = {
-           "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-           "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
-           "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-           "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-           "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-           "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
     deps = DEPENDENCIES + [
         "//rs/rosetta-api/tvl/xrc_mock",
         "//rs/tests",

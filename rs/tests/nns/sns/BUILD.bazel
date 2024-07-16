@@ -44,6 +44,9 @@ system_test(
 
 system_test(
     name = "aggregation_canister_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO[NNS1-2658]: re-enable this test
@@ -55,9 +58,6 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    env = {
-           "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -76,6 +76,9 @@ system_test(
 
 system_test(
     name = "launchpad_direct_load_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -86,14 +89,14 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    env = {
-           "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "launchpad_direct_auth_load_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -104,14 +107,14 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    env = {
-           "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "launchpad_aggregator_load_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -122,9 +125,6 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    env = {
-           "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
