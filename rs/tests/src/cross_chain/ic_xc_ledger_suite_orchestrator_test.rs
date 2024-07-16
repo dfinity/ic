@@ -1,9 +1,9 @@
-use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use anyhow::{anyhow, bail};
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     UpgradeArg,

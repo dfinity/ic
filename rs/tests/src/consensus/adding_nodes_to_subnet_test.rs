@@ -1,3 +1,4 @@
+// TODO(kpop): Inline this test, as it doesn't rely on any `//rs/tests/src/` functionality
 /* tag::catalog[]
 
 Title:: Adding new nodes to a subnet test
@@ -15,7 +16,7 @@ Success::
 
 end::catalog[] */
 
-use crate::orchestrator::utils::rw_message::{
+use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
     install_nns_and_check_progress, store_message,
 };

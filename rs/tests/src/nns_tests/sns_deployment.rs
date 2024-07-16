@@ -55,7 +55,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
 
-use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_system_test_driver::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
 use ic_system_test_driver::util::{assert_create_agent_with_identity, block_on};
 
