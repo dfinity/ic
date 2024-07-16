@@ -178,6 +178,9 @@ rust_test_suite_with_extra_srcs(
     srcs = glob(
         ["tests/**/*.rs"],
     ),
+    tags = [
+        "cpu:2",
+    ],
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
