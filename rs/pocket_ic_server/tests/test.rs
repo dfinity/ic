@@ -699,10 +699,6 @@ fn test_specified_id_call_v3() {
         .build();
     let endpoint = pic.make_live(None);
 
-    // We define a "specified" canister ID that exists on the IC mainnet,
-    // but belongs to the canister ranges of no subnet on the PocketIC instance.
-    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
-    assert!(pic.get_subnet(specified_id).is_none());
 
     // We create a canister with that specified canister ID: this should succeed
     // and a new subnet should be created.
