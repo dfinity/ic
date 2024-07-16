@@ -62,8 +62,8 @@ use ic_tests::nns_dapp::{
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
-use std::str::FromStr;
 use std::env;
+use std::str::FromStr;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
 
 const DEFAULT_XRC_PRINCIPAL_STR: &str = "uf6dk-hyaaa-aaaaq-qaaaq-cai";
