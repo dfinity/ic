@@ -6,11 +6,12 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, DashboardRequest, ExecuteIngressMessage,
-    GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query,
-    QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
-    Tick,
+    AddCycles, AdvanceTimeAndTick, AwaitIngressMessage, CallRequest, DashboardRequest,
+    ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
+    PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest,
+    SubmitIngressMessage, Tick,
 };
+use crate::state_api::state::ProgressThread;
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
 use aide::{
@@ -43,6 +44,10 @@ use pocket_ic::common::rest::{
 use pocket_ic::WasmResult;
 use serde::Serialize;
 use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use tokio::spawn;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TryRecvError;
+use tokio::time::sleep;
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tracing::trace;
 
@@ -52,6 +57,9 @@ type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
 const RETRY_TIMEOUT_S: u64 = 300;
+
+// The minimum delay between consecutive ticks in auto progress mode.
+const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
 
 #[derive(Clone)]
 pub struct AppState {
@@ -1068,7 +1076,35 @@ pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    api_state.auto_progress(id).await;
+    let (tx, mut rx) = mpsc::channel::<()>(1);
+    let api_state_clone = api_state.clone();
+    let handle = spawn(async move {
+        use std::time::Instant;
+        let mut now = Instant::now();
+        let mut advance_time = Duration::default();
+        loop {
+            let start = Instant::now();
+            let old = std::mem::replace(&mut now, Instant::now());
+            advance_time += now.duration_since(old);
+            let cur_op = AdvanceTimeAndTick(advance_time);
+            if let (_, ApiResponse::Success(_)) =
+                run_operation::<()>(api_state_clone.clone(), id, None, cur_op).await
+            {
+                advance_time = Duration::default();
+            };
+            let duration = start.elapsed();
+            sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+            match rx.try_recv() {
+                Ok(_) | Err(TryRecvError::Disconnected) => {
+                    return;
+                }
+                Err(TryRecvError::Empty) => {}
+            }
+        }
+    });
+    let progress_thread = ProgressThread { handle, sender: tx };
+
+    api_state.auto_progress(id, progress_thread).await;
     (StatusCode::OK, Json(ApiResponse::Success(())))
 }
 

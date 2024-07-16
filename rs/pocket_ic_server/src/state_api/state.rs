@@ -1,7 +1,7 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-use crate::pocket_ic::{AdvanceTimeAndTick, EffectivePrincipal, PocketIc};
+use crate::pocket_ic::{EffectivePrincipal, PocketIc};
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
@@ -21,20 +21,14 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::error::TryRecvError,
     sync::{mpsc, Mutex, RwLock},
     task::{spawn, spawn_blocking, JoinHandle},
-    time::{self, sleep},
+    time::{self},
 };
 use tracing::{error, info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
-
-// The minimum delay between consecutive ticks in auto progress mode.
-const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
-// The retry delay when polling for status of a long-running tick.
-const POLL_TICK_STATUS_DELAY: Duration = Duration::from_millis(100);
 
 pub const STATE_LABEL_HASH_SIZE: usize = 32;
 
@@ -68,9 +62,9 @@ impl std::convert::TryFrom<Vec<u8>> for StateLabel {
     }
 }
 
-struct ProgressThread {
-    handle: JoinHandle<()>,
-    sender: mpsc::Sender<()>,
+pub struct ProgressThread {
+    pub handle: JoinHandle<()>,
+    pub sender: mpsc::Sender<()>,
 }
 
 /// The state of the PocketIC API.
@@ -587,65 +581,14 @@ impl ApiState {
         }
     }
 
-    pub async fn auto_progress(&self, instance_id: InstanceId) {
+    pub async fn auto_progress(&self, instance_id: InstanceId, progress_thread: ProgressThread) {
         let progress_threads = self.progress_threads.read().await;
-        let mut progress_thread = progress_threads[instance_id].lock().await;
-        let instances = self.instances.clone();
-        let graph = self.graph.clone();
-        let sync_wait_time = self.sync_wait_time;
-        if progress_thread.is_none() {
-            let (tx, mut rx) = mpsc::channel::<()>(1);
-            let handle = spawn(async move {
-                use std::time::Instant;
-                let mut now = Instant::now();
-                let mut advance_time = Duration::default();
-                loop {
-                    let start = Instant::now();
-                    let old = std::mem::replace(&mut now, Instant::now());
-                    advance_time += now.duration_since(old);
-                    let cur_op = AdvanceTimeAndTick(advance_time);
-                    let retry_immediately = match Self::update_instances_with_timeout(
-                        instances.clone(),
-                        graph.clone(),
-                        cur_op.into(),
-                        instance_id,
-                        sync_wait_time,
-                    )
-                    .await
-                    {
-                        Ok(UpdateReply::Busy { .. }) => true,
-                        Ok(UpdateReply::Output(_)) => {
-                            advance_time = Duration::default();
-                            false
-                        }
-                        Ok(UpdateReply::Started { state_label, op_id }) => loop {
-                            if Self::read_result(graph.clone(), &state_label, &op_id).is_some() {
-                                advance_time = Duration::default();
-                                break false;
-                            }
-                            sleep(POLL_TICK_STATUS_DELAY).await;
-                            match rx.try_recv() {
-                                Ok(_) | Err(TryRecvError::Disconnected) => {
-                                    return;
-                                }
-                                Err(TryRecvError::Empty) => {}
-                            };
-                        },
-                        Err(_) => true,
-                    };
-                    let duration = start.elapsed();
-                    if !retry_immediately {
-                        sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
-                    }
-                    match rx.try_recv() {
-                        Ok(_) | Err(TryRecvError::Disconnected) => {
-                            return;
-                        }
-                        Err(TryRecvError::Empty) => {}
-                    }
-                }
-            });
-            *progress_thread = Some(ProgressThread { handle, sender: tx });
+        let mut progress_thread_ref = progress_threads[instance_id].lock().await;
+        if progress_thread_ref.is_none() {
+            *progress_thread_ref = Some(progress_thread);
+        } else {
+            progress_thread.sender.send(()).await.unwrap();
+            progress_thread.handle.await.unwrap();
         }
     }
 
