@@ -459,6 +459,12 @@ impl PocketIc {
             subnet.reload_registry();
         }
 
+        // Update the registry file on disk.
+        if let Some(ref state_dir) = state_dir {
+            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+            registry_data_provider.write_to_file(registry_proto_path);
+        }
+
         // Sync the time on the subnets (if only the NNS subnet is loaded
         // from a snapshot, then its time might diverge).
         // Since time must be monotone, we pick the maximum time.
@@ -1963,6 +1969,12 @@ fn route(
                         // Reload registry on the state machines to make sure
                         // all the state machines have a consistent view of the registry.
                         subnet.reload_registry();
+                    }
+                    // Update the registry file on disk.
+                    if let Some(ref state_dir) = pic.state_dir {
+                        let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+                        pic.registry_data_provider
+                            .write_to_file(registry_proto_path);
                     }
                     // We need to execute a round on the new subnet to make its state certified.
                     // To keep the PocketIC instance time in sync, we execute a round on all subnets.
