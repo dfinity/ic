@@ -496,7 +496,7 @@ impl From<pb::SetSnsTokenSwapOpenTimeWindow> for pb_api::SetSnsTokenSwapOpenTime
     fn from(item: pb::SetSnsTokenSwapOpenTimeWindow) -> Self {
         Self {
             swap_canister_id: item.swap_canister_id.map(|x| x.into()),
-            request: item.request.map(|x| x.into()),
+            request: item.request,
         }
     }
 }
@@ -504,7 +504,7 @@ impl From<pb_api::SetSnsTokenSwapOpenTimeWindow> for pb::SetSnsTokenSwapOpenTime
     fn from(item: pb_api::SetSnsTokenSwapOpenTimeWindow) -> Self {
         Self {
             swap_canister_id: item.swap_canister_id.map(|x| x.into()),
-            request: item.request.map(|x| x.into()),
+            request: item.request,
         }
     }
 }
@@ -1723,7 +1723,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants.into_iter().map(|x| x.into()).collect(),
+            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
@@ -1752,7 +1752,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants.into_iter().map(|x| x.into()).collect(),
+            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
@@ -2418,7 +2418,7 @@ impl From<pb::OpenSnsTokenSwap> for pb_api::OpenSnsTokenSwap {
     fn from(item: pb::OpenSnsTokenSwap) -> Self {
         Self {
             target_swap_canister_id: item.target_swap_canister_id.map(|x| x.into()),
-            params: item.params.map(|x| x.into()),
+            params: item.params,
             community_fund_investment_e8s: item.community_fund_investment_e8s,
         }
     }
@@ -2427,7 +2427,7 @@ impl From<pb_api::OpenSnsTokenSwap> for pb::OpenSnsTokenSwap {
     fn from(item: pb_api::OpenSnsTokenSwap) -> Self {
         Self {
             target_swap_canister_id: item.target_swap_canister_id.map(|x| x.into()),
-            params: item.params.map(|x| x.into()),
+            params: item.params,
             community_fund_investment_e8s: item.community_fund_investment_e8s,
         }
     }
