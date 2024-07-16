@@ -8,9 +8,9 @@ on:
   # schedule:
   #   - cron: "0 8 * * 4"
   workflow_dispatch:
-  # TODO: Change to pull_request_target
   pull_request:
     paths:
+      - '.github/workflows/container-base-images.yml' # TODO: remove me
       - '**/Dockerfile.base'
       - '**/packages.common'
       - '**/packages.dev'
@@ -91,7 +91,7 @@ jobs:
         run: |
           set -xeuo pipefail
           mkdir -p "$(dirname artifacts/${{ matrix.REFFILE }})"
-          echo docker.io/dfinity/${{matrix.IMAGE}}@${{ steps.build-base-image.outputs.imageid }} \
+          echo ghcr.io/dfinity/${{matrix.IMAGE}}@${{ steps.build-base-image.outputs.imageid }} \
             > artifacts/${{ matrix.REFFILE }}
 
       - name: Upload SHA256 Digest Artifact
@@ -133,8 +133,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@6d6857d36972b65feb161a90e484f2984215f83e # v6.0.5
         with:
-          # TODO: change to master prior to migration
-          base: mirroring
+          base: master
           branch: base-image-refs-update-${{ env.DATE }}
           delete-branch: true
           title: Update Base Image Refs [${{ env.DATE }}]
