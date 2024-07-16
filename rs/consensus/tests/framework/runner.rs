@@ -178,7 +178,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );
-        let ecdsa = ecdsa::EcdsaImpl::new(
+        let ecdsa = ecdsa::IDkgImpl::new(
             deps.replica_config.node_id,
             deps.consensus_pool.read().unwrap().get_block_cache(),
             consensus_crypto,

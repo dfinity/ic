@@ -40,7 +40,7 @@
 //! Complete transcripts will be included in blocks via the functions
 //! `create_data_payload` and `create_summary_payload`.
 //!
-//! # [EcdsaImpl] behavior
+//! # [IDkgImpl] behavior
 //! The ECDSA component is responsible for adding artifacts to the ECDSA
 //! artifact pool, and validating artifacts in that pool, by exposing a function
 //! `on_state_change`. This function behaves as follows, where `finalized_tip`
@@ -171,7 +171,7 @@
 
 use crate::ecdsa::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::ecdsa::metrics::{
-    timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
+    timed_call, IDkgClientMetrics, IDkgGossipMetrics,
     CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::ecdsa::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
@@ -234,9 +234,9 @@ const LOOK_AHEAD: u64 = 10;
 /// Frequency for clearing the inactive key transcripts.
 pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 
-/// `EcdsaImpl` is the consensus component responsible for processing threshold
+/// `IDkgImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
-pub struct EcdsaImpl {
+pub struct IDkgImpl {
     /// The Pre-Signer subcomponent
     pub pre_signer: Box<IDkgPreSignerImpl>,
     signer: Box<dyn ThresholdSigner>,
@@ -245,13 +245,13 @@ pub struct EcdsaImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
     last_transcript_purge_ts: RefCell<Instant>,
-    metrics: EcdsaClientMetrics,
+    metrics: IDkgClientMetrics,
     logger: ReplicaLogger,
     #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
     malicious_flags: MaliciousFlags,
 }
 
-impl EcdsaImpl {
+impl IDkgImpl {
     /// Builds a new threshold ECDSA component
     pub fn new(
         node_id: NodeId,
@@ -292,7 +292,7 @@ impl EcdsaImpl {
             consensus_block_cache,
             schedule: RoundRobin::default(),
             last_transcript_purge_ts: RefCell::new(Instant::now()),
-            metrics: EcdsaClientMetrics::new(metrics_registry),
+            metrics: IDkgClientMetrics::new(metrics_registry),
             logger,
             malicious_flags,
         }
@@ -369,7 +369,7 @@ impl EcdsaImpl {
     }
 }
 
-impl<T: IDkgPool> ChangeSetProducer<T> for EcdsaImpl {
+impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
     type ChangeSet = IDkgChangeSet;
 
     fn on_state_change(&self, idkg_pool: &T) -> IDkgChangeSet {
@@ -428,17 +428,17 @@ impl<T: IDkgPool> ChangeSetProducer<T> for EcdsaImpl {
     }
 }
 
-/// `EcdsaGossipImpl` implements the priority function and other gossip related
+/// `IDkgGossipImpl` implements the priority function and other gossip related
 /// functionality
-pub struct EcdsaGossipImpl {
+pub struct IDkgGossipImpl {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    metrics: EcdsaGossipMetrics,
+    metrics: IDkgGossipMetrics,
 }
 
-impl EcdsaGossipImpl {
-    /// Builds a new EcdsaGossipImpl component
+impl IDkgGossipImpl {
+    /// Builds a new IDkgGossipImpl component
     pub fn new(
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -449,12 +449,12 @@ impl EcdsaGossipImpl {
             subnet_id,
             consensus_block_cache,
             state_reader,
-            metrics: EcdsaGossipMetrics::new(metrics_registry),
+            metrics: IDkgGossipMetrics::new(metrics_registry),
         }
     }
 }
 
-struct EcdsaPriorityFnArgs {
+struct IDkgPriorityFnArgs {
     finalized_height: Height,
     #[allow(dead_code)]
     certified_height: Height,
@@ -463,7 +463,7 @@ struct EcdsaPriorityFnArgs {
     active_transcripts: BTreeSet<IDkgTranscriptId>,
 }
 
-impl EcdsaPriorityFnArgs {
+impl IDkgPriorityFnArgs {
     fn new(
         block_reader: &dyn IDkgBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
@@ -501,14 +501,14 @@ impl EcdsaPriorityFnArgs {
     }
 }
 
-impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for EcdsaGossipImpl {
+impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for IDkgGossipImpl {
     fn get_priority_function(
         &self,
         _idkg_pool: &Pool,
     ) -> PriorityFn<IDkgMessageId, IDkgMessageAttribute> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = EcdsaPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
+        let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
         let metrics = self.metrics.clone();
         Box::new(move |_, attr: &'_ IDkgMessageAttribute| {
             compute_priority(attr, subnet_id, &args, &metrics)
@@ -519,8 +519,8 @@ impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for EcdsaGossipImpl {
 fn compute_priority(
     attr: &IDkgMessageAttribute,
     subnet_id: SubnetId,
-    args: &EcdsaPriorityFnArgs,
-    metrics: &EcdsaGossipMetrics,
+    args: &IDkgPriorityFnArgs,
+    metrics: &IDkgGossipMetrics,
 ) -> Priority {
     match attr {
         IDkgMessageAttribute::Dealing(transcript_id)
@@ -607,7 +607,7 @@ mod tests {
     use tests::test_utils::create_sig_inputs;
 
     #[test]
-    fn test_ecdsa_priority_fn_args() {
+    fn test_idkg_priority_fn_args() {
         let state_manager = Arc::new(RefMockStateManager::default());
         let height = Height::from(100);
         let key_id = fake_ecdsa_master_public_key_id();
@@ -639,7 +639,7 @@ mod tests {
         );
 
         // Only the context with matched quadruple should be in "requested"
-        let args = EcdsaPriorityFnArgs::new(&block_reader, state_manager.as_ref());
+        let args = IDkgPriorityFnArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
         assert_eq!(args.requested_signatures.len(), 1);
         assert_eq!(
@@ -650,7 +650,7 @@ mod tests {
 
     // Tests the priority computation for dealings/support.
     #[test]
-    fn test_ecdsa_priority_fn_dealing_support() {
+    fn test_idkg_priority_fn_dealing_support() {
         let xnet_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
@@ -660,11 +660,11 @@ mod tests {
         let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
 
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaGossipMetrics::new(metrics_registry);
+        let metrics = IDkgGossipMetrics::new(metrics_registry);
 
         let mut requested_transcripts = BTreeSet::new();
         requested_transcripts.insert(transcript_id_fetch_1);
-        let args = EcdsaPriorityFnArgs {
+        let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
             requested_transcripts,
@@ -727,7 +727,7 @@ mod tests {
 
     // Tests the priority computation for sig shares.
     #[test]
-    fn test_ecdsa_priority_fn_sig_shares() {
+    fn test_idkg_priority_fn_sig_shares() {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let mut uid_generator = IDkgUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
@@ -752,11 +752,11 @@ mod tests {
         };
 
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaGossipMetrics::new(metrics_registry);
+        let metrics = IDkgGossipMetrics::new(metrics_registry);
 
         let mut requested_signatures = BTreeSet::new();
         requested_signatures.insert(request_id_fetch_1.clone());
-        let args = EcdsaPriorityFnArgs {
+        let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
             requested_transcripts: BTreeSet::new(),
@@ -809,7 +809,7 @@ mod tests {
 
     // Tests the priority computation for complaints/openings.
     #[test]
-    fn test_ecdsa_priority_fn_complaint_opening() {
+    fn test_idkg_priority_fn_complaint_opening() {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
         let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
@@ -818,13 +818,13 @@ mod tests {
         let transcript_id_fetch_3 = IDkgTranscriptId::new(subnet_id, 5, Height::from(80));
 
         let metrics_registry = MetricsRegistry::new();
-        let metrics = EcdsaGossipMetrics::new(metrics_registry);
+        let metrics = IDkgGossipMetrics::new(metrics_registry);
 
         let mut active_transcripts = BTreeSet::new();
         active_transcripts.insert(transcript_id_fetch_1);
         let mut requested_transcripts = BTreeSet::new();
         requested_transcripts.insert(transcript_id_fetch_3);
-        let args = EcdsaPriorityFnArgs {
+        let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
             requested_transcripts,
