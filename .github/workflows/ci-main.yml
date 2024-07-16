@@ -119,7 +119,7 @@ jobs:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
     runs-on:
-      labels: macOS
+      labels: darwin-6
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
