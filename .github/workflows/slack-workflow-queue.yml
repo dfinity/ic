@@ -40,7 +40,7 @@ jobs:
             fi
           done
 
-          if [ "$MESAGE" !=  "" ]; then
+          if [ "$MESSAGE" !=  "" ]; then
             MESSAGE=":alert: Workflows in Wait Queue [> ${WAIT_THRESHOLD_MINUTES} min]: ${MESSAGE}"
           fi
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
