@@ -45,7 +45,7 @@ jobs:
           done
 
           if [ "$MESSAGE" !=  "" ]; then
-            MESSAGE=":alert: Workflows in Wait Queue [> ${WAIT_THRESHOLD_MINUTES} min]: ${MESSAGE}"
+            MESSAGE=":alert: <Workflows in Wait Queue|https://github.com/${{ github.repository }}/actions?query=is%3Aqueued> [> ${WAIT_THRESHOLD_MINUTES} min]: ${MESSAGE}"
           fi
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
 
