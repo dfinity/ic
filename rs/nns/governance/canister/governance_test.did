@@ -2,6 +2,7 @@ type AccountIdentifier = record { hash : blob };
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   ManageNeuron : ManageNeuron;
+  InstallCode : InstallCode;
   CreateServiceNervousSystem : CreateServiceNervousSystem;
   ExecuteNnsFunction : ExecuteNnsFunction;
   RewardNodeProvider : RewardNodeProvider;
@@ -249,6 +250,13 @@ type InitialTokenDistribution = record {
   treasury_distribution : opt SwapDistribution;
   developer_distribution : opt DeveloperDistribution;
   swap_distribution : opt SwapDistribution;
+};
+type InstallCode = record {
+  arg : opt blob;
+  wasm_module : opt blob;
+  skip_stopping_before_installing : opt bool;
+  canister_id : opt principal;
+  install_mode : opt int32;
 };
 type KnownNeuron = record {
   id : opt NeuronId;

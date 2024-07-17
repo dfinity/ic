@@ -1485,7 +1485,7 @@ pub mod settle_neurons_fund_participation_request {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Principals {
-    #[prost(message, repeated, tag = "7")]
+    #[prost(message, repeated, tag = "1")]
     pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
 /// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is

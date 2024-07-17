@@ -44,10 +44,11 @@ use crate::{
         settle_neurons_fund_participation_response::NeuronsFundNeuron as NeuronsFundNeuronPb,
         swap_background_information, Ballot, CreateServiceNervousSystem, ExecuteNnsFunction,
         GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-        Governance as GovernanceProto, GovernanceError, KnownNeuron, ListKnownNeuronsResponse,
-        ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics,
-        Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron as NeuronProto, NeuronInfo, NeuronState,
+        NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Principals,
@@ -57,7 +58,10 @@ use crate::{
         Topic, UpdateNodeProvider, Vote, WaitForQuietState,
         XdrConversionRate as XdrConversionRatePb,
     },
-    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
+    proposals::{
+        call_canister::CallCanister,
+        create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
+    },
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -811,6 +815,12 @@ impl Proposal {
                 Action::SetSnsTokenSwapOpenTimeWindow(_)
                 | Action::OpenSnsTokenSwap(_)
                 | Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+                Action::InstallCode(install_code) => {
+                    // There should be a valid topic since the validation should be done when the
+                    // proposal is created. We avoid panicking here since `topic()` is called in a
+                    // lot of places.
+                    install_code.valid_topic().unwrap_or(Topic::Unspecified)
+                }
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -881,6 +891,7 @@ impl Action {
             Action::OpenSnsTokenSwap(_) => "ACTION_OPEN_SNS_TOKEN_SWAP",
             Action::CreateServiceNervousSystem(_) => "ACTION_CREATE_SERVICE_NERVOUS_SYSTEM",
             Action::ExecuteNnsFunction(_) => "ACTION_EXECUTE_NNS_FUNCTION",
+            Action::InstallCode(_) => "ACTION_CHANGE_CANISTER",
         }
     }
 
@@ -4410,6 +4421,9 @@ impl Governance {
             Action::OpenSnsTokenSwap(obsolete_action) => {
                 self.perform_obsolete_action(pid, obsolete_action);
             }
+            Action::InstallCode(install_code) => {
+                self.perform_install_code(pid, install_code).await;
+            }
         }
     }
 
@@ -4425,6 +4439,36 @@ impl Governance {
                 format!("Proposal action {:?} is obsolete.", obsolete_action),
             )),
         );
+    }
+
+    async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
+        let result = self.perform_call_canister(proposal_id, install_code).await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_call_canister(
+        &mut self,
+        proposal_id: u64,
+        call_canister: impl CallCanister,
+    ) -> Result<(), GovernanceError> {
+        let (canister_id, function) = call_canister.canister_and_function()?;
+        let payload = call_canister.payload()?;
+
+        let response = self
+            .env
+            .call_canister_method(canister_id, function, payload)
+            .await;
+
+        match response {
+            Ok(_) => Ok(()),
+            Err((code, message)) => Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Error calling external canister for proposal {}. Rejection code: {:?} message: {}",
+                    proposal_id, code, message
+                ),
+            )),
+        }
     }
 
     /// Always fails, because this type of proposal is obsolete.
@@ -4767,6 +4811,7 @@ impl Governance {
             Action::OpenSnsTokenSwap(obsolete_action) => {
                 Self::validate_obsolete_proposal_action(obsolete_action)
             }
+            Action::InstallCode(install_code) => install_code.validate(),
         }?;
 
         Ok(action.clone())
