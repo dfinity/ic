@@ -45,8 +45,6 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",
             # TODO node
             "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",
-            # TODO dre
-            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             # TODO node
             "//publish/binaries:nft-exporter": "/opt/ic/bin/nft-exporter:0755",
             # TODO node
@@ -55,6 +53,8 @@ def image_deps(mode, malicious = False):
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
             # TODO node
             "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",
+            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",           #Proxies, filters, and serves public node metrics.
+
 
             # additional libraries to install
             # TODO dre
