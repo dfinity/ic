@@ -41,7 +41,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 128,
     "links": [
         {
             "asDropdown": true,
@@ -215,7 +214,7 @@
                 "h": 8,
                 "w": 24,
                 "x": 0,
-                "y": 120
+                "y": 112
             },
             "id": 28,
             "options": {
@@ -492,7 +491,7 @@
     "timepicker": {},
     "timezone": "utc",
     "title": "State Manager API Calls",
-    "uid": "state-manager-api-calls",
-    "version": 2,
+    "uid": "em7Wo7dVz",
+    "version": 1,
     "weekStart": ""
 }
