@@ -6,7 +6,7 @@ use crate::{
         ConsensusCrypto,
     },
     dkg::payload_builder::create_payload as create_dkg_payload,
-    ecdsa::{self, metrics::EcdsaPayloadMetrics},
+    ecdsa::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
     find_lowest_ranked_proposals, get_block_hash_string, get_notarization_delay_settings,
@@ -70,7 +70,7 @@ pub struct BlockMaker {
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
-    ecdsa_payload_metrics: EcdsaPayloadMetrics,
+    idkg_payload_metrics: IDkgPayloadMetrics,
     pub(crate) log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
@@ -107,7 +107,7 @@ impl BlockMaker {
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
-            ecdsa_payload_metrics: EcdsaPayloadMetrics::new(metrics_registry),
+            idkg_payload_metrics: IDkgPayloadMetrics::new(metrics_registry),
             stable_registry_version_age,
         }
     }
@@ -321,13 +321,13 @@ impl BlockMaker {
                 dkg::Payload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
-                    let ecdsa_summary = ecdsa::create_summary_payload(
+                    let idkg_summary = ecdsa::create_summary_payload(
                         self.replica_config.subnet_id,
                         &*self.registry_client,
                         pool,
                         &context,
                         parent.as_ref(),
-                        Some(&self.ecdsa_payload_metrics),
+                        Some(&self.idkg_payload_metrics),
                         &self.log,
                     )
                     .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
@@ -336,7 +336,7 @@ impl BlockMaker {
 
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
-                        ecdsa: ecdsa_summary,
+                        ecdsa: idkg_summary,
                     })
                 }
                 dkg::Payload::Dealings(dealings) => {
@@ -376,7 +376,7 @@ impl BlockMaker {
                                 &*self.state_manager,
                                 &context,
                                 parent.as_ref(),
-                                &self.ecdsa_payload_metrics,
+                                &self.idkg_payload_metrics,
                                 &self.log,
                             )
                             .map_err(|err| {

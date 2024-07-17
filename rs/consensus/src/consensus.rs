@@ -41,7 +41,7 @@ use ic_interfaces::{
     ecdsa::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{ChangeSetProducer, PriorityFn, PriorityFnFactory},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -52,7 +52,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{ConsensusMessageId, PriorityFn},
+    artifact::ConsensusMessageId,
     consensus::{ConsensusMessage, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
@@ -588,9 +588,7 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusMessage, Pool>
-    for ConsensusGossipImpl
-{
+impl<Pool: ConsensusPool> PriorityFnFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
     /// Return a priority function that matches the given consensus pool.
     fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
         get_priority_function(pool, self.message_routing.expected_batch_height())

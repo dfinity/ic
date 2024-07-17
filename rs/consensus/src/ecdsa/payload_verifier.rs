@@ -21,12 +21,12 @@
 //! approach, similar to what we have been doing in verifying other kinds
 //! payloads.
 
-use super::payload_builder::EcdsaPayloadError;
-use super::pre_signer::EcdsaTranscriptBuilder;
-use super::signer::EcdsaSignatureBuilder;
+use super::payload_builder::IDkgPayloadError;
+use super::pre_signer::IDkgTranscriptBuilder;
+use super::signer::ThresholdSignatureBuilder;
 use super::utils::{
     block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
-    EcdsaBlockReaderImpl, InvalidChainCacheError,
+    IDkgBlockReaderImpl, InvalidChainCacheError,
 };
 use crate::ecdsa::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
@@ -46,7 +46,7 @@ use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        idkg::{self, ecdsa, schnorr, EcdsaBlockReader, TranscriptRef},
+        idkg::{self, ecdsa, schnorr, IDkgBlockReader, TranscriptRef},
         Block, BlockPayload, HasHeight,
     },
     crypto::canister_threshold_sig::{
@@ -70,7 +70,7 @@ use std::convert::TryFrom;
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
 /// Reasons for why an ecdsa payload might be invalid.
-pub(crate) enum EcdsaPayloadValidationFailure {
+pub(crate) enum IDkgPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
 }
@@ -81,10 +81,10 @@ pub(crate) enum EcdsaPayloadValidationFailure {
 #[allow(dead_code)]
 /// Possible failures which could occur while validating an ecdsa payload. They don't imply that the
 /// payload is invalid.
-pub(crate) enum InvalidEcdsaPayloadReason {
+pub(crate) enum InvalidIDkgPayloadReason {
     // wrapper of other errors
-    UnexpectedSummaryPayload(EcdsaPayloadError),
-    UnexpectedDataPayload(Option<EcdsaPayloadError>),
+    UnexpectedSummaryPayload(IDkgPayloadError),
+    UnexpectedDataPayload(Option<IDkgPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
     ThresholdEcdsaSigInputsError(ecdsa::ThresholdEcdsaSigInputsError),
     ThresholdSchnorrSigInputsError(schnorr::ThresholdSchnorrSigInputsError),
@@ -98,7 +98,7 @@ pub(crate) enum InvalidEcdsaPayloadReason {
     EcdsaConfigNotFound,
     SummaryPayloadMismatch,
     DataPayloadMismatch,
-    MissingEcdsaDataPayload,
+    MissingIDkgDataPayload,
     NewTranscriptRefWrongHeight(TranscriptRef, Height),
     NewTranscriptNotFound(IDkgTranscriptId),
     NewTranscriptMiscount(u64),
@@ -111,68 +111,68 @@ pub(crate) enum InvalidEcdsaPayloadReason {
     DecodingError(String),
 }
 
-impl From<InvalidEcdsaPayloadReason> for EcdsaValidationError {
-    fn from(err: InvalidEcdsaPayloadReason) -> Self {
+impl From<InvalidIDkgPayloadReason> for IDkgValidationError {
+    fn from(err: InvalidIDkgPayloadReason) -> Self {
         ValidationError::InvalidArtifact(err)
     }
 }
 
-impl From<EcdsaPayloadValidationFailure> for EcdsaValidationError {
-    fn from(err: EcdsaPayloadValidationFailure) -> Self {
+impl From<IDkgPayloadValidationFailure> for IDkgValidationError {
+    fn from(err: IDkgPayloadValidationFailure) -> Self {
         ValidationError::ValidationFailed(err)
     }
 }
 
-impl From<InvalidChainCacheError> for InvalidEcdsaPayloadReason {
+impl From<InvalidChainCacheError> for InvalidIDkgPayloadReason {
     fn from(err: InvalidChainCacheError) -> Self {
-        InvalidEcdsaPayloadReason::InvalidChainCacheError(err)
+        InvalidIDkgPayloadReason::InvalidChainCacheError(err)
     }
 }
 
-impl From<ecdsa::ThresholdEcdsaSigInputsError> for InvalidEcdsaPayloadReason {
+impl From<ecdsa::ThresholdEcdsaSigInputsError> for InvalidIDkgPayloadReason {
     fn from(err: ecdsa::ThresholdEcdsaSigInputsError) -> Self {
-        InvalidEcdsaPayloadReason::ThresholdEcdsaSigInputsError(err)
+        InvalidIDkgPayloadReason::ThresholdEcdsaSigInputsError(err)
     }
 }
 
-impl From<schnorr::ThresholdSchnorrSigInputsError> for InvalidEcdsaPayloadReason {
+impl From<schnorr::ThresholdSchnorrSigInputsError> for InvalidIDkgPayloadReason {
     fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
-        InvalidEcdsaPayloadReason::ThresholdSchnorrSigInputsError(err)
+        InvalidIDkgPayloadReason::ThresholdSchnorrSigInputsError(err)
     }
 }
 
-impl From<idkg::TranscriptParamsError> for InvalidEcdsaPayloadReason {
+impl From<idkg::TranscriptParamsError> for InvalidIDkgPayloadReason {
     fn from(err: idkg::TranscriptParamsError) -> Self {
-        InvalidEcdsaPayloadReason::TranscriptParamsError(err)
+        InvalidIDkgPayloadReason::TranscriptParamsError(err)
     }
 }
 
-impl From<IDkgVerifyTranscriptError> for InvalidEcdsaPayloadReason {
+impl From<IDkgVerifyTranscriptError> for InvalidIDkgPayloadReason {
     fn from(err: IDkgVerifyTranscriptError) -> Self {
-        InvalidEcdsaPayloadReason::IDkgVerifyTranscriptError(err)
+        InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(err)
     }
 }
 
-impl From<IDkgVerifyInitialDealingsError> for InvalidEcdsaPayloadReason {
+impl From<IDkgVerifyInitialDealingsError> for InvalidIDkgPayloadReason {
     fn from(err: IDkgVerifyInitialDealingsError) -> Self {
-        InvalidEcdsaPayloadReason::IDkgVerifyInitialDealingsError(err)
+        InvalidIDkgPayloadReason::IDkgVerifyInitialDealingsError(err)
     }
 }
 
-impl From<RegistryClientError> for EcdsaPayloadValidationFailure {
+impl From<RegistryClientError> for IDkgPayloadValidationFailure {
     fn from(err: RegistryClientError) -> Self {
-        EcdsaPayloadValidationFailure::RegistryClientError(err)
+        IDkgPayloadValidationFailure::RegistryClientError(err)
     }
 }
 
-impl From<StateManagerError> for EcdsaPayloadValidationFailure {
+impl From<StateManagerError> for IDkgPayloadValidationFailure {
     fn from(err: StateManagerError) -> Self {
-        EcdsaPayloadValidationFailure::StateManagerError(err)
+        IDkgPayloadValidationFailure::StateManagerError(err)
     }
 }
 
-pub(crate) type EcdsaValidationError =
-    ValidationError<InvalidEcdsaPayloadReason, EcdsaPayloadValidationFailure>;
+pub(crate) type IDkgValidationError =
+    ValidationError<InvalidIDkgPayloadReason, IDkgPayloadValidationFailure>;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_payload(
@@ -185,7 +185,7 @@ pub(crate) fn validate_payload(
     parent_block: &Block,
     payload: &BlockPayload,
     metrics: HistogramVec,
-) -> ValidationResult<EcdsaValidationError> {
+) -> ValidationResult<IDkgValidationError> {
     if payload.is_summary() {
         timed_call(
             "verify_summary_payload",
@@ -231,18 +231,18 @@ fn validate_summary_payload(
     pool_reader: &PoolReader<'_>,
     context: &ValidationContext,
     parent_block: &Block,
-    summary_payload: Option<&idkg::EcdsaPayload>,
-) -> ValidationResult<EcdsaValidationError> {
+    summary_payload: Option<&idkg::IDkgPayload>,
+) -> ValidationResult<IDkgValidationError> {
     let height = parent_block.height().increment();
     let registry_version = pool_reader.registry_version(height).ok_or(
-        InvalidEcdsaPayloadReason::ConsensusRegistryVersionNotFound(height),
+        InvalidIDkgPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
     let chain_key_config =
         get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
-            .map_err(EcdsaPayloadValidationFailure::from)?;
+            .map_err(IDkgPayloadValidationFailure::from)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
-            return Err(InvalidEcdsaPayloadReason::EcdsaConfigNotFound.into());
+            return Err(InvalidIDkgPayloadReason::EcdsaConfigNotFound.into());
         } else {
             return Ok(());
         }
@@ -260,16 +260,16 @@ fn validate_summary_payload(
             if payload.as_ref() == summary_payload {
                 Ok(())
             } else {
-                Err(InvalidEcdsaPayloadReason::SummaryPayloadMismatch.into())
+                Err(InvalidIDkgPayloadReason::SummaryPayloadMismatch.into())
             }
         }
-        Err(EcdsaPayloadError::RegistryClientError(err)) => {
-            Err(EcdsaPayloadValidationFailure::RegistryClientError(err).into())
+        Err(IDkgPayloadError::RegistryClientError(err)) => {
+            Err(IDkgPayloadValidationFailure::RegistryClientError(err).into())
         }
-        Err(EcdsaPayloadError::StateManagerError(err)) => {
-            Err(EcdsaPayloadValidationFailure::StateManagerError(err).into())
+        Err(IDkgPayloadError::StateManagerError(err)) => {
+            Err(IDkgPayloadValidationFailure::StateManagerError(err).into())
         }
-        Err(err) => Err(InvalidEcdsaPayloadReason::UnexpectedSummaryPayload(err).into()),
+        Err(err) => Err(InvalidIDkgPayloadReason::UnexpectedSummaryPayload(err).into()),
     }
 }
 
@@ -283,12 +283,12 @@ fn validate_data_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
-    data_payload: Option<&idkg::EcdsaPayload>,
+    data_payload: Option<&idkg::IDkgPayload>,
     metrics: &HistogramVec,
-) -> ValidationResult<EcdsaValidationError> {
+) -> ValidationResult<IDkgValidationError> {
     if parent_block.payload.as_ref().as_ecdsa().is_none() {
         if data_payload.is_some() {
-            return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
+            return Err(InvalidIDkgPayloadReason::UnexpectedDataPayload(None).into());
         } else {
             return Ok(());
         }
@@ -299,30 +299,30 @@ fn validate_data_payload(
         match &block_payload.as_summary().ecdsa {
             None => {
                 if data_payload.is_some() {
-                    return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
+                    return Err(InvalidIDkgPayloadReason::UnexpectedDataPayload(None).into());
                 } else {
                     return Ok(());
                 }
             }
-            Some(ecdsa_summary) => {
+            Some(idkg_summary) => {
                 if data_payload.is_none() {
-                    return Err(InvalidEcdsaPayloadReason::MissingEcdsaDataPayload.into());
+                    return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
-                (ecdsa_summary.clone(), data_payload.as_ref().unwrap())
+                (idkg_summary.clone(), data_payload.as_ref().unwrap())
             }
         }
     } else {
         match &block_payload.as_data().ecdsa {
             None => {
                 if data_payload.is_some() {
-                    return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
+                    return Err(InvalidIDkgPayloadReason::UnexpectedDataPayload(None).into());
                 } else {
                     return Ok(());
                 }
             }
             Some(payload) => {
                 if data_payload.is_none() {
-                    return Err(InvalidEcdsaPayloadReason::MissingEcdsaDataPayload.into());
+                    return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
                 (payload.clone(), data_payload.as_ref().unwrap())
             }
@@ -338,8 +338,8 @@ fn validate_data_payload(
             )
         });
     let parent_chain = block_chain_cache(pool_reader, &summary_block, parent_block)
-        .map_err(InvalidEcdsaPayloadReason::from)?;
-    let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
+        .map_err(InvalidIDkgPayloadReason::from)?;
+    let block_reader = IDkgBlockReaderImpl::new(parent_chain);
     let curr_height = parent_block.height().increment();
 
     let transcripts = timed_call(
@@ -362,7 +362,7 @@ fn validate_data_payload(
     )?;
     let state = state_manager
         .get_state_at(context.certified_height)
-        .map_err(EcdsaPayloadValidationFailure::StateManagerError)?;
+        .map_err(IDkgPayloadValidationFailure::StateManagerError)?;
     let signatures = timed_call(
         "validate_new_signature_agreements",
         || {
@@ -383,7 +383,7 @@ fn validate_data_payload(
         signatures,
     };
 
-    let ecdsa_payload = create_data_payload_helper(
+    let idkg_payload = create_data_payload_helper(
         subnet_id,
         context,
         parent_block,
@@ -396,12 +396,12 @@ fn validate_data_payload(
         None,
         &ic_logger::replica_logger::no_op_logger(),
     )
-    .map_err(|err| InvalidEcdsaPayloadReason::UnexpectedDataPayload(Some(err)))?;
+    .map_err(|err| InvalidIDkgPayloadReason::UnexpectedDataPayload(Some(err)))?;
 
-    if ecdsa_payload.as_ref() == data_payload {
+    if idkg_payload.as_ref() == data_payload {
         Ok(())
     } else {
-        Err(InvalidEcdsaPayloadReason::DataPayloadMismatch.into())
+        Err(InvalidIDkgPayloadReason::DataPayloadMismatch.into())
     }
 }
 
@@ -411,7 +411,7 @@ struct CachedBuilder {
     signatures: BTreeMap<idkg::PseudoRandomId, CombinedSignature>,
 }
 
-impl EcdsaTranscriptBuilder for CachedBuilder {
+impl IDkgTranscriptBuilder for CachedBuilder {
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         self.transcripts.get(&transcript_id).cloned()
     }
@@ -424,7 +424,7 @@ impl EcdsaTranscriptBuilder for CachedBuilder {
     }
 }
 
-impl EcdsaSignatureBuilder for CachedBuilder {
+impl ThresholdSignatureBuilder for CachedBuilder {
     fn get_completed_signature(
         &self,
         context: &SignWithThresholdContext,
@@ -442,12 +442,12 @@ impl EcdsaSignatureBuilder for CachedBuilder {
 // in prev_payload resolve correctly. So only new references need to be checked.
 fn validate_transcript_refs(
     crypto: &dyn ConsensusCrypto,
-    block_reader: &dyn EcdsaBlockReader,
-    prev_payload: &idkg::EcdsaPayload,
-    curr_payload: &idkg::EcdsaPayload,
+    block_reader: &dyn IDkgBlockReader,
+    prev_payload: &idkg::IDkgPayload,
+    curr_payload: &idkg::IDkgPayload,
     curr_height: Height,
-) -> Result<BTreeMap<IDkgTranscriptId, IDkgTranscript>, EcdsaValidationError> {
-    use InvalidEcdsaPayloadReason::*;
+) -> Result<BTreeMap<IDkgTranscriptId, IDkgTranscript>, IDkgValidationError> {
+    use InvalidIDkgPayloadReason::*;
     let mut count = 0;
     let idkg_transcripts = &curr_payload.idkg_transcripts;
     let prev_configs = prev_payload
@@ -486,11 +486,11 @@ fn validate_transcript_refs(
 
 fn validate_reshare_dealings(
     crypto: &dyn ConsensusCrypto,
-    block_reader: &dyn EcdsaBlockReader,
-    prev_payload: &idkg::EcdsaPayload,
-    curr_payload: &idkg::EcdsaPayload,
-) -> Result<BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>, EcdsaValidationError> {
-    use InvalidEcdsaPayloadReason::*;
+    block_reader: &dyn IDkgBlockReader,
+    prev_payload: &idkg::IDkgPayload,
+    curr_payload: &idkg::IDkgPayload,
+) -> Result<BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>, IDkgValidationError> {
+    use InvalidIDkgPayloadReason::*;
     let mut new_reshare_agreement = BTreeMap::new();
     for (request, dealings) in curr_payload.xnet_reshare_agreements.iter() {
         if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings {
@@ -510,21 +510,21 @@ fn validate_reshare_dealings(
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
                     let dealings_response = ComputeInitialIDkgDealingsResponse::decode(data)
                         .map_err(|err| {
-                            InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
+                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
                     let transcript_id = config.as_ref().transcript_id;
                     let param = config
                         .as_ref()
                         .translate(block_reader)
-                        .map_err(InvalidEcdsaPayloadReason::from)?;
+                        .map_err(InvalidIDkgPayloadReason::from)?;
                     let initial_dealings =
                         InitialIDkgDealings::try_from(&dealings_response.initial_dkg_dealings)
                             .map_err(|err| {
-                                InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
+                                InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                             })?;
                     crypto
                         .verify_initial_dealings(&param, &initial_dealings)
-                        .map_err(InvalidEcdsaPayloadReason::from)?;
+                        .map_err(InvalidIDkgPayloadReason::from)?;
                     new_dealings.insert(transcript_id, initial_dealings.dealings().clone());
                 }
             } else {
@@ -539,12 +539,12 @@ fn validate_reshare_dealings(
 // New signatures are those that are Unreported in the curr_payload and not in prev_payload.
 fn validate_new_signature_agreements(
     crypto: &dyn ConsensusCrypto,
-    block_reader: &dyn EcdsaBlockReader,
+    block_reader: &dyn IDkgBlockReader,
     state: &ReplicatedState,
-    prev_payload: &idkg::EcdsaPayload,
-    curr_payload: &idkg::EcdsaPayload,
-) -> Result<BTreeMap<idkg::PseudoRandomId, CombinedSignature>, EcdsaValidationError> {
-    use InvalidEcdsaPayloadReason::*;
+    prev_payload: &idkg::IDkgPayload,
+    curr_payload: &idkg::IDkgPayload,
+) -> Result<BTreeMap<idkg::PseudoRandomId, CombinedSignature>, IDkgValidationError> {
+    use InvalidIDkgPayloadReason::*;
     let mut new_signatures = BTreeMap::new();
     let contexts = state.signature_request_contexts();
     let context_map = contexts
@@ -555,22 +555,20 @@ fn validate_new_signature_agreements(
         if let idkg::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.payload {
                 if prev_payload.signature_agreements.contains_key(random_id) {
-                    return Err(
-                        InvalidEcdsaPayloadReason::NewSignatureUnexpected(*random_id).into(),
-                    );
+                    return Err(InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into());
                 }
                 let context = context_map.get(random_id).ok_or(
-                    InvalidEcdsaPayloadReason::NewSignatureMissingContext(*random_id),
+                    InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
                 let (_, input_ref) = build_signature_inputs(context, block_reader)
-                    .map_err(InvalidEcdsaPayloadReason::NewSignatureBuildInputsError)?;
+                    .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
                 match input_ref {
                     ThresholdSigInputsRef::Ecdsa(input_ref) => {
                         let input = input_ref
                             .translate(block_reader)
-                            .map_err(InvalidEcdsaPayloadReason::from)?;
+                            .map_err(InvalidIDkgPayloadReason::from)?;
                         let reply = SignWithECDSAReply::decode(data).map_err(|err| {
-                            InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
+                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
                         let signature = ThresholdEcdsaCombinedSignature {
                             signature: reply.signature,
@@ -582,9 +580,9 @@ fn validate_new_signature_agreements(
                     ThresholdSigInputsRef::Schnorr(input_ref) => {
                         let input = input_ref
                             .translate(block_reader)
-                            .map_err(InvalidEcdsaPayloadReason::from)?;
+                            .map_err(InvalidIDkgPayloadReason::from)?;
                         let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
-                            InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
+                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
                         let signature = ThresholdSchnorrCombinedSignature {
                             signature: reply.signature,
@@ -649,8 +647,8 @@ mod test {
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
         let registry_version = env.newest_registry_version;
         let crypto = &CryptoReturningOk::default();
-        let mut block_reader = TestEcdsaBlockReader::new();
-        let mut prev_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let mut block_reader = TestIDkgBlockReader::new();
+        let mut prev_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let mut curr_payload = prev_payload.clone();
 
         // Empty payload verifies
@@ -681,7 +679,7 @@ mod test {
                 height_100
             ),
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewTranscriptMiscount(_)
+                InvalidIDkgPayloadReason::NewTranscriptMiscount(_)
             ))
         );
 
@@ -715,7 +713,7 @@ mod test {
                 Height::from(99),
             ),
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewTranscriptRefWrongHeight(_, _)
+                InvalidIDkgPayloadReason::NewTranscriptRefWrongHeight(_, _)
             ))
         );
 
@@ -733,7 +731,7 @@ mod test {
                 height_100
             ),
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewTranscriptNotFound(_)
+                InvalidIDkgPayloadReason::NewTranscriptNotFound(_)
             ))
         );
 
@@ -764,9 +762,9 @@ mod test {
         let crypto = &CryptoReturningOk::default();
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
 
-        let mut payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        let mut block_reader = TestEcdsaBlockReader::new();
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let mut payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let mut block_reader = TestIDkgBlockReader::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         let req_1 = create_reshare_request(key_id.clone(), 1, 1);
         let req_2 = create_reshare_request(key_id.clone(), 2, 2);
@@ -819,7 +817,7 @@ mod test {
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::XNetReshareRequestDisappeared(_)
+                InvalidIDkgPayloadReason::XNetReshareRequestDisappeared(_)
             ))
         );
 
@@ -849,7 +847,7 @@ mod test {
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::XNetReshareAgreementWithoutRequest(_)
+                InvalidIDkgPayloadReason::XNetReshareAgreementWithoutRequest(_)
             ))
         );
     }
@@ -868,15 +866,15 @@ mod test {
         let subnet_id = subnet_test_id(0);
         let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
         let crypto = &CryptoReturningOk::default();
-        let mut block_reader = TestEcdsaBlockReader::new();
+        let mut block_reader = TestIDkgBlockReader::new();
         let height = Height::from(1);
         let mut valid_keys = BTreeSet::new();
         valid_keys.insert(key_id.clone());
 
-        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        let pre_sig_id1 = ecdsa_payload.uid_generator.next_pre_signature_id();
-        let pre_sig_id2 = ecdsa_payload.uid_generator.next_pre_signature_id();
-        let pre_sig_id3 = ecdsa_payload.uid_generator.next_pre_signature_id();
+        let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let pre_sig_id1 = idkg_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id2 = idkg_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id3 = idkg_payload.uid_generator.next_pre_signature_id();
 
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
@@ -894,7 +892,7 @@ mod test {
             .collect::<Vec<_>>();
 
         let (key_transcript, key_transcript_ref) =
-            ecdsa_payload.generate_current_key(&key_id, &env, &mut rng);
+            idkg_payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
 
         // Add the pre-signatures and transcripts to block reader and payload
@@ -912,7 +910,7 @@ mod test {
 
         insert_test_sig_inputs(
             &mut block_reader,
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             [
                 (pre_sig_id1, sig_inputs[0].clone()),
                 (pre_sig_id2, sig_inputs[1].clone()),
@@ -921,7 +919,7 @@ mod test {
         );
 
         // Only the first context has a completed signature so far
-        let mut signature_builder = TestEcdsaSignatureBuilder::new();
+        let mut signature_builder = TestThresholdSignatureBuilder::new();
         signature_builder.signatures.insert(
             request_ids[0].clone(),
             CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
@@ -933,21 +931,21 @@ mod test {
             &signature_request_contexts,
             &signature_builder,
             None,
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             &valid_keys,
             None,
         );
         // First signature should now be in "unreported" agreement
-        assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
+        assert_eq!(idkg_payload.signature_agreements.len(), 1);
         assert_matches!(
-            ecdsa_payload
+            idkg_payload
                 .signature_agreements
                 .get(&request_ids[0].pseudo_random_id)
                 .unwrap(),
             CompletedSignature::Unreported(_)
         );
 
-        let prev_payload = ecdsa_payload.clone();
+        let prev_payload = idkg_payload.clone();
         // Now the second context has a completed signature as well
         signature_builder.signatures.insert(
             request_ids[1].clone(),
@@ -959,21 +957,21 @@ mod test {
             &signature_request_contexts,
             &signature_builder,
             None,
-            &mut ecdsa_payload,
+            &mut idkg_payload,
             &valid_keys,
             None,
         );
         // First signature should now be reported, second unreported.
-        assert_eq!(ecdsa_payload.signature_agreements.len(), 2);
+        assert_eq!(idkg_payload.signature_agreements.len(), 2);
         assert_matches!(
-            ecdsa_payload
+            idkg_payload
                 .signature_agreements
                 .get(&request_ids[0].pseudo_random_id)
                 .unwrap(),
             CompletedSignature::ReportedToExecution
         );
         assert_matches!(
-            ecdsa_payload
+            idkg_payload
                 .signature_agreements
                 .get(&request_ids[1].pseudo_random_id)
                 .unwrap(),
@@ -986,7 +984,7 @@ mod test {
             &block_reader,
             snapshot.get_state(),
             &prev_payload,
-            &ecdsa_payload,
+            &idkg_payload,
         )
         .unwrap();
         assert_eq!(res.len(), 1);
@@ -997,13 +995,13 @@ mod test {
             crypto,
             &block_reader,
             snapshot.get_state(),
-            &ecdsa_payload,
-            &ecdsa_payload,
+            &idkg_payload,
+            &idkg_payload,
         );
         assert_matches!(
             res,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewSignatureUnexpected(id)
+                InvalidIDkgPayloadReason::NewSignatureUnexpected(id)
             ))
             if id == request_ids[1].pseudo_random_id
         );
@@ -1021,9 +1019,9 @@ mod test {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
-        let mut block_reader = TestEcdsaBlockReader::new();
+        let mut block_reader = TestIDkgBlockReader::new();
 
-        let mut prev_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let mut prev_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id2 = prev_payload.uid_generator.next_pre_signature_id();
 
@@ -1049,9 +1047,9 @@ mod test {
             ));
 
         // Insert agreement for incomplete context
-        let mut ecdsa_payload_incomplete_context =
-            empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        ecdsa_payload_incomplete_context
+        let mut idkg_payload_incomplete_context =
+            empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        idkg_payload_incomplete_context
             .signature_agreements
             .insert([1; 32], fake_response.clone());
         let res = validate_new_signature_agreements(
@@ -1059,20 +1057,20 @@ mod test {
             &block_reader,
             snapshot.get_state(),
             &prev_payload,
-            &ecdsa_payload_incomplete_context,
+            &idkg_payload_incomplete_context,
         );
         assert_matches!(
             res,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewSignatureBuildInputsError(
+                InvalidIDkgPayloadReason::NewSignatureBuildInputsError(
                     BuildSignatureInputsError::MissingPreSignature(_)
                 )
             ))
         );
 
         // Insert agreement for context matched with pre-signature of different scheme
-        let mut ecdsa_payload_mismatched_context =
-            empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let mut idkg_payload_mismatched_context =
+            empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let wrong_key_id = match key_id {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
@@ -1082,10 +1080,10 @@ mod test {
         // Add a pre-signature for the "wrong_key_id"
         insert_test_sig_inputs(
             &mut block_reader,
-            &mut ecdsa_payload_mismatched_context,
+            &mut idkg_payload_mismatched_context,
             [(pre_sig_id2, create_sig_inputs(2, &wrong_key_id))],
         );
-        ecdsa_payload_mismatched_context
+        idkg_payload_mismatched_context
             .signature_agreements
             .insert([2; 32], fake_response.clone());
         let res = validate_new_signature_agreements(
@@ -1093,21 +1091,21 @@ mod test {
             &block_reader,
             snapshot.get_state(),
             &prev_payload,
-            &ecdsa_payload_mismatched_context,
+            &idkg_payload_mismatched_context,
         );
         assert_matches!(
             res,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewSignatureBuildInputsError(
+                InvalidIDkgPayloadReason::NewSignatureBuildInputsError(
                     BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
                 )
             ))
         );
 
         // Insert agreement for unknown context
-        let mut ecdsa_payload_missing_context =
-            empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        ecdsa_payload_missing_context
+        let mut idkg_payload_missing_context =
+            empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        idkg_payload_missing_context
             .signature_agreements
             .insert(fake_context.pseudo_random_id, fake_response);
         let res = validate_new_signature_agreements(
@@ -1115,12 +1113,12 @@ mod test {
             &block_reader,
             snapshot.get_state(),
             &prev_payload,
-            &ecdsa_payload_missing_context,
+            &idkg_payload_missing_context,
         );
         assert_matches!(
             res,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewSignatureMissingContext(_)
+                InvalidIDkgPayloadReason::NewSignatureMissingContext(_)
             ))
         );
     }
@@ -1135,11 +1133,11 @@ mod test {
         let registry_version = env.newest_registry_version;
         let algorithm_id = AlgorithmId::ThresholdEcdsaSecp256k1;
         let crypto = &CryptoReturningOk::default();
-        let mut block_reader = TestEcdsaBlockReader::new();
+        let mut block_reader = TestIDkgBlockReader::new();
         let key_id = fake_ecdsa_key_id();
         let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
         let mut prev_payload =
-            empty_ecdsa_payload_with_key_ids(subnet_id, vec![master_public_key_id.clone()]);
+            empty_idkg_payload_with_key_ids(subnet_id, vec![master_public_key_id.clone()]);
         let mut curr_payload = prev_payload.clone();
 
         // Add a unmasked transcript
@@ -1220,7 +1218,7 @@ mod test {
         assert_matches!(
             error,
             ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewTranscriptRefWrongHeight(_, _)
+                InvalidIDkgPayloadReason::NewTranscriptRefWrongHeight(_, _)
             )
         );
     }

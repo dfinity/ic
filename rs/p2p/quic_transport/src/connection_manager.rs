@@ -46,9 +46,11 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use quinn::{
-    AsyncUdpSocket, ConnectError, Connecting, Connection, ConnectionError, Endpoint,
-    EndpointConfig, VarInt,
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
+    VarInt,
 };
+use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
@@ -223,7 +225,9 @@ pub(crate) fn start_connection_manager(
     transport_config.max_concurrent_bidi_streams(VarInt::from_u32(1_000));
     transport_config.max_concurrent_uni_streams(VarInt::from_u32(1_000));
     let transport_config = Arc::new(transport_config);
-    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
+        QuicServerConfig::try_from(rustls_server_config).unwrap(),
+    ));
     server_config.transport_config(transport_config.clone());
 
     // Start endpoint
@@ -273,7 +277,7 @@ pub(crate) fn start_connection_manager(
         Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
             endpoint_config,
             Some(server_config),
-            async_udp_socket,
+            Arc::new(async_udp_socket),
             Arc::new(quinn::TokioRuntime),
         )
         .expect("Failed to create endpoint"),
@@ -321,9 +325,9 @@ impl ConnectionManager {
                 Ok(()) = self.watcher.changed() => {
                     self.handle_topology_change();
                 },
-                connecting = self.endpoint.accept() => {
-                    if let Some(connecting) = connecting {
-                        self.handle_inbound(connecting);
+                incoming = self.endpoint.accept() => {
+                    if let Some(incoming) = incoming {
+                        self.handle_inbound(incoming);
                     } else {
                         error!(self.log, "Quic endpoint closed. Stopping transport.");
                         // Endpoint is closed. This indicates NOT graceful shutdown.
@@ -412,8 +416,9 @@ impl ConnectionManager {
             .server_config(subnet_nodes, self.topology.latest_registry_version())
         {
             Ok(rustls_server_config) => {
+                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).unwrap();
                 let mut server_config =
-                    quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
+                    quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
                 server_config.transport_config(self.transport_config.clone());
                 self.endpoint.set_server_config(Some(server_config));
             }
@@ -489,15 +494,17 @@ impl ConnectionManager {
             .get_addr(&peer_id)
             .expect("Just checked this conditions");
         let endpoint = self.endpoint.clone();
-        let client_config = self
+        let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
-            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause });
+            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
+            .unwrap();
         let transport_config = self.transport_config.clone();
         let conn_fut = async move {
-            let mut quinn_client_config = quinn::ClientConfig::new(Arc::new(client_config?));
-            quinn_client_config.transport_config(transport_config);
-            let connecting = endpoint.connect_with(quinn_client_config, addr, "irrelevant");
+            let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
+            let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
+            client_config.transport_config(transport_config);
+            let connecting = endpoint.connect_with(client_config, addr, "irrelevant");
             let established = connecting
                 .map_err(|cause| ConnectionEstablishError::ConnectError { peer_id, cause })?
                 .await
@@ -600,12 +607,12 @@ impl ConnectionManager {
         };
     }
 
-    fn handle_inbound(&mut self, connecting: Connecting) {
+    fn handle_inbound(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
         let conn_fut = async move {
             let established =
-                connecting
+                incoming
                     .await
                     .map_err(|cause| ConnectionEstablishError::ConnectionError {
                         peer_id: None,
@@ -615,7 +622,7 @@ impl ConnectionManager {
             let rustls_certs = established
                 .peer_identity()
                 .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
-                .downcast::<Vec<rustls::Certificate>>()
+                .downcast::<Vec<CertificateDer>>()
                 .unwrap();
             let rustls_cert =
                 rustls_certs
@@ -675,6 +682,8 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 send.finish()
+                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
+                send.stopped()
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 let data = recv
@@ -707,6 +716,8 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 send.finish()
+                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
+                send.stopped()
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
             }

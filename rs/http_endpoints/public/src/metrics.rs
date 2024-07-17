@@ -61,6 +61,7 @@ pub struct HttpHandlerMetrics {
     pub ingress_watcher_duplicate_requests_total: IntCounter,
     pub ingress_watcher_subscription_latency_duration_seconds: Histogram,
     pub ingress_watcher_wait_for_certification_duration_seconds: Histogram,
+    pub ingress_watcher_messages_completed_execution_channel_capacity: IntGauge,
 
     // Call v3 handler metrics
     pub call_v3_early_response_trigger_total: IntCounterVec,
@@ -162,6 +163,10 @@ impl HttpHandlerMetrics {
                 "The duration the call v3 handler waits for subscribing to a message. I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
                 // 0.1ms - 500ms
                 decimal_buckets(-4, -1),
+            ),
+            ingress_watcher_messages_completed_execution_channel_capacity: metrics_registry.int_gauge(
+                "replica_http_ingress_watcher_messages_completed_execution_channel_capacity",
+                "The capacity of the channel that holds messages that have completed execution."
             ),
             ingress_watcher_wait_for_certification_duration_seconds: metrics_registry.histogram(
                 "replica_http_ingress_watcher_wait_for_certification_duration_seconds",

@@ -48,10 +48,10 @@ use ic_nns_governance::pb::v1::{
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     proposal::{self, Action},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, ListNeurons, ListNeuronsResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
-    RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCode, ListNeurons,
+    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal,
+    ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -1031,8 +1031,17 @@ pub fn nns_propose_upgrade_nns_canister(
     target_canister_id: CanisterId,
     wasm_module: Vec<u8>,
     module_arg: Vec<u8>,
+    use_proposal_action: bool,
 ) -> ProposalId {
-    let action = if target_canister_id != ROOT_CANISTER_ID {
+    let action = if use_proposal_action {
+        Some(proposal::Action::InstallCode(InstallCode {
+            canister_id: Some(target_canister_id.get()),
+            install_mode: Some(3),
+            wasm_module: Some(wasm_module),
+            arg: Some(module_arg),
+            skip_stopping_before_installing: None,
+        }))
+    } else if target_canister_id != ROOT_CANISTER_ID {
         let payload = ChangeCanisterRequest::new(
             true, // stop_before_installing,
             CanisterInstallMode::Upgrade,
@@ -1112,7 +1121,7 @@ pub fn wait_for_canister_upgrade_to_succeed(
     for i in 0..25 {
         state_machine.tick();
 
-        // Fetch status of governance.
+        // Fetch status of the canister being upgraded.
         let status_result = get_canister_status(
             state_machine,
             controller_principal_id,

@@ -70,13 +70,13 @@ impl WasmCompilerProxy {
             .map_err(|e| unexpected(&format!("Failed to create a socket: {}", e)))?;
         use std::os::unix::io::AsRawFd;
 
-        launcher
+        let _ignore = launcher
             .launch_compiler(crate::protocol::launchersvc::LaunchCompilerRequest {
                 exec_path: exec_path.to_string(),
                 argv: argv.to_vec(),
                 socket: socket_b.as_raw_fd(),
             })
-            .on_completion(|_| ());
+            .sync();
 
         let socket_a = Arc::new(socket_a);
         let send_worker =

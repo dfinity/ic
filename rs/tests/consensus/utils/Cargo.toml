@@ -1,0 +1,10 @@
+[package]
+name = "ic_consensus_system_test_utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-system-test-driver = { path = "../../driver" }

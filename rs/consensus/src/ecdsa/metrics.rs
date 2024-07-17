@@ -5,11 +5,11 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
 };
-use ic_types::consensus::idkg::{EcdsaPayload, HasMasterPublicKeyId};
+use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgPayload};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 
-pub const ECDSA_KEY_ID_LABEL: &str = "key_id";
+pub const KEY_ID_LABEL: &str = "key_id";
 
 pub(crate) const CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING: &str = "ecdsa_key_transcript_missing";
 pub(crate) const CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS: &str =
@@ -69,13 +69,13 @@ impl EcdsaGossipMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaPreSignerMetrics {
+pub struct IDkgPreSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub pre_sign_metrics: IntCounterVec,
     pub pre_sign_errors: IntCounterVec,
 }
 
-impl EcdsaPreSignerMetrics {
+impl IDkgPreSignerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(
@@ -109,13 +109,13 @@ impl EcdsaPreSignerMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaSignerMetrics {
+pub struct ThresholdSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub sign_metrics: IntCounterVec,
     pub sign_errors: IntCounterVec,
 }
 
-impl EcdsaSignerMetrics {
+impl ThresholdSignerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(
@@ -147,7 +147,7 @@ impl EcdsaSignerMetrics {
     }
 }
 
-pub(crate) struct EcdsaPayloadMetrics {
+pub(crate) struct IDkgPayloadMetrics {
     payload_metrics: IntGaugeVec,
     payload_errors: IntCounterVec,
     transcript_builder_metrics: IntCounterVec,
@@ -157,17 +157,17 @@ pub(crate) struct EcdsaPayloadMetrics {
     pub(crate) critical_error_ecdsa_key_transcript_missing: IntCounter,
 }
 
-impl EcdsaPayloadMetrics {
+impl IDkgPayloadMetrics {
     pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             payload_metrics: metrics_registry.int_gauge_vec(
-                "ecdsa_payload_metrics",
-                "ECDSA payload related metrics",
-                &["type", ECDSA_KEY_ID_LABEL],
+                "idkg_payload_metrics",
+                "IDKG payload related metrics",
+                &["type", KEY_ID_LABEL],
             ),
             payload_errors: metrics_registry.int_counter_vec(
-                "ecdsa_payload_errors",
-                "ECDSA payload related errors",
+                "idkg_payload_errors",
+                "IDKG payload related errors",
                 &["type"],
             ),
             transcript_builder_metrics: metrics_registry.int_counter_vec(
@@ -193,7 +193,7 @@ impl EcdsaPayloadMetrics {
         }
     }
 
-    pub(crate) fn report(&self, payload: &EcdsaPayload) {
+    pub(crate) fn report(&self, payload: &IDkgPayload) {
         let expected_keys = expected_keys(payload);
 
         self.payload_metrics_set_without_key_id_label(
@@ -221,11 +221,6 @@ impl EcdsaPayloadMetrics {
         self.payload_metrics_set(
             "xnet_reshare_agreements",
             count_by_master_public_key_id(payload.xnet_reshare_agreements.keys(), &expected_keys),
-        );
-        self.payload_metrics_set_without_key_id_label("payload_layout_multiple_keys", 1);
-        self.payload_metrics_set_without_key_id_label(
-            "payload_layout_generalized_pre_signatures",
-            1,
         );
         self.payload_metrics_set_without_key_id_label(
             "key_transcripts",
@@ -325,7 +320,7 @@ impl IDkgComplaintMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaTranscriptMetrics {
+pub struct IDkgTranscriptMetrics {
     pub active_transcripts: IntGauge,
     pub support_validation_duration: HistogramVec,
     pub support_validation_total_duration: HistogramVec,
@@ -336,7 +331,7 @@ pub struct EcdsaTranscriptMetrics {
     pub transcript_e2e_latency: HistogramVec,
 }
 
-impl EcdsaTranscriptMetrics {
+impl IDkgTranscriptMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             active_transcripts: metrics_registry
@@ -388,11 +383,11 @@ impl EcdsaTranscriptMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaPreSignatureMetrics {
+pub struct IDkgPreSignatureMetrics {
     pub pre_signature_e2e_latency: HistogramVec,
 }
 
-impl EcdsaPreSignatureMetrics {
+impl IDkgPreSignatureMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             pre_signature_e2e_latency: metrics_registry.histogram_vec(
@@ -406,7 +401,7 @@ impl EcdsaPreSignatureMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaSignatureMetrics {
+pub struct ThresholdSignatureMetrics {
     pub active_signatures: IntGauge,
     pub sig_share_validation_duration: Histogram,
     pub sig_share_validation_total_duration: Histogram,
@@ -415,7 +410,7 @@ pub struct EcdsaSignatureMetrics {
     pub signature_e2e_latency: Histogram,
 }
 
-impl EcdsaSignatureMetrics {
+impl ThresholdSignatureMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             active_signatures: metrics_registry
@@ -454,7 +449,7 @@ pub fn key_id_label(key_id: Option<&MasterPublicKeyId>) -> String {
     key_id.map(ToString::to_string).unwrap_or_default()
 }
 
-pub fn expected_keys(payload: &EcdsaPayload) -> Vec<MasterPublicKeyId> {
+pub fn expected_keys(payload: &IDkgPayload) -> Vec<MasterPublicKeyId> {
     payload.key_transcripts.keys().cloned().collect()
 }
 

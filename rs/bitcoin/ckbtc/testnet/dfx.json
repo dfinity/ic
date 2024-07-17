@@ -1,6 +1,5 @@
 {
   "version": 1,
-  "dfx": "0.12.1",
   "canisters": {
     "minter": {
       "type": "custom",
@@ -14,27 +13,27 @@
     "ledger": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm.gz",
       "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
       "shrink": false
     },
     "archive": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/archive:archive_canister"
+        "bazel build //rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm.gz",
       "candid": "../../../rosetta-api/icrc1/archive/archive.did",
       "shrink": false
     },
     "index": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister"
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister.wasm",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister.wasm.gz",
       "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
       "shrink": false
     },
