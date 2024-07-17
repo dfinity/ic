@@ -264,6 +264,29 @@ impl From<RawSubnetId> for Principal {
     }
 }
 
+#[derive(
+    Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
+pub struct RawNodeId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub node_id: Vec<u8>,
+}
+
+impl From<RawNodeId> for Principal {
+    fn from(val: RawNodeId) -> Self {
+        Principal::from_slice(&val.node_id)
+    }
+}
+
+impl From<Principal> for RawNodeId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            node_id: principal.as_slice().to_vec(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct RawVerifyCanisterSigArg {
     #[serde(deserialize_with = "base64::deserialize")]
@@ -624,8 +647,8 @@ pub struct SubnetConfig {
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Number of nodes in the subnet.
-    pub size: u64,
+    /// Node ids of nodes in the subnet.
+    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }
