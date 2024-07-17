@@ -41,24 +41,17 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",                 # May be used for inspecting and recovering the registry.
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",                 # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",               # Required for performing subnet recoveries on the node directly.
-            # TODO crypto, node
-            "//publish/binaries:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",
-            # TODO node
-            "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",
-            # TODO node
-            "//publish/binaries:nft-exporter": "/opt/ic/bin/nft-exporter:0755",
-            # TODO node
-            "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
-            # TODO node
-            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
-            # TODO node
-            "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",
-            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",           #Proxies, filters, and serves public node metrics.
-
+            
+            "//publish/binaries:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",               # TODO crypto, node
+            "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",             # TODO node
+            "//publish/binaries:nft-exporter": "/opt/ic/bin/nft-exporter:0755",             # TODO node
+            "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",               # TODO node
+            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",                                # TODO node
+            "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",                            # TODO node
+            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",           # Proxies, filters, and serves public node metrics.
 
             # additional libraries to install
-            # TODO dre
-            "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
+            "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",   # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
         },
 
         # Set various configuration values
