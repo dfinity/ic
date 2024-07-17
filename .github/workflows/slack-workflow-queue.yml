@@ -39,6 +39,7 @@ jobs:
             fi
           done
           #echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
+          notification_message=$(echo "${notification_message}" | sed ':a;N;$!ba;s/\n/\\n/g')
           echo "message=${notification_message}" >> $GITHUB_OUTPUT
 
       - name: Post Slack Notification
