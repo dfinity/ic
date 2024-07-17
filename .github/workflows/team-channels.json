@@ -2,7 +2,7 @@
     "boundary-node": "eng-boundary-nodes",
     "Consensus": "eng-consensus",
     "cross-chain-team": "eng-cross-chain",
-    "dept-crypto-library": "eng-crypto-mr",
+    "dept-Crypto Library": "eng-crypto-mr",
     "DRE": "eng-release-bots",
     "execution": "eng-execution-mrs",
     "FinInt": "eng-fi-mrs",
