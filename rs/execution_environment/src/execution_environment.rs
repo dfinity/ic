@@ -2794,7 +2794,10 @@ impl ExecutionEnvironment {
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
-                args: ThresholdArguments::Schnorr(SchnorrArguments { key_id, message }),
+                args: ThresholdArguments::Schnorr(SchnorrArguments {
+                    key_id,
+                    message: Arc::new(message),
+                }),
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,

@@ -852,6 +852,8 @@ message Proposal {
     OpenSnsTokenSwap open_sns_token_swap = 23 [deprecated = true];
     // Create a new SNS.
     CreateServiceNervousSystem create_service_nervous_system = 24;
+    // Calls install_code for a canister (install, reinstall, or upgrade).
+    InstallCode install_code = 25;
   }
 }
 
@@ -2026,6 +2028,27 @@ message CreateServiceNervousSystem {
   GovernanceParameters governance_parameters = 10;
 }
 
+message InstallCode {
+  // The target canister ID to call install_code on. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  enum CanisterInstallMode {
+    CANISTER_INSTALL_MODE_UNSPECIFIED = 0;
+    CANISTER_INSTALL_MODE_INSTALL = 1;
+    CANISTER_INSTALL_MODE_REINSTALL = 2;
+    CANISTER_INSTALL_MODE_UPGRADE = 3;
+  }
+  // The install mode. Either install, reinstall, or upgrade. Required.
+  optional CanisterInstallMode install_mode = 2;
+
+  // The wasm module to install. required.
+  optional bytes wasm_module = 3;
+  // The arg to pass to the canister. Optional.
+  optional bytes arg = 4;
+  // Whether to skip stopping the canister before installing. Optional. Default is false.
+  optional bool skip_stopping_before_installing = 5;
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -2586,7 +2609,7 @@ message SettleNeuronsFundParticipationRequest {
 // A list of principals.
 // Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
 message Principals {
-  repeated ic_base_types.pb.v1.PrincipalId principals = 7;
+  repeated ic_base_types.pb.v1.PrincipalId principals = 1;
 }
 
 // Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is

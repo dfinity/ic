@@ -549,17 +549,18 @@ fn test_multiple_large_xnet_payloads() {
 #[test]
 fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
-    pic.set_time(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1234567890));
+    let unix_time_secs = 1630328630;
+    pic.set_time(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs));
     let time = pic.get_time();
     assert_eq!(
         time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1234567890)
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs)
     );
     pic.advance_time(std::time::Duration::from_secs(420));
     let time = pic.get_time();
     assert_eq!(
         time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1234567890 + 420)
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs + 420)
     );
 }
 
