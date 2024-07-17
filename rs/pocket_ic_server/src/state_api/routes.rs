@@ -43,12 +43,17 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
-use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::spawn;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::time::sleep;
-use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use tokio::{runtime::Runtime, sync::RwLock};
 use tracing::trace;
 
 type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
@@ -58,6 +63,10 @@ type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
 const RETRY_TIMEOUT_S: u64 = 300;
 
+// The timeout for executing an operation in auto progress mode.
+const AUTO_PROGRESS_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
+// The delay between consecutive attempts to read the graph in auto progress mode.
+const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive ticks in auto progress mode.
 const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
 
@@ -192,6 +201,44 @@ where
         .api_route("/", post(create_http_gateway))
         // Stops an HTTP gateway.
         .api_route("/:id/stop", post(stop_http_gateway))
+}
+
+async fn execute_operation(
+    api_state: Arc<ApiState>,
+    instance_id: InstanceId,
+    timeout: Duration,
+    op: impl Operation + Send + Sync + 'static,
+) -> Option<OpOut> {
+    let start = Instant::now();
+    let op = Arc::new(op);
+    loop {
+        match api_state
+            .update_with_timeout(op.clone(), instance_id, Some(timeout))
+            .await
+        {
+            Err(_) => break None,
+            Ok(update_reply) => match update_reply {
+                UpdateReply::Started { state_label, op_id } => {
+                    break loop {
+                        if let Some((_, op_out)) =
+                            ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
+                        {
+                            break Some(op_out);
+                        }
+                        sleep(READ_GRAPH_DELAY).await;
+                        if start.elapsed() > timeout {
+                            break None;
+                        }
+                    }
+                }
+                UpdateReply::Busy { .. } => {}
+                UpdateReply::Output(op_out) => break Some(op_out),
+            },
+        }
+        if start.elapsed() > timeout {
+            break None;
+        }
+    }
 }
 
 async fn run_operation<T: Serialize>(
@@ -1080,7 +1127,6 @@ pub async fn auto_progress(
         let (tx, mut rx) = mpsc::channel::<()>(1);
         let api_state_clone = api_state.clone();
         let handle = spawn(async move {
-            use std::time::Instant;
             let mut now = Instant::now();
             let mut advance_time = Duration::default();
             loop {
@@ -1088,18 +1134,19 @@ pub async fn auto_progress(
                 let old = std::mem::replace(&mut now, Instant::now());
                 advance_time += now.duration_since(old);
                 let op = AdvanceTimeAndTick(advance_time);
-                let retry_immediately =
-                    match run_operation::<()>(api_state_clone.clone(), id, None, op).await {
-                        (_, ApiResponse::Success(_)) | (_, ApiResponse::Started { .. }) => {
-                            advance_time = Duration::default();
-                            false
-                        }
-                        (_, ApiResponse::Busy { .. }) | (_, ApiResponse::Error { .. }) => true,
-                    };
-                let duration = start.elapsed();
-                if !retry_immediately {
-                    sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                if execute_operation(
+                    api_state_clone.clone(),
+                    id,
+                    AUTO_PROGRESS_OPERATION_TIMEOUT,
+                    op,
+                )
+                .await
+                .is_some()
+                {
+                    advance_time = Duration::default();
                 }
+                let duration = start.elapsed();
+                sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
                 match rx.try_recv() {
                     Ok(_) | Err(TryRecvError::Disconnected) => {
                         return;

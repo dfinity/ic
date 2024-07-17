@@ -653,35 +653,15 @@ impl ApiState {
         O: Operation + Send + Sync + 'static,
     {
         let sync_wait_time = sync_wait_time.unwrap_or(self.sync_wait_time);
-        Self::update_instances_with_timeout(
-            self.instances.clone(),
-            self.graph.clone(),
-            op,
-            instance_id,
-            sync_wait_time,
-        )
-        .await
-    }
-
-    /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
-    /// cases when clients want to enforce a long-running blocking call.
-    async fn update_instances_with_timeout<O>(
-        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
-        op: Arc<O>,
-        instance_id: InstanceId,
-        sync_wait_time: Duration,
-    ) -> UpdateResult
-    where
-        O: Operation + Send + Sync + 'static,
-    {
         let op_id = op.id().0;
         trace!(
             "update_with_timeout::start instance_id={} op_id={}",
             instance_id,
             op_id,
         );
+        let instances = self.instances.clone();
         let instances_cloned = instances.clone();
+        let graph = self.graph.clone();
         let instances_locked = instances_cloned.read().await;
         let (bg_task, busy_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)
