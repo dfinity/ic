@@ -590,7 +590,7 @@ impl ConsensusGossipImpl {
 
 impl<Pool: ConsensusPool> PriorityFnFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
     /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
+    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId> {
         get_priority_function(pool, self.message_routing.expected_batch_height())
     }
 }

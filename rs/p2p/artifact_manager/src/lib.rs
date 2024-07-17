@@ -447,9 +447,7 @@ mod tests {
         impl IdentifiableArtifact for DummyArtifact {
             const NAME: &'static str = "dummy";
             type Id = ();
-            type Attribute = ();
             fn id(&self) -> Self::Id {}
-            fn attribute(&self) -> Self::Attribute {}
         }
 
         impl PbArtifact for DummyArtifact {
@@ -457,8 +455,6 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessage = u64;
             type PbMessageError = Infallible;
-            type PbAttribute = ();
-            type PbAttributeError = Infallible;
         }
 
         struct DummyProcessor;
