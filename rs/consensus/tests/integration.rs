@@ -207,7 +207,7 @@ fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
             let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
-                    maliciously_corrupt_ecdsa_dealings: true,
+                    maliciously_corrupt_idkg_dealings: true,
                     ..MaliciousFlags::default()
                 };
                 malicious.push(malicious::with_malicious_flags(malicious_flags));

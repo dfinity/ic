@@ -124,7 +124,7 @@ impl From<&Block> for BlockStats {
             block_hash: get_block_hash_string(block),
             block_height: block.height().get(),
             block_context_certified_height: block.context.certified_height.get(),
-            idkg_stats: block.payload.as_ref().as_ecdsa().map(IDkgStats::from),
+            idkg_stats: block.payload.as_ref().as_idkg().map(IDkgStats::from),
         }
     }
 }

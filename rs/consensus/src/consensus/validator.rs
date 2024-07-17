@@ -14,7 +14,7 @@ use crate::{
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript,
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, get_oldest_ecdsa_state_registry_version, is_time_to_make_block,
+    find_lowest_ranked_proposals, get_oldest_idkg_state_registry_version, is_time_to_make_block,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
@@ -1541,13 +1541,13 @@ impl Validator {
         }
 
         let summary = block.payload.as_ref().as_summary();
-        let registry_version = if let Some(ecdsa) = summary.ecdsa.as_ref() {
+        let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
             // Should succeed as we already got the hash above
             let state = self
                 .state_manager
                 .get_state_at(height)
                 .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_ecdsa_state_registry_version(ecdsa, state.get_ref())
+            get_oldest_idkg_state_registry_version(idkg, state.get_ref())
         } else {
             None
         };
@@ -2065,18 +2065,18 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut ecdsa = empty_idkg_payload(subnet_test_id(0));
+            let mut idkg = empty_idkg_payload(subnet_test_id(0));
             // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id3, RegistryVersion::from(2));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
                     dkg,
-                    ecdsa: Some(ecdsa),
+                    idkg: Some(idkg),
                 }),
             );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
@@ -3413,7 +3413,7 @@ pub mod test {
                     ..BatchPayload::default()
                 },
                 dealings: dkg::Dealings::new_empty(Height::new(0)),
-                ecdsa: None,
+                idkg: None,
             }),
         );
         block.signature.signer = correct_signer;
@@ -3427,7 +3427,7 @@ pub mod test {
                     ..BatchPayload::default()
                 },
                 dealings: dkg::Dealings::new_empty(Height::new(0)),
-                ecdsa: None,
+                idkg: None,
             }),
         );
         block.update_content();

@@ -82,7 +82,7 @@ impl CombineSigSharesError {
 }
 
 pub(crate) trait ThresholdSigner: Send {
-    /// The on_state_change() called from the main ECDSA path.
+    /// The on_state_change() called from the main IDKG path.
     fn on_state_change(
         &self,
         idkg_pool: &dyn IDkgPool,
@@ -597,7 +597,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
 
 pub(crate) trait ThresholdSignatureBuilder {
     /// Returns the signature for the given context, if it can be successfully
-    /// built from the current sig shares in the ECDSA pool
+    /// built from the current sig shares in the IDKG pool
     fn get_completed_signature(
         &self,
         context: &SignWithThresholdContext,
@@ -988,7 +988,7 @@ mod tests {
             create_request_id(&mut uid_generator, height),
         );
 
-        // Set up the ECDSA pool. Pool has shares for requests 1, 2, 3.
+        // Set up the IDKG pool. Pool has shares for requests 1, 2, 3.
         // Only the share for request 1 is issued by us
         let shares = vec![
             create_signature_share(&key_id, NODE_1, id_1.clone()),
@@ -1429,7 +1429,7 @@ mod tests {
             }),
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A share from a node ahead of us (deferred)
         let message = create_signature_share(&key_id, NODE_2, id_1);
@@ -1532,7 +1532,7 @@ mod tests {
             }),
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A valid share for the first context
         let message = create_signature_share(&key_id, NODE_2, id_1);
@@ -1620,7 +1620,7 @@ mod tests {
             ],
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A share for the first incomplete context (deferred)
         let message = create_signature_share(&key_id, NODE_2, id_1);
@@ -1702,7 +1702,7 @@ mod tests {
 
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Validated pool has: {signature share 2, signer = NODE_2}
                 let share = create_signature_share(&key_id, NODE_2, id_2.clone());
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
