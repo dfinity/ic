@@ -222,11 +222,6 @@ impl IDkgPayloadMetrics {
             "xnet_reshare_agreements",
             count_by_master_public_key_id(payload.xnet_reshare_agreements.keys(), &expected_keys),
         );
-        self.payload_metrics_set_without_key_id_label("payload_layout_multiple_keys", 1);
-        self.payload_metrics_set_without_key_id_label(
-            "payload_layout_generalized_pre_signatures",
-            1,
-        );
         self.payload_metrics_set_without_key_id_label(
             "key_transcripts",
             payload.key_transcripts.len(),
