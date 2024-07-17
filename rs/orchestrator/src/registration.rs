@@ -665,7 +665,7 @@ fn process_ipv4_config(
 
 fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<Option<String>> {
     info!(log, "Reading domain name for registration");
-    if domain == "" {
+    if domain.is_empty() {
         return Ok(None);
     }
     if let Ok(parsed_domain) = domain_to_ascii_strict(domain) {
