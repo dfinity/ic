@@ -1665,7 +1665,7 @@ mod incompatible_token_type_upgrade {
         let ledger_id = env
             .install_canister(ledger_mainnet_u256_wasm(), default_init_args(), None)
             .unwrap();
-        transfer(&env, ledger_id, MINTER, account(1), 1_000_000);
+        transfer(&env, ledger_id, MINTER, account(1), FEE);
         let mut balance_1 = balance_of(&env, ledger_id, account(1));
         let mut big_amount = BigUint::ZERO;
         big_amount.set_bit(65, true);
