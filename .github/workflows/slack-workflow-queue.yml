@@ -46,6 +46,6 @@ jobs:
         if: steps.check.outputs.message != ''
         with:
           channel-id: markos-void
-          slack-message: "${{ steps.check.outputs.message }}"
+          slack-message: ${{ steps.check.outputs.message }}
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
