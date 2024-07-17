@@ -52,8 +52,8 @@ fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm, use_propo
 fn upgrade_canisters_by_proposal() {
     test_upgrade_canister(GOVERNANCE_CANISTER_ID, build_governance_wasm(), true);
     test_upgrade_canister(GOVERNANCE_CANISTER_ID, build_governance_wasm(), false);
-    // TODO(NNS1-3190): Test upgrading root with proposal action when it's supported.
     test_upgrade_canister(ROOT_CANISTER_ID, build_root_wasm(), false);
+    test_upgrade_canister(ROOT_CANISTER_ID, build_root_wasm(), true);
     test_upgrade_canister(LIFELINE_CANISTER_ID, build_lifeline_wasm(), true);
     test_upgrade_canister(LIFELINE_CANISTER_ID, build_lifeline_wasm(), false);
 }
