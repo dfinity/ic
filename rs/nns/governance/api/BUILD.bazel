@@ -7,6 +7,7 @@ BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/proto",
+    "//rs/nns/common",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/sns/root",
@@ -26,18 +27,10 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/common",
-    "//rs/nns/constants",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/init",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/common:common--test_feature",
-    "//rs/nns/constants:constants--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
-    "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ]
 
