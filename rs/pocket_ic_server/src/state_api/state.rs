@@ -1,7 +1,7 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-use crate::pocket_ic::{EffectivePrincipal, PocketIc};
+use crate::pocket_ic::{AdvanceTimeAndTick, EffectivePrincipal, PocketIc};
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
@@ -21,14 +21,23 @@ use std::{
     time::Duration,
 };
 use tokio::{
+    sync::mpsc::error::TryRecvError,
+    sync::mpsc::Receiver,
     sync::{mpsc, Mutex, RwLock},
     task::{spawn, spawn_blocking, JoinHandle},
-    time::{self},
+    time::{self, sleep, Instant},
 };
 use tracing::{error, info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
+
+// The timeout for executing an operation in auto progress mode.
+const AUTO_PROGRESS_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
+// The minimum delay between consecutive attempts to run an operation in auto progress mode.
+const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
+// The minimum delay between consecutive attempts to read the graph in auto progress mode.
+const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
 pub const STATE_LABEL_HASH_SIZE: usize = 32;
 
@@ -62,9 +71,9 @@ impl std::convert::TryFrom<Vec<u8>> for StateLabel {
     }
 }
 
-pub struct ProgressThread {
-    pub handle: JoinHandle<()>,
-    pub sender: mpsc::Sender<()>,
+struct ProgressThread {
+    handle: JoinHandle<()>,
+    sender: mpsc::Sender<()>,
 }
 
 /// The state of the PocketIC API.
@@ -315,7 +324,61 @@ pub trait HasStateLabel {
     fn get_state_label(&self) -> StateLabel;
 }
 
+fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
+    match rx.try_recv() {
+        Ok(_) | Err(TryRecvError::Disconnected) => true,
+        Err(TryRecvError::Empty) => false,
+    }
+}
+
 impl ApiState {
+    // Helper function for auto progress mode.
+    // Executes an operation to completion and returns its `OpOut`
+    // or `None` if the auto progress mode received a stop signal.
+    async fn execute_operation(
+        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+        instance_id: InstanceId,
+        op: impl Operation + Send + Sync + 'static,
+        rx: &mut Receiver<()>,
+    ) -> Option<OpOut> {
+        let op = Arc::new(op);
+        loop {
+            // It is safe to unwrap as there can only be an error if the instance does not exist
+            // and there cannot be a progress thread for a non-existing instance (progress threads
+            // are stopped before an instance is deleted).
+            match Self::update_instances_with_timeout(
+                instances.clone(),
+                graph.clone(),
+                op.clone(),
+                instance_id,
+                AUTO_PROGRESS_OPERATION_TIMEOUT,
+            )
+            .await
+            .unwrap()
+            {
+                UpdateReply::Started { state_label, op_id } => {
+                    break loop {
+                        sleep(READ_GRAPH_DELAY).await;
+                        if let Some((_, op_out)) =
+                            Self::read_result(graph.clone(), &state_label, &op_id)
+                        {
+                            break Some(op_out);
+                        }
+                        if received_stop_signal(rx) {
+                            break None;
+                        }
+                    }
+                }
+                UpdateReply::Busy { .. } => {}
+                UpdateReply::Output(op_out) => break Some(op_out),
+            };
+            if received_stop_signal(rx) {
+                break None;
+            }
+        }
+    }
+
     /// For polling:
     /// The client lib dispatches a long running operation and gets a Started {state_label, op_id}.
     /// It then polls on that via this state tree api function.
@@ -581,14 +644,39 @@ impl ApiState {
         }
     }
 
-    pub async fn auto_progress<F>(&self, instance_id: InstanceId, create_progress_thread: F)
-    where
-        F: FnOnce() -> ProgressThread,
-    {
+    pub async fn auto_progress(&self, instance_id: InstanceId) {
         let progress_threads = self.progress_threads.read().await;
         let mut progress_thread = progress_threads[instance_id].lock().await;
+        let instances = self.instances.clone();
+        let graph = self.graph.clone();
         if progress_thread.is_none() {
-            *progress_thread = Some(create_progress_thread());
+            let (tx, mut rx) = mpsc::channel::<()>(1);
+            let handle = spawn(async move {
+                let mut now = Instant::now();
+                loop {
+                    let start = Instant::now();
+                    let old = std::mem::replace(&mut now, Instant::now());
+                    let op = AdvanceTimeAndTick(now.duration_since(old));
+                    if Self::execute_operation(
+                        instances.clone(),
+                        graph.clone(),
+                        instance_id,
+                        op,
+                        &mut rx,
+                    )
+                    .await
+                    .is_none()
+                    {
+                        return;
+                    }
+                    let duration = start.elapsed();
+                    sleep(std::cmp::max(duration, MIN_OPERATION_DELAY)).await;
+                    if received_stop_signal(&mut rx) {
+                        return;
+                    }
+                }
+            });
+            *progress_thread = Some(ProgressThread { handle, sender: tx });
         }
     }
 
@@ -653,15 +741,35 @@ impl ApiState {
         O: Operation + Send + Sync + 'static,
     {
         let sync_wait_time = sync_wait_time.unwrap_or(self.sync_wait_time);
+        Self::update_instances_with_timeout(
+            self.instances.clone(),
+            self.graph.clone(),
+            op,
+            instance_id,
+            sync_wait_time,
+        )
+        .await
+    }
+
+    /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
+    /// cases when clients want to enforce a long-running blocking call.
+    async fn update_instances_with_timeout<O>(
+        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+        op: Arc<O>,
+        instance_id: InstanceId,
+        sync_wait_time: Duration,
+    ) -> UpdateResult
+    where
+        O: Operation + Send + Sync + 'static,
+    {
         let op_id = op.id().0;
         trace!(
             "update_with_timeout::start instance_id={} op_id={}",
             instance_id,
             op_id,
         );
-        let instances = self.instances.clone();
         let instances_cloned = instances.clone();
-        let graph = self.graph.clone();
         let instances_locked = instances_cloned.read().await;
         let (bg_task, busy_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)

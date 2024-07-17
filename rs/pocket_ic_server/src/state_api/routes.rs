@@ -6,12 +6,11 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AdvanceTimeAndTick, AwaitIngressMessage, CallRequest, DashboardRequest,
-    ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
-    PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest,
-    SubmitIngressMessage, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, DashboardRequest, ExecuteIngressMessage,
+    GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query,
+    QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    Tick,
 };
-use crate::state_api::state::ProgressThread;
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
 use aide::{
@@ -43,17 +42,8 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
-use std::{
-    collections::BTreeMap,
-    fs::File,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-use tokio::spawn;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::error::TryRecvError;
-use tokio::time::sleep;
-use tokio::{runtime::Runtime, sync::RwLock};
+use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tracing::trace;
 
 type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
@@ -62,13 +52,6 @@ type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
 const RETRY_TIMEOUT_S: u64 = 300;
-
-// The timeout for executing an operation in auto progress mode.
-const AUTO_PROGRESS_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
-// The delay between consecutive attempts to read the graph in auto progress mode.
-const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
-// The minimum delay between consecutive ticks in auto progress mode.
-const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
 
 #[derive(Clone)]
 pub struct AppState {
@@ -201,44 +184,6 @@ where
         .api_route("/", post(create_http_gateway))
         // Stops an HTTP gateway.
         .api_route("/:id/stop", post(stop_http_gateway))
-}
-
-async fn execute_operation(
-    api_state: Arc<ApiState>,
-    instance_id: InstanceId,
-    timeout: Duration,
-    op: impl Operation + Send + Sync + 'static,
-) -> Option<OpOut> {
-    let start = Instant::now();
-    let op = Arc::new(op);
-    loop {
-        match api_state
-            .update_with_timeout(op.clone(), instance_id, Some(timeout))
-            .await
-        {
-            Err(_) => break None,
-            Ok(update_reply) => match update_reply {
-                UpdateReply::Started { state_label, op_id } => {
-                    break loop {
-                        if let Some((_, op_out)) =
-                            ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
-                        {
-                            break Some(op_out);
-                        }
-                        sleep(READ_GRAPH_DELAY).await;
-                        if start.elapsed() > timeout {
-                            break None;
-                        }
-                    }
-                }
-                UpdateReply::Busy { .. } => {}
-                UpdateReply::Output(op_out) => break Some(op_out),
-            },
-        }
-        if start.elapsed() > timeout {
-            break None;
-        }
-    }
 }
 
 async fn run_operation<T: Serialize>(
@@ -1123,42 +1068,7 @@ pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    let create_progress_thread = || {
-        let (tx, mut rx) = mpsc::channel::<()>(1);
-        let api_state_clone = api_state.clone();
-        let handle = spawn(async move {
-            let mut now = Instant::now();
-            let mut advance_time = Duration::default();
-            loop {
-                let start = Instant::now();
-                let old = std::mem::replace(&mut now, Instant::now());
-                advance_time += now.duration_since(old);
-                let op = AdvanceTimeAndTick(advance_time);
-                if execute_operation(
-                    api_state_clone.clone(),
-                    id,
-                    AUTO_PROGRESS_OPERATION_TIMEOUT,
-                    op,
-                )
-                .await
-                .is_some()
-                {
-                    advance_time = Duration::default();
-                }
-                let duration = start.elapsed();
-                sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
-                match rx.try_recv() {
-                    Ok(_) | Err(TryRecvError::Disconnected) => {
-                        return;
-                    }
-                    Err(TryRecvError::Empty) => {}
-                }
-            }
-        });
-        ProgressThread { handle, sender: tx }
-    };
-
-    api_state.auto_progress(id, create_progress_thread).await;
+    api_state.auto_progress(id).await;
     (StatusCode::OK, Json(ApiResponse::Success(())))
 }
 
