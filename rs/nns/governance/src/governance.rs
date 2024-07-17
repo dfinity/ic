@@ -300,7 +300,7 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             controller: Some(neuron.controller),
-            hotkeys: Some(neuron.hotkeys.into()),
+            hotkeys: Some(Principals::from(neuron.hotkeys.clone())),
             is_capped: Some(neuron.is_capped),
             hotkey_principal: Some(neuron.controller.to_string()),
         }

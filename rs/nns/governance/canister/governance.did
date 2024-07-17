@@ -11,7 +11,7 @@ type Action = variant {
   SetDefaultFollowees : SetDefaultFollowees;
   RewardNodeProviders : RewardNodeProviders;
   ManageNetworkEconomics : NetworkEconomics;
-  ApproveGenesisKyc : Principals;
+  ApproveGenesisKyc : Principals_1;
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
 };
@@ -42,10 +42,12 @@ type CanisterSummary = record {
 };
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
+  hotkeys : opt Principals_1;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
 type CfParticipant = record {
+  controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
@@ -513,6 +515,7 @@ type Params = record {
 };
 type Percentage = record { basis_points : opt nat64 };
 type Principals = record { principals : vec principal };
+type Principals_1 = record { principals : vec principal };
 type Progress = variant { LastNeuronId : NeuronId };
 type Proposal = record {
   url : text;

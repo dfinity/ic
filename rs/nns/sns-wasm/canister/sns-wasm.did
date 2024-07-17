@@ -4,10 +4,12 @@ type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type Canister = record { id : opt principal };
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
+  hotkeys : opt Principals;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
 type CfParticipant = record {
+  controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
@@ -125,6 +127,7 @@ type PrettySnsVersion = record {
   governance_wasm_hash : text;
   index_wasm_hash : text;
 };
+type Principals = record { principals : vec principal };
 type Result = variant { Error : SnsWasmError; Hash : blob };
 type Result_1 = variant { Ok : Ok; Error : SnsWasmError };
 type SnsCanisterIds = record {
