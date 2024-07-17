@@ -28,7 +28,7 @@ jobs:
           WORKFLOWS_IN_QUEUE=$(echo $WORKFLOW_RUNS | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, run_started_at: .run_started_at}')
 
           set -x
-          MESSAGE=":alert: Workflows in Wait Queue (> ${WAIT_THRESHOLD_MINUTES} min): "
+          MESSAGE=":alert: Workflows in Wait Queue [> ${WAIT_THRESHOLD_MINUTES} min]: "
           for WORKFLOW in $(echo "${WORKFLOWS_IN_QUEUE}" | jq -r '.id'); do
             RUN_STARTED_AT=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .run_started_at")
             RUN_STARTED_TIME=$(date -d "$RUN_STARTED_AT" +%s)
