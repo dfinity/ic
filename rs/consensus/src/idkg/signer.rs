@@ -2095,7 +2095,7 @@ mod tests {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::Schnorr(SchnorrArguments {
                         key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
-                        message: message.clone(),
+                        message: Arc::new(message.clone()),
                     }),
                     pseudo_random_id: req_id.pseudo_random_id,
                     derivation_path: vec![],

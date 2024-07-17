@@ -95,7 +95,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
         }),
         MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
             key_id,
-            message: vec![1; 48],
+            message: Arc::new(vec![1; 48]),
         }),
     }
 }
@@ -313,7 +313,7 @@ impl From<&ThresholdSchnorrSigInputs> for TestSigInputs {
         }
         let sig_inputs_ref = ThresholdSchnorrSigInputsRef {
             derivation_path: inputs.derivation_path().clone(),
-            message: inputs.message().into(),
+            message: Arc::new(inputs.message().into()),
             nonce: *inputs.nonce(),
             presig_transcript_ref: PreSignatureTranscriptRef {
                 key_id: fake_schnorr_key_id(algorithm),
@@ -1321,7 +1321,7 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
             caller: PrincipalId::try_from(&vec![caller]).unwrap(),
             derivation_path: vec![],
         },
-        vec![0; 128],
+        Arc::new(vec![0; 128]),
         Randomness::from([0_u8; 32]),
         presig_transcript_ref,
     );
