@@ -1322,7 +1322,7 @@ fn canister_snapshots_after_split() {
     test.canister_update_controller(canister_id_2, controllers)
         .unwrap();
 
-    // The snapshots do not exists in the replicated state before the requests.
+    // The snapshots do not exist in the replicated state before the requests.
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1355,7 +1355,7 @@ fn canister_snapshots_after_split() {
     );
     test.execute_subnet_message();
 
-    // Verify the snapshots exists in the replicated state.
+    // Verify the snapshots exist in the replicated state.
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1385,7 +1385,7 @@ fn canister_snapshots_after_split() {
         .split(subnet_a, &routing_table, None)
         .unwrap();
 
-    // Restore consistency between stop canister calls tracked by canisters and subnet.
+    // Restore consistency between canister snapshots tracked by canisters and subnet.
     state_a.after_split();
 
     // Split subnet B.
@@ -1395,7 +1395,7 @@ fn canister_snapshots_after_split() {
         .split(subnet_b, &routing_table, None)
         .unwrap();
 
-    // Restore consistency between stop canister calls tracked by canisters and subnet.
+    // Restore consistency between canister snapshots tracked by canisters and subnet.
     state_b.after_split();
 
     // Splitting the original subnet into subnet A' and subnet B,
