@@ -154,8 +154,7 @@ jobs:
         # TODO: remove when we flakiness is resolved or when we move to hosted runners
         # settting to true to allow a job to pass when this step fails
         continue-on-error: true
-        # TODO: change back
-        # if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'true' || github.event_name == 'schedule'
+        if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'true' || github.event_name == 'schedule'
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"

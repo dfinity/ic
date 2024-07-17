@@ -27,7 +27,7 @@ jobs:
           workflows_in_queue=$(echo $workflow_runs | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, run_started_at: .run_started_at}')
 
           set -x
-          notification_message=""
+          notification_message=":alert: Workflows in Wait Queue (> ${WAIT_THRESHOLD_MINUTES} min): "
           for workflow in $(echo "${workflows_in_queue}" | jq -r '.id'); do
             run_started_at=$(echo "${workflows_in_queue}" | jq -r "select(.id == ${workflow}) | .run_started_at")
             run_started_time=$(date -d "$run_started_at" +%s)
@@ -35,7 +35,7 @@ jobs:
 
             if [ $time_in_queue -ge $WAIT_THRESHOLD_SECONDS ]; then
               workflow_url="https://github.com/${{ github.repository }}/actions/runs/${workflow}"
-              notification_message="${notification_message}\\nWorkflow <${workflow_url}|Run ${workflow}> in wait queue more than ${WAIT_THRESHOLD_MINUTES} minutes :alert:"
+              notification_message="${notification_message} <${workflow_url}|Run ${workflow}>"
             fi
           done
           #echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
