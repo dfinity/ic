@@ -1,10 +1,11 @@
 {
     "boundary-node": "eng-boundary-nodes",
     "Consensus": "eng-consensus",
+    "cross-chain-team": "eng-cross-chain",
     "dept-crypto-library": "eng-crypto-mr",
     "dre": "eng-release-bots",
     "execution": "eng-execution-mrs",
-    "finint": "eng-fi-mrs",
+    "FinInt": "eng-fi-mrs",
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",
     "ic-message-routing-owners": "eng-message-routing-mr",
@@ -15,6 +16,7 @@
     "nns-team": "eng-nns",
     "node": "eng-node",
     "platform-operations": "eng-platform-ops",
+    "pocket-ic": "pocket-ic",
     "Product Security": "eng-prodsec",
     "runtime": "runtime-code-reviews",
     "utopia": "eng-utopia"

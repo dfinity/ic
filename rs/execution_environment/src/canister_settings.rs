@@ -535,9 +535,12 @@ pub(crate) fn validate_canister_settings(
         .or(canister_reserved_balance_limit);
 
     if let Some(limit) = reserved_balance_limit {
-        // TODO(RUN-1001): return `ReservedCyclesLimitIsTooLow` once
-        // the replica with that error type rolls out successfully.
-        if canister_reserved_balance + reservation_cycles > limit {
+        if canister_reserved_balance > limit {
+            return Err(CanisterManagerError::ReservedCyclesLimitIsTooLow {
+                cycles: canister_reserved_balance,
+                limit,
+            });
+        } else if canister_reserved_balance + reservation_cycles > limit {
             return Err(
                 CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
                     memory_allocation: new_memory_allocation,
