@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::ecdsa::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{info, ReplicaLogger};
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
@@ -228,7 +228,7 @@ mod tests {
         Height,
     };
 
-    use crate::ecdsa::{
+    use crate::idkg::{
         test_utils::{
             create_reshare_unmasked_transcript_param,
             fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,

@@ -1,8 +1,8 @@
-use crate::ecdsa::complaints::{
+use crate::idkg::complaints::{
     IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus,
 };
-use crate::ecdsa::pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder};
-use crate::ecdsa::signer::{ThresholdSignatureBuilder, ThresholdSignerImpl};
+use crate::idkg::pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder};
+use crate::idkg::signer::{ThresholdSignatureBuilder, ThresholdSignerImpl};
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_mocks::{dependencies, Dependencies};
@@ -14,7 +14,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces::ecdsa::{IDkgChangeAction, IDkgPool};
+use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
