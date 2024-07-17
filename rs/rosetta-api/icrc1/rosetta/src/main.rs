@@ -346,6 +346,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/ready", get(ready))
         .route("/health", get(health))
+        .route("/call", post(call))
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))

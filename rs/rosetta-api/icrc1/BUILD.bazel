@@ -41,6 +41,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest-derive",
 ]
 
@@ -69,6 +70,7 @@ rust_test(
     srcs = ["tests/tests.rs"],
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
+        # Keep sorted.
         ":icrc1",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//rs/rosetta-api/icrc1/tokens_u256",

@@ -456,7 +456,6 @@ impl CanisterManager {
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
-            | Ok(Ic00Method::ComputeInitialEcdsaDealings)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -2249,9 +2248,6 @@ pub(crate) enum CanisterManagerError {
         requested: Cycles,
         limit: Cycles,
     },
-    // TODO(RUN-1001): Use this error type after successful rollout of the next
-    // replica version.
-    #[allow(dead_code)]
     ReservedCyclesLimitIsTooLow {
         cycles: Cycles,
         limit: Cycles,

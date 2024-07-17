@@ -24,48 +24,6 @@ pub struct ConstructionHashResponse {
     pub metadata: ObjectMap,
 }
 
-/// CallRequest is the input to the `/call`
-/// endpoint. It contains the method name the user wants to call and some parameters specific for the method call.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct CallRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "method_name")]
-    pub method_name: String,
-
-    #[serde(rename = "parameters")]
-    pub parameters: ObjectMap,
-}
-
-impl CallRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        method_name: String,
-        parameters: ObjectMap,
-    ) -> CallRequest {
-        CallRequest {
-            network_identifier,
-            method_name,
-            parameters,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct CallResponse {
-    #[serde(rename = "result")]
-    pub result: ObjectMap,
-}
-
-impl CallResponse {
-    pub fn new(result: ObjectMap) -> CallResponse {
-        CallResponse { result }
-    }
-}
-
 /// The type (encoded as CBOR) returned by /construction/combine, containing the
 /// IC calls to submit the transaction and to check the result.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -593,6 +551,65 @@ impl TryFrom<Option<ObjectMap>> for NeuronInfoResponse {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse NeuronInfoResponse metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct QueryBlockRangeRequest {
+    pub highest_block_index: u64,
+    pub number_of_blocks: u64,
+}
+
+impl TryFrom<QueryBlockRangeRequest> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: QueryBlockRangeRequest) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeRequest to ObjectMap. Expected type Object but received: {:?}",v)))
+            },Err(err) => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeRequest to ObjectMap: {:?}",err))),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for QueryBlockRangeRequest {
+    type Error = ApiError;
+    fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse QueryBlockRangeRequest from JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct QueryBlockRangeResponse {
+    pub blocks: Vec<rosetta_core::objects::Block>,
+}
+
+impl TryFrom<QueryBlockRangeResponse> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: QueryBlockRangeResponse) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeResponse to ObjectMap. Expected type Object but received: {:?}",v)))
+            },Err(err) =>Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeResponse to ObjectMap: {:?}",err))),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for QueryBlockRangeResponse {
+    type Error = ApiError;
+    fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse QueryBlockRangeResponse from JSON object: {}",
                 e
             ))
         })

@@ -61,14 +61,8 @@ fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
 #[test]
 fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
     let mut ckerc20 = CkErc20Setup::default();
-    let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
-    let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
 
-    for token in supported_erc20_tokens(
-        ckerc20.cketh.minter_id.into(),
-        embedded_ledger_wasm_hash,
-        embedded_index_wasm_hash,
-    ) {
+    for token in supported_erc20_tokens() {
         ckerc20.orchestrator = ckerc20
             .orchestrator
             .add_erc20_token(token.clone())
@@ -97,13 +91,7 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
     const RETRY_FREQUENCY: Duration = Duration::from_secs(5);
 
     let mut ckerc20 = CkErc20Setup::default();
-    let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
-    let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(
-        Principal::anonymous(),
-        embedded_ledger_wasm_hash,
-        embedded_index_wasm_hash,
-    );
+    let usdc = usdc();
     let stop_msg_id = ckerc20
         .env
         .stop_canister_non_blocking(ckerc20.cketh.minter_id);
@@ -170,7 +158,9 @@ mod withdraw_erc20 {
         DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC, TWO_USDC,
     };
     use ic_cketh_test_utils::flow::{
-        increment_max_priority_fee_per_gas, DepositParams, ProcessWithdrawalParams,
+        double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
+        increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
+        ProcessWithdrawalParams,
     };
     use ic_cketh_test_utils::mock::JsonRpcProvider;
     use ic_cketh_test_utils::response::{
@@ -953,6 +943,55 @@ mod withdraw_erc20 {
                 }
             ]
         )
+    }
+
+    #[test]
+    fn should_process_withdrawal_when_price_increases_moderately() {
+        fn test_when_tx_fee<F: FnMut(&mut ethers_core::types::FeeHistory)>(
+            tx_fee_increase: &mut F,
+        ) -> FeeHistoryProcessWithdrawal<CkErc20Setup, RetrieveErc20Request> {
+            let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+            let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+            let caller = ckerc20.caller();
+            let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+
+            ckerc20
+                .deposit_cketh_and_ckerc20(
+                    EXPECTED_BALANCE,
+                    TWO_USDC + CKERC20_TRANSFER_FEE,
+                    ckusdc.clone(),
+                    caller,
+                )
+                .expect_mint()
+                .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+                .call_ckerc20_ledger_approve_minter(
+                    ckusdc.ledger_canister_id,
+                    caller,
+                    TWO_USDC,
+                    None,
+                )
+                .call_minter_withdraw_erc20(
+                    caller,
+                    TWO_USDC,
+                    ckusdc.ledger_canister_id,
+                    DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+                )
+                .expect_refresh_gas_fee_estimate(identity)
+                .expect_withdrawal_request_accepted()
+                .start_processing_withdrawals()
+                .retrieve_fee_history(|mock| mock.modify_response_for_all(tx_fee_increase))
+        }
+
+        test_when_tx_fee(&mut increment_base_fee_per_gas)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::TxCreated);
+
+        test_when_tx_fee(&mut double_and_increment_base_fee_per_gas)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::Pending)
+            .expect_transaction_not_created();
     }
 
     #[test]

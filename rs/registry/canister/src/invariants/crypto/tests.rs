@@ -6,7 +6,6 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript_and_master_key, InitialNiDkgConfig};
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::{
@@ -19,6 +18,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTran
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::RegistryVersion;
 use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2};
+use prost::Message;
 use rand::RngCore;
 use std::collections::BTreeSet;
 
@@ -54,7 +54,7 @@ fn map_to_current_node_public_keys(value: ValidNodePublicKeys) -> CurrentNodePub
 fn insert_dummy_node(node_id: &NodeId, snapshot: &mut RegistrySnapshot) {
     snapshot.insert(
         make_node_record_key(node_id.to_owned()).into_bytes(),
-        encode_or_panic::<NodeRecord>(&NodeRecord::default()),
+        NodeRecord::default().encode_to_vec(),
     );
 }
 
@@ -387,7 +387,7 @@ fn high_threshold_public_key_invariant_public_key_and_cup_both_missing() {
     let subnet_list_record_key = make_subnet_list_record_key();
     let subnet_mutation = insert(
         subnet_list_record_key.into_bytes(),
-        encode_or_panic(&subnet_list_record),
+        subnet_list_record.encode_to_vec(),
     );
     let mut snapshot = RegistrySnapshot::new();
     snapshot.insert(subnet_mutation.key, subnet_mutation.value);
@@ -405,7 +405,7 @@ fn high_threshold_public_key_invariant_unable_to_parse_key() {
     );
     let pubkey_key = make_crypto_threshold_signing_pubkey_key(setup.receiver_subnet);
     let bad_pubkey_bytes = vec![];
-    let pubkey_value = encode_or_panic(&bad_pubkey_bytes);
+    let pubkey_value = bad_pubkey_bytes.encode_to_vec();
     let pubkey_mutation = insert(pubkey_key.into_bytes(), pubkey_value);
     snapshot.insert(pubkey_mutation.key, pubkey_mutation.value);
 
@@ -422,7 +422,7 @@ fn high_threshold_public_key_invariant_unable_to_parse_cup() {
     );
     let cup_contents_key = make_catch_up_package_contents_key(setup.receiver_subnet).into_bytes();
     let bad_cup_contents_bytes = vec![];
-    let cup_mutation = insert(cup_contents_key, encode_or_panic(&bad_cup_contents_bytes));
+    let cup_mutation = insert(cup_contents_key, bad_cup_contents_bytes.encode_to_vec());
     snapshot.insert(cup_mutation.key, cup_mutation.value);
 
     assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
@@ -445,7 +445,7 @@ fn high_threshold_public_key_invariant_unable_to_parse_initial_ni_dkg_transcript
             Some(initial_ni_dkg_transcript_high_threshold);
     }
     let cup_contents_key = make_catch_up_package_contents_key(setup.receiver_subnet).into_bytes();
-    let cup_mutation = insert(cup_contents_key, encode_or_panic(&setup.cup_contents));
+    let cup_mutation = insert(cup_contents_key, setup.cup_contents.encode_to_vec());
     snapshot.insert(cup_mutation.key, cup_mutation.value);
 
     assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
@@ -526,7 +526,7 @@ fn registry_snapshot_from_threshold_sig_pk_and_cup(
     let mut snapshot = RegistrySnapshot::new();
     if let Some(cup_contents) = cup_contents {
         let cup_contents_key = make_catch_up_package_contents_key(receiver_subnet).into_bytes();
-        let cup_mutation = insert(cup_contents_key, encode_or_panic(&cup_contents));
+        let cup_mutation = insert(cup_contents_key, cup_contents.encode_to_vec());
         snapshot.insert(cup_mutation.key, cup_mutation.value);
     }
     let subnet_list_record = SubnetListRecord {
@@ -535,13 +535,13 @@ fn registry_snapshot_from_threshold_sig_pk_and_cup(
     let subnet_list_record_key = make_subnet_list_record_key();
     let subnet_mutation = insert(
         subnet_list_record_key.into_bytes(),
-        encode_or_panic(&subnet_list_record),
+        subnet_list_record.encode_to_vec(),
     );
     snapshot.insert(subnet_mutation.key, subnet_mutation.value);
     if let Some(threshold_sig_pk) = threshold_sig_pk {
         let pubkey_key = make_crypto_threshold_signing_pubkey_key(receiver_subnet);
         let pubkey_proto = PublicKey::from(threshold_sig_pk);
-        let pubkey_value = encode_or_panic(&pubkey_proto);
+        let pubkey_value = pubkey_proto.encode_to_vec();
         let pubkey_mutation = insert(pubkey_key.into_bytes(), pubkey_value);
         snapshot.insert(pubkey_mutation.key, pubkey_mutation.value);
     }
@@ -599,9 +599,7 @@ fn run_test_orphaned_crypto_keys(
 
 mod ecdsa_signing_subnet_lists {
     use super::*;
-    use crate::{
-        common::test_helpers::invariant_compliant_registry, mutations::common::encode_or_panic,
-    };
+    use crate::common::test_helpers::invariant_compliant_registry;
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
@@ -618,6 +616,7 @@ mod ecdsa_signing_subnet_lists {
     use ic_registry_transport::upsert;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::PrincipalId;
+    use prost::Message;
     use rand::Rng;
 
     fn invariant_compliant_chain_key_config() -> ChainKeyConfigPb {
@@ -659,7 +658,7 @@ mod ecdsa_signing_subnet_lists {
 
         let new_subnet = upsert(
             make_subnet_record_key(nns_id).into_bytes(),
-            encode_or_panic(&subnet),
+            subnet.encode_to_vec(),
         );
         registry.check_global_state_invariants(&[new_subnet]);
     }
@@ -1006,7 +1005,7 @@ mod ecdsa_signing_subnet_lists {
             let subnets_value = ChainKeySigningSubnetList { subnets };
             mutations.push(ic_registry_transport::insert(
                 ecdsa_signing_subnet_list_key,
-                encode_or_panic(&subnets_value),
+                subnets_value.encode_to_vec(),
             ));
             let node_id = node_test_id(1);
             if self.with_subnet_record {
@@ -1036,7 +1035,7 @@ mod ecdsa_signing_subnet_lists {
                 };
                 mutations.push(ic_registry_transport::insert(
                     make_subnet_record_key(subnet_id),
-                    encode_or_panic(&subnet_record),
+                    subnet_record.encode_to_vec(),
                 ));
                 if let Some(another_subnet_id) = self.additional_subnet_id {
                     let node_id = node_test_id(2);
@@ -1047,7 +1046,7 @@ mod ecdsa_signing_subnet_lists {
                     };
                     mutations.push(ic_registry_transport::insert(
                         make_subnet_record_key(another_subnet_id),
-                        encode_or_panic(&subnet_record),
+                        subnet_record.encode_to_vec(),
                     ));
                 }
             }

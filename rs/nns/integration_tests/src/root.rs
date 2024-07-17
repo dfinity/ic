@@ -8,22 +8,20 @@ use ic_nervous_system_clients::{
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_USER1_KEYPAIR,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_USER1_KEYPAIR,
 };
 use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    pb::v1::{
-        manage_neuron::{Command, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        proposal::Action,
-        ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-        ProposalStatus, Vote,
-    },
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    proposal::Action,
+    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal, ProposalStatus,
+    Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

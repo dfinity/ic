@@ -6,14 +6,14 @@ use crate::{
         ConsensusCrypto,
     },
     dkg::payload_builder::create_payload as create_dkg_payload,
-    ecdsa::{self, metrics::EcdsaPayloadMetrics},
+    idkg::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
     find_lowest_ranked_proposals, get_block_hash_string, get_notarization_delay_settings,
     get_subnet_record, is_time_to_make_block, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource,
+    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -67,10 +67,10 @@ pub struct BlockMaker {
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
-    ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+    idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
-    ecdsa_payload_metrics: EcdsaPayloadMetrics,
+    idkg_payload_metrics: IDkgPayloadMetrics,
     pub(crate) log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
@@ -89,7 +89,7 @@ impl BlockMaker {
         crypto: Arc<dyn ConsensusCrypto>,
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
-        ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+        idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
@@ -103,11 +103,11 @@ impl BlockMaker {
             crypto,
             payload_builder,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
-            ecdsa_payload_metrics: EcdsaPayloadMetrics::new(metrics_registry),
+            idkg_payload_metrics: IDkgPayloadMetrics::new(metrics_registry),
             stable_registry_version_age,
         }
     }
@@ -321,13 +321,13 @@ impl BlockMaker {
                 dkg::Payload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
-                    let ecdsa_summary = ecdsa::create_summary_payload(
+                    let idkg_summary = idkg::create_summary_payload(
                         self.replica_config.subnet_id,
                         &*self.registry_client,
                         pool,
                         &context,
                         parent.as_ref(),
-                        Some(&self.ecdsa_payload_metrics),
+                        Some(&self.idkg_payload_metrics),
                         &self.log,
                     )
                     .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
@@ -336,7 +336,7 @@ impl BlockMaker {
 
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
-                        ecdsa: ecdsa_summary,
+                        ecdsa: idkg_summary,
                     })
                 }
                 dkg::Payload::Dealings(dealings) => {
@@ -367,16 +367,16 @@ impl BlockMaker {
                                 subnet_records,
                             );
 
-                            let ecdsa_data = ecdsa::create_data_payload(
+                            let ecdsa_data = idkg::create_data_payload(
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
                                 &*self.crypto,
                                 pool,
-                                self.ecdsa_pool.clone(),
+                                self.idkg_pool.clone(),
                                 &*self.state_manager,
                                 &context,
                                 parent.as_ref(),
-                                &self.ecdsa_payload_metrics,
+                                &self.idkg_payload_metrics,
                                 &self.log,
                             )
                             .map_err(|err| {
@@ -515,7 +515,7 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 
 #[cfg(test)]
 mod tests {
-    use crate::ecdsa::test_utils::create_ecdsa_pool;
+    use crate::idkg::test_utils::create_idkg_pool;
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
@@ -547,7 +547,7 @@ mod tests {
                 replica_config,
                 state_manager,
                 dkg_pool,
-                ecdsa_pool,
+                idkg_pool,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config,
@@ -585,7 +585,7 @@ mod tests {
                 crypto.clone(),
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
-                ecdsa_pool.clone(),
+                idkg_pool.clone(),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -663,7 +663,7 @@ mod tests {
                 Arc::clone(&crypto) as Arc<_>,
                 Arc::new(payload_builder),
                 dkg_pool,
-                ecdsa_pool,
+                idkg_pool,
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -753,7 +753,7 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             )));
-            let ecdsa_pool = Arc::new(RwLock::new(create_ecdsa_pool(
+            let idkg_pool = Arc::new(RwLock::new(create_idkg_pool(
                 pool_config,
                 no_op_logger(),
                 MetricsRegistry::new(),
@@ -792,7 +792,7 @@ mod tests {
                 crypto.clone(),
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
-                ecdsa_pool.clone(),
+                idkg_pool.clone(),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -831,7 +831,7 @@ mod tests {
                 crypto,
                 Arc::new(payload_builder),
                 dkg_pool,
-                ecdsa_pool,
+                idkg_pool,
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -884,7 +884,7 @@ mod tests {
                 state_manager,
                 registry_data_provider,
                 dkg_pool,
-                ecdsa_pool,
+                idkg_pool,
                 ..
             } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record.clone())]);
 
@@ -906,7 +906,7 @@ mod tests {
                 crypto,
                 Arc::new(payload_builder),
                 dkg_pool,
-                ecdsa_pool,
+                idkg_pool,
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),

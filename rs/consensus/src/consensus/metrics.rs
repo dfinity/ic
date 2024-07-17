@@ -8,7 +8,7 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        idkg::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
+        idkg::{CompletedReshareRequest, CompletedSignature, IDkgPayload, KeyTranscriptCreation},
         Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
     CountBytes, Height,
@@ -18,9 +18,9 @@ use prometheus::{
 };
 use std::sync::RwLock;
 
-use crate::ecdsa::metrics::{
+use crate::idkg::metrics::{
     count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
-    ECDSA_KEY_ID_LABEL,
+    KEY_ID_LABEL,
 };
 
 // For certain metrics, we record metrics based on block's rank.
@@ -115,7 +115,7 @@ pub struct BlockStats {
     pub block_hash: String,
     pub block_height: u64,
     pub block_context_certified_height: u64,
-    pub ecdsa_stats: Option<EcdsaStats>,
+    pub idkg_stats: Option<IDkgStats>,
 }
 
 impl From<&Block> for BlockStats {
@@ -124,7 +124,7 @@ impl From<&Block> for BlockStats {
             block_hash: get_block_hash_string(block),
             block_height: block.height().get(),
             block_context_certified_height: block.context.certified_height.get(),
-            ecdsa_stats: block.payload.as_ref().as_ecdsa().map(EcdsaStats::from),
+            idkg_stats: block.payload.as_ref().as_ecdsa().map(IDkgStats::from),
         }
     }
 }
@@ -157,8 +157,8 @@ impl BatchStats {
     }
 }
 
-// Ecdsa payload stats
-pub struct EcdsaStats {
+// IDkg payload stats
+pub struct IDkgStats {
     pub signature_agreements: usize,
     pub key_transcript_created: CounterPerMasterPublicKeyId,
     pub available_quadruples: CounterPerMasterPublicKeyId,
@@ -167,8 +167,8 @@ pub struct EcdsaStats {
     pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
 }
 
-impl From<&EcdsaPayload> for EcdsaStats {
-    fn from(payload: &EcdsaPayload) -> Self {
+impl From<&IDkgPayload> for IDkgStats {
+    fn from(payload: &IDkgPayload) -> Self {
         let mut key_transcript_created = CounterPerMasterPublicKeyId::new();
 
         for (key_id, key_transcript) in &payload.key_transcripts {
@@ -276,7 +276,7 @@ impl FinalizerMetrics {
             ecdsa_key_transcript_created: metrics_registry.int_counter_vec(
                 "consensus_ecdsa_key_transcript_created",
                 "The number of times ECDSA key transcript is created",
-                &[ECDSA_KEY_ID_LABEL],
+                &[KEY_ID_LABEL],
             ),
             ecdsa_signature_agreements: metrics_registry.int_counter(
                 "consensus_ecdsa_signature_agreements",
@@ -285,22 +285,22 @@ impl FinalizerMetrics {
             ecdsa_available_quadruples: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_available_quadruples",
                 "The number of available ECDSA quadruples",
-                &[ECDSA_KEY_ID_LABEL],
+                &[KEY_ID_LABEL],
             ),
             ecdsa_quadruples_in_creation: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_quadruples_in_creation",
                 "The number of ECDSA quadruples in creation",
-                &[ECDSA_KEY_ID_LABEL],
+                &[KEY_ID_LABEL],
             ),
             ecdsa_ongoing_xnet_reshares: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_ongoing_xnet_reshares",
                 "The number of ongoing ECDSA xnet reshares",
-                &[ECDSA_KEY_ID_LABEL],
+                &[KEY_ID_LABEL],
             ),
             ecdsa_xnet_reshare_agreements: metrics_registry.int_counter_vec(
                 "consensus_ecdsa_reshare_agreements",
                 "Total number of ECDSA reshare agreements created",
-                &[ECDSA_KEY_ID_LABEL],
+                &[KEY_ID_LABEL],
             ),
             // canister http payload metrics
             canister_http_success_delivered: metrics_registry.int_counter(
@@ -337,7 +337,7 @@ impl FinalizerMetrics {
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
 
-        if let Some(ecdsa) = &block_stats.ecdsa_stats {
+        if let Some(ecdsa) = &block_stats.idkg_stats {
             let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric

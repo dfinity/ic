@@ -8,7 +8,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -17,8 +17,7 @@ use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{CertificationMessageId, Priority, PriorityFn},
-    artifact_kind::CertificationArtifact,
+    artifact::CertificationMessageId,
     consensus::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
@@ -61,7 +60,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact, Pool>
+impl<Pool: CertificationPool> PriorityFnFactory<CertificationMessage, Pool>
     for CertifierGossipImpl
 {
     // The priority function requires just the height of the artifact to decide if
@@ -626,7 +625,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        artifact::{CertificationMessageId, Priority},
+        artifact::CertificationMessageId,
         consensus::certification::{
             Certification, CertificationContent, CertificationMessage, CertificationMessageHash,
             CertificationShare,

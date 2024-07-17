@@ -34,7 +34,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
-            "//publish/binaries:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",
+            "//rs/https_outcalls/adapter:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
@@ -42,6 +42,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-boundary-tls": "/opt/ic/bin/ic-boundary:0755",
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Install the malicious replica if set
             "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
+            "//publish/binaries:nft-exporter": "/opt/ic/bin/nft-exporter:0755",
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",

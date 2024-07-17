@@ -88,7 +88,8 @@ impl CkErc20Setup {
                 minter_id: Some(cketh.minter_id.get_ref().0),
                 cycles_management: None,
             },
-        );
+        )
+        .register_embedded_wasms();
         Self {
             env,
             cketh,
@@ -98,14 +99,7 @@ impl CkErc20Setup {
     }
 
     pub fn add_supported_erc20_tokens(mut self) -> Self {
-        let embedded_ledger_wasm_hash = self.orchestrator.embedded_ledger_wasm_hash.clone();
-        let embedded_index_wasm_hash = self.orchestrator.embedded_index_wasm_hash.clone();
-
-        self.supported_erc20_tokens = supported_erc20_tokens(
-            self.cketh.minter_id.into(),
-            embedded_ledger_wasm_hash,
-            embedded_index_wasm_hash,
-        );
+        self.supported_erc20_tokens = supported_erc20_tokens();
         for token in self.supported_erc20_tokens.iter() {
             self.orchestrator = self
                 .orchestrator

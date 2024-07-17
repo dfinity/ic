@@ -10,14 +10,14 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::ConsensusPoolImpl,
     dkg_pool::DkgPoolImpl,
-    ecdsa_pool::EcdsaPoolImpl,
+    idkg_pool::IDkgPoolImpl,
     ingress_pool::{IngressPoolImpl, IngressPrioritizer},
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
     certification::{setup as certification_setup, CertificationCrypto},
     consensus::{dkg_key_manager::DkgKeyManager, setup as consensus_setup},
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
 use ic_consensus_utils::{
@@ -51,11 +51,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
-    consensus::CatchUpPackage,
-    consensus::HasHeight,
+    consensus::{CatchUpPackage, HasHeight},
     malicious_flags::MaliciousFlags,
+    messages::SignedIngress,
     replica_config::ReplicaConfig,
     Height, NodeId, SubnetId,
 };
@@ -74,7 +73,7 @@ struct ArtifactPools {
     ingress_pool: Arc<RwLock<IngressPoolImpl>>,
     certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
-    ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+    idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
@@ -119,7 +118,7 @@ pub fn setup_consensus_and_p2p(
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let time_source = Arc::new(SysTimeSource::new());
@@ -237,7 +236,7 @@ fn start_consensus(
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
     ConsensusManagerBuilder,
 ) {
@@ -302,7 +301,7 @@ fn start_consensus(
     let (certification_tx, certification_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (dkg_tx, dkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (ecdsa_tx, ecdsa_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+    let (idkg_tx, idkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
 
     {
@@ -322,7 +321,7 @@ fn start_consensus(
             canister_http_payload_builder,
             Arc::from(query_stats_payload_builder),
             Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
-            Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
+            Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
             Arc::clone(&dkg_key_manager) as Arc<_>,
             message_router,
             Arc::clone(&state_manager) as Arc<_>,
@@ -430,8 +429,8 @@ fn start_consensus(
             registry_client.get_chain_key_config(subnet_id, registry_client.get_latest_version());
         info!(
             log,
-            "ECDSA: finalized_height = {:?}, chain_key_config = {:?}, \
-                 DKG interval start = {:?}, is_summary = {}, has_ecdsa = {}",
+            "IDKG: finalized_height = {:?}, chain_key_config = {:?}, \
+                 DKG interval start = {:?}, is_summary = {}, has_idkg_payload = {}",
             finalized.height(),
             chain_key_config,
             finalized.payload.as_ref().dkg_interval_start_height(),
@@ -439,7 +438,7 @@ fn start_consensus(
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
 
-        let ecdsa_gossip = Arc::new(ecdsa::EcdsaGossipImpl::new(
+        let idkg_gossip = Arc::new(idkg::IDkgGossipImpl::new(
             subnet_id,
             Arc::clone(&consensus_block_cache),
             Arc::clone(&state_reader),
@@ -447,8 +446,8 @@ fn start_consensus(
         ));
 
         let (client, jh) = create_artifact_handler(
-            ecdsa_tx,
-            ecdsa::EcdsaImpl::new(
+            idkg_tx,
+            idkg::IDkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_block_cache),
                 Arc::clone(&consensus_crypto),
@@ -458,13 +457,13 @@ fn start_consensus(
                 malicious_flags,
             ),
             Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&artifact_pools.ecdsa_pool),
+            Arc::clone(&artifact_pools.idkg_pool),
             metrics_registry.clone(),
         );
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(ecdsa_rx, artifact_pools.ecdsa_pool, ecdsa_gossip, client);
+        new_p2p_consensus.add_client(idkg_rx, artifact_pools.idkg_pool, idkg_gossip, client);
     };
 
     {
@@ -523,14 +522,14 @@ fn init_artifact_pools(
         log.clone(),
     )));
 
-    let mut ecdsa_pool = EcdsaPoolImpl::new(
+    let mut idkg_pool = IDkgPoolImpl::new(
         config.clone(),
         log.clone(),
         metrics_registry.clone(),
-        Box::new(ecdsa::EcdsaStatsImpl::new(metrics_registry.clone())),
+        Box::new(idkg::IDkgStatsImpl::new(metrics_registry.clone())),
     );
-    ecdsa_pool.add_initial_dealings(&catch_up_package, time_source);
-    let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
+    idkg_pool.add_initial_dealings(&catch_up_package, time_source);
+    let idkg_pool = Arc::new(RwLock::new(idkg_pool));
 
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
         node_id,
@@ -550,7 +549,7 @@ fn init_artifact_pools(
         ingress_pool,
         certification_pool,
         dkg_pool,
-        ecdsa_pool,
+        idkg_pool,
         canister_http_pool,
     }
 }

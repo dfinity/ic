@@ -19,6 +19,7 @@ def _run_system_test(ctx):
         content = """#!/bin/bash
             set -eEuo pipefail
             RUNFILES="$PWD"
+            KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
             VERSION_FILE="$(cat $VERSION_FILE_PATH)"
             cd "$TEST_TMPDIR"
             mkdir root_env
@@ -33,15 +34,26 @@ def _run_system_test(ctx):
         ),
     )
 
-    env = dict(ctx.attr.env.items() + [
+    env = dict(ctx.attr.env.items())
+
+    # Expand Make variables in env vars, with runtime_deps as targets
+    for key, value in env.items():
+        # If this looks like a Make variable, try to expand it
+        if value.startswith("$"):
+            env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
+
+    env = dict(env.items() + [
         ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
     ])
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
+    if k8s:
+        env["KUBECONFIG"] = ctx.file._k8sconfig.path
+
     # version_file_path contains the "direct" path to the volatile status file.
     # The wrapper script copies this file instead of receiving ing as bazel dependency to not invalidate the cache.
-    runtime_deps = [depset([ctx.file.version_file_path])]
+    runtime_deps = [depset([ctx.file.version_file_path, ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
@@ -65,7 +77,7 @@ def _run_system_test(ctx):
         ),
         RunEnvironmentInfo(
             environment = env,
-            inherited_environment = ctx.attr.env_inherit + ["KUBECONFIG"],
+            inherited_environment = ctx.attr.env_inherit,
         ),
     ]
 
@@ -77,6 +89,7 @@ run_system_test = rule(
         "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
         "_k8s": attr.label(default = "//rs/tests:k8s"),
+        "_k8sconfig": attr.label(allow_single_file = True, default = "@kubeconfig//:kubeconfig.yaml"),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.label_keyed_string_dict(allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
@@ -105,6 +118,7 @@ def system_test(
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
         uses_hostos_dev_test = False,
+        env = {},
         env_inherit = [],
         additional_colocate_tags = [],
         **kwargs):
@@ -134,6 +148,7 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
+      env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
       additional_colocate_tags: additional tags to pass to the colocated test.
@@ -201,6 +216,7 @@ def system_test(
         src = bin_name,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
+        env = env,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),

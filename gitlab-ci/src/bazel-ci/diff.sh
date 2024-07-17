@@ -43,6 +43,10 @@ if grep -qE ".*\.hs" <<<"$DIFF_FILES"; then
     files+=(//pre-commit:ormolu-lint)
 fi
 
+if grep -qE ".*\.proto" <<<"$DIFF_FILES"; then
+    files+=(//pre-commit:protobuf-format-check)
+fi
+
 if [ ${#files[@]} -eq 0 ]; then
     echo "Changes not detected in bazel targets. No bazel targets to build or test." >&2
     exit 0

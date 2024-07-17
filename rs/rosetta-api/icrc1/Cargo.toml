@@ -16,7 +16,7 @@ ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-num-bigint = "0.4"
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

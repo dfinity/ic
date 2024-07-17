@@ -6,6 +6,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
@@ -24,6 +25,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = []
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:paste",
 ]
 

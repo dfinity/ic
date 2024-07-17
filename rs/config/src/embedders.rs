@@ -45,7 +45,7 @@ pub(crate) const DEFAULT_MIN_SANDBOX_COUNT: usize = 500;
 
 /// Sandbox process eviction ensures that the number of sandbox processes is
 /// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 2_000;
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 1_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
@@ -71,14 +71,19 @@ const STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE: NumOsPages =
 // Maximum number of stable memory dirty OS pages (4KiB) that a regular message (update) execution
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE: NumOsPages =
-    NumOsPages::new(4 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(2 * GiB / (PAGE_SIZE as u64));
 // Maximum number of stable memory dirty OS pages (4KiB) that a non-replicated query is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages = NumOsPages::new(GiB / (PAGE_SIZE as u64));
 
-// Maximum number of stable memory pages that a single message execution
+// Maximum number of stable memory OS pages (4KiB) that that an upgrade/install message execution
 // is allowed to access.
-const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages = NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
-// Maximum number of stable memory pages that a single non-replicated query execution
+const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE: NumOsPages =
+    NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
+// Maximum number of stable memory OS pages (4KiB) that a that a regular message (update) execution
+// is allowed to access.
+const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
+    NumOsPages::new(2 * GiB / (PAGE_SIZE as u64));
+// Maximum number of stable memory OS pages (4KiB) that a single non-replicated query execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
     NumOsPages::new(GiB / (PAGE_SIZE as u64));
@@ -244,8 +249,8 @@ impl Config {
                 query: STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY,
             },
             stable_memory_accessed_page_limit: StableMemoryPageLimit {
-                message: STABLE_MEMORY_ACCESSED_PAGE_LIMIT,
-                upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT,
+                message: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE,
+                upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY,
             },
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,

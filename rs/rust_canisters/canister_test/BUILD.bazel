@@ -3,9 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
-    "//rs/crypto/sha2",
     "//rs/config",
+    "//rs/crypto/sha2",
     "//rs/registry/transport",
     "//rs/replica_tests",
     "//rs/rust_canisters/dfn_candid",

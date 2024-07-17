@@ -1156,6 +1156,12 @@ message SettleNeuronsFundParticipationRequest {
   message Aborted {}
 }
 
+// A list of principals.
+// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
+message Principals {
+  repeated ic_base_types.pb.v1.PrincipalId principals = 1;
+}
+
 // Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 // thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 // a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -1175,11 +1181,17 @@ message SettleNeuronsFundParticipationResponse {
     optional uint64 nns_neuron_id = 1;
     // The amount of Neurons' Fund participation associated with this neuron.
     optional uint64 amount_icp_e8s = 2;
-    // The principal that can vote on behalf of this neuron.
-    optional string hotkey_principal = 3;
+    // The principal that can manage this neuron.
+    optional ic_base_types.pb.v1.PrincipalId controller = 6;
+    // The principals that can vote, propose, and follow on behalf of this neuron.
+    optional Principals hotkeys = 7;
+
     // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
+
+    // Deprecated. Please use `controller` instead (not `hotkeys`!)
+    optional string hotkey_principal = 3 [deprecated = true];
   }
 
   // Request was completed successfully.

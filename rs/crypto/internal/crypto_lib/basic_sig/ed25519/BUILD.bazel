@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/ed25519",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/seed",
@@ -10,7 +11,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:base64",
     "@crate_index//:curve25519-dalek",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
@@ -22,6 +22,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
@@ -33,6 +34,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest-derive",
 ]
 

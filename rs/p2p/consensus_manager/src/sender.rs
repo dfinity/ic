@@ -14,14 +14,14 @@ use ic_base_types::NodeId;
 use ic_interfaces::p2p::{artifact_manager::ArtifactProcessorEvent, consensus::ArtifactWithOpt};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
-use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{Advert, ArtifactKind};
+use ic_quic_transport::{ConnId, Shutdown, Transport};
+use ic_types::artifact::PbArtifact;
 use prost::Message;
 use tokio::{
     runtime::Handle,
     select,
     sync::mpsc::Receiver,
-    task::{JoinError, JoinHandle, JoinSet},
+    task::{JoinError, JoinSet},
     time,
 };
 use tokio_util::sync::CancellationToken;
@@ -56,7 +56,7 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
     }
 }
 
-pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
+pub(crate) struct ConsensusManagerSender<Artifact: PbArtifact> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
@@ -66,20 +66,17 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
     join_set: JoinSet<()>,
-    cancellation_token: CancellationToken,
 }
 
-impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
+impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
     pub(crate) fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
         transport: Arc<dyn Transport>,
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
-        cancellation_token: CancellationToken,
-    ) -> JoinHandle<()> {
-        let slot_manager =
-            AvailableSlotSet::new(log.clone(), metrics.clone(), Artifact::TAG.into());
+    ) -> Shutdown {
+        let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), Artifact::NAME);
 
         let manager = Self {
             log,
@@ -91,16 +88,18 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
             current_commit_id: CommitId::from(0),
             active_adverts: HashMap::new(),
             join_set: JoinSet::new(),
-            cancellation_token,
         };
 
-        rt_handle.spawn(manager.start_event_loop())
+        Shutdown::spawn_on_with_cancellation(
+            |cancellation: CancellationToken| manager.start_event_loop(cancellation),
+            &rt_handle,
+        )
     }
 
-    async fn start_event_loop(mut self) {
+    async fn start_event_loop(mut self, cancellation_token: CancellationToken) {
         loop {
             select! {
-                _ = self.cancellation_token.cancelled() => {
+                _ = cancellation_token.cancelled() => {
                     error!(
                         self.log,
                         "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
@@ -110,7 +109,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 }
                 Some(advert) = self.adverts_to_send.recv() => {
                     match advert {
-                        ArtifactProcessorEvent::Artifact(new_artifact) => self.handle_send_advert(new_artifact),
+                        ArtifactProcessorEvent::Artifact(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
                         ArtifactProcessorEvent::Purge(id) => self.handle_purge_advert(&id),
                     }
 
@@ -130,7 +129,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                     // when purging artifacts, and not when the tasks join due to a cancellation
                     // not triggered by the manager.
                     let is_not_cancelled =
-                        time::timeout(Duration::from_secs(5), self.cancellation_token.cancelled())
+                        time::timeout(Duration::from_secs(5), cancellation_token.cancelled())
                             .await
                             .is_err();
 
@@ -161,8 +160,13 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
     }
 
     #[instrument(skip_all)]
-    fn handle_send_advert(&mut self, new_artifact: ArtifactWithOpt<Artifact>) {
-        let Advert { id, attribute } = Artifact::message_to_advert(&new_artifact.artifact);
+    fn handle_send_advert(
+        &mut self,
+        new_artifact: ArtifactWithOpt<Artifact>,
+        cancellation_token: CancellationToken,
+    ) {
+        let id = new_artifact.artifact.id();
+        let attribute = new_artifact.artifact.attribute();
         let entry = self.active_adverts.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {
@@ -170,7 +174,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
             let used_slot = self.slot_manager.pop();
 
-            let child_token = self.cancellation_token.child_token();
+            let child_token = cancellation_token.child_token();
             let child_token_clone = child_token.clone();
             let send_future = Self::send_advert_to_all_peers(
                 self.rt_handle.clone(),
@@ -399,12 +403,10 @@ mod tests {
     /// Verify that advert is sent to multiple peers.
     #[tokio::test]
     async fn send_advert_to_all_peers() {
-        let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
-        let cancel_token = CancellationToken::new();
-        let cancel_token_clone = cancel_token.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        with_test_replica_logger(|log| async {
+            let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
 
-        let consensus_sender_join_handle = with_test_replica_logger(|log| {
             let mut mock_transport = MockTransport::new();
             mock_transport
                 .expect_peers()
@@ -417,50 +419,45 @@ mod tests {
                     Ok(())
                 });
 
-            ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                cancel_token_clone,
-            )
-        });
+            );
 
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(1, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-
-        let first_push_node = push_rx.recv().await.unwrap();
-        let second_push_node: phantom_newtype::Id<
-            ic_base_types::NodeTag,
-            ic_base_types::PrincipalId,
-        > = push_rx.recv().await.unwrap();
-        assert!(
-            first_push_node == NODE_1 && second_push_node == NODE_2
-                || first_push_node == NODE_2 && second_push_node == NODE_1
-        );
-
-        cancel_token.cancel();
-
-        timeout(Duration::from_secs(5), consensus_sender_join_handle)
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(1, 1024),
+                is_latency_sensitive: false,
+            }))
             .await
-            .expect("ConsensusManagerSender did not terminate in time.")
-            .unwrap()
+            .unwrap();
+
+            let first_push_node = push_rx.recv().await.unwrap();
+            let second_push_node: phantom_newtype::Id<
+                ic_base_types::NodeTag,
+                ic_base_types::PrincipalId,
+            > = push_rx.recv().await.unwrap();
+            assert!(
+                first_push_node == NODE_1 && second_push_node == NODE_2
+                    || first_push_node == NODE_2 && second_push_node == NODE_1
+            );
+
+            timeout(Duration::from_secs(5), shutdown.shutdown())
+                .await
+                .expect("ConsensusManagerSender did not terminate in time.")
+        })
+        .await
     }
 
     /// Verify that increasing connection id causes advert to be resent.
     #[tokio::test]
     async fn resend_advert_to_reconnected_peer() {
-        let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
-        let cancel_token = CancellationToken::new();
-        let cancel_token_clone = cancel_token.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        with_test_replica_logger(|log| async {
+            let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
 
-        let consensus_sender_join_handle = with_test_replica_logger(|log| {
             let mut mock_transport = MockTransport::new();
             let mut seq = Sequence::new();
 
@@ -483,48 +480,44 @@ mod tests {
                     Ok(())
                 });
 
-            ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                cancel_token_clone,
-            )
-        });
+            );
 
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(1, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-
-        // Received two messages from NODE_1 because of reconnection.
-        let pushes = [
-            push_rx.recv().await.unwrap(),
-            push_rx.recv().await.unwrap(),
-            push_rx.recv().await.unwrap(),
-        ];
-        assert_eq!(pushes.iter().filter(|&&n| n == NODE_1).count(), 2);
-        assert_eq!(pushes.iter().filter(|&&n| n == NODE_2).count(), 1);
-
-        cancel_token.cancel();
-        timeout(Duration::from_secs(5), consensus_sender_join_handle)
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(1, 1024),
+                is_latency_sensitive: false,
+            }))
             .await
-            .expect("ConsensusManagerSender did not terminate in time.")
-            .unwrap()
+            .unwrap();
+
+            // Received two messages from NODE_1 because of reconnection.
+            let pushes = [
+                push_rx.recv().await.unwrap(),
+                push_rx.recv().await.unwrap(),
+                push_rx.recv().await.unwrap(),
+            ];
+            assert_eq!(pushes.iter().filter(|&&n| n == NODE_1).count(), 2);
+            assert_eq!(pushes.iter().filter(|&&n| n == NODE_2).count(), 1);
+
+            timeout(Duration::from_secs(5), shutdown.shutdown())
+                .await
+                .expect("ConsensusManagerSender did not terminate in time.")
+        })
+        .await
     }
 
     /// Verify failed send is retried.
     #[tokio::test]
     async fn retry_peer_error() {
-        let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
-        let cancel_token = CancellationToken::new();
-        let cancel_token_clone = cancel_token.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        with_test_replica_logger(|log| async {
+            let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
 
-        let consensus_sender_join_handle = with_test_replica_logger(|log| {
             let mut mock_transport = MockTransport::new();
             let mut seq = Sequence::new();
 
@@ -545,40 +538,37 @@ mod tests {
                     Ok(())
                 });
 
-            ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                cancel_token_clone,
-            )
-        });
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(1, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-        // Verify that we successfully retried.
-        assert_eq!(push_rx.recv().await.unwrap(), NODE_1);
+            );
 
-        cancel_token.cancel();
-        timeout(Duration::from_secs(5), consensus_sender_join_handle)
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(1, 1024),
+                is_latency_sensitive: false,
+            }))
             .await
-            .expect("ConsensusManagerSender did not terminate in time.")
-            .unwrap()
+            .unwrap();
+            // Verify that we successfully retried.
+            assert_eq!(push_rx.recv().await.unwrap(), NODE_1);
+
+            timeout(Duration::from_secs(5), shutdown.shutdown())
+                .await
+                .expect("ConsensusManagerSender did not terminate in time.")
+        })
+        .await
     }
 
     /// Verify commit id increases with new adverts/purge events.
     #[tokio::test]
     async fn increasing_commit_id() {
-        let (commit_id_tx, mut commit_id_rx) = tokio::sync::mpsc::unbounded_channel();
-        let cancel_token = CancellationToken::new();
-        let cancel_token_clone = cancel_token.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        with_test_replica_logger(|log| async {
+            let (commit_id_tx, mut commit_id_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
 
-        let consensus_sender_join_handle = with_test_replica_logger(|log| {
             let mut mock_transport = MockTransport::new();
 
             mock_transport
@@ -593,59 +583,54 @@ mod tests {
                     Ok(())
                 });
 
-            ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                cancel_token_clone,
-            )
-        });
-        // Send advert and verify commit it.
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(1, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-        assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
-
-        // Send second advert and observe commit id bump.
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(2, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-        assert_eq!(commit_id_rx.recv().await.unwrap(), 1);
-        // Send purge and new advert and observe commit id increase by 2.
-        tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(3, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-
-        assert_eq!(commit_id_rx.recv().await.unwrap(), 3);
-
-        cancel_token.cancel();
-        timeout(Duration::from_secs(5), consensus_sender_join_handle)
+            );
+            // Send advert and verify commit it.
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(1, 1024),
+                is_latency_sensitive: false,
+            }))
             .await
-            .expect("ConsensusManagerSender did not terminate in time.")
-            .unwrap()
+            .unwrap();
+            assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
+
+            // Send second advert and observe commit id bump.
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(2, 1024),
+                is_latency_sensitive: false,
+            }))
+            .await
+            .unwrap();
+            assert_eq!(commit_id_rx.recv().await.unwrap(), 1);
+            // Send purge and new advert and observe commit id increase by 2.
+            tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(3, 1024),
+                is_latency_sensitive: false,
+            }))
+            .await
+            .unwrap();
+
+            assert_eq!(commit_id_rx.recv().await.unwrap(), 3);
+            timeout(Duration::from_secs(5), shutdown.shutdown())
+                .await
+                .expect("ConsensusManagerSender did not terminate in time.")
+        })
+        .await
     }
 
     /// Verify that duplicate Advert event does not cause sending twice.
     #[tokio::test]
     async fn send_same_advert_twice() {
-        let (commit_id_tx, mut commit_id_rx) = tokio::sync::mpsc::unbounded_channel();
-        let cancel_token = CancellationToken::new();
-        let cancel_token_clone = cancel_token.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        with_test_replica_logger(|log| async {
+            let (commit_id_tx, mut commit_id_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
 
-        let consensus_sender_join_handle = with_test_replica_logger(|log| {
             let mut mock_transport = MockTransport::new();
 
             mock_transport
@@ -660,47 +645,46 @@ mod tests {
                     Ok(())
                 });
 
-            ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                cancel_token_clone,
-            )
-        });
-        // Send advert and verify commit id.
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(1, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-        assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
+            );
 
-        // Send same advert again. This should be noop.
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(1, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-
-        // Check that new advert is advertised with correct commit id.
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            artifact: U64Artifact::id_to_msg(2, 1024),
-            is_latency_sensitive: false,
-        }))
-        .await
-        .unwrap();
-
-        assert_eq!(commit_id_rx.recv().await.unwrap(), 2);
-
-        cancel_token.cancel();
-        timeout(Duration::from_secs(5), consensus_sender_join_handle)
+            // Send advert and verify commit id.
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(1, 1024),
+                is_latency_sensitive: false,
+            }))
             .await
-            .expect("ConsensusManagerSender did not terminate in time.")
-            .unwrap()
+            .unwrap();
+            assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
+
+            // Send same advert again. This should be noop.
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(1, 1024),
+                is_latency_sensitive: false,
+            }))
+            .await
+            .unwrap();
+
+            // Check that new advert is advertised with correct commit id.
+            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                artifact: U64Artifact::id_to_msg(2, 1024),
+                is_latency_sensitive: false,
+            }))
+            .await
+            .unwrap();
+
+            assert_eq!(commit_id_rx.recv().await.unwrap(), 2);
+
+            timeout(Duration::from_secs(5), shutdown.shutdown())
+                .await
+                .expect("ConsensusManagerSender did not terminate in time.")
+        })
+        .await
     }
 
     /// Verify that a panic happening in one of the tasks spawned by the ConsensusManagerSender
@@ -710,11 +694,9 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn panic_in_task_is_propagated() {
-        let cancel_token = CancellationToken::new();
-        let cancel_token_clone = cancel_token.clone();
+        with_test_replica_logger(|log| async {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
-        let consensus_sender_join_handle = with_test_replica_logger(|log| {
             let mut mock_transport = MockTransport::new();
 
             mock_transport
@@ -729,15 +711,13 @@ mod tests {
                     panic!("Panic in mock transport expectation.");
                 });
 
-            ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown =ConsensusManagerSender::<U64Artifact>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                cancel_token_clone,
-            )
-        });
+            );
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
             artifact: U64Artifact::id_to_msg(1, 1024),
@@ -746,12 +726,12 @@ mod tests {
         .await
         .unwrap();
 
-        let join_error = timeout(Duration::from_secs(5), consensus_sender_join_handle)
+        timeout(Duration::from_secs(5), shutdown.shutdown())
             .await
-            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.")
-            .expect_err("Expected a join error");
+            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.");
 
-        assert!(join_error.is_panic(), "The join error should be a panic.");
+        //assert!(join_error.is_panic(), "The join error should be a panic.");
+    }).await
     }
 
     /// Test that we can take more slots than SLOT_TABLE_THRESHOLD

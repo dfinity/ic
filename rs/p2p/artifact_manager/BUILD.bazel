@@ -3,16 +3,19 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces",
     "//rs/monitoring/metrics",
     "//rs/types/types",
     "@crate_index//:prometheus",
     "@crate_index//:tokio",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/protobuf",

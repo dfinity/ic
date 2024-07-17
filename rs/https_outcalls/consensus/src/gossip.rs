@@ -3,19 +3,17 @@
 pub use crate::pool_manager::CanisterHttpPoolManagerImpl;
 use ic_consensus_utils::registry_version_at_height;
 use ic_interfaces::{
-    canister_http::CanisterHttpPool, consensus_pool::ConsensusPoolCache,
-    p2p::consensus::PriorityFnAndFilterProducer,
+    canister_http::CanisterHttpPool,
+    consensus_pool::ConsensusPoolCache,
+    p2p::consensus::{Priority, PriorityFn, PriorityFnFactory},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    artifact::{CanisterHttpResponseId, Priority, PriorityFn},
-    artifact_kind::CanisterHttpArtifact,
-};
+use ic_types::{artifact::CanisterHttpResponseId, canister_http::CanisterHttpResponseShare};
 use std::{collections::BTreeSet, sync::Arc};
 
-/// The canonical implementation of [`PriorityFnAndFilterProducer`]
+/// The canonical implementation of [`PriorityFnFactory`]
 pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -37,7 +35,7 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, Pool>
+impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
     for CanisterHttpGossipImpl
 {
     fn get_priority_function(

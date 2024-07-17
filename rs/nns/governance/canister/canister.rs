@@ -50,8 +50,8 @@ use ic_nns_governance::{
         GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
         Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
         ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
-        ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
+        ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+        NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
         RewardEvent, RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
@@ -683,7 +683,11 @@ fn get_monthly_node_provider_rewards() {
 
 #[candid_method(update, rename = "get_monthly_node_provider_rewards")]
 async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
-    governance_mut().get_monthly_node_provider_rewards().await
+    let rewards = governance_mut().get_monthly_node_provider_rewards().await?;
+    Ok(RewardNodeProviders {
+        rewards: rewards.rewards,
+        use_registry_derived_rewards: Some(true),
+    })
 }
 
 #[export_name = "canister_query list_known_neurons"]
@@ -886,17 +890,13 @@ fn list_node_providers_() -> ListNodeProvidersResponse {
 
 #[export_name = "canister_query get_most_recent_monthly_node_provider_rewards"]
 fn get_most_recent_monthly_node_provider_rewards() {
-    over(
-        candid,
-        |()| -> Option<MostRecentMonthlyNodeProviderRewards> {
-            get_most_recent_monthly_node_provider_rewards_()
-        },
-    )
+    over(candid, |()| -> Option<MonthlyNodeProviderRewards> {
+        get_most_recent_monthly_node_provider_rewards_()
+    })
 }
 
 #[candid_method(query, rename = "get_most_recent_monthly_node_provider_rewards")]
-fn get_most_recent_monthly_node_provider_rewards_() -> Option<MostRecentMonthlyNodeProviderRewards>
-{
+fn get_most_recent_monthly_node_provider_rewards_() -> Option<MonthlyNodeProviderRewards> {
     governance()
         .heap_data
         .most_recent_monthly_node_provider_rewards

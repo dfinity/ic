@@ -26,7 +26,6 @@ use tokio::{
 use turmoil::Builder;
 
 mod common;
-
 #[test]
 fn test_ping_pong() {
     with_test_replica_logger(|log| {
@@ -719,7 +718,6 @@ fn test_changing_subnet_membership() {
         sim.run().unwrap();
     })
 }
-
 /// Test that we reconnect after TLS handshake failures.
 #[test]
 fn test_transient_failing_tls() {

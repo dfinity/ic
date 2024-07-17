@@ -25,7 +25,7 @@ use crate::{
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
 use ic_base_types::NodeId;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;

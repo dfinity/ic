@@ -6,6 +6,7 @@ rust_library(
     name = "dfn_json",
     srcs = glob(["src/**"]),
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/on_wire",
         "@crate_index//:serde",
         "@crate_index//:serde_json",

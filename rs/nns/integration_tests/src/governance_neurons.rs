@@ -6,20 +6,18 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
-        manage_neuron_response::{
-            Command as CommandResponse, {self},
-        },
-        neuron::DissolveState,
-        GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
+use ic_nns_governance::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron_response::{
+        Command as CommandResponse, {self},
     },
+    neuron::DissolveState,
+    GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

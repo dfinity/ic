@@ -9,9 +9,10 @@ rust_library(
     crate_name = "ic_crypto_tls_interfaces_mocks",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/tls_interfaces",
         "//rs/types/base_types",
         "@crate_index//:mockall",
-        "@crate_index//:rustls_0_21_12",
+        "@crate_index//:rustls",
     ],
 )

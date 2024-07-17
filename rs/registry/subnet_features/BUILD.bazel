@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_registry_subnet_features",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/types/management_canister_types",
         "@crate_index//:candid",

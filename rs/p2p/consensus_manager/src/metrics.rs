@@ -1,5 +1,5 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_types::artifact::ArtifactKind;
+use ic_types::artifact::PbArtifact;
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntCounterVec, IntGauge};
 
 use crate::uri_prefix;
@@ -50,7 +50,7 @@ pub(crate) struct ConsensusManagerMetrics {
 }
 
 impl ConsensusManagerMetrics {
-    pub fn new<Artifact: ArtifactKind>(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new<Artifact: PbArtifact>(metrics_registry: &MetricsRegistry) -> Self {
         let prefix = uri_prefix::<Artifact>();
         let const_labels_string = labels! {"client".to_string() => prefix.clone()};
         let const_labels = labels! {"client" => prefix.as_str()};

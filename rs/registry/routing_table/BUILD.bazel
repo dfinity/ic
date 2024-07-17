@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_registry_routing_table",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/types/base_types",
         "@crate_index//:candid",
@@ -19,6 +20,7 @@ rust_test(
     name = "routing_table_test",
     crate = ":routing_table",
     deps = [
+        # Keep sorted.
         "//rs/test_utilities/types",
         "@crate_index//:assert_matches",
     ],

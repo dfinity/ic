@@ -13,7 +13,7 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactWithOpt, ChangeResult, MutablePool, PriorityFnAndFilterProducer,
+        ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn, PriorityFnFactory,
         UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
@@ -21,8 +21,7 @@ use ic_interfaces::{
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{IngressMessageId, Priority, PriorityFn},
-    artifact_kind::IngressArtifact,
+    artifact::IngressMessageId,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, NodeId, Time,
 };
@@ -257,7 +256,7 @@ impl IngressPool for IngressPoolImpl {
     }
 }
 
-impl MutablePool<IngressArtifact> for IngressPoolImpl {
+impl MutablePool<SignedIngress> for IngressPoolImpl {
     type ChangeSet = ChangeSet;
 
     /// Insert a new ingress message in the Ingress Pool and update the
@@ -294,7 +293,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
     }
 
     /// Apply changeset to the Ingress Pool
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<SignedIngress> {
         let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for change_action in change_set {
@@ -384,7 +383,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
     }
 }
 
-impl ValidatedPoolReader<IngressArtifact> for IngressPoolImpl {
+impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
     fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
@@ -419,7 +418,7 @@ impl IngressPrioritizer {
     }
 }
 
-impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPrioritizer {
+impl PriorityFnFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
     fn get_priority_function(&self, pool: &IngressPoolImpl) -> PriorityFn<IngressMessageId, ()> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to
@@ -453,7 +452,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{ids::node_test_id, messages::SignedIngressBuilder};
-    use ic_types::{artifact::ArtifactKind, time::UNIX_EPOCH};
+    use ic_types::{artifact::IdentifiableArtifact, time::UNIX_EPOCH};
     use rand::Rng;
     use std::time::Duration;
 
@@ -654,7 +653,7 @@ mod tests {
                 assert!(result.purged.is_empty());
                 assert_eq!(result.artifacts_with_opt.len(), 1);
                 assert_eq!(
-                    IngressArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                    IdentifiableArtifact::id(&result.artifacts_with_opt[0].artifact),
                     message_id0
                 );
                 assert!(!result.poll_immediately);

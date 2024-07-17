@@ -6,9 +6,10 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, ExecuteIngressMessage, GetCyclesBalance,
-    GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query, QueryRequest,
-    ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, DashboardRequest, ExecuteIngressMessage,
+    GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query,
+    QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    Tick,
 };
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
@@ -34,13 +35,14 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId, RawSetStableMemory,
-    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
+    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig,
+    RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
+    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
+    RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tracing::trace;
 
@@ -157,6 +159,9 @@ where
         //
         // All the api v2 endpoints
         .nest("/:id/api/v2", instance_api_v2_routes())
+        //
+        // The instance dashboard
+        .api_route("/:id/_/dashboard", get(handler_dashboard))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
@@ -428,7 +433,7 @@ impl TryFrom<OpOut> for RawSubmitIngressResult {
 impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
     fn from(value: OpOut) -> Self {
         match value {
-            OpOut::ApiV2Response((status, headers, bytes)) => (
+            OpOut::RawResponse((status, headers, bytes)) => (
                 StatusCode::from_u16(status).unwrap(),
                 ApiResponse::Success((headers, bytes)),
             ),
@@ -575,63 +580,60 @@ pub async fn handler_pub_key(
     (code, Json(res))
 }
 
+pub async fn handler_dashboard(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = DashboardRequest {};
+    handle_raw(api_state, instance_id, op).await
+}
+
 pub async fn handler_status(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = StatusRequest { bytes, runtime };
-    handler_api_v2(api_state, instance_id, op).await
+    let op = StatusRequest { bytes };
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_call(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_query(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = QueryRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_read_state(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = ReadStateRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
-async fn handler_api_v2<T: Operation + Send + Sync + 'static>(
+async fn handle_raw<T: Operation + Send + Sync + 'static>(
     api_state: Arc<ApiState>,
     instance_id: InstanceId,
     op: T,
@@ -731,7 +733,7 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             }),
         )
             .into_response(),
-        OpOut::ApiV2Response((status, headers, bytes)) => {
+        OpOut::RawResponse((status, headers, bytes)) => {
             let code = StatusCode::from_u16(status).unwrap();
             let mut resp = Response::builder().status(code);
             for (name, value) in headers {
@@ -956,9 +958,20 @@ pub async fn create_instance(
         runtime,
         blob_store: _,
     }): State<AppState>,
-    extract::Json(subnet_configs): extract::Json<ExtendedSubnetConfigSet>,
+    extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
-    if subnet_configs.validate().is_err() {
+    let subnet_configs = instance_config.subnet_config_set;
+    if (instance_config.state_dir.is_none()
+        || File::open(
+            instance_config
+                .state_dir
+                .clone()
+                .unwrap()
+                .join("topology.json"),
+        )
+        .is_err())
+        && subnet_configs.validate().is_err()
+    {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
@@ -976,11 +989,18 @@ pub async fn create_instance(
         );
     }
 
-    let pocket_ic = tokio::task::spawn_blocking(move || PocketIc::new(runtime, subnet_configs))
-        .await
-        .expect("Failed to launch PocketIC");
+    let pocket_ic = tokio::task::spawn_blocking(move || {
+        PocketIc::new(
+            runtime,
+            subnet_configs,
+            instance_config.state_dir,
+            instance_config.nonmainnet_features,
+        )
+    })
+    .await
+    .expect("Failed to launch PocketIC");
 
-    let topology = pocket_ic.topology.clone();
+    let topology = pocket_ic.topology().clone();
     let instance_id = api_state.add_instance(pocket_ic).await;
     (
         StatusCode::CREATED,

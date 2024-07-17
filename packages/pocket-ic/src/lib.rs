@@ -69,7 +69,10 @@ const LOCALHOST: &str = "127.0.0.1";
 
 pub struct PocketIcBuilder {
     config: ExtendedSubnetConfigSet,
+    server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
+    state_dir: Option<PathBuf>,
+    nonmainnet_features: bool,
 }
 
 #[allow(clippy::new_without_default)]
@@ -77,21 +80,60 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: ExtendedSubnetConfigSet::default(),
+            server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            state_dir: None,
+            nonmainnet_features: false,
         }
     }
 
     pub fn build(self) -> PocketIc {
-        PocketIc::from_config_and_max_request_time(self.config, self.max_request_time_ms)
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
+        PocketIc::from_components(
+            self.config,
+            server_url,
+            self.max_request_time_ms,
+            self.state_dir,
+            self.nonmainnet_features,
+        )
     }
 
     pub async fn build_async(self) -> PocketIcAsync {
-        PocketIcAsync::from_config_and_max_request_time(self.config, self.max_request_time_ms).await
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
+        PocketIcAsync::from_components(
+            self.config,
+            server_url,
+            self.max_request_time_ms,
+            self.state_dir,
+            self.nonmainnet_features,
+        )
+        .await
+    }
+
+    pub fn with_server_url(self, server_url: Url) -> Self {
+        Self {
+            server_url: Some(server_url),
+            ..self
+        }
     }
 
     pub fn with_max_request_time_ms(self, max_request_time_ms: Option<u64>) -> Self {
         Self {
             max_request_time_ms,
+            ..self
+        }
+    }
+
+    pub fn with_state_dir(self, state_dir: PathBuf) -> Self {
+        Self {
+            state_dir: Some(state_dir),
+            ..self
+        }
+    }
+
+    pub fn with_nonmainnet_features(self, nonmainnet_features: bool) -> Self {
+        Self {
+            nonmainnet_features,
             ..self
         }
     }
@@ -248,7 +290,13 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS))
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
@@ -259,7 +307,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms)
+        Self::from_components(config, server_url, max_request_time_ms, None, false)
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -268,13 +316,21 @@ impl PocketIc {
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
     ) -> Self {
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS))
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+        )
     }
 
-    fn from_components(
-        config: impl Into<ExtendedSubnetConfigSet>,
+    pub(crate) fn from_components(
+        subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
         max_request_time_ms: Option<u64>,
+        state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -287,7 +343,14 @@ impl PocketIc {
         let runtime = rx.recv().unwrap();
 
         let pocket_ic = runtime.block_on(async {
-            PocketIcAsync::from_components(config, server_url, max_request_time_ms).await
+            PocketIcAsync::from_components(
+                subnet_config_set,
+                server_url,
+                max_request_time_ms,
+                state_dir,
+                nonmainnet_features,
+            )
+            .await
         });
 
         Self {
@@ -412,24 +475,25 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
     }
 
-    /// Creates an HTTPS gateway for this IC instance
-    /// listening on an optionally specified domain and port
-    /// and configures the IC instance to make progress
-    /// automatically, i.e., periodically update the time
-    /// of the IC to the real time and execute rounds on the subnets.
+    /// Creates an HTTP gateway for this PocketIC instance listening
+    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// and optionally specified domains (default to `localhost`)
+    /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
     /// Returns the URL at which `/api/v2` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub async fn make_live_https(
+    pub async fn make_live_with_params(
         &mut self,
         listen_at: Option<u16>,
-        domain: String,
-        https_config: HttpsConfig,
+        domains: Option<Vec<String>>,
+        https_config: Option<HttpsConfig>,
     ) -> Url {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
-                .make_live_https(listen_at, domain, https_config)
+                .make_live_with_params(listen_at, domains, https_config)
                 .await
         })
     }

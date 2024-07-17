@@ -48,10 +48,10 @@ use ic_nns_governance::pb::v1::{
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     proposal::{self, Action},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, ListNeurons, ListNeuronsResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
-    RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCode, ListNeurons,
+    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal,
+    ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -272,6 +272,8 @@ pub fn query_with_sender(
     query_impl(machine, canister, method_name, payload, Some(sender))
 }
 
+/// Once you have a Scrape, pass it to a function like get_gauge, get_counter,
+/// et. al., which are provided by nervous_system/common/test_utils.
 pub fn scrape_metrics(
     state_machine: &StateMachine,
     canister_id: CanisterId,
@@ -297,29 +299,6 @@ pub fn scrape_metrics(
         .into_iter();
 
     prometheus_parse::Scrape::parse(body).unwrap()
-}
-
-pub fn get_counter(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Counter(value) => value,
-        value => panic!("Metric found, but not a counter: {:?}", value),
-    }
-}
-
-pub fn get_gauge(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Gauge(value) => value,
-        value => panic!("Metric found, but not a gauge: {:?}", value),
-    }
-}
-
-pub fn get_sample(scrape: &prometheus_parse::Scrape, name: &str) -> prometheus_parse::Sample {
-    for sample in &scrape.samples {
-        if sample.metric == name {
-            return sample.clone();
-        }
-    }
-    panic!("Metric not found: {}", name);
 }
 
 pub fn make_http_request(
@@ -1052,8 +1031,17 @@ pub fn nns_propose_upgrade_nns_canister(
     target_canister_id: CanisterId,
     wasm_module: Vec<u8>,
     module_arg: Vec<u8>,
+    use_proposal_action: bool,
 ) -> ProposalId {
-    let action = if target_canister_id != ROOT_CANISTER_ID {
+    let action = if use_proposal_action {
+        Some(proposal::Action::InstallCode(InstallCode {
+            canister_id: Some(target_canister_id.get()),
+            install_mode: Some(3),
+            wasm_module: Some(wasm_module),
+            arg: Some(module_arg),
+            skip_stopping_before_installing: None,
+        }))
+    } else if target_canister_id != ROOT_CANISTER_ID {
         let payload = ChangeCanisterRequest::new(
             true, // stop_before_installing,
             CanisterInstallMode::Upgrade,
@@ -1133,7 +1121,7 @@ pub fn wait_for_canister_upgrade_to_succeed(
     for i in 0..25 {
         state_machine.tick();
 
-        // Fetch status of governance.
+        // Fetch status of the canister being upgraded.
         let status_result = get_canister_status(
             state_machine,
             controller_principal_id,
@@ -1396,7 +1384,7 @@ pub fn nns_get_monthly_node_provider_rewards(
 /// Return the most recent monthly Node Provider rewards
 pub fn nns_get_most_recent_monthly_node_provider_rewards(
     state_machine: &StateMachine,
-) -> Option<MostRecentMonthlyNodeProviderRewards> {
+) -> Option<MonthlyNodeProviderRewards> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
@@ -1415,7 +1403,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
         }
     };
 
-    Decode!(&result, Option<MostRecentMonthlyNodeProviderRewards>).unwrap()
+    Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap()
 }
 
 pub fn nns_get_network_economics_parameters(state_machine: &StateMachine) -> NetworkEconomics {

@@ -75,7 +75,7 @@ fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
         .with_log(
             LogEntryLogger::new(
                 slog::Logger::root(slog::Discard, slog::o!()),
-                slog::Level::Trace,
+                ic_config::logger::Level::Trace,
             )
             .into(),
         )

@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/canister_client/sender",
     "//rs/config",
@@ -53,8 +54,8 @@ BASE_DEPENDENCIES = [
     "@crate_index//:ic-btc-interface",
     "@crate_index//:maplit",
     "@crate_index//:num-traits",
-    "@crate_index//:prost",
     "@crate_index//:prometheus-parse",
+    "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:tokio",

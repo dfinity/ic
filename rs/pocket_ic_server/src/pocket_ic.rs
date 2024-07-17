@@ -3,11 +3,15 @@ use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::OpId;
 use crate::Operation;
 use crate::{copy_dir, BlobStore};
-use axum::{extract::State, response::IntoResponse};
+use askama::Template;
+use axum::{
+    extract::State,
+    response::{Html, IntoResponse},
+};
 use candid::Decode;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
-use hyper::Method;
+use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey};
 use ic_config::execution_environment;
 use ic_config::flag_status::FlagStatus;
@@ -17,9 +21,10 @@ use ic_http_endpoints_public::{
     CallServiceV2, CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
 };
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
+use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs,
+    CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
+    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
@@ -28,18 +33,18 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     finalize_registry, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
-    StateMachineConfig, SubmitIngressError, Time,
+    StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
-        QueryResponseHash, ReplicaHealthStatus,
+        QueryResponseHash, ReplicaHealthStatus, SignedIngress,
     },
-    CanisterId, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
+    time::GENESIS,
+    CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
@@ -55,7 +60,11 @@ use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
+    cmp::max,
     collections::BTreeMap,
+    fs::File,
+    io::{BufReader, Write},
+    path::PathBuf,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime},
 };
@@ -67,41 +76,156 @@ use tower::{
     util::{BoxCloneService, ServiceExt},
 };
 
+// See build.rs
+include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 
+fn compute_subnet_seed(
+    ranges: Vec<CanisterIdRange>,
+    alloc_range: Option<CanisterIdRange>,
+) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.write(format!("SubnetCanisterRanges({:?},{:?})", ranges, alloc_range).as_bytes());
+    hasher.finish()
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct RawTopologyInternal(pub BTreeMap<String, RawSubnetConfigInternal>);
+
+#[derive(Clone, Serialize, Deserialize)]
+struct RawSubnetConfigInternal {
+    pub subnet_config: SubnetConfigInternal,
+    pub time: SystemTime,
+}
+
+#[derive(Clone)]
+struct TopologyInternal(pub BTreeMap<[u8; 32], SubnetConfigInternal>);
+
+#[derive(Clone, Serialize, Deserialize)]
+struct SubnetConfigInternal {
+    pub subnet_id: SubnetId,
+    pub subnet_kind: SubnetKind,
+    pub instruction_config: SubnetInstructionConfig,
+    pub dts_flag: DtsFlag,
+    pub ranges: Vec<CanisterIdRange>,
+    pub alloc_range: Option<CanisterIdRange>,
+}
+
 pub struct PocketIc {
+    state_dir: Option<PathBuf>,
     subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     routing_table: RoutingTable,
     /// Created on initialization and updated if a new subnet is created.
-    pub topology: Topology,
+    topology: TopologyInternal,
     // Used for choosing a random subnet when the user does not specify
     // where a canister should be created. This value is seeded,
     // so reproducibility is maintained.
     randomness: StdRng,
-    // The initial subnet configs are used for computing the state label
+    // The initial state hash used for computing the state label
     // to distinguish PocketIC instances with different initial configs.
-    initial_subnet_configs: ExtendedSubnetConfigSet,
+    initial_state_hash: [u8; 32],
     // The following fields are used to create a new subnet.
     range_gen: RangeGen,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     runtime: Arc<Runtime>,
+    nonmainnet_features: bool,
+}
+
+impl Drop for PocketIc {
+    fn drop(&mut self) {
+        let subnets = self.subnets.read().unwrap();
+        if let Some(ref state_dir) = self.state_dir {
+            for subnet in subnets.values() {
+                subnet.checkpointed_tick();
+            }
+            for subnet in subnets.values() {
+                subnet.await_state_hash();
+            }
+            let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
+            let raw_topology: RawTopologyInternal = RawTopologyInternal(
+                self.topology
+                    .0
+                    .clone()
+                    .into_iter()
+                    .map(|(seed, config)| {
+                        let time = subnets.get(&config.subnet_id).unwrap().time();
+                        (
+                            hex::encode(seed),
+                            RawSubnetConfigInternal {
+                                subnet_config: config,
+                                time,
+                            },
+                        )
+                    })
+                    .collect(),
+            );
+            let topology_json = serde_json::to_string(&raw_topology).unwrap();
+            topology_file.write_all(topology_json.as_bytes()).unwrap();
+        }
+        for subnet in subnets.values() {
+            subnet.drop_payload_builder();
+        }
+    }
 }
 
 impl PocketIc {
-    fn sm_builder(
+    pub(crate) fn topology(&self) -> Topology {
+        let mut topology = Topology(BTreeMap::new());
+        let subnets = self.subnets.read().unwrap();
+        for (subnet_seed, config) in self.topology.0.iter() {
+            // What will be returned to the client:
+            let subnet_config = pocket_ic::common::rest::SubnetConfig {
+                subnet_kind: config.subnet_kind,
+                subnet_seed: *subnet_seed,
+                node_ids: subnets
+                    .get(&config.subnet_id)
+                    .unwrap()
+                    .nodes
+                    .iter()
+                    .map(|n| n.node_id.get().0.into())
+                    .collect(),
+                canister_ranges: config.ranges.iter().map(from_range).collect(),
+                instruction_config: config.instruction_config.clone(),
+            };
+            topology
+                .0
+                .insert(config.subnet_id.get().into(), subnet_config);
+        }
+        topology
+    }
+
+    fn create_state_machine_state_dir(
+        state_dir: &Option<PathBuf>,
+        subnet_seed: &[u8; 32],
+    ) -> Box<dyn StateMachineStateDir> {
+        if let Some(ref state_dir) = state_dir {
+            Box::new(state_dir.join(hex::encode(subnet_seed)))
+        } else {
+            Box::new(TempDir::new().unwrap())
+        }
+    }
+
+    fn state_machine_builder(
+        state_machine_state_dir: Box<dyn StateMachineStateDir>,
         runtime: Arc<Runtime>,
         subnet_kind: SubnetKind,
-        ranges: Vec<CanisterIdRange>,
-        alloc_range: Option<CanisterIdRange>,
+        subnet_seed: [u8; 32],
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
+        time: SystemTime,
+        nonmainnet_features: bool,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        let mut hypervisor_config = execution_environment::Config::default();
+        let mut hypervisor_config = if nonmainnet_features {
+            ic_starter::hypervisor_config(true)
+        } else {
+            execution_environment::Config::default()
+        };
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -122,103 +246,154 @@ impl PocketIc {
             .embedders_config
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
-        let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
-        let mut hasher = Sha256::new();
-        hasher.write(format!("SubnetCanisterRanges({:?},{:?})", ranges, alloc_range).as_bytes());
-        let subnet_seed = hasher.finish();
+        let state_machine_config = StateMachineConfig::new(subnet_config, hypervisor_config);
+        let t = time
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let time = Time::from_nanos_since_unix_epoch(t);
         StateMachineBuilder::new()
             .with_runtime(runtime)
-            .with_config(Some(sm_config))
+            .with_config(Some(state_machine_config))
             .with_subnet_seed(subnet_seed)
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
+            .with_time(time)
+            .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
-            .with_multisubnet_ecdsa_key()
             .with_use_cost_scaling_flag(true)
     }
 
-    pub fn new(runtime: Arc<Runtime>, subnet_configs: ExtendedSubnetConfigSet) -> Self {
-        let fixed_range_subnets = subnet_configs.get_named();
-        let flexible_subnets = {
-            // note that for these, the subnet ids are currently ignored.
-            let sys = subnet_configs.system.iter().map(|spec| {
-                (
-                    SubnetKind::System,
-                    spec.get_state_path(),
-                    spec.get_instruction_config(),
-                    spec.get_dts_flag(),
-                )
-            });
-            let app = subnet_configs.application.iter().map(|spec| {
-                (
-                    SubnetKind::Application,
-                    spec.get_state_path(),
-                    spec.get_instruction_config(),
-                    spec.get_dts_flag(),
-                )
-            });
-            sys.chain(app)
-        };
-
+    pub(crate) fn new(
+        runtime: Arc<Runtime>,
+        subnet_configs: ExtendedSubnetConfigSet,
+        state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
+    ) -> Self {
         let mut range_gen = RangeGen::new();
-        let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
         let mut routing_table = RoutingTable::new();
-
         let mut nns_subnet_id = subnet_configs.nns.as_ref().and_then(|x| {
             x.get_subnet_id()
                 .map(|y| SubnetId::new(PrincipalId(y.into())))
         });
 
-        let ii_subnet_split = subnet_configs.ii.is_some();
+        let topology: Option<RawTopologyInternal> = if let Some(ref state_dir) = state_dir {
+            let topology_file_path = state_dir.join("topology.json");
+            File::open(topology_file_path).ok().map(|file| {
+                let reader = BufReader::new(file);
+                serde_json::from_reader(reader).unwrap()
+            })
+        } else {
+            None
+        };
 
-        for (subnet_kind, subnet_state_dir, instruction_config, dts_flag) in
-            fixed_range_subnets.into_iter().chain(flexible_subnets)
-        {
-            let RangeConfig {
-                canister_id_ranges: ranges,
-                canister_allocation_range: alloc_range,
-            } = get_range_config(subnet_kind, &mut range_gen, ii_subnet_split);
-
-            let state_dir = if let Some(subnet_state_dir) = subnet_state_dir {
-                let tmp_dir = TempDir::new().expect("Failed to create temporary directory");
-                copy_dir(subnet_state_dir, tmp_dir.path()).expect("Failed to copy state directory");
-                Some(tmp_dir)
-            } else {
-                None
+        let subnet_config_info: Vec<SubnetConfigInfo> = if let Some(topology) = topology {
+            topology
+                .0
+                .into_iter()
+                .map(|(subnet_seed, config)| SubnetConfigInfo {
+                    state_machine_state_dir: Box::new(
+                        state_dir.as_ref().unwrap().join(subnet_seed.clone()),
+                    ),
+                    subnet_id: Some(config.subnet_config.subnet_id),
+                    ranges: config.subnet_config.ranges,
+                    alloc_range: config.subnet_config.alloc_range,
+                    subnet_kind: config.subnet_config.subnet_kind,
+                    subnet_seed: hex::decode(subnet_seed).unwrap().try_into().unwrap(),
+                    instruction_config: config.subnet_config.instruction_config,
+                    dts_flag: config.subnet_config.dts_flag,
+                    time: config.time,
+                })
+                .collect()
+        } else {
+            let fixed_range_subnets = subnet_configs.get_named();
+            let flexible_subnets = {
+                let sys = subnet_configs.system.iter().map(|spec| {
+                    (
+                        SubnetKind::System,
+                        spec.get_state_path(),
+                        spec.get_subnet_id(),
+                        spec.get_instruction_config(),
+                        spec.get_dts_flag(),
+                    )
+                });
+                let app = subnet_configs.application.iter().map(|spec| {
+                    (
+                        SubnetKind::Application,
+                        spec.get_state_path(),
+                        spec.get_subnet_id(),
+                        spec.get_instruction_config(),
+                        spec.get_dts_flag(),
+                    )
+                });
+                sys.chain(app)
             };
 
-            subnet_config_info.push(SubnetConfigInfo {
-                ranges,
-                alloc_range,
-                subnet_kind,
-                state_dir,
-                instruction_config,
-                dts_flag,
-            });
-        }
+            let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
+
+            let ii_subnet_split = subnet_configs.ii.is_some();
+
+            for (subnet_kind, subnet_state_dir, subnet_id, instruction_config, dts_flag) in
+                fixed_range_subnets.into_iter().chain(flexible_subnets)
+            {
+                let RangeConfig {
+                    canister_id_ranges: ranges,
+                    canister_allocation_range: alloc_range,
+                } = get_range_config(subnet_kind, &mut range_gen, ii_subnet_split);
+
+                let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
+
+                let state_machine_state_dir =
+                    Self::create_state_machine_state_dir(&state_dir, &subnet_seed);
+
+                if let Some(subnet_state_dir) = subnet_state_dir {
+                    copy_dir(subnet_state_dir, state_machine_state_dir.path())
+                        .expect("Failed to copy state directory");
+                }
+
+                subnet_config_info.push(SubnetConfigInfo {
+                    state_machine_state_dir,
+                    subnet_id: subnet_id.map(|raw| SubnetId::new(PrincipalId(raw.into()))),
+                    ranges,
+                    alloc_range,
+                    subnet_kind,
+                    subnet_seed,
+                    instruction_config,
+                    dts_flag,
+                    time: GENESIS.into(),
+                });
+            }
+
+            subnet_config_info
+        };
 
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>> =
             Arc::new(RwLock::new(BTreeMap::new()));
-        let mut topology = Topology(BTreeMap::new());
+        let mut topology = TopologyInternal(BTreeMap::new());
 
         // Create all StateMachines and the topology from the subnet config infos.
         for SubnetConfigInfo {
+            state_machine_state_dir,
+            subnet_id,
             ranges,
             alloc_range,
             subnet_kind,
-            state_dir,
+            subnet_seed,
             instruction_config,
             dts_flag,
+            time,
         } in subnet_config_info.into_iter()
         {
-            let mut builder = Self::sm_builder(
+            let mut builder = Self::state_machine_builder(
+                state_machine_state_dir,
                 runtime.clone(),
                 subnet_kind,
-                ranges.clone(),
-                alloc_range,
+                subnet_seed,
                 instruction_config.clone(),
                 registry_data_provider.clone(),
+                time,
+                nonmainnet_features,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -227,13 +402,25 @@ impl PocketIc {
 
             if subnet_kind == SubnetKind::NNS {
                 builder = builder.with_root_subnet_config();
-                if let Some(nns_subnet_id) = nns_subnet_id {
-                    builder = builder.with_subnet_id(nns_subnet_id);
-                }
             }
 
-            if let Some(state_dir) = state_dir {
-                builder = builder.with_state_dir(state_dir);
+            if let Some(subnet_id) = subnet_id {
+                builder = builder.with_subnet_id(subnet_id);
+            }
+
+            if subnet_kind == SubnetKind::II {
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "dfx_test_key1".to_string(),
+                }));
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "test_key_1".to_string(),
+                }));
+                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "key_1".to_string(),
+                }));
             }
 
             let sm = builder.build_with_subnets(subnets.clone());
@@ -252,21 +439,22 @@ impl PocketIc {
                 routing_table.insert(alloc_range, subnet_id).unwrap();
             }
 
-            // What will be returned to the client:
-            let subnet_config = pocket_ic::common::rest::SubnetConfig {
+            let subnet_config_internal = SubnetConfigInternal {
+                subnet_id,
                 subnet_kind,
-                size: subnet_size(subnet_kind),
-                canister_ranges: ranges.iter().map(from_range).collect(),
                 instruction_config,
+                ranges,
+                alloc_range,
+                dts_flag,
             };
-            topology.0.insert(subnet_id.get().0, subnet_config);
+            topology.0.insert(subnet_seed, subnet_config_internal);
         }
 
         // Finalize registry with subnet IDs that are only available now that we created
         // all the StateMachines.
-        let subnet_list = topology.0.keys().map(|p| PrincipalId(*p).into()).collect();
+        let subnet_list = topology.0.values().map(|config| config.subnet_id).collect();
         finalize_registry(
-            nns_subnet_id.unwrap_or(PrincipalId(*topology.0.keys().next().unwrap()).into()),
+            nns_subnet_id.unwrap_or(topology.0.values().next().unwrap().subnet_id),
             routing_table.clone(),
             subnet_list,
             registry_data_provider.clone(),
@@ -278,15 +466,42 @@ impl PocketIc {
             subnet.reload_registry();
         }
 
+        // Sync the time on the subnets (if only the NNS subnet is loaded
+        // from a snapshot, then its time might diverge).
+        // Since time must be monotone, we pick the maximum time.
+        let mut max_time = GENESIS;
+        for subnet in subnets.read().unwrap().values() {
+            max_time = max(max_time, subnet.get_state_time());
+        }
+        for subnet in subnets.read().unwrap().values() {
+            subnet.set_time(max_time.into());
+        }
+
+        // We execute a round on every subnet to make sure it has a state to certify.
+        for subnet in subnets.read().unwrap().values() {
+            subnet.execute_round();
+        }
+
+        let mut hasher = Sha256::new();
+        let subnet_configs_string = format!("{:?}", subnet_configs);
+        hasher.write(subnet_configs_string.as_bytes());
+        let initial_state_hash = compute_state_label(
+            &hasher.finish(),
+            subnets.read().unwrap().values().cloned().collect(),
+        )
+        .0;
+
         Self {
+            state_dir,
             subnets,
             routing_table,
             topology,
             randomness: StdRng::seed_from_u64(42),
-            initial_subnet_configs: subnet_configs,
+            initial_state_hash,
             range_gen,
             registry_data_provider,
             runtime,
+            nonmainnet_features,
         }
     }
 
@@ -322,7 +537,7 @@ impl PocketIc {
     }
 
     fn nns_subnet(&self) -> Option<Arc<StateMachine>> {
-        self.topology.get_nns().map(|nns_subnet_id| {
+        self.topology().get_nns().map(|nns_subnet_id| {
             self.get_subnet_with_id(PrincipalId(nns_subnet_id).into())
                 .unwrap()
         })
@@ -340,8 +555,8 @@ impl PocketIc {
         &mut self,
         subnet_type: rest::SubnetKind,
     ) -> Option<Arc<StateMachine>> {
-        let subnets = self
-            .topology
+        let topology = self.topology();
+        let subnets = topology
             .0
             .iter()
             .filter(|(_, config)| config.subnet_kind == subnet_type)
@@ -380,26 +595,37 @@ impl Default for PocketIc {
                 application: vec![SubnetSpec::default()],
                 ..Default::default()
             },
+            None,
+            false,
         )
     }
 }
 
+fn compute_state_label(
+    initial_state_hash: &[u8; 32],
+    subnets: Vec<Arc<StateMachine>>,
+) -> StateLabel {
+    let mut hasher = Sha256::new();
+    hasher.write(initial_state_hash);
+    for subnet in subnets {
+        let subnet_state_hash = subnet
+            .state_manager
+            .latest_state_certification_hash()
+            .map(|(_, h)| h.0)
+            .unwrap_or_else(|| [0u8; 32].to_vec());
+        let nanos = systemtime_to_unix_epoch_nanos(subnet.time());
+        hasher.write(&subnet_state_hash[..]);
+        hasher.write(&nanos.to_be_bytes());
+    }
+    StateLabel(hasher.finish())
+}
+
 impl HasStateLabel for PocketIc {
     fn get_state_label(&self) -> StateLabel {
-        let mut hasher = Sha256::new();
-        let subnet_configs_string = format!("{:?}", self.initial_subnet_configs);
-        hasher.write(subnet_configs_string.as_bytes());
-        for subnet in self.subnets.read().unwrap().values() {
-            let subnet_state_hash = subnet
-                .state_manager
-                .latest_state_certification_hash()
-                .map(|(_, h)| h.0)
-                .unwrap_or_else(|| [0u8; 32].to_vec());
-            let nanos = systemtime_to_unix_epoch_nanos(subnet.time());
-            hasher.write(&subnet_state_hash[..]);
-            hasher.write(&nanos.to_be_bytes());
-        }
-        StateLabel(hasher.finish())
+        compute_state_label(
+            &self.initial_state_hash,
+            self.subnets.read().unwrap().values().cloned().collect(),
+        )
     }
 }
 
@@ -538,12 +764,15 @@ struct RangeConfig {
 
 /// Internal struct used during initialization.
 struct SubnetConfigInfo {
+    pub state_machine_state_dir: Box<dyn StateMachineStateDir>,
+    pub subnet_id: Option<SubnetId>,
     pub ranges: Vec<CanisterIdRange>,
     pub alloc_range: Option<CanisterIdRange>,
     pub subnet_kind: SubnetKind,
-    pub state_dir: Option<TempDir>,
+    pub subnet_seed: [u8; 32],
     pub instruction_config: SubnetInstructionConfig,
     pub dts_flag: DtsFlag,
+    pub time: SystemTime,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -579,7 +808,7 @@ pub struct GetTopology;
 
 impl Operation for GetTopology {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        OpOut::Topology(pic.topology.clone())
+        OpOut::Topology(pic.topology().clone())
     }
 
     fn id(&self) -> OpId {
@@ -863,9 +1092,74 @@ impl Operation for Query {
     }
 }
 
+pub struct DashboardRequest {}
+
+impl Operation for DashboardRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnets = pic.subnets.read().unwrap();
+
+        // All PocketIC subnets have the same height and thus we fetch the height from an arbitrary subnet.
+        let arbitrary_subnet = subnets.values().next().unwrap();
+        let height = arbitrary_subnet.state_manager.latest_state_height();
+
+        let states: Vec<_> = subnets
+            .values()
+            .map(|subnet| {
+                (
+                    subnet.state_manager.get_latest_state(),
+                    subnet.get_subnet_id(),
+                )
+            })
+            .collect();
+        let canisters = states
+            .iter()
+            .map(|(state, subnet_id)| {
+                state
+                    .get_ref()
+                    .canisters_iter()
+                    .map(|c| (c, *subnet_id))
+                    .collect::<Vec<_>>()
+            })
+            .concat();
+
+        let dashboard = Dashboard {
+            height,
+            canisters: &canisters,
+        };
+
+        let resp = match dashboard.render() {
+            Ok(content) => Html(content).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal error: {}", e),
+            )
+                .into_response(),
+        };
+
+        OpOut::RawResponse((
+            resp.status().into(),
+            resp.headers()
+                .iter()
+                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                .collect(),
+            pic.runtime
+                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
+                .unwrap()
+                .to_vec(),
+        ))
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        OpId("dashboard".to_string())
+    }
+}
+
 pub struct StatusRequest {
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 struct PocketHealth;
@@ -936,18 +1230,18 @@ impl Operation for StatusRequest {
         let root_key_bytes = pic.nns_subnet().map(|nns_subnet| nns_subnet.root_key_der());
         let root_key = PocketRootKey(root_key_bytes);
 
-        let resp = self
+        let resp = pic
             .runtime
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
 
-        OpOut::ApiV2Response((
+        OpOut::RawResponse((
             resp.status().into(),
             resp.headers()
                 .iter()
                 .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                 .collect(),
-            self.runtime
+            pic.runtime
                 .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                 .unwrap()
                 .to_vec(),
@@ -969,7 +1263,6 @@ impl Operation for StatusRequest {
 pub struct CallRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 #[derive(Clone)]
@@ -1004,7 +1297,7 @@ impl Operation for CallRequest {
                 let node = &subnet.nodes[0];
                 #[allow(clippy::disallowed_methods)]
                 let (s, mut r) =
-                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<IngressArtifact>>();
+                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<SignedIngress>>();
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
@@ -1038,19 +1331,19 @@ impl Operation for CallRequest {
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
                 if let Ok(UnvalidatedArtifactMutation::Insert((msg, _node_id))) = r.try_recv() {
                     subnet.push_signed_ingress(msg);
                 }
 
-                OpOut::ApiV2Response((
+                OpOut::RawResponse((
                     resp.status().into(),
                     resp.headers()
                         .iter()
                         .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                         .collect(),
-                    self.runtime
+                    pic.runtime
                         .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                         .unwrap()
                         .to_vec(),
@@ -1074,11 +1367,10 @@ impl Operation for CallRequest {
 pub struct QueryRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 #[derive(Clone)]
-struct PocketNodeSigner(pub ed25519_consensus::SigningKey);
+struct PocketNodeSigner(pub ic_crypto_ed25519::PrivateKey);
 
 impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(
@@ -1088,7 +1380,7 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
         _registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<QueryResponseHash>> {
         Ok(BasicSigOf::new(BasicSig(
-            self.0.sign(&message.as_signed_bytes()).to_bytes().to_vec(),
+            self.0.sign_message(&message.as_signed_bytes()).to_vec(),
         )))
     }
 }
@@ -1135,15 +1427,15 @@ impl Operation for QueryRequest {
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::ApiV2Response((
+                OpOut::RawResponse((
                     resp.status().into(),
                     resp.headers()
                         .iter()
                         .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                         .collect(),
-                    self.runtime
+                    pic.runtime
                         .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                         .unwrap()
                         .to_vec(),
@@ -1168,7 +1460,6 @@ impl Operation for QueryRequest {
 pub struct ReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
 }
 
 impl Operation for ReadStateRequest {
@@ -1199,15 +1490,15 @@ impl Operation for ReadStateRequest {
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::ApiV2Response((
+                OpOut::RawResponse((
                     resp.status().into(),
                     resp.headers()
                         .iter()
                         .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
                         .collect(),
-                    self.runtime
+                    pic.runtime
                         .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
                         .unwrap()
                         .to_vec(),
@@ -1580,14 +1871,7 @@ fn route(
             None => {
                 if is_provisional_create_canister {
                     // We retrieve the PocketIC instace time (consistent across all subnets) from one subnet.
-                    let time = pic
-                        .subnets
-                        .read()
-                        .unwrap()
-                        .values()
-                        .next()
-                        .unwrap()
-                        .get_time();
+                    let time = pic.subnets.read().unwrap().values().next().unwrap().time();
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.
                     // NNS and II subnets cannot be created at this point though because NNS is the root subnet
                     // and both NNS and II subnets on the IC mainnet do not have a single canister range
@@ -1599,6 +1883,7 @@ fn route(
                         return Err(format!("The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."));
                     }
                     let instruction_config = SubnetInstructionConfig::Production;
+                    let dts_flag = DtsFlag::Enabled;
                     // The binary representation of canister IDs on the IC mainnet consists of exactly 10 bytes.
                     let canister_id_slice: &[u8] = canister_id.as_ref();
                     if canister_id_slice.len() != 10 {
@@ -1622,14 +1907,19 @@ fn route(
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
                     let canister_allocation_range = pic.range_gen.next_range();
+                    // Compute the subnet seed.
+                    let subnet_seed =
+                        compute_subnet_seed(vec![range], Some(canister_allocation_range));
                     // We build the `StateMachine` of the new subnet.
-                    let builder = PocketIc::sm_builder(
+                    let builder = PocketIc::state_machine_builder(
+                        PocketIc::create_state_machine_state_dir(&pic.state_dir, &subnet_seed),
                         pic.runtime.clone(),
                         subnet_kind,
-                        vec![range],
-                        Some(canister_allocation_range),
+                        subnet_seed,
                         instruction_config.clone(),
                         pic.registry_data_provider.clone(),
+                        time,
+                        pic.nonmainnet_features,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
@@ -1639,13 +1929,15 @@ fn route(
                         .insert(canister_allocation_range, subnet_id)
                         .unwrap();
                     // We insert the new subnet into the topology.
-                    let subnet_config = pocket_ic::common::rest::SubnetConfig {
+                    let subnet_config_internal = SubnetConfigInternal {
+                        subnet_id,
                         subnet_kind,
-                        size: subnet_size(subnet_kind),
-                        canister_ranges: vec![from_range(&range)],
                         instruction_config,
+                        ranges: vec![range],
+                        alloc_range: Some(canister_allocation_range),
+                        dts_flag,
                     };
-                    pic.topology.0.insert(subnet_id.get().0, subnet_config);
+                    pic.topology.0.insert(subnet_seed, subnet_config_internal);
                     // We update the registry by creating a new registry version
                     // and inserting new records at that new registry version.
                     let registry_version = pic.registry_data_provider.latest_version();
@@ -1658,7 +1950,7 @@ fn route(
                         )
                         .unwrap();
                     let subnet_list = pic
-                        .topology
+                        .topology()
                         .0
                         .keys()
                         .map(|p| PrincipalId(*p).into())
@@ -1673,8 +1965,6 @@ fn route(
                         // all the state machines have a consistent view of the registry.
                         subnet.reload_registry();
                     }
-                    // We set the time on the new subnet to the PocketIC instance time.
-                    sm.set_time(time.into());
                     // We need to execute a round on the new subnet to make its state certified.
                     // To keep the PocketIC instance time in sync, we execute a round on all subnets.
                     for subnet in pic.subnets.read().unwrap().values() {
@@ -1795,9 +2085,10 @@ mod tests {
     fn test_time() {
         let mut pic = PocketIc::default();
 
-        let time = Time::from_nanos_since_unix_epoch(21);
+        let unix_time_ns = 1640995200000000000; // 1st Jan 2022
+        let time = Time::from_nanos_since_unix_epoch(unix_time_ns);
         compute_assert_state_change(&mut pic, SetTime { time });
-        let expected_time = OpOut::Time(21);
+        let expected_time = OpOut::Time(unix_time_ns);
         let actual_time = compute_assert_state_immutable(&mut pic, GetTime {});
 
         assert_eq!(expected_time, actual_time);
@@ -1912,6 +2203,8 @@ mod tests {
                 ii: Some(SubnetSpec::default()),
                 ..Default::default()
             },
+            None,
+            false,
         );
         let canister_id = pic.any_subnet().create_canister(None);
 

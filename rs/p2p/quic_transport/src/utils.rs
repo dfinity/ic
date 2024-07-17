@@ -18,7 +18,7 @@ use axum::{
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{Chunk, RecvStream, SendStream, VarInt, WriteError};
+use quinn::{Chunk, ClosedStream, RecvStream, SendStream, StoppedError, VarInt, WriteError};
 use reed_solomon_simd::ReedSolomonDecoder;
 
 use crate::metrics::QuicTransportMetrics;
@@ -193,10 +193,16 @@ async fn disassemble(send_stream: &mut SendStream, bytes: Vec<u8>) -> Result<(),
         Err(WriteError::Stopped(int)) if int == VarInt::from_u32(1) => {}
         Err(e) => return Err(e.into()),
     };
-    let finish_result = send_stream.finish().await;
+    let finish_result = send_stream.finish();
     match finish_result {
-        Ok(()) => Ok(()),
-        Err(WriteError::Stopped(int)) if int == VarInt::from_u32(1) => Ok(()),
+        Ok(()) => Ok::<(), anyhow::Error>(()),
+        Err(e) => Err(e.into()),
+    }?;
+    let stopped_result = send_stream.stopped().await.map_err(|err| err);
+    match stopped_result {
+        Ok(None) => Ok(()),
+        Ok(Some(int)) if int == VarInt::from_u32(1) => Ok(()),
+        Ok(Some(_)) => Ok(()),
         Err(e) => Err(e.into()),
     }
 }
