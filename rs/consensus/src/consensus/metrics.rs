@@ -18,7 +18,7 @@ use prometheus::{
 };
 use std::sync::RwLock;
 
-use crate::ecdsa::metrics::{
+use crate::idkg::metrics::{
     count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
     KEY_ID_LABEL,
 };
@@ -157,7 +157,7 @@ impl BatchStats {
     }
 }
 
-// Ecdsa payload stats
+// IDkg payload stats
 pub struct IDkgStats {
     pub signature_agreements: usize,
     pub key_transcript_created: CounterPerMasterPublicKeyId,
