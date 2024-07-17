@@ -17,10 +17,7 @@ pub(crate) struct ConsensusManagerMetrics {
     pub download_task_finished_total: IntCounter,
     pub download_task_duration: Histogram,
     pub download_task_result_total: IntCounterVec,
-    pub download_task_stashed_total: IntCounter,
-    pub download_task_artifact_download_duration: Histogram,
     pub download_task_restart_after_join_total: IntCounter,
-    pub download_task_artifact_download_errors_total: IntCounter,
 
     // Slot table
     pub slot_table_updates_total: IntCounter,
@@ -91,35 +88,10 @@ impl ConsensusManagerMetrics {
                 )
                 .unwrap(),
             ),
-            download_task_stashed_total: metrics_registry.register(
-                IntCounter::with_opts(opts!(
-                    "ic_consensus_manager_download_task_stashed_total",
-                    "Adverts stashed at least once.",
-                    const_labels.clone(),
-                ))
-                .unwrap(),
-            ),
-            download_task_artifact_download_duration: metrics_registry.register(
-                Histogram::with_opts(histogram_opts!(
-                    "ic_consensus_manager_download_task_artifact_download_duration",
-                    "Download time for artifact.",
-                    decimal_buckets(-2, 1),
-                    const_labels_string.clone(),
-                ))
-                .unwrap(),
-            ),
             download_task_restart_after_join_total: metrics_registry.register(
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_download_task_restart_after_join_total",
                     "Download task immediately restarted due to advert appearing when closing.",
-                    const_labels.clone(),
-                ))
-                .unwrap(),
-            ),
-            download_task_artifact_download_errors_total: metrics_registry.register(
-                IntCounter::with_opts(opts!(
-                    "ic_consensus_manager_download_task_artifact_download_errors_total",
-                    "Error occurred when downloading artifact.",
                     const_labels.clone(),
                 ))
                 .unwrap(),

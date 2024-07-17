@@ -208,6 +208,7 @@ members = [
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
     "rs/orchestrator/registry_replicator",
+    "rs/p2p/artifact_downloader",
     "rs/p2p/artifact_manager",
     "rs/p2p/consensus_manager",
     "rs/p2p/peer_manager",

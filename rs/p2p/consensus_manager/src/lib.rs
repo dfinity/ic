@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::{
     metrics::ConsensusManagerMetrics,
@@ -7,14 +7,11 @@ use crate::{
 };
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::{
-    artifact_manager::ArtifactProcessorEvent,
-    consensus::{PriorityFnFactory, ValidatedPoolReader},
-};
+use ic_interfaces::p2p::artifact_manager::ArtifactProcessorEvent;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
-use ic_types::artifact::{PbArtifact, UnvalidatedArtifactMutation};
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
 use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
@@ -50,18 +47,21 @@ impl ConsensusManagerBuilder {
         }
     }
 
-    pub fn add_client<Artifact, Pool>(
+    pub fn add_client<
+        Artifact: IdentifiableArtifact,
+        WireArtifact: PbArtifact,
+        F: FnOnce(Arc<dyn Transport>) -> D + 'static,
+        D: ArtifactAssembler<Artifact, WireArtifact>,
+    >(
         &mut self,
         outbound_artifacts_rx: Receiver<ArtifactProcessorEvent<Artifact>>,
-        pool: Arc<RwLock<Pool>>,
-        priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    ) where
-        Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-        Artifact: PbArtifact,
-    {
-        assert!(uri_prefix::<Artifact>().chars().all(char::is_alphabetic));
-        let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone(), pool.clone());
+        (downloader, downloader_router): (F, Router),
+    ) {
+        assert!(uri_prefix::<WireArtifact>()
+            .chars()
+            .all(char::is_alphabetic));
+        let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone());
 
         let log = self.log.clone();
         let rt_handle = self.rt_handle.clone();
@@ -74,15 +74,20 @@ impl ConsensusManagerBuilder {
                 rt_handle,
                 outbound_artifacts_rx,
                 adverts_from_peers_rx,
-                pool,
-                priority_fn_producer,
                 inbound_artifacts_tx,
+                downloader(transport.clone()),
                 transport,
                 topology_watcher,
             )
         };
 
-        self.router = Some(self.router.take().unwrap_or_default().merge(router));
+        self.router = Some(
+            self.router
+                .take()
+                .unwrap_or_default()
+                .merge(router)
+                .merge(downloader_router),
+        );
 
         self.clients.push(Box::new(builder));
     }
@@ -104,32 +109,33 @@ impl ConsensusManagerBuilder {
     }
 }
 
-fn start_consensus_manager<Artifact, Pool>(
+fn start_consensus_manager<Artifact, WireArtifact, Downloader>(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
     adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
     // Adverts received from peers
-    adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
-    raw_pool: Arc<RwLock<Pool>>,
-    priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
+    adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    downloader: Downloader,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
 ) -> Shutdown
 where
-    Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: PbArtifact,
+    Artifact: IdentifiableArtifact,
+    WireArtifact: PbArtifact,
+    Downloader: ArtifactAssembler<Artifact, WireArtifact>,
 {
-    let metrics = ConsensusManagerMetrics::new::<Artifact>(metrics_registry);
+    let metrics = ConsensusManagerMetrics::new::<WireArtifact>(metrics_registry);
 
-    let shutdown = ConsensusManagerSender::run(
+    let shutdown = ConsensusManagerSender::<Artifact, WireArtifact, _>::run(
         log.clone(),
         metrics.clone(),
         rt_handle.clone(),
         transport.clone(),
         adverts_to_send,
+        downloader.clone(),
     );
 
     ConsensusManagerReceiver::run(
@@ -137,10 +143,8 @@ where
         metrics,
         rt_handle,
         adverts_received,
-        raw_pool,
-        priority_fn_producer,
+        downloader,
         sender,
-        transport,
         topology_watcher,
     );
     shutdown
@@ -157,7 +161,7 @@ pub(crate) enum Update<Artifact: PbArtifact> {
     Advert((Artifact::Id, Artifact::Attribute)),
 }
 
-pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
+pub fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
@@ -166,3 +170,56 @@ pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
 pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Aborted;
+
+pub trait Peers {
+    fn peers(&self) -> Vec<NodeId>;
+}
+
+pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
+    Send + Clone + 'static
+{
+    fn disassemble_message(&self, msg: A1) -> A2;
+    fn assemble_message<P: Peers + Send + 'static>(
+        &self,
+        id: <A2 as IdentifiableArtifact>::Id,
+        attr: <A2 as IdentifiableArtifact>::Attribute,
+        artifact: Option<(A2, NodeId)>,
+        peer_rx: P,
+    ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
+}
+
+#[cfg(test)]
+pub mod mocks {
+    use super::*;
+    use ic_p2p_test_utils::consensus::U64Artifact;
+
+    mockall::mock! {
+        pub ArtifactAssembler {}
+
+        impl Clone for ArtifactAssembler {
+            fn clone(&self) -> Self;
+        }
+
+        impl ArtifactAssembler<U64Artifact, U64Artifact> for ArtifactAssembler {
+            fn disassemble_message(&self, msg: U64Artifact) -> U64Artifact;
+            fn assemble_message<P: Peers + Send + 'static>(
+                &self,
+                id: u64,
+                attr: (),
+                artifact: Option<(U64Artifact, NodeId)>,
+                peer_rx: P,
+            ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;
+        }
+    }
+
+    mockall::mock! {
+        pub Peers {}
+
+        impl Peers for Peers {
+            fn peers(&self) -> Vec<NodeId>;
+        }
+    }
+}

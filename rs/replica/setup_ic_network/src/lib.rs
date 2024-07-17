@@ -346,7 +346,14 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(consensus_rx, consensus_pool, consensus_gossip, client);
+        let downloader = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            consensus_pool,
+            consensus_gossip,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.add_client(consensus_rx, client, downloader);
     };
 
     let ingress_sender = {
@@ -362,12 +369,14 @@ fn start_consensus(
         );
 
         join_handles.push(jh);
-        new_p2p_consensus.add_client(
-            ingress_rx,
+        let downloader = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
             artifact_pools.ingress_pool.clone(),
             ingress_prioritizer,
-            client.clone(),
+            metrics_registry.clone(),
         );
+        new_p2p_consensus.add_client(ingress_rx, client.clone(), downloader);
         client
     };
 
@@ -394,12 +403,14 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        new_p2p_consensus.add_client(
-            certification_rx,
+        let downloader = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
             artifact_pools.certification_pool,
             certifier_gossip,
-            client,
+            metrics_registry.clone(),
         );
+        new_p2p_consensus.add_client(certification_rx, client, downloader);
     };
 
     {
@@ -420,7 +431,14 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        new_p2p_consensus.add_client(dkg_rx, artifact_pools.dkg_pool, dkg_gossip, client);
+        let downloader = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.dkg_pool,
+            dkg_gossip,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.add_client(dkg_rx, client, downloader);
     };
 
     {
@@ -463,7 +481,14 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(idkg_rx, artifact_pools.idkg_pool, idkg_gossip, client);
+        let downloader = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.idkg_pool,
+            idkg_gossip,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.add_client(idkg_rx, client, downloader);
     };
 
     {
@@ -491,12 +516,14 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(
-            http_outcalls_rx,
+        let downloader = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
             artifact_pools.canister_http_pool,
             canister_http_gossip,
-            client,
+            metrics_registry.clone(),
         );
+        new_p2p_consensus.add_client(http_outcalls_rx, client, downloader);
     };
 
     (

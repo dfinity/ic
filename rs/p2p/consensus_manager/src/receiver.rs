@@ -1,34 +1,27 @@
 #![allow(clippy::disallowed_methods)]
 
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
     metrics::{
         ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
         DOWNLOAD_TASK_RESULT_COMPLETED, DOWNLOAD_TASK_RESULT_DROP,
     },
-    uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
+    uri_prefix, Aborted, ArtifactAssembler, CommitId, Peers, SlotNumber, SlotUpdate, Update,
 };
 use axum::{
     extract::{DefaultBodyLimit, State},
-    http::{Request, StatusCode},
+    http::StatusCode,
     routing::any,
     Extension, Router,
 };
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader};
 use ic_logger::{error, warn, ReplicaLogger};
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
-use ic_quic_transport::{ConnId, SubnetTopology, Transport};
-use ic_types::artifact::{PbArtifact, UnvalidatedArtifactMutation};
+use ic_protobuf::p2p::v1 as pb;
+use ic_quic_transport::{ConnId, SubnetTopology};
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
 use prost::Message;
-use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use tokio::{
     runtime::Handle,
     select,
@@ -37,29 +30,17 @@ use tokio::{
         watch,
     },
     task::JoinSet,
-    time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
 use tracing::instrument;
 
-const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
-const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
-
-type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
 
 #[allow(unused)]
 pub fn build_axum_router<Artifact: PbArtifact>(
     log: ReplicaLogger,
-    pool: ValidatedPoolReaderRef<Artifact>,
 ) -> (Router, Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>) {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
     let router = Router::new()
-        .route(
-            &format!("/{}/rpc", uri_prefix::<Artifact>()),
-            any(rpc_handler),
-        )
-        .with_state(pool)
         .route(
             &format!("/{}/update", uri_prefix::<Artifact>()),
             any(update_handler),
@@ -69,25 +50,6 @@ pub fn build_axum_router<Artifact: PbArtifact>(
         .layer(DefaultBodyLimit::disable());
 
     (router, update_rx)
-}
-
-async fn rpc_handler<Artifact: PbArtifact>(
-    State(pool): State<ValidatedPoolReaderRef<Artifact>>,
-    payload: Bytes,
-) -> Result<Bytes, StatusCode> {
-    let jh = tokio::task::spawn_blocking(move || {
-        let id: Artifact::Id =
-            Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-        let artifact = pool
-            .read()
-            .unwrap()
-            .get(&id)
-            .ok_or(StatusCode::NO_CONTENT)?;
-        Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
-    });
-    let bytes = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
-
-    Ok(bytes)
 }
 
 async fn update_handler<Artifact: PbArtifact>(
@@ -136,11 +98,11 @@ async fn update_handler<Artifact: PbArtifact>(
 pub struct PeerCounter(HashMap<NodeId, u32>);
 
 impl PeerCounter {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(HashMap::new())
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
@@ -149,7 +111,7 @@ impl PeerCounter {
     }
 
     /// Returns true if value is newly inserted
-    pub fn insert(&mut self, node: NodeId) -> bool {
+    pub(crate) fn insert(&mut self, node: NodeId) -> bool {
         match self.0.entry(node) {
             Entry::Occupied(mut entry) => {
                 *entry.get_mut() += 1;
@@ -163,7 +125,7 @@ impl PeerCounter {
     }
 
     /// Returns true if removed key was present and counter got to zero
-    pub fn remove(&mut self, node: NodeId) -> bool {
+    pub(crate) fn remove(&mut self, node: NodeId) -> bool {
         match self.0.entry(node) {
             Entry::Occupied(mut entry) => {
                 assert!(*entry.get() != 0);
@@ -182,65 +144,63 @@ impl PeerCounter {
 }
 
 #[allow(unused)]
-pub(crate) struct ConsensusManagerReceiver<Artifact: PbArtifact, Pool, ReceivedAdvert> {
+pub(crate) struct ConsensusManagerReceiver<
+    Artifact: IdentifiableArtifact,
+    WireArtifact: PbArtifact,
+    Downloader: ArtifactAssembler<Artifact, WireArtifact>,
+    ReceivedAdvert,
+> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
-    transport: Arc<dyn Transport>,
 
     // Receive side:
     adverts_received: Receiver<ReceivedAdvert>,
-    pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
-    raw_pool: Arc<RwLock<Pool>>,
-    priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
-    current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    artifact_assembler: Downloader,
 
-    slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
-    active_downloads: HashMap<Artifact::Id, watch::Sender<PeerCounter>>,
+    slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<WireArtifact::Id>>>,
+    active_downloads: HashMap<WireArtifact::Id, watch::Sender<PeerCounter>>,
 
     #[allow(clippy::type_complexity)]
     artifact_processor_tasks: JoinSet<(
         watch::Receiver<PeerCounter>,
-        Artifact::Id,
-        Artifact::Attribute,
+        WireArtifact::Id,
+        WireArtifact::Attribute,
     )>,
 
     topology_watcher: watch::Receiver<SubnetTopology>,
 }
 
 #[allow(unused)]
-impl<Artifact, Pool>
-    ConsensusManagerReceiver<Artifact, Pool, (SlotUpdate<Artifact>, NodeId, ConnId)>
+impl<Artifact, WireArtifact, Downloader>
+    ConsensusManagerReceiver<
+        Artifact,
+        WireArtifact,
+        Downloader,
+        (SlotUpdate<WireArtifact>, NodeId, ConnId),
+    >
 where
-    Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: PbArtifact,
+    Artifact: IdentifiableArtifact,
+    WireArtifact: PbArtifact,
+    Downloader: ArtifactAssembler<Artifact, WireArtifact>,
 {
     pub(crate) fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
-        adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
-        raw_pool: Arc<RwLock<Pool>>,
-        priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
+        adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
+        artifact_assembler: Downloader,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-        transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) {
-        let priority_fn = priority_fn_producer.get_priority_function(&raw_pool.read().unwrap());
-        let (current_priority_fn, _) = watch::channel(priority_fn);
-
         let receive_manager = Self {
             log,
             metrics,
             rt_handle: rt_handle.clone(),
             adverts_received,
-            pool_reader: raw_pool.clone() as Arc<_>,
-            raw_pool,
-            priority_fn_producer,
-            current_priority_fn,
+            artifact_assembler,
             sender,
-            transport,
             active_downloads: HashMap::new(),
             slot_table: HashMap::new(),
             artifact_processor_tasks: JoinSet::new(),
@@ -253,13 +213,8 @@ where
     /// Event loop that processes advert updates and artifact downloads.
     /// The event loop preserves the invariants checked with `debug_assert`.
     async fn start_event_loop(mut self) {
-        let mut priority_fn_interval = time::interval(PRIORITY_FUNCTION_UPDATE_INTERVAL);
-        priority_fn_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             select! {
-                _ = priority_fn_interval.tick() => {
-                    self.handle_pfn_timer_tick();
-                }
                 Some((advert_update, peer_id, conn_id)) = self.adverts_received.recv() => {
                     self.handle_advert_receive(advert_update, peer_id, conn_id);
                 }
@@ -289,7 +244,7 @@ where
             );
             debug_assert!(
                 self.artifact_processor_tasks.len()
-                    >= HashSet::<Artifact::Id>::from_iter(
+                    >= HashSet::<WireArtifact::Id>::from_iter(
                         self.slot_table
                             .iter()
                             .flat_map(|(k, v)| v.iter())
@@ -301,17 +256,11 @@ where
         }
     }
 
-    pub(crate) fn handle_pfn_timer_tick(&mut self) {
-        let pool = &self.raw_pool.read().unwrap();
-        let priority_fn = self.priority_fn_producer.get_priority_function(pool);
-        self.current_priority_fn.send_replace(priority_fn);
-    }
-
     pub(crate) fn handle_artifact_processor_joined(
         &mut self,
         peer_rx: watch::Receiver<PeerCounter>,
-        id: Artifact::Id,
-        attr: Artifact::Attribute,
+        id: WireArtifact::Id,
+        attr: WireArtifact::Attribute,
     ) {
         self.metrics.download_task_finished_total.inc();
         // Invariant: Peer sender should only be dropped in this task..
@@ -328,9 +277,8 @@ where
                     attr,
                     None,
                     peer_rx,
-                    self.current_priority_fn.subscribe(),
                     self.sender.clone(),
-                    self.transport.clone(),
+                    self.artifact_assembler.clone(),
                     self.metrics.clone(),
                 ),
                 &self.rt_handle,
@@ -350,7 +298,7 @@ where
     #[instrument(skip_all)]
     pub(crate) fn handle_advert_receive(
         &mut self,
-        advert_update: SlotUpdate<Artifact>,
+        advert_update: SlotUpdate<WireArtifact>,
         peer_id: NodeId,
         connection_id: ConnId,
     ) {
@@ -370,7 +318,7 @@ where
             self.metrics.slot_table_updates_with_artifact_total.inc();
         }
 
-        let new_slot_entry: SlotEntry<Artifact::Id> = SlotEntry {
+        let new_slot_entry: SlotEntry<WireArtifact::Id> = SlotEntry {
             commit_id,
             conn_id: connection_id,
             id: id.clone(),
@@ -423,9 +371,8 @@ where
                             attribute,
                             artifact.map(|a| (a, peer_id)),
                             rx,
-                            self.current_priority_fn.subscribe(),
                             self.sender.clone(),
-                            self.transport.clone(),
+                            self.artifact_assembler.clone(),
                             self.metrics.clone(),
                         ),
                         &self.rt_handle,
@@ -453,146 +400,6 @@ where
         }
     }
 
-    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `DownloadStopped` is returned.
-    #[instrument(skip_all)]
-    async fn wait_fetch(
-        id: &Artifact::Id,
-        attr: &Artifact::Attribute,
-        artifact: &mut Option<(Artifact, NodeId)>,
-        metrics: &ConsensusManagerMetrics,
-        mut peer_rx: &mut watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: &mut watch::Receiver<
-            PriorityFn<Artifact::Id, Artifact::Attribute>,
-        >,
-    ) -> Result<(), Aborted> {
-        let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
-
-        // Clear the artifact from memory if it was pushed.
-        if let Priority::Stash = priority {
-            artifact.take();
-            metrics.download_task_stashed_total.inc();
-        }
-
-        while let Priority::Stash = priority {
-            let _ = priority_fn_watcher.changed().await;
-            priority = priority_fn_watcher.borrow_and_update()(id, attr);
-        }
-
-        if let Priority::Drop = priority {
-            return Err(Aborted);
-        }
-        Ok(())
-    }
-
-    /// Downloads a given artifact.
-    ///
-    /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
-    ///
-    /// The download fails iff:
-    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadStopped::PriorityIsDrop`]
-    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
-    /// and the failure condition is reported in the error variant of the returned result.
-    #[instrument(skip_all)]
-    async fn download_artifact(
-        log: ReplicaLogger,
-        id: &Artifact::Id,
-        attr: &Artifact::Attribute,
-        // Only first peer for specific artifact ID is considered for push
-        mut artifact: Option<(Artifact, NodeId)>,
-        mut peer_rx: &mut watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-        transport: Arc<dyn Transport>,
-        metrics: ConsensusManagerMetrics,
-    ) -> Result<(Artifact, NodeId), Aborted> {
-        // Evaluate priority and wait until we should fetch.
-        Self::wait_fetch(
-            id,
-            attr,
-            &mut artifact,
-            &metrics,
-            peer_rx,
-            &mut priority_fn_watcher,
-        )
-        .await?;
-
-        let mut artifact_download_timeout = ExponentialBackoffBuilder::new()
-            .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
-            .with_max_interval(MAX_ARTIFACT_RPC_TIMEOUT)
-            .with_max_elapsed_time(None)
-            .build();
-
-        match artifact {
-            // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
-            // to the artifact because we earlier derived the ID from the artifact.
-            Some((artifact, peer_id)) => Ok((artifact, peer_id)),
-
-            // Fetch artifact
-            None => {
-                let timer = metrics
-                    .download_task_artifact_download_duration
-                    .start_timer();
-                let mut rng = SmallRng::from_entropy();
-
-                let result = loop {
-                    let next_request_at = Instant::now()
-                        + artifact_download_timeout
-                            .next_backoff()
-                            .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
-                    if let Some(peer) = {
-                        let peer = peer_rx.borrow().peers().choose(&mut rng).copied();
-                        peer
-                    } {
-                        let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
-                        let request = Request::builder()
-                            .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
-                            .body(bytes)
-                            .unwrap();
-
-                        if peer_rx.has_changed().unwrap_or(false) {
-                            artifact_download_timeout.reset();
-                        }
-
-                        match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
-                            Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                                let body = response.into_body();
-                                if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
-                                    if &message.id() == id {
-                                        break Ok((message, peer));
-                                    } else {
-                                        warn!(
-                                            log,
-                                            "Peer {} responded with wrong artifact for advert",
-                                            peer
-                                        );
-                                    }
-                                }
-                            }
-                            _ => {
-                                metrics.download_task_artifact_download_errors_total.inc();
-                            }
-                        }
-                    }
-
-                    // Wait before checking the priority so we might be able to avoid an unnecessary download.
-                    sleep_until(next_request_at).await;
-                    Self::wait_fetch(
-                        id,
-                        attr,
-                        &mut artifact,
-                        &metrics,
-                        peer_rx,
-                        &mut priority_fn_watcher,
-                    )
-                    .await?;
-                };
-
-                timer.stop_and_record();
-
-                result
-            }
-        }
-    }
-
     /// Tries to download the given artifact, and insert it into the unvalidated pool.
     ///
     /// This future waits for all peers that advertise the artifact to delete it.
@@ -600,19 +407,18 @@ where
     #[instrument(skip_all)]
     async fn process_advert(
         log: ReplicaLogger,
-        id: Artifact::Id,
-        attr: Artifact::Attribute,
+        id: WireArtifact::Id,
+        attr: WireArtifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
-        mut artifact: Option<(Artifact, NodeId)>,
+        mut artifact: Option<(WireArtifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-        transport: Arc<dyn Transport>,
+        mut artifact_assembler: Downloader,
         metrics: ConsensusManagerMetrics,
     ) -> (
         watch::Receiver<PeerCounter>,
-        Artifact::Id,
-        Artifact::Attribute,
+        WireArtifact::Id,
+        WireArtifact::Attribute,
     ) {
         let _timer = metrics.download_task_duration.start_timer();
 
@@ -627,24 +433,20 @@ where
             }
         };
 
-        let download_artifact = async {
-            Self::download_artifact(
-                log,
-                &id,
-                &attr,
-                artifact,
-                &mut peer_rx,
-                priority_fn_watcher,
-                transport,
-                metrics.clone(),
-            )
-            .await
+        let mut peer_rx_c = peer_rx.clone();
+        let id_c = id.clone();
+        let attr_c = attr.clone();
+        let download_artifact = async move {
+            artifact_assembler
+                .assemble_message(id, attr, artifact, PeerWatcher::new(peer_rx_c))
+                .await
         };
 
         select! {
             download_result = download_artifact => {
                 match download_result {
                     Ok((artifact, peer_id)) => {
+                        let id = artifact.id();
                         // Send artifact to pool
                         sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
 
@@ -652,7 +454,7 @@ where
                         peer_rx.wait_for(|p| p.is_empty()).await;
 
                         // Purge from the unvalidated pool
-                        sender.send(UnvalidatedArtifactMutation::Remove(id.clone()));
+                        sender.send(UnvalidatedArtifactMutation::Remove(id));
                         metrics
                             .download_task_result_total
                             .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
@@ -677,7 +479,7 @@ where
             },
         };
 
-        (peer_rx, id, attr)
+        (peer_rx, id_c, attr_c)
     }
 
     /// Notifies all running tasks about the topology update.
@@ -713,8 +515,19 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct Aborted;
+struct PeerWatcher(watch::Receiver<PeerCounter>);
+
+impl PeerWatcher {
+    pub fn new(w: watch::Receiver<PeerCounter>) -> Self {
+        Self(w)
+    }
+}
+
+impl Peers for PeerWatcher {
+    fn peers(&self) -> Vec<NodeId> {
+        self.0.borrow().peers().cloned().collect()
+    }
+}
 
 #[derive(PartialEq, Eq, Debug)]
 struct SlotEntry<T> {
@@ -735,21 +548,19 @@ impl<T> SlotEntry<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::{backtrace::Backtrace, convert::Infallible, sync::Mutex};
+    use std::{backtrace::Backtrace, convert::Infallible, time::Duration};
 
-    use axum::{body::Body, http::Response};
+    use axum::{body::Body, http::Request};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::{
-        consensus::U64Artifact,
-        mocks::{MockPriorityFnFactory, MockTransport, MockValidatedPoolReader},
-    };
+    use ic_p2p_test_utils::consensus::U64Artifact;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
-    use mockall::Sequence;
     use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
     use tower::util::ServiceExt;
+
+    use crate::mocks::MockArtifactAssembler;
 
     use super::*;
 
@@ -758,11 +569,8 @@ mod tests {
     struct ReceiverManagerBuilder {
         // Adverts received from peers
         adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
-        raw_pool: MockValidatedPoolReader<U64Artifact>,
-        priority_fn_producer:
-            Arc<dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
-        transport: Arc<dyn Transport>,
+        artifact_assembler: MockArtifactAssembler,
         topology_watcher: watch::Receiver<SubnetTopology>,
 
         channels: Channels,
@@ -770,7 +578,8 @@ mod tests {
 
     type ConsensusManagerReceiverForTest = ConsensusManagerReceiver<
         U64Artifact,
-        MockValidatedPoolReader<U64Artifact>,
+        U64Artifact,
+        MockArtifactAssembler,
         (SlotUpdate<U64Artifact>, NodeId, ConnId),
     >;
 
@@ -779,43 +588,32 @@ mod tests {
     }
 
     impl ReceiverManagerBuilder {
+        fn make_mock_artifact_assembler_with_clone(
+            make_mock: fn() -> MockArtifactAssembler,
+        ) -> MockArtifactAssembler {
+            let mut assembler = make_mock();
+            assembler
+                .expect_clone()
+                .returning(move || Self::make_mock_artifact_assembler_with_clone(make_mock));
+            assembler
+        }
+
         fn new() -> Self {
             let (_, adverts_received) = tokio::sync::mpsc::channel(100);
             let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
             let (_, topology_watcher) = watch::channel(SubnetTopology::default());
-
-            let mut mock_pfn = MockPriorityFnFactory::new();
-
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let artifact_assembler =
+                Self::make_mock_artifact_assembler_with_clone(MockArtifactAssembler::default);
 
             Self {
                 adverts_received,
-                raw_pool: MockValidatedPoolReader::new(),
-                priority_fn_producer: Arc::new(mock_pfn),
                 sender,
-                transport: Arc::new(MockTransport::new()),
                 topology_watcher,
+                artifact_assembler,
                 channels: Channels {
                     unvalidated_artifact_receiver,
                 },
             }
-        }
-
-        fn with_priority_fn_producer(
-            mut self,
-            priority_fn_producer: Arc<
-                dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
-            >,
-        ) -> Self {
-            self.priority_fn_producer = priority_fn_producer;
-            self
-        }
-
-        fn with_transport(mut self, transport: Arc<dyn Transport>) -> Self {
-            self.transport = transport;
-            self
         }
 
         fn with_topology_watcher(
@@ -826,33 +624,30 @@ mod tests {
             self
         }
 
-        fn build(self) -> (ConsensusManagerReceiverForTest, Channels) {
-            let consensus_manager_receiver = with_test_replica_logger(|log| {
-                let priority_fn = self
-                    .priority_fn_producer
-                    .get_priority_function(&self.raw_pool);
-                let (current_priority_fn, _) = watch::channel(priority_fn);
+        fn with_artifact_assembler_maker(
+            mut self,
+            make_mock: fn() -> MockArtifactAssembler,
+        ) -> Self {
+            self.artifact_assembler = Self::make_mock_artifact_assembler_with_clone(make_mock);
+            self
+        }
 
-                let raw_pool = Arc::new(RwLock::new(self.raw_pool));
-                ConsensusManagerReceiver {
+        fn build(self) -> (ConsensusManagerReceiverForTest, Channels) {
+            let consensus_manager_receiver =
+                with_test_replica_logger(|log| ConsensusManagerReceiver {
                     log,
                     metrics: ConsensusManagerMetrics::new::<U64Artifact>(
                         &MetricsRegistry::default(),
                     ),
                     rt_handle: Handle::current(),
                     adverts_received: self.adverts_received,
-                    pool_reader: raw_pool.clone() as Arc<_>,
-                    raw_pool: raw_pool.clone() as Arc<_>,
-                    priority_fn_producer: self.priority_fn_producer,
-                    current_priority_fn,
                     sender: self.sender,
-                    transport: self.transport,
+                    artifact_assembler: self.artifact_assembler,
                     topology_watcher: self.topology_watcher,
                     active_downloads: HashMap::new(),
                     slot_table: HashMap::new(),
                     artifact_processor_tasks: JoinSet::new(),
-                }
-            });
+                });
 
             (consensus_manager_receiver, self.channels)
         }
@@ -996,7 +791,7 @@ mod tests {
 
     /// Check that adverts updates with higher connection ids take precedence.
     #[tokio::test]
-    async fn overwrite_slot() {
+    async fn overwrite_slot1() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1005,7 +800,18 @@ mod tests {
             std::process::abort();
         }));
 
-        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
+        fn make_artifact_assembler() -> MockArtifactAssembler {
+            let mut artifact_assembler = MockArtifactAssembler::default();
+            artifact_assembler
+                .expect_assemble_message()
+                .returning(|id, _, _, _: PeerWatcher| {
+                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                });
+            artifact_assembler
+        }
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_artifact_assembler)
+            .build();
 
         mgr.handle_advert_receive(
             SlotUpdate {
@@ -1069,6 +875,109 @@ mod tests {
         assert_eq!(result.1, 0);
     }
 
+    /// Check that adverts updates with higher connection ids take precedence.
+    #[tokio::test]
+    async fn overwrite_slot_send_remove() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+
+        fn make_artifact_assembler() -> MockArtifactAssembler {
+            let mut artifact_assembler = MockArtifactAssembler::default();
+            artifact_assembler
+                .expect_assemble_message()
+                .returning(|id, _, _, _: PeerWatcher| {
+                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                });
+            artifact_assembler
+        }
+        let (mut mgr, mut channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_artifact_assembler)
+            .build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Verify that advert is correctly inserted into slot table.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        assert_eq!(
+            channels.unvalidated_artifact_receiver.recv().await.unwrap(),
+            UnvalidatedArtifactMutation::Insert((U64Artifact::id_to_msg(0, 100), NODE_1))
+        );
+
+        // Send advert with higher conn id.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(0),
+                update: Update::Advert((1, ())),
+            },
+            NODE_1,
+            ConnId::from(2),
+        );
+        // Verify that slot table now only contains newer entry.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(2),
+                commit_id: CommitId::from(0),
+                id: 1,
+            }
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+
+        let joined_artifact_processor = mgr.artifact_processor_tasks.join_next().await;
+        let result = joined_artifact_processor
+            .expect("Joining artifact processor task failed")
+            .expect("Artifact processor task panicked");
+        let receiver_unvalidated_1 = channels.unvalidated_artifact_receiver.recv().await.unwrap();
+        let receiver_unvalidated_2 = channels.unvalidated_artifact_receiver.recv().await.unwrap();
+        assert!(
+            (receiver_unvalidated_1
+                == UnvalidatedArtifactMutation::Insert((U64Artifact::id_to_msg(1, 100), NODE_1))
+                && receiver_unvalidated_2 == UnvalidatedArtifactMutation::Remove(0))
+                || (receiver_unvalidated_2
+                    == UnvalidatedArtifactMutation::Insert((
+                        U64Artifact::id_to_msg(1, 100),
+                        NODE_1
+                    ))
+                    && receiver_unvalidated_1 == UnvalidatedArtifactMutation::Remove(0))
+        );
+
+        // Check that download task for first advert closes.
+        assert_eq!(result.1, 0);
+    }
+
     /// Verify that if two peers advertise the same advert it will get added to the same download task.
     #[tokio::test]
     async fn two_peers_advertise_same_advert() {
@@ -1119,7 +1028,18 @@ mod tests {
             std::process::abort();
         }));
 
-        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
+        fn make_artifact_assembler() -> MockArtifactAssembler {
+            let mut artifact_assembler = MockArtifactAssembler::default();
+            artifact_assembler
+                .expect_assemble_message()
+                .returning(|id, _, _, _: PeerWatcher| {
+                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                });
+            artifact_assembler
+        }
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_artifact_assembler)
+            .build();
 
         mgr.handle_advert_receive(
             SlotUpdate {
@@ -1163,132 +1083,6 @@ mod tests {
         assert_eq!(mgr.active_downloads.len(), 2);
     }
 
-    /// Verify that advert that transitions from stash to drop is not downloaded.
-    #[tokio::test]
-    async fn priority_from_stash_to_drop() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
-        let mut mock_pfn = MockPriorityFnFactory::new();
-        let mut seq = Sequence::new();
-        mock_pfn
-            .expect_get_priority_function()
-            .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Stash))
-            .in_sequence(&mut seq);
-        mock_pfn
-            .expect_get_priority_function()
-            .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Drop))
-            .in_sequence(&mut seq);
-
-        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
-            .with_priority_fn_producer(Arc::new(mock_pfn))
-            .build();
-
-        mgr.handle_advert_receive(
-            SlotUpdate {
-                slot_number: SlotNumber::from(1),
-                commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
-            },
-            NODE_1,
-            ConnId::from(1),
-        );
-        assert_eq!(mgr.slot_table.len(), 1);
-        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert_eq!(mgr.active_downloads.len(), 1);
-        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        // Update priority fn to drop.
-        mgr.handle_pfn_timer_tick();
-        // Overwrite existing advert to finish download task.
-        mgr.handle_advert_receive(
-            SlotUpdate {
-                slot_number: SlotNumber::from(1),
-                commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
-            },
-            NODE_1,
-            ConnId::from(1),
-        );
-        assert_eq!(
-            mgr.artifact_processor_tasks
-                .join_next()
-                .await
-                .unwrap()
-                .unwrap()
-                .1,
-            0
-        );
-    }
-
-    /// Check that an advert for which the priority changes from stash to fetch is downloaded.
-    #[tokio::test]
-    async fn priority_from_stash_to_fetch() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
-        let mut mock_pfn = MockPriorityFnFactory::new();
-        let mut seq = Sequence::new();
-        mock_pfn
-            .expect_get_priority_function()
-            .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Stash))
-            .in_sequence(&mut seq);
-        mock_pfn
-            .expect_get_priority_function()
-            .times(1)
-            .returning(|_| Box::new(|_, _| Priority::FetchNow))
-            .in_sequence(&mut seq);
-
-        let mut mock_transport = MockTransport::new();
-        mock_transport.expect_rpc().returning(|_, _| {
-            Ok(Response::builder()
-                .body(Bytes::from(
-                    <<U64Artifact as PbArtifact>::PbMessage>::proxy_encode(U64Artifact::id_to_msg(
-                        0, 1024,
-                    )),
-                ))
-                .unwrap())
-        });
-
-        let (mut mgr, mut channels) = ReceiverManagerBuilder::new()
-            .with_priority_fn_producer(Arc::new(mock_pfn))
-            .with_transport(Arc::new(mock_transport))
-            .build();
-
-        mgr.handle_advert_receive(
-            SlotUpdate {
-                slot_number: SlotNumber::from(1),
-                commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
-            },
-            NODE_1,
-            ConnId::from(1),
-        );
-        assert_eq!(mgr.slot_table.len(), 1);
-        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert_eq!(mgr.active_downloads.len(), 1);
-        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        // Update priority fn to fetch.
-        mgr.handle_pfn_timer_tick();
-        // Check that we received downloaded artifact.
-        assert_eq!(
-            channels.unvalidated_artifact_receiver.recv().await.unwrap(),
-            UnvalidatedArtifactMutation::Insert((U64Artifact::id_to_msg(0, 1024), NODE_1))
-        );
-    }
-
     /// Verify that slot table is pruned if node leaves subnet.
     #[tokio::test]
     async fn topology_update() {
@@ -1300,13 +1094,8 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnFactory::new();
-        mock_pfn
-            .expect_get_priority_function()
-            .returning(|_| Box::new(|_, _| Priority::Stash));
         let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
-            .with_priority_fn_producer(Arc::new(mock_pfn))
             .with_topology_watcher(pfn_rx)
             .build();
 
@@ -1378,15 +1167,19 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnFactory::new();
-        mock_pfn
-            .expect_get_priority_function()
-            .returning(|_| Box::new(|_, _| Priority::Stash));
-
         let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
 
+        fn make_artifact_assembler() -> MockArtifactAssembler {
+            let mut artifact_assembler = MockArtifactAssembler::default();
+            artifact_assembler
+                .expect_assemble_message()
+                .returning(|id, _, _, _: PeerWatcher| {
+                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                });
+            artifact_assembler
+        }
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
-            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .with_artifact_assembler_maker(make_artifact_assembler)
             .with_topology_watcher(pfn_rx)
             .build();
 
@@ -1432,7 +1225,18 @@ mod tests {
             std::process::abort();
         }));
 
-        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
+        fn make_artifact_assembler() -> MockArtifactAssembler {
+            let mut artifact_assembler = MockArtifactAssembler::default();
+            artifact_assembler
+                .expect_assemble_message()
+                .returning(|id, _, _, _: PeerWatcher| {
+                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                });
+            artifact_assembler
+        }
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_artifact_assembler)
+            .build();
 
         // Add id 0 on slot 1.
         mgr.handle_advert_receive(
@@ -1510,13 +1314,17 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnFactory::new();
-        mock_pfn
-            .expect_get_priority_function()
-            .returning(|_| Box::new(|_, _| Priority::Stash));
-
+        fn make_artifact_assembler() -> MockArtifactAssembler {
+            let mut artifact_assembler = MockArtifactAssembler::default();
+            artifact_assembler
+                .expect_assemble_message()
+                .returning(|id, _, _, _: PeerWatcher| {
+                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                });
+            artifact_assembler
+        }
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
-            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .with_artifact_assembler_maker(make_artifact_assembler)
             .build();
 
         mgr.handle_advert_receive(
@@ -1580,7 +1388,18 @@ mod tests {
             std::process::abort();
         }));
 
-        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
+        fn make_artifact_assembler() -> MockArtifactAssembler {
+            let mut artifact_assembler = MockArtifactAssembler::default();
+            artifact_assembler
+                .expect_assemble_message()
+                .returning(|id, _, _, _: PeerWatcher| {
+                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                });
+            artifact_assembler
+        }
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_artifact_assembler)
+            .build();
 
         mgr.handle_advert_receive(
             SlotUpdate {
@@ -1672,127 +1491,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetch_to_stash() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
-        let mut mock_pfn = MockPriorityFnFactory::new();
-        let priorities = Arc::new(Mutex::new(vec![Priority::FetchNow, Priority::Stash]));
-        mock_pfn
-            .expect_get_priority_function()
-            .times(1)
-            .returning(move |_| {
-                let priorities = priorities.clone();
-                Box::new(move |_, _| priorities.lock().unwrap().remove(0))
-            });
-        let mut mock_transport = MockTransport::new();
-        mock_transport.expect_rpc().once().returning(|_, _| {
-            Ok(Response::builder()
-                .status(StatusCode::NO_CONTENT)
-                .body(Bytes::new())
-                .unwrap())
-        });
-
-        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
-            .with_priority_fn_producer(Arc::new(mock_pfn))
-            .with_transport(Arc::new(mock_transport))
-            .build();
-
-        mgr.handle_advert_receive(
-            SlotUpdate {
-                slot_number: SlotNumber::from(1),
-                commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
-            },
-            NODE_1,
-            ConnId::from(1),
-        );
-
-        timeout(
-            Duration::from_secs(4),
-            mgr.artifact_processor_tasks.join_next(),
-        )
-        .await
-        .expect_err("Task should not close because it is stash.");
-    }
-
-    /// Verify that downloads with AdvertId != ArtifactId are not added to the pool.
-    #[test]
-    fn invalid_artifact_not_accepted() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let mut mock_transport = MockTransport::new();
-        let mut seq = Sequence::new();
-        // Respond with artifact that does not correspond to the advertised ID
-        mock_transport
-            .expect_rpc()
-            .once()
-            .returning(|_, _| {
-                Ok(Response::builder()
-                    .body(Bytes::from(
-                        <<U64Artifact as PbArtifact>::PbMessage>::proxy_encode(
-                            U64Artifact::id_to_msg(1, 1024),
-                        ),
-                    ))
-                    .unwrap())
-            })
-            .in_sequence(&mut seq);
-        // Respond with artifact that does correspond to the advertised ID
-        mock_transport
-            .expect_rpc()
-            .once()
-            .returning(|_, _| {
-                // Respond with artifact that does correspond to the advertised ID
-                Ok(Response::builder()
-                    .body(Bytes::from(
-                        <<U64Artifact as PbArtifact>::PbMessage>::proxy_encode(
-                            U64Artifact::id_to_msg(0, 1024),
-                        ),
-                    ))
-                    .unwrap())
-            })
-            .in_sequence(&mut seq);
-
-        let mut pc = PeerCounter::new();
-        pc.insert(NODE_1);
-        let (_peer_tx, mut peer_rx) = watch::channel(pc);
-        let pfn = |_: &_, _: &_| Priority::FetchNow;
-        let (_pfn_tx, pfn_rx) = watch::channel(Box::new(pfn) as Box<_>);
-
-        rt.block_on(async {
-            assert_eq!(
-                ConsensusManagerReceiver::<
-                    U64Artifact,
-                    MockValidatedPoolReader<U64Artifact>,
-                    (SlotUpdate<U64Artifact>, NodeId, ConnId),
-                >::download_artifact(
-                    no_op_logger(),
-                    &0,
-                    &(),
-                    None,
-                    &mut peer_rx,
-                    pfn_rx,
-                    Arc::new(mock_transport),
-                    ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                )
-                .await,
-                Ok((U64Artifact::id_to_msg(0, 1024), NODE_1))
-            )
-        });
-    }
-
-    #[tokio::test]
     async fn large_artifact() {
         use ic_protobuf::p2p::v1 as pb;
 
@@ -1825,10 +1523,7 @@ mod tests {
             type PbAttribute = ();
         }
 
-        let (router, mut update_rx) = build_axum_router::<BigArtifact>(
-            no_op_logger(),
-            Arc::new(RwLock::new(MockValidatedPoolReader::default())),
-        );
+        let (router, mut update_rx) = build_axum_router::<BigArtifact>(no_op_logger());
 
         let req_pb = pb::SlotUpdate {
             commit_id: 0,

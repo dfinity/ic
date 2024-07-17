@@ -5186,6 +5186,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-artifact-downloader"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.7.5",
+ "backoff",
+ "bytes",
+ "futures",
+ "ic-base-types",
+ "ic-consensus-manager",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-p2p-test-utils",
+ "ic-protobuf",
+ "ic-quic-transport",
+ "ic-test-utilities-logger",
+ "ic-types",
+ "ic-types-test-utils",
+ "mockall",
+ "phantom_newtype",
+ "prometheus",
+ "prost",
+ "rand 0.8.5",
+ "slog",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
@@ -9932,6 +9962,7 @@ dependencies = [
  "bytes",
  "either",
  "futures",
+ "ic-artifact-downloader",
  "ic-artifact-manager",
  "ic-base-types",
  "ic-consensus-manager",
@@ -10592,6 +10623,7 @@ name = "ic-replica-setup-ic-network"
 version = "0.9.0"
 dependencies = [
  "either",
+ "ic-artifact-downloader",
  "ic-artifact-manager",
  "ic-artifact-pool",
  "ic-config",
@@ -19523,9 +19555,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.12"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fb52b74f05dbf495a8fba459fdc331812b96aa086d9eb78101fa0d4569c3313"
+checksum = "267ac89e0bec6e691e5813911606935d77c476ff49024f98abcea3e7b15e37af"
 dependencies = [
  "futures-core",
  "pin-project-lite",
