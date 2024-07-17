@@ -33,7 +33,7 @@ use std::str::FromStr;
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
 /// The information that canisters can see about their own status.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum CanisterStatusView {
     Running,
     Stopping,
@@ -50,14 +50,14 @@ impl CanisterStatusView {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CallbackUpdate {
     Register(CallbackId, Callback),
     Unregister(CallbackId),
 }
 
 /// Tracks changes to the system state that the canister has requested.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,
@@ -545,7 +545,7 @@ impl SystemStateChanges {
 /// A version of the `SystemState` that can be used in a sandboxed process.
 /// Changes are separately tracked so that we can verify the changes are valid
 /// before applying them to the actual system state.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SandboxSafeSystemState {
     /// Only public for tests
     #[doc(hidden)]

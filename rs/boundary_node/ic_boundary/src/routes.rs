@@ -193,13 +193,7 @@ impl ErrorCause {
     }
 
     pub fn retriable(&self) -> bool {
-        matches!(
-            self,
-            Self::ReplicaErrorDNS(_)
-                | Self::ReplicaErrorConnect
-                | Self::ReplicaTLSErrorOther(_)
-                | Self::ReplicaTLSErrorCert(_)
-        )
+        !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
     }
 }
 
@@ -594,7 +588,6 @@ pub async fn validate_request(
     }
 
     let resp = next.run(request).await;
-
     Ok(resp)
 }
 

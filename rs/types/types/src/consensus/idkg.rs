@@ -1787,8 +1787,6 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
             ongoing_xnet_reshares,
             xnet_reshare_agreements,
             key_transcripts,
-            // Kept for backwards compatibility
-            generalized_pre_signatures: true,
         }
     }
 }

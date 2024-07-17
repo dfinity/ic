@@ -114,6 +114,9 @@ system_test(
 
 system_test(
     name = "ii_delegation_test",
+    env = {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

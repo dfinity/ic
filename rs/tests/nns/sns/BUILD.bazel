@@ -44,6 +44,9 @@ system_test(
 
 system_test(
     name = "aggregation_canister_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO[NNS1-2658]: re-enable this test
@@ -73,6 +76,9 @@ system_test(
 
 system_test(
     name = "launchpad_direct_load_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -88,6 +94,9 @@ system_test(
 
 system_test(
     name = "launchpad_direct_auth_load_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -103,6 +112,9 @@ system_test(
 
 system_test(
     name = "launchpad_aggregator_load_test",
+    env = {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",

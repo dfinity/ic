@@ -53,6 +53,7 @@ ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
+ic_consensus_system_test_utils = { path = "./consensus/utils" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -594,8 +595,8 @@ name = "ic-systest-consensus-performance"
 path = "consensus/consensus_performance.rs"
 
 [[bin]]
-name = "ic-systest-tecdsa-performance"
-path = "consensus/tecdsa/tecdsa_performance.rs"
+name = "ic-systest-tecdsa-performance-test"
+path = "consensus/tecdsa/tecdsa_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-performance"

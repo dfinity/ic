@@ -41,6 +41,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -60,6 +61,7 @@ ic-sns-swap = { path = "../../sns/swap" }                                       
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
