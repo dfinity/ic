@@ -28,9 +28,9 @@ use super::utils::{
     block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
     IDkgBlockReaderImpl, InvalidChainCacheError,
 };
-use crate::ecdsa::metrics::timed_call;
-use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
-use crate::ecdsa::utils::build_signature_inputs;
+use crate::idkg::metrics::timed_call;
+use crate::idkg::payload_builder::{create_data_payload_helper, create_summary_payload};
+use crate::idkg::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier};
@@ -95,7 +95,7 @@ pub(crate) enum InvalidIDkgPayloadReason {
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
-    EcdsaConfigNotFound,
+    ChainKeyConfigNotFound,
     SummaryPayloadMismatch,
     DataPayloadMismatch,
     MissingIDkgDataPayload,
@@ -222,7 +222,7 @@ pub(crate) fn validate_payload(
     }
 }
 
-/// Validates a threshold ECDSA summary payload.
+/// Validates an IDKG summary payload.
 /// This is an entirely deterministic operation, so we can just check if
 /// the given summary payload matches what we would have created locally.
 fn validate_summary_payload(
@@ -242,7 +242,7 @@ fn validate_summary_payload(
             .map_err(IDkgPayloadValidationFailure::from)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
-            return Err(InvalidIDkgPayloadReason::EcdsaConfigNotFound.into());
+            return Err(InvalidIDkgPayloadReason::ChainKeyConfigNotFound.into());
         } else {
             return Ok(());
         }
@@ -603,7 +603,7 @@ fn validate_new_signature_agreements(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ecdsa::{
+    use crate::idkg::{
         payload_builder::{
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
             signatures::update_signature_agreements,
