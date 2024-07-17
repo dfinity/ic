@@ -668,7 +668,15 @@ fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<
     match domain {
         "" => Ok(None),
         domain => match domain_to_ascii_strict(domain) {
-            Ok(res) => Ok(Some(res)),
+            Ok(res) => {
+                if res == *domain {
+                    return Ok(Some(res));
+                } else {
+                    Err(OrchestratorError::invalid_configuration_error(format!(
+                        "Provided domain name {domain} is invalid",
+                    )))
+                }
+            }
             Err(err) => Err(OrchestratorError::invalid_configuration_error(format!(
                 "Provided domain name {domain} is invalid: {err}",
             ))),
