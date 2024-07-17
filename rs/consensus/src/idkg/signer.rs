@@ -1343,7 +1343,6 @@ mod tests {
                             Randomness::from([0; 32]),
                             &derivation_path,
                             algorithm_for_key_id(&key_id),
-                            true,
                             &mut rng,
                         );
 
@@ -1973,7 +1972,6 @@ mod tests {
                     Randomness::from(context.nonce.unwrap()),
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
-                    false,
                     &mut rng,
                 );
 
