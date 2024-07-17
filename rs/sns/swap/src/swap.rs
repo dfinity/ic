@@ -21,7 +21,7 @@ use crate::{
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
         NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
-        Participant, Principals, RefreshBuyerTokensResponse, SetDappControllersCallResult,
+        Participant, RefreshBuyerTokensResponse, SetDappControllersCallResult,
         SetDappControllersRequest, SetDappControllersResponse, SetModeCallResult,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
@@ -35,6 +35,7 @@ use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
+use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::{
     claim_swap_neurons_request::NeuronParameters,

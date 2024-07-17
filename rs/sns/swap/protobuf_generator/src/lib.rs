@@ -43,7 +43,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
 
     config.type_attribute(".ic_sns_swap.pb.v1.TimeWindow", "#[derive(Copy)]");
-    config.type_attribute(".ic_sns_swap.pb.v1.Principals", "#[derive(Eq)]");
     config.type_attribute(".ic_sns_swap.pb.v1.CfParticipant", "#[derive(Eq)]");
     config.type_attribute(".ic_sns_swap.pb.v1.CfNeuron", "#[derive(Eq)]");
     config.type_attribute(

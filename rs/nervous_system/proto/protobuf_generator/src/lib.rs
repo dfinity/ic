@@ -41,6 +41,7 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
         "ic_nervous_system.pb.v1.Canister",
         "#[derive(Ord, PartialOrd)]",
     );
+    config.type_attribute("ic_nervous_system.pb.v1.Canister", "#[derive(Eq)]");
 
     let src_file = proto_paths
         .nervous_system

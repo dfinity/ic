@@ -488,7 +488,7 @@ pub struct CfNeuron {
     pub amount_icp_e8s: u64,
     /// The principals that can vote, propose, and follow on behalf of this neuron.
     #[prost(message, optional, tag = "4")]
-    pub hotkeys: ::core::option::Option<Principals>,
+    pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     /// Idempotency flag indicating whether the neuron recipes have been created for
     /// the CfNeuron. When set to true, it signifies that the action of creating neuron
     /// recipes has been performed on this structure. If the action is retried, this flag
@@ -695,7 +695,7 @@ pub struct CfInvestment {
     pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// The principals that can vote, propose, and follow on behalf of this neuron.
     #[prost(message, optional, tag = "7")]
-    pub hotkeys: ::core::option::Option<Principals>,
+    pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     #[prost(fixed64, tag = "2")]
     pub nns_neuron_id: u64,
     /// Deprecated. Please use `controller` instead (not `hotkey_principal`)!
@@ -1497,15 +1497,6 @@ pub mod settle_neurons_fund_participation_request {
         Aborted(Aborted),
     }
 }
-/// A list of principals.
-/// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Principals {
-    #[prost(message, repeated, tag = "1")]
-    pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-}
 /// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 /// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 /// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -1546,7 +1537,7 @@ pub mod settle_neurons_fund_participation_response {
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
         #[prost(message, optional, tag = "7")]
-        pub hotkeys: ::core::option::Option<super::Principals>,
+        pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
         /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]

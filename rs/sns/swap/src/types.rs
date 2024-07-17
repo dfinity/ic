@@ -9,7 +9,7 @@ use crate::{
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
-        OpenRequest, Params, Principals, SetDappControllersCallResult, SetModeCallResult,
+        OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
@@ -18,6 +18,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, ONE_DAY_SECONDS};
+use ic_nervous_system_proto::pb::v1::Principals;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -1217,18 +1218,6 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
                 nns_neuron_id, amount_icp_e8s, is_capped
             )),
         }
-    }
-}
-
-impl From<Vec<PrincipalId>> for Principals {
-    fn from(principals: Vec<PrincipalId>) -> Self {
-        Self { principals }
-    }
-}
-
-impl From<Principals> for Vec<PrincipalId> {
-    fn from(principals: Principals) -> Self {
-        principals.principals
     }
 }
 

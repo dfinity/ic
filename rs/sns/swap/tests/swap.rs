@@ -32,6 +32,7 @@ use ic_nervous_system_common_test_utils::{
     SpyLedger,
 };
 use ic_nervous_system_proto::pb::v1::Countries;
+use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{
     InvertibleFunction, MatchingFunction, NeuronsFundParticipationLimits,
     PolynomialMatchingFunction, SerializableFunction,
