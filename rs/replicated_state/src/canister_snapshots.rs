@@ -172,12 +172,23 @@ impl CanisterSnapshots {
         for snapshot_id in old_snapshot_ids {
             // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
             let snapshot = snapshots.get(&snapshot_id).unwrap();
+            let canister_id = snapshot.canister_id;
             if !is_local_canister(snapshot.canister_id) {
                 snapshots.remove(&snapshot_id);
                 unflushed_changes.push(SnapshotOperation::Delete(snapshot_id));
+
+                // Remove the associated snapshot_id from `snapshot_ids`.
+                debug_assert!(snapshot_ids.contains_key(&canister_id));
+                let snapshot_ids_set = snapshot_ids.get_mut(&canister_id).unwrap();
+                debug_assert!(snapshot_ids_set.contains(&snapshot_id));
+                snapshot_ids_set.remove(&snapshot_id);
+
+                // Remove the snapshot ID set associated with the specified `canister_id` if it's empty.
+                if snapshot_ids_set.is_empty() {
+                    snapshot_ids.remove(&canister_id);
+                }
             }
         }
-        snapshot_ids.retain(|canister_id, _| is_local_canister(*canister_id));
     }
 }
 
