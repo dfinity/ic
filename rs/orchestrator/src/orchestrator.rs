@@ -406,8 +406,8 @@ impl Orchestrator {
             // made, to ensure the upgrade loop does not get stuck.
             //
             // The exponential backoff between retries starts at 1 minute, and
-            // increases by a factor of 1.75, maxing out at an hour.
-            // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 60, 60, 60
+            // increases by a factor of 1.75, maxing out at two hours.
+            // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
             //
             // Additionally, there's a random +=50% range added to each delay, for jitter.
             let backoff = ExponentialBackoffBuilder::new()
