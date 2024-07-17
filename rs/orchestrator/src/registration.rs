@@ -27,10 +27,11 @@ use ic_registry_client_helpers::{
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
+use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::{
-    common::{check_ipv4_config, is_valid_domain},
+    common::check_ipv4_config,
     do_update_node_directly::UpdateNodeDirectlyPayload,
     node_management::{
         do_add_node::AddNodePayload, do_update_node_ipv4_config_directly::IPv4Config,
@@ -666,11 +667,12 @@ fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<
     info!(log, "Reading domain name for registration");
     match domain {
         "" => Ok(None),
-        domain if is_valid_domain(domain) => Ok(Some(domain.into())),
-        _ => Err(OrchestratorError::invalid_configuration_error(format!(
-            "Provided domain name {} is invalid",
-            domain
-        ))),
+        domain => match domain_to_ascii_strict(domain) {
+            Ok(res) => Ok(Some(res)),
+            Err(err) => Err(OrchestratorError::invalid_configuration_error(format!(
+                "Provided domain name {domain} is invalid: {err}",
+            ))),
+        },
     }
 }
 

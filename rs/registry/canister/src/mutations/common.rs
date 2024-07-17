@@ -142,7 +142,7 @@ pub fn is_valid_domain(domain: &str) -> bool {
 }
 
 // Check that the given string is indeed a valid IPv4 address
-pub fn is_valid_ipv4_address(ipv4_address: &str) -> bool {
+fn is_valid_ipv4_address(ipv4_address: &str) -> bool {
     Ipv4Addr::from_str(ipv4_address).is_ok()
 }
 

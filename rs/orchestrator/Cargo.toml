@@ -37,6 +37,7 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+idna = "1.0.2"
 indoc = "1.0.9"
 nix = { workspace = true }
 prometheus = { workspace = true }
