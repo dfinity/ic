@@ -1,0 +1,17 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary_afl")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_fuzz_test_binary_afl(
+    name = "routing_table_insert",
+    srcs = [
+        "fuzz_targets/routing_table_insert.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/routing_table",
+        "//rs/types/base_types",
+        "@crate_index//:arbitrary",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)
