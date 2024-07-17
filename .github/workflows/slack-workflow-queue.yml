@@ -35,7 +35,7 @@ jobs:
 
             if [ $time_in_queue -ge $WAIT_THRESHOLD_SECONDS ]; then
               workflow_url="https://github.com/${{ github.repository }}/actions/runs/${workflow}"
-              notification_message="${notification_message} <${workflow_url}|Run ${workflow}>"
+              notification_message="${notification_message} <${workflow_url}|${workflow}>"
             fi
           done
           #echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
