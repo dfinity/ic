@@ -10,7 +10,7 @@ use ic_types::{
     messages::CallbackId,
 };
 
-use crate::ecdsa::pre_signer::IDkgTranscriptBuilder;
+use crate::idkg::pre_signer::IDkgTranscriptBuilder;
 
 /// Checks for new reshare requests from execution and initiates the processing
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
@@ -189,7 +189,7 @@ mod tests {
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::IDkgPayload;
 
-    use crate::ecdsa::{
+    use crate::idkg::{
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
             fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,

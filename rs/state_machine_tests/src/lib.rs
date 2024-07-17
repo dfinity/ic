@@ -6,7 +6,7 @@ use ic_config::{
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus::dkg::make_registry_cup;
+use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
@@ -606,6 +606,7 @@ impl From<u64> for StateMachineNode {
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     public_key: ThresholdSigPublicKey,
     public_key_der: Vec<u8>,
     secret_key: SecretKeyBytes,
@@ -636,6 +637,7 @@ pub struct StateMachine {
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
     time_source: Arc<FastForwardTimeSource>,
+    consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
@@ -1199,6 +1201,26 @@ impl StateMachine {
     /// after this `StateMachine` has been built.
     pub fn reload_registry(&self) {
         self.registry_client.reload();
+        // Since the latest registry version could have changed,
+        // we update the CUP in `FakeConsensusPoolCache` to refer
+        // to the latest registry version.
+        let registry_version = self.registry_client.get_latest_version();
+        let cup_contents = self
+            .registry_client
+            .get_cup_contents(self.subnet_id, registry_version)
+            .unwrap()
+            .value
+            .unwrap();
+        let cup = make_registry_cup_from_cup_contents(
+            self.registry_client.as_ref(),
+            self.subnet_id,
+            cup_contents,
+            registry_version,
+            &self.replica_logger,
+        )
+        .unwrap();
+        let cup_proto: pb::CatchUpPackage = cup.into();
+        self.consensus_pool_cache.update_cup(cup_proto);
     }
 
     /// Constructs and initializes a new state machine that uses the specified
@@ -1323,11 +1345,11 @@ impl StateMachine {
             metrics_registry.clone(),
             replica_logger.clone(),
         )));
-        let consensus_pool_cache = FakeConsensusPoolCache::new(cup_proto);
+        let consensus_pool_cache = Arc::new(FakeConsensusPoolCache::new(cup_proto));
         let crypto = CryptoReturningOk::default();
         let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
             canister_http_pool.clone(),
-            Arc::new(consensus_pool_cache),
+            consensus_pool_cache.clone(),
             Arc::new(crypto),
             state_manager.clone(),
             subnet_id,
@@ -1455,6 +1477,7 @@ impl StateMachine {
 
         Self {
             subnet_id,
+            subnet_type,
             secret_key,
             public_key,
             public_key_der,
@@ -1488,6 +1511,7 @@ impl StateMachine {
             nodes,
             batch_summary: None,
             time_source,
+            consensus_pool_cache,
             canister_http_pool,
             canister_http_payload_builder,
         }
@@ -2805,6 +2829,11 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         assert_eq!(next_version, self.registry_client.get_latest_version());
+    }
+
+    /// Returns the subnet type of this state machine.
+    pub fn get_subnet_type(&self) -> SubnetType {
+        self.subnet_type
     }
 
     /// Returns the subnet id of this state machine.

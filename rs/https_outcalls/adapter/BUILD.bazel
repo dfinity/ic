@@ -63,6 +63,7 @@ rust_library(
     crate_name = "ic_https_outcalls_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 

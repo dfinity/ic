@@ -1,11 +1,11 @@
 //! Common utils for the ECDSA implementation.
 
-use crate::ecdsa::complaints::{IDkgTranscriptLoader, TranscriptLoadStatus};
-use crate::ecdsa::metrics::IDkgPayloadMetrics;
+use crate::idkg::complaints::{IDkgTranscriptLoader, TranscriptLoadStatus};
+use crate::idkg::metrics::IDkgPayloadMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
-use ic_interfaces::ecdsa::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
+use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm};
@@ -586,7 +586,7 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecdsa::test_utils::{
+    use crate::idkg::test_utils::{
         create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
         fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         set_up_idkg_payload, IDkgPayloadTestHelper,

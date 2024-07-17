@@ -1,8 +1,8 @@
 //! The signature process manager
 
-use crate::ecdsa::complaints::IDkgTranscriptLoader;
-use crate::ecdsa::metrics::{timed_call, IDkgPayloadMetrics, ThresholdSignerMetrics};
-use crate::ecdsa::utils::{load_transcripts, IDkgBlockReaderImpl};
+use crate::idkg::complaints::IDkgTranscriptLoader;
+use crate::idkg::metrics::{timed_call, IDkgPayloadMetrics, ThresholdSignerMetrics};
+use crate::idkg::utils::{load_transcripts, IDkgBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
@@ -10,7 +10,7 @@ use ic_interfaces::crypto::{
     ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
     ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
 };
-use ic_interfaces::ecdsa::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
+use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -790,8 +790,8 @@ impl<'a> Debug for Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecdsa::test_utils::*;
-    use crate::ecdsa::utils::algorithm_for_key_id;
+    use crate::idkg::test_utils::*;
+    use crate::idkg::utils::algorithm_for_key_id;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, generate_tecdsa_protocol_inputs,
@@ -2095,7 +2095,7 @@ mod tests {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::Schnorr(SchnorrArguments {
                         key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
-                        message: message.clone(),
+                        message: Arc::new(message.clone()),
                     }),
                     pseudo_random_id: req_id.pseudo_random_id,
                     derivation_path: vec![],
