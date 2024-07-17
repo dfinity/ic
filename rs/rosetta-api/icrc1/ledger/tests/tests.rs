@@ -1554,6 +1554,10 @@ mod verify_written_blocks {
     }
 }
 
+// TODO: The tests in the following module test the current behavior, but not necessarily the
+//  desired behavior. FI-1389 has been created to consider addressing the current behavior, i.e.,
+//  disallowing upgrading from a WASM of one token type to another. In that case, the tests may
+//  need to be updated.
 mod incompatible_token_type_upgrade {
     use super::*;
     use assert_matches::assert_matches;
