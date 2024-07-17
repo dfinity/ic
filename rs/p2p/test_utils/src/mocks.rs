@@ -79,7 +79,7 @@ mock! {
     }
 }
 
-mockall::mock! {
+mock! {
     pub Peers {}
 
     impl Peers for Peers {
