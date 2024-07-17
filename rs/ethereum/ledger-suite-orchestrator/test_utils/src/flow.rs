@@ -2,7 +2,7 @@ use crate::metrics::MetricsAssert;
 use crate::universal_canister::UniversalCanister;
 use crate::{
     assert_reply, out_of_band_upgrade, stop_canister, LedgerAccount, LedgerMetadataValue,
-    LedgerSuiteOrchestrator, MAX_TICKS,
+    LedgerSuiteOrchestrator, MAX_TICKS, MINTER_PRINCIPAL,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -78,7 +78,7 @@ impl ManagedCanistersAssert {
             .collect();
 
         for _i in 0..ARCHIVE_TRIGGER_THRESHOLD {
-            let from = Principal::anonymous();
+            let from = MINTER_PRINCIPAL;
             let to = Principal::management_canister();
             self.call_ledger_icrc1_transfer(
                 from,
