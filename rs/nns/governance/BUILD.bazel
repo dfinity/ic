@@ -27,7 +27,6 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nns/cmc",
-    "//rs/nns/common",
     "//rs/nns/gtc_accounts",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -80,6 +79,7 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm",
     "//rs/sns/init",
     "//rs/sns/swap",
+    "//rs/nns/common",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
@@ -88,6 +88,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
+    "//rs/nns/common:common--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
