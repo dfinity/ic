@@ -30,17 +30,29 @@ jobs:
 
           set -x
           MESSAGE=""
-          for WORKFLOW in $(echo "${WORKFLOWS_IN_QUEUE}" | jq -r '.id'); do
-            RUN_STARTED_AT=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .run_started_at")
-            RUN_STARTED_TIME=$(date -d "$RUN_STARTED_AT" +%s)
-            TIME_IN_QUEUE=$((CURRENT_TIME - RUN_STARTED_TIME))
+          # for WORKFLOW in $(echo "${WORKFLOWS_IN_QUEUE}" | jq -r '.id'); do
+          #   RUN_STARTED_AT=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .run_started_at")
+          #   RUN_STARTED_TIME=$(date -d "$RUN_STARTED_AT" +%s)
+          #   TIME_IN_QUEUE=$((CURRENT_TIME - RUN_STARTED_TIME))
+          #
+          #   if [ $TIME_IN_QUEUE -ge $WAIT_THRESHOLD_SECONDS ]; then
+          #     WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${WORKFLOW}"
+          #     MESSAGE="${MESSAGE}\nWorkflow [Run#${WORKFLOW}](${WORKFLOW_URL) in wait queue more than ${WAIT_THRESHOLD_MINUTES} minutes."
+          #   fi
+          # done
+          notification_message=""
+          for workflow in $(echo "${workflows_in_queue}" | jq -r '.id'); do
+            run_started_at=$(echo "${workflows_in_queue}" | jq -r "select(.id == ${workflow}) | .run_started_at")
+            run_started_time=$(date -d "$run_started_at" +%s)
+            time_in_queue=$((current_time - run_started_time))
 
-            if [ $TIME_IN_QUEUE -ge $WAIT_THRESHOLD_SECONDS ]; then
-              WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${WORKFLOW}"
-              MESSAGE="${MESSAGE}\nWorkflow [Run#${WORKFLOW}](${WORKFLOW_URL) in wait queue more than ${WAIT_THRESHOLD_MINUTES} minutes."
+            if [ $time_in_queue -ge $WAIT_THRESHOLD_SECONDS ]; then
+              workflow_url="https://github.com/${{ github.repository }}/actions/runs/${workflow}"
+              notification_message="${notification_message}\nWorkflow [Run#${workflow}](${workflow_url}) in wait queue more than ${WAIT_THRESHOLD_MINUTES} minutes."
             fi
           done
-          echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
+          #echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
+          echo "message=${notification_message}" >> $GITHUB_OUTPUT
 
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
