@@ -34,8 +34,9 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    BlobCompression, BlobId, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig, InstanceId,
-    RawEffectivePrincipal, RawMessageId, SubnetId, SubnetSpec, Topology,
+    BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
+    InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
+    SubnetSpec, Topology,
 };
 use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
@@ -864,6 +865,27 @@ impl PocketIc {
                     method,
                     payload,
                 )
+                .await
+        })
+    }
+
+    /// Get the pending canister HTTP outcalls.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn get_canister_http(&self) -> Vec<CanisterHttpRequest> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_canister_http().await })
+    }
+
+    /// Mock a response to a pending canister HTTP outcall.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn mock_canister_http_response(
+        &self,
+        mock_canister_http_response: MockCanisterHttpResponse,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .mock_canister_http_response(mock_canister_http_response)
                 .await
         })
     }

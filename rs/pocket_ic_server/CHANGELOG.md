@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   specifies if non-mainnet features (e.g., best-effort responses) should be enabled for the PocketIC instance.
   The topology contains a new field `subnet_seed` which is equal to the directory name of the directory in the `state_dir`
   storing the state of the corresponding subnet.
+- Support for canister HTTP outcalls: endpoint `/instances/<instance_id>/get_canister_http` to retrieve pending canister HTTP outcalls
+  and endpoint `/instances/<instance_id>/mock_canister_http_response` to mock a response for a pending canister HTTP outcall,
+  the server produces responses for pending canister HTTP outcalls automatically in the auto-progress mode (started by calling the endpoint `/instances/<instance_id>/auto_progress`).
 
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.
