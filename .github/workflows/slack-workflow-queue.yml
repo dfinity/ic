@@ -1,7 +1,11 @@
 name: Schedule Wait Queue Check
 
+# Check GitHub's API if there are any workflows in wait queue for longer then 5 minutes
+
 on:
   pull_request:
+    paths:
+      - '.github/workflows/slack-workflow-queue.yml'
   schedule:
     - cron: "*/5 * * * *"
 
@@ -9,8 +13,8 @@ jobs:
   check-queue:
     name: Check Workflow Wait Queue
     runs-on: ubuntu-latest
-
     steps:
+
       - name: Check for workflows in wait queue
         id: check
         shell: bash
@@ -49,7 +53,7 @@ jobs:
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: steps.check.outputs.message != ''
         with:
-          channel-id: markos-void
+          channel-id: eng-idx-alerts
           slack-message: ${{ steps.check.outputs.message }}
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
