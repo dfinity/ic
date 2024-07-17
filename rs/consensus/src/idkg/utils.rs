@@ -16,7 +16,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
 use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
-use ic_types::consensus::idkg::idkg::ThresholdEcdsaSigInputsRef;
+use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::Block;
