@@ -15,7 +15,7 @@ jobs:
         id: check
         shell: bash
         run: |
-          set -xeuo pipefail
+          set -euo pipefail
 
           GITHUB_API_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs"
           WAIT_THRESHOLD_MINUTES=0 # TODO: change to 5
@@ -28,6 +28,7 @@ jobs:
           CURRENT_TIME=$(date +%s)
           WORKFLOWS_IN_QUEUE=$(echo $WORKFLOW_RUNS | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, run_started_at: .run_started_at}')
 
+          set -x
           MESSAGE=""
           for WORKFLOW in $(echo "${WORKFLOWS_IN_QUEUE}" | jq -r '.id'); do
             RUN_STARTED_AT=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .run_started_at")
