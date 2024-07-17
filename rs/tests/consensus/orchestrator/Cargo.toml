@@ -15,7 +15,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 tests = { path = "../.." }
 ic-types = { path = "../../../types/types" }
 slog = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [[bin]]
 name = "ic-systest-sr-nns-failover-nodes-test"

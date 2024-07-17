@@ -146,7 +146,7 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
-url = "2.1.1"
+url = { workspace = true }
 wat = "1.0.52"
 ic-agent = { workspace = true }
 ic-utils = { workspace = true }
