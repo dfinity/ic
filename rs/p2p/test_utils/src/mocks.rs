@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
+use ic_consensus_manager::Peers;
 use ic_interfaces::p2p::{
     consensus::{PriorityFn, PriorityFnFactory, ValidatedPoolReader},
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
@@ -75,5 +76,13 @@ mock! {
 
     impl<A: IdentifiableArtifact + Sync> PriorityFnFactory<A, MockValidatedPoolReader<A>> for PriorityFnFactory<A> {
         fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
+    }
+}
+
+mockall::mock! {
+    pub Peers {}
+
+    impl Peers for Peers {
+        fn peers(&self) -> Vec<NodeId>;
     }
 }

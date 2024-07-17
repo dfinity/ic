@@ -214,12 +214,4 @@ pub mod mocks {
             ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;
         }
     }
-
-    mockall::mock! {
-        pub Peers {}
-
-        impl Peers for Peers {
-            fn peers(&self) -> Vec<NodeId>;
-        }
-    }
 }

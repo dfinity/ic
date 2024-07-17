@@ -9,13 +9,13 @@ use std::{
 use axum::http::{Response, StatusCode};
 use bytes::Bytes;
 use ic_artifact_downloader::FetchArtifact;
-use ic_consensus_manager::{mocks::MockPeers, ArtifactAssembler};
+use ic_consensus_manager::ArtifactAssembler;
 use ic_interfaces::p2p::consensus::Priority;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     consensus::U64Artifact,
-    mocks::{MockPriorityFnFactory, MockTransport, MockValidatedPoolReader},
+    mocks::{MockPeers, MockPriorityFnFactory, MockTransport, MockValidatedPoolReader},
 };
 use ic_protobuf::proxy::ProtoProxy;
 use ic_types::artifact::PbArtifact;
