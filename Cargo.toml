@@ -434,7 +434,7 @@ opt-level = 3
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
-anyhow = "=1.0.72"
+anyhow = "^1"
 arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
@@ -542,8 +542,8 @@ minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 nftables = "0.4"
 nix = "0.24.3"
-num-traits = { version = "0.2.14", features = ["libm"] }
-num-bigint = "=0.4.3"
+num-traits = { version = "0.2.12", features = ["libm"] }
+num-bigint = "0.4.6"
 opentelemetry = { version = "0.23.0", features = ["metrics", "trace"] }
 opentelemetry-prometheus = "0.16.0"
 opentelemetry-otlp = { version = "0.16.0", features = ["grpc-tonic"] }
@@ -592,8 +592,8 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
-sha2 = "0.10"
-sha3 = "0.10"
+sha2 = "0.10.8"
+sha3 = "0.10.8"
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
@@ -612,7 +612,7 @@ syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
 tar = "=0.4.39"
 tempfile = "3.10.1"
-thiserror = "1.0.57"
+thiserror = "1.0.62"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.38.0", features = ["full"] }
