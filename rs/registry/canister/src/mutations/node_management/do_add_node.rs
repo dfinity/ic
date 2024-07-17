@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, mutations::common::is_valid_domain, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use std::net::SocketAddr;
 
@@ -13,6 +13,7 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
 };
+use idna::domain_to_ascii_strict;
 
 use crate::mutations::{
     common::check_ipv4_config,
@@ -88,10 +89,17 @@ impl Registry {
             .domain
             .as_ref()
             .map(|domain| {
-                if !is_valid_domain(domain) {
-                    return Err(format!(
-                        "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format"
-                    ));
+                match domain_to_ascii_strict(domain) {
+                    Err(err) => return Err(format!(
+                        "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format: {err}"
+                    )),
+                    Ok(parsed_domain) => {
+                        if parsed_domain != *domain {
+                            return Err(format!(
+                            "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format"
+                        ));
+                        }
+                    }
                 }
                 Ok(domain.clone())
             })

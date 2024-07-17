@@ -1,10 +1,10 @@
-use crate::mutations::common::is_valid_domain;
 use crate::mutations::node_management::common::get_node_operator_id_for_node;
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
+use idna::domain_to_ascii_strict;
 use prost::Message;
 use serde::Serialize;
 
@@ -54,9 +54,8 @@ impl Registry {
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain {
-            if !is_valid_domain(domain) {
-                panic!("invalid domain");
-            }
+            let parsed_domain = domain_to_ascii_strict(domain).expect("invalid domain");
+            assert_eq!(parsed_domain, *domain);
         }
         node_record.domain = domain;
 
