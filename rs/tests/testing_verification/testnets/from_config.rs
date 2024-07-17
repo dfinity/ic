@@ -65,7 +65,7 @@ pub fn setup(env: TestEnv) {
                 ),
                 (
                     CUSTOM_DISK_IMG_TAR_URL,
-                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/disk-img/disk-img.tar.zst", v.to_string()),
+                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/disk-img/disk-img.tar.zst", v),
                     DEV_DISK_IMG_TAR_ZST_CAS_URL,
                 ),
                 (
@@ -169,7 +169,6 @@ fn fetch_shasum_for_disk_img(version: String) -> String {
         )
     })
     .split_whitespace()
-    .into_iter()
     .next()
     .expect("The format of hash should contain whitespace")
     .to_string()
