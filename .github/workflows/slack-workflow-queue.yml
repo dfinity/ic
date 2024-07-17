@@ -15,31 +15,18 @@ jobs:
         id: check
         shell: bash
         run: |
-          set -euo pipefail
+          # set -euo pipefail
 
           GITHUB_API_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs"
-          WAIT_THRESHOLD_MINUTES=0 # TODO: change to 5
+          WAIT_THRESHOLD_MINUTES=5
           WAIT_THRESHOLD_SECONDS=$((WAIT_THRESHOLD_MINUTES * 60))
-
           # Fetch workflow runs
-          WORKFLOW_RUNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $GITHUB_API_URL)
-
+          workflow_runs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $GITHUB_API_URL)
           # Check for queued workflows
-          CURRENT_TIME=$(date +%s)
-          WORKFLOWS_IN_QUEUE=$(echo $WORKFLOW_RUNS | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, run_started_at: .run_started_at}')
+          current_time=$(date +%s)
+          workflows_in_queue=$(echo $workflow_runs | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, run_started_at: .run_started_at}')
 
           set -x
-          MESSAGE=""
-          # for WORKFLOW in $(echo "${WORKFLOWS_IN_QUEUE}" | jq -r '.id'); do
-          #   RUN_STARTED_AT=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .run_started_at")
-          #   RUN_STARTED_TIME=$(date -d "$RUN_STARTED_AT" +%s)
-          #   TIME_IN_QUEUE=$((CURRENT_TIME - RUN_STARTED_TIME))
-          #
-          #   if [ $TIME_IN_QUEUE -ge $WAIT_THRESHOLD_SECONDS ]; then
-          #     WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${WORKFLOW}"
-          #     MESSAGE="${MESSAGE}\nWorkflow [Run#${WORKFLOW}](${WORKFLOW_URL) in wait queue more than ${WAIT_THRESHOLD_MINUTES} minutes."
-          #   fi
-          # done
           notification_message=""
           for workflow in $(echo "${workflows_in_queue}" | jq -r '.id'); do
             run_started_at=$(echo "${workflows_in_queue}" | jq -r "select(.id == ${workflow}) | .run_started_at")
