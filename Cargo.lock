@@ -9512,6 +9512,7 @@ dependencies = [
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-governance-api",
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
  "ic-protobuf",

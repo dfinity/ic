@@ -11,7 +11,6 @@ BASE_DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/sns/root",
-    "//rs/sns/swap",
     "//rs/types/base_types",
     "//rs/types/types",
     "//rs/utils",
@@ -27,7 +26,13 @@ BASE_DEPENDENCIES = [
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/sns/swap",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/sns/swap:swap--test_feature",
+]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
@@ -47,6 +52,20 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "api--test_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_governance_api",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
 # needed for check_generated_files test
