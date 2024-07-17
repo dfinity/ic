@@ -1594,12 +1594,10 @@ mod incompatible_token_type_upgrade {
         let ledger_id = env
             .install_canister(ledger_mainnet_u64_wasm(), default_init_args(), None)
             .unwrap();
-        // Create a large balance that is still smaller than the max token supply of u64::MAX
-        transfer(&env, ledger_id, MINTER, account(1), u64::MAX - 100);
-        let mut balance_1 = balance_of(&env, ledger_id, account(1));
-        // Create a large allowance that gets capped at u64::MAX
-        let mut big_amount = BigUint::ZERO;
-        big_amount.set_bit(65, true);
+        // Create a large balance
+        transfer(&env, ledger_id, MINTER, account(1), u64::MAX);
+        let mut balance = balance_of(&env, ledger_id, account(1));
+        // Create a large allowance
         let approval_result = send_approval(
             &env,
             ledger_id,
@@ -1607,7 +1605,7 @@ mod incompatible_token_type_upgrade {
             &ApproveArgs {
                 from_subaccount: None,
                 spender: account(2),
-                amount: Nat::from(big_amount),
+                amount: Nat::from(u64::MAX),
                 expected_allowance: None,
                 expires_at: None,
                 fee: None,
@@ -1616,7 +1614,7 @@ mod incompatible_token_type_upgrade {
             },
         );
         assert_eq!(approval_result, Ok(BlockIndex::from(1u64)));
-        balance_1 -= FEE;
+        balance -= FEE;
 
         // Try to upgrade the ledger from using a u64 wasm to a u256 wasm
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
@@ -1624,9 +1622,9 @@ mod incompatible_token_type_upgrade {
             .expect("Unable to upgrade the ledger canister");
 
         // The balance and allowance should not change
-        assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
-        let allowance_2 = get_allowance(&env, ledger_id, account(1), account(2));
-        assert_eq!(allowance_2.allowance, Nat::from(u64::MAX));
+        assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
+        let allowance = get_allowance(&env, ledger_id, account(1), account(2));
+        assert_eq!(allowance.allowance, Nat::from(u64::MAX));
 
         // Try to upgrade the ledger back to a u64 wasm
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
@@ -1634,8 +1632,9 @@ mod incompatible_token_type_upgrade {
             .expect("Unable to upgrade the ledger canister");
 
         // The balance and allowance should not change
-        assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
-        assert_eq!(allowance_2.allowance, Nat::from(u64::MAX));
+        assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
+        let allowance = get_allowance(&env, ledger_id, account(1), account(2));
+        assert_eq!(allowance.allowance, Nat::from(u64::MAX));
     }
 
     #[test]
