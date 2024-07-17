@@ -60,8 +60,6 @@ const RETRY_TIMEOUT_S: u64 = 300;
 
 // The minimum delay between consecutive ticks in auto progress mode.
 const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
-// The timeout of an operation in auto progress mode.
-const AUTO_PROGRESS_OP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct AppState {
@@ -1089,22 +1087,19 @@ pub async fn auto_progress(
                 let start = Instant::now();
                 let old = std::mem::replace(&mut now, Instant::now());
                 advance_time += now.duration_since(old);
-                let cur_op = AdvanceTimeAndTick(advance_time);
-                match run_operation::<()>(
-                    api_state_clone.clone(),
-                    id,
-                    Some(AUTO_PROGRESS_OP_TIMEOUT),
-                    cur_op,
-                )
-                .await
-                {
-                    (_, ApiResponse::Success(_)) | (_, ApiResponse::Started { .. }) => {
-                        advance_time = Duration::default();
-                    }
-                    _ => {}
-                };
+                let op = AdvanceTimeAndTick(advance_time);
+                let retry_immediately =
+                    match run_operation::<()>(api_state_clone.clone(), id, None, op).await {
+                        (_, ApiResponse::Success(_)) | (_, ApiResponse::Started { .. }) => {
+                            advance_time = Duration::default();
+                            false
+                        }
+                        (_, ApiResponse::Busy { .. }) | (_, ApiResponse::Error { .. }) => true,
+                    };
                 let duration = start.elapsed();
-                sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                if !retry_immediately {
+                    sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                }
                 match rx.try_recv() {
                     Ok(_) | Err(TryRecvError::Disconnected) => {
                         return;
