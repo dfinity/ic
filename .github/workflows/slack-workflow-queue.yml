@@ -1,6 +1,7 @@
 name: Schedule Wait Queue Check
 
 on:
+  pull_request:
   schedule:
     - cron: "*/5 * * * *"
 
