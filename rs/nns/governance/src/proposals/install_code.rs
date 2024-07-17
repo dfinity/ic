@@ -33,7 +33,7 @@ const PROTOCOL_CANISTER_IDS: [&CanisterId; 12] = [
     &EXCHANGE_RATE_CANISTER_ID,
 ];
 
-// The paylod type for the upgrade_root method in the lifeline canister. Should be kept in sync with
+// When calling lifeline's upgrade_root method, this is the request. Keep this in sync with
 // `rs/nns/handlers/lifeline/impl/lifeline.mo`.
 #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize, Serialize)]
 struct UpgradeRootProposalPayload {
@@ -53,12 +53,12 @@ impl InstallCode {
 
         let _ = self.valid_canister_id()?;
         let _ = self.valid_install_mode()?;
+        let _ = self.valid_wasm_module()?;
         let _ = self.valid_topic()?;
         let _ = self.canister_and_function()?;
 
-        if self.wasm_module.is_none() {
-            return Err(Self::invalid_proposal_error("Wasm module is required"));
-        }
+        // In the future, we could potentially validate the wasm module to see if it's a valid gzip
+        // or a valid WASM.
 
         Ok(())
     }
@@ -89,14 +89,23 @@ impl InstallCode {
         }
     }
 
+    fn valid_wasm_module(&self) -> Result<&Vec<u8>, GovernanceError> {
+        // We do not want to copy the (potentially large) wasm module when validating, so we return
+        // a reference and let the caller clone it if needed.
+        self.wasm_module
+            .as_ref()
+            .ok_or(Self::invalid_proposal_error("Wasm module is required"))
+    }
+
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         if PROTOCOL_CANISTER_IDS.contains(&&canister_id) {
             Ok(Topic::ProtocolCanisterManagement)
         } else {
-            Err(Self::invalid_proposal_error(
-                "Canister ID is not a protocol canister",
-            ))
+            Err(Self::invalid_proposal_error(&format!(
+                "Canister id {:?} is not a protocol canister",
+                canister_id
+            )))
         }
     }
 
@@ -109,7 +118,7 @@ impl InstallCode {
 
     fn payload_to_upgrade_root(&self) -> Result<Vec<u8>, GovernanceError> {
         let stop_upgrade_start = !self.skip_stopping_before_installing.unwrap_or(false);
-        let wasm_module = vec![];
+        let wasm_module = self.valid_wasm_module()?.clone();
         let module_arg = self.arg.clone().unwrap_or_default();
 
         Encode!(&UpgradeRootProposalPayload {
@@ -124,10 +133,7 @@ impl InstallCode {
         let stop_before_installing = !self.skip_stopping_before_installing.unwrap_or(false);
         let mode = self.valid_install_mode()?;
         let canister_id = self.valid_canister_id()?;
-        let wasm_module = self
-            .wasm_module
-            .clone()
-            .ok_or(Self::invalid_proposal_error("Wasm module is required"))?;
+        let wasm_module = self.valid_wasm_module()?.clone();
         let arg = self.arg.clone().unwrap_or_default();
         let compute_allocation = None;
         let memory_allocation = None;
@@ -148,6 +154,9 @@ impl InstallCode {
 impl CallCanister for InstallCode {
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         let canister_id = self.valid_canister_id()?;
+        // Most canisters are upgraded indirectly via root. In such cases, we call root's
+        // change_nns_canister method. The exception is when root is to be upgraded. In that case,
+        // upgrades are instead done via lifeline's upgrade_root method.
         if canister_id != ROOT_CANISTER_ID {
             return Ok((ROOT_CANISTER_ID, "change_nns_canister"));
         }
@@ -155,6 +164,14 @@ impl CallCanister for InstallCode {
         let install_mode = self.valid_install_mode()?;
         match install_mode {
             RootCanisterInstallMode::Install | RootCanisterInstallMode::Reinstall => {
+                // We can potentially support those modes in the future by extending what the
+                // lifeline canister can do. However there is no reason to do so currently: (1) the
+                // install mode is only useful when root does not have any code, which we don't
+                // expect to happen. (2) as the root canister does not have state, there is no
+                // reason to do reinstall instead of upgrade; for getting out of open call context
+                // problems, only uninstalling and reinstalling the root canister would help
+                // (uninstall cancels open calls), and that is achieved by
+                // HardResetNnsRootToVersion.
                 Err(Self::invalid_proposal_error(&format!(
                     "InstallCode mode {:?} is not supported for root canister, consider using \
                      HardResetNnsRootToVersion proposal instead",
@@ -214,102 +231,92 @@ mod tests {
             skip_stopping_before_installing: None,
         };
 
-        assert_eq!(
+        let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
+            let error = install_code.validate().unwrap_err();
+            assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
+            for keyword in keywords {
+                let error_message = error.error_message.to_lowercase();
+                assert!(
+                    error_message.contains(keyword),
+                    "{} not found in {:#?}",
+                    keyword,
+                    error_message
+                );
+            }
+        };
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 canister_id: None,
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of Canister ID is required".to_string(),
-            ))
+            },
+            vec!["canister id", "required"],
         );
-        assert_eq!(
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 install_mode: None,
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of Install mode is required".to_string(),
-            ))
+            },
+            vec!["install mode", "required"],
         );
-        assert_eq!(
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 install_mode: Some(1000),
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of Unspecified or unrecognized install mode"
-                    .to_string(),
-            ))
+            },
+            vec!["unspecified or unrecognized", "install mode"],
         );
-        assert_eq!(
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 install_mode: Some(CanisterInstallMode::Unspecified as i32),
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of Unspecified or unrecognized install mode"
-                    .to_string(),
-            ))
+            },
+            vec!["unspecified or unrecognized", "install mode"],
         );
-        assert_eq!(
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 wasm_module: None,
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of Wasm module is required".to_string(),
-            ))
+            },
+            vec!["wasm module", "required"],
         );
-        assert_eq!(
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 canister_id: Some(ROOT_CANISTER_ID.get()),
                 install_mode: Some(CanisterInstallMode::Install as i32),
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of InstallCode mode Install is not supported for root canister, \
-                consider using HardResetNnsRootToVersion proposal instead"
-                    .to_string(),
-            ))
+            },
+            vec![
+                "installcode mode install",
+                "not supported for root canister",
+                "hardresetnnsroottoversion",
+            ],
         );
-        assert_eq!(
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 canister_id: Some(ROOT_CANISTER_ID.get()),
                 install_mode: Some(CanisterInstallMode::Reinstall as i32),
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of InstallCode mode Reinstall is not supported for root canister, \
-                consider using HardResetNnsRootToVersion proposal instead"
-                    .to_string(),
-            ))
+            },
+            vec![
+                "installcode mode reinstall",
+                "not supported for root canister",
+                "hardresetnnsroottoversion",
+            ],
         );
-        assert_eq!(
+
+        is_invalid_proposal_with_keywords(
             InstallCode {
                 canister_id: Some(ic_nns_constants::SNS_WASM_CANISTER_ID.get()),
                 ..valid_install_code.clone()
-            }
-            .validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "InstallCode proposal invalid because of Canister ID is not a protocol canister"
-                    .to_string(),
-            ))
+            },
+            vec!["canister id", "not a protocol canister"],
         );
     }
 
