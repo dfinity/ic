@@ -31,14 +31,15 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",     # Need for the canister sandboxing to work.
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",     # Need for the Wasm compilation sandboxing to work.
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",     # Need for the canister/compilation sandboxing to work.
-            "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",         # Required by the Bitcoin integration.
-            "//rs/https_outcalls/adapter:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # Required by the HTTPS outcalls feature. `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
-            "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",           # Crypto provider required by the IC protocol.
-            "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",             # Replica process manager. Required for upgrades, node addition, etc.
-            ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Main protocol binary. Installs the malicious replica if set.
-            "//publish/binaries:ic-boundary-tls": "/opt/ic/bin/ic-boundary:0755",           # API Boundary Node. The same GuestOS is used both for the replica and API boundary nodes.
+            "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",         # Need for the Bitcoin integration.
+            "//rs/https_outcalls/adapter:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # Need for the HTTPS outcalls feature. `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
+            "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",           # Crypto operations provider, required by the IC protocol (signing, etc).
+            "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",             # Replica process manager, required by the IC protocol (upgrades, node addition, etc).
+            ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Main protocol binary, required by the IC protocol. Installs the malicious replica if set.
+            "//publish/binaries:ic-boundary-tls": "/opt/ic/bin/ic-boundary:0755",           # API boundary node binary, required by the IC protocol. The same GuestOS is used both for the replica and API boundary nodes.
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",  # May be used during recoveries to export/import consensus pool artifacts.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",                 # May be used for inspecting and recovering the registry.
+            "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",                 # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",               # Required for performing subnet recoveries on the node directly.
             # TODO crypto, node
             "//publish/binaries:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",
@@ -48,8 +49,6 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             # TODO node
             "//publish/binaries:nft-exporter": "/opt/ic/bin/nft-exporter:0755",
-            # TODO messaging
-            "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             # TODO node
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
             # TODO node
