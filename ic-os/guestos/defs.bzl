@@ -28,10 +28,12 @@ def image_deps(mode, malicious = False):
         "bootfs": {},
         "rootfs": {
             # additional files to install
-            # TODO runtime
+            # Need for the canister sandboxing to work.
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
-            # TODO runtime
+            # Need for the Wasm compilation sandboxing to work.
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",
+            # Need for the canister/compilation sandboxing to work.
+            "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
             # TODO crypto
             "//publish/binaries:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",
             # TODO node
@@ -42,7 +44,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
             # Required by the HTTPS outcalls feature - https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-bitcoin-api
             "//rs/https_outcalls/adapter:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
-            # Crypto operation provider required by the IC protocol.
+            # Crypto operations provider required by the IC protocol.
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
             # TODO consensus
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
@@ -52,14 +54,12 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
             # API Boundary Node process. The same GuestOS is used both for the replica and API boundary nodes.
             "//publish/binaries:ic-boundary-tls": "/opt/ic/bin/ic-boundary:0755",
-            # Main protocol binary
+            # Main protocol binary.
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Install the malicious replica if set
             # TODO DRE
             "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             # TODO node
             "//publish/binaries:nft-exporter": "/opt/ic/bin/nft-exporter:0755",
-            # TODO runtime
-            "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
             # TODO messaging
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             # TODO node
