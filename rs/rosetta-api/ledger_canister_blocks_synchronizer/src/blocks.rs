@@ -1741,25 +1741,28 @@ mod tests {
         blocks.push(&hashed_block1).unwrap();
         let mut connection = blocks.connection.lock().unwrap();
         let transaction = connection.transaction().unwrap();
-        {
-            let mut statement1 = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
-        VALUES (:idx, :hash, :timestamp)"#,
-                )
-                .unwrap();
-            let mut statement2 = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
-VALUES (:idx, :block_idx)"#,
-                )
-                .unwrap();
 
-            blocks
-                .store_rosetta_block(rosetta_block.clone(), &mut statement1, &mut statement2)
-                .unwrap();
-        }
+        let mut statement1 = transaction
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
+        VALUES (:idx, :hash, :timestamp)"#,
+            )
+            .unwrap();
+        let mut statement2 = transaction
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
+VALUES (:idx, :block_idx)"#,
+            )
+            .unwrap();
+
+        blocks
+            .store_rosetta_block(rosetta_block.clone(), &mut statement1, &mut statement2)
+            .unwrap();
+
+        drop(statement1);
+        drop(statement2);
         transaction.commit().unwrap();
+        drop(connection);
         let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
         assert_eq!(rosetta_block, actual_rosetta_block);
     }
