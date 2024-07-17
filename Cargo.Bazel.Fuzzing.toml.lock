@@ -3185,6 +3185,8 @@ dependencies = [
  "thousands",
  "threadpool",
  "time",
+ "tla_instrumentation",
+ "tla_instrumentation_proc_macros",
  "tokio",
  "tokio-io-timeout",
  "tokio-metrics",
@@ -5559,6 +5561,15 @@ name = "itertools"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25db6b064527c5d482d0423354fcd07a89a2dfe07b67892e62411946db7f07b0"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -10821,6 +10832,27 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "tla_instrumentation"
+version = "0.1.0"
+source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=60ac57c2401630017e9d993bdbdcf88b70be6727#60ac57c2401630017e9d993bdbdcf88b70be6727"
+dependencies = [
+ "candid",
+ "itertools 0.13.0",
+ "serde",
+ "tla_instrumentation_proc_macros",
+]
+
+[[package]]
+name = "tla_instrumentation_proc_macros"
+version = "0.1.0"
+source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=60ac57c2401630017e9d993bdbdcf88b70be6727#60ac57c2401630017e9d993bdbdcf88b70be6727"
+dependencies = [
+ "proc-macro2 1.0.85",
+ "quote 1.0.35",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "tls_codec"

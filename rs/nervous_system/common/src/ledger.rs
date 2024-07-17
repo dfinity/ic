@@ -132,6 +132,8 @@ impl IcpLedger for IcpLedgerCanister {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
+
+        tla_log_request!(Destination("ledger"));
         // Send 'amount_e8s' to the target account.
         //
         // We expect the 'fee_e8s' AND 'amount_e8s' to be
@@ -153,6 +155,7 @@ impl IcpLedger for IcpLedgerCanister {
             },
         )
         .await;
+        tla_log_response!(Destination("ledger"), result);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(format!(

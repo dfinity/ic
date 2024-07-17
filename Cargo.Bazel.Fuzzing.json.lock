@@ -1,5 +1,5 @@
 {
-  "checksum": "1dfe000977bed3c4144af12c400c27dbe62bf6883a7bd4764d8c26c09733e54b",
+  "checksum": "acbf105603496dfe38ed3b3fc7a845aa66c2c9ed27f64124821361db9dff0ea5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18166,6 +18166,10 @@
               "target": "time"
             },
             {
+              "id": "tla_instrumentation 0.1.0",
+              "target": "tla_instrumentation"
+            },
+            {
               "id": "tokio 1.38.0",
               "target": "tokio"
             },
@@ -18432,6 +18436,10 @@
             {
               "id": "test-strategy 0.3.1",
               "target": "test_strategy"
+            },
+            {
+              "id": "tla_instrumentation_proc_macros 0.1.0",
+              "target": "tla_instrumentation_proc_macros"
             }
           ],
           "selects": {}
@@ -31794,6 +31802,62 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "itertools 0.13.0": {
+      "name": "itertools",
+      "version": "0.13.0",
+      "package_url": "https://github.com/rust-itertools/itertools",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/itertools/0.13.0/download",
+          "sha256": "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "itertools",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "itertools",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "use_alloc",
+            "use_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.9.0",
+              "target": "either"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.13.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "itoa 1.0.9": {
       "name": "itoa",
       "version": "1.0.9",
@@ -35195,38 +35259,30 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
@@ -35239,14 +35295,10 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ]
@@ -64236,6 +64288,127 @@
       ],
       "license_file": "LICENSE-APACHE.md"
     },
+    "tla_instrumentation 0.1.0": {
+      "name": "tla_instrumentation",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
+          "commitish": {
+            "Rev": "60ac57c2401630017e9d993bdbdcf88b70be6727"
+          },
+          "strip_prefix": "tla_instrumentation"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tla_instrumentation",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tla_instrumentation",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "tla_instrumentation_proc_macros 0.1.0",
+              "target": "tla_instrumentation_proc_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": null
+    },
+    "tla_instrumentation_proc_macros 0.1.0": {
+      "name": "tla_instrumentation_proc_macros",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
+          "commitish": {
+            "Rev": "60ac57c2401630017e9d993bdbdcf88b70be6727"
+          },
+          "strip_prefix": "tla_instrumentation_proc_macros"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "tla_instrumentation_proc_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tla_instrumentation_proc_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": null
+    },
     "tls_codec 0.4.1": {
       "name": "tls_codec",
       "version": "0.4.1",
@@ -77925,6 +78098,8 @@
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "time 0.3.36",
+    "tla_instrumentation 0.1.0",
+    "tla_instrumentation_proc_macros 0.1.0",
     "tokio 1.38.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
