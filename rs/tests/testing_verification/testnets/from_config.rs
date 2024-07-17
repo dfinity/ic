@@ -161,7 +161,6 @@ fn fetch_shasum_for_disk_img(version: String) -> String {
     )
     .expect("Failed to convert to UTF8")
     .lines()
-    .into_iter()
     .find(|l| l.ends_with(TAR_EXTENSION))
     .unwrap_or_else(|| {
         panic!(
