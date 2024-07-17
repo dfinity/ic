@@ -416,15 +416,13 @@ mod tests {
     use super::{Reply, Request, TerminateRequest};
 
     fn wasm_module() -> (CompilationResult, SerializedModule) {
-        let wat = format!(
-            r#"
+        let wat = r#"
             (module
                 (func (export "canister_init")
                     (drop (memory.grow (i32.const 160)))
                 )
                 (memory 1)
-            )"#
-        );
+            )"#;
         let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
         let wasm = wat::parse_str(wat).unwrap();
 
