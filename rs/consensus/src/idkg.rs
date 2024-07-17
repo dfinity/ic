@@ -169,21 +169,21 @@
 //!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
 //!   signatures with the signing request and the 4-tuple.
 
-use crate::ecdsa::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
-use crate::ecdsa::metrics::{
+use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
+use crate::idkg::metrics::{
     timed_call, IDkgClientMetrics, IDkgGossipMetrics,
     CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
 };
-use crate::ecdsa::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
-use crate::ecdsa::signer::{ThresholdSigner, ThresholdSignerImpl};
-use crate::ecdsa::utils::IDkgBlockReaderImpl;
+use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
+use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
+use crate::idkg::utils::IDkgBlockReaderImpl;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
-    ecdsa::{IDkgChangeSet, IDkgPool},
+    idkg::{IDkgChangeSet, IDkgPool},
     p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
 };
 use ic_interfaces_state_manager::StateReader;
@@ -385,7 +385,7 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
             );
             #[cfg(any(feature = "malicious_code", test))]
             if self.malicious_flags.is_ecdsa_malicious() {
-                return super::ecdsa::malicious_pre_signer::maliciously_alter_changeset(
+                return super::idkg::malicious_pre_signer::maliciously_alter_changeset(
                     changeset,
                     &self.pre_signer,
                     &self.malicious_flags,

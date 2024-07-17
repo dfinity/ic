@@ -18,7 +18,7 @@ use prometheus::{
 };
 use std::sync::RwLock;
 
-use crate::ecdsa::metrics::{
+use crate::idkg::metrics::{
     count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
     KEY_ID_LABEL,
 };

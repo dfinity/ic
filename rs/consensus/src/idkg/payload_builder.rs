@@ -6,13 +6,13 @@
 use super::pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl};
 use super::signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl};
 use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
-use crate::ecdsa::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
+use crate::idkg::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::retrieve_mega_public_key_from_registry;
-use ic_interfaces::ecdsa::IDkgPool;
+use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -677,10 +677,10 @@ pub(crate) fn create_data_payload_helper_2(
 mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
-    use crate::ecdsa::test_utils::*;
-    use crate::ecdsa::utils::algorithm_for_key_id;
-    use crate::ecdsa::utils::block_chain_reader;
-    use crate::ecdsa::utils::get_context_request_id;
+    use crate::idkg::test_utils::*;
+    use crate::idkg::utils::algorithm_for_key_id;
+    use crate::idkg::utils::block_chain_reader;
+    use crate::idkg::utils::get_context_request_id;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;

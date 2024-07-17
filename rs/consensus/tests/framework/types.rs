@@ -6,14 +6,14 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
     consensus::{ConsensusGossipImpl, ConsensusImpl},
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
-    ecdsa::IDkgChangeSet,
+    idkg::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
@@ -112,7 +112,7 @@ pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
-    Ecdsa(IDkgMessage),
+    IDkg(IDkgMessage),
 }
 
 /// A Message is a tuple of [`InputMessage`] with a timestamp.
@@ -305,9 +305,9 @@ pub struct ComponentModifier {
         )
             -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     >,
-    pub(crate) ecdsa: Box<
+    pub(crate) idkg: Box<
         dyn Fn(
-            ecdsa::IDkgImpl,
+            idkg::IDkgImpl,
         )
             -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     >,
@@ -317,7 +317,7 @@ impl Default for ComponentModifier {
     fn default() -> Self {
         Self {
             consensus: Box::new(|x: ConsensusImpl| Box::new(x)),
-            ecdsa: Box::new(|x: ecdsa::IDkgImpl| Box::new(x)),
+            idkg: Box::new(|x: idkg::IDkgImpl| Box::new(x)),
         }
     }
 }
@@ -332,13 +332,13 @@ pub fn apply_modifier_consensus(
     }
 }
 
-pub fn apply_modifier_ecdsa(
+pub fn apply_modifier_idkg(
     modifier: &Option<ComponentModifier>,
-    ecdsa: ecdsa::IDkgImpl,
+    idkg: idkg::IDkgImpl,
 ) -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>> {
     match modifier {
-        Some(f) => (f.ecdsa)(ecdsa),
-        _ => Box::new(ecdsa),
+        Some(f) => (f.idkg)(idkg),
+        _ => Box::new(idkg),
     }
 }
 
@@ -349,8 +349,7 @@ pub struct ConsensusDriver<'a> {
         Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
-    pub(crate) ecdsa:
-        Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
+    pub(crate) idkg: Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,
