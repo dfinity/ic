@@ -665,23 +665,18 @@ fn process_ipv4_config(
 
 fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<Option<String>> {
     info!(log, "Reading domain name for registration");
-    match domain {
-        "" => Ok(None),
-        domain => match domain_to_ascii_strict(domain) {
-            Ok(res) => {
-                if res == *domain {
-                    return Ok(Some(res));
-                } else {
-                    Err(OrchestratorError::invalid_configuration_error(format!(
-                        "Provided domain name {domain} is invalid",
-                    )))
-                }
-            }
-            Err(err) => Err(OrchestratorError::invalid_configuration_error(format!(
-                "Provided domain name {domain} is invalid: {err}",
-            ))),
-        },
+    if domain == "" {
+        return Ok(None);
     }
+    if let Ok(parsed_domain) = domain_to_ascii_strict(domain) {
+        if parsed_domain == *domain {
+            return Ok(Some(parsed_domain));
+        }
+    }
+
+    Err(OrchestratorError::invalid_configuration_error(format!(
+        "Provided domain name {domain} is invalid",
+    )))
 }
 
 /// Create a nonce to be included with the ingress message sent to the node
