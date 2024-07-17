@@ -41,9 +41,6 @@ impl UpgradeArg {
 pub struct AddErc20Arg {
     pub contract: Erc20Contract,
     pub ledger_init_arg: LedgerInitArg,
-    pub git_commit_hash: String,
-    pub ledger_compressed_wasm_hash: String,
-    pub index_compressed_wasm_hash: String,
 }
 
 impl AddErc20Arg {
@@ -222,11 +219,29 @@ impl From<(Erc20Token, Canisters)> for ManagedCanisters {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct LedgerSuiteVersion {
+    pub ledger_compressed_wasm_hash: String,
+    pub index_compressed_wasm_hash: String,
+    pub archive_compressed_wasm_hash: String,
+}
+
+impl From<crate::state::LedgerSuiteVersion> for LedgerSuiteVersion {
+    fn from(value: crate::state::LedgerSuiteVersion) -> Self {
+        Self {
+            ledger_compressed_wasm_hash: value.ledger_compressed_wasm_hash.to_string(),
+            index_compressed_wasm_hash: value.index_compressed_wasm_hash.to_string(),
+            archive_compressed_wasm_hash: value.archive_compressed_wasm_hash.to_string(),
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OrchestratorInfo {
     pub managed_canisters: Vec<ManagedCanisters>,
     pub cycles_management: CyclesManagement,
     pub more_controller_ids: Vec<Principal>,
     pub minter_id: Option<Principal>,
+    pub ledger_suite_version: Option<LedgerSuiteVersion>,
 }
 
 #[derive(

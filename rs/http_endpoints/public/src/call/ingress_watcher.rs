@@ -40,7 +40,7 @@ struct IngressWatcherSubscription {
 
 /// A handle to the [`IngressWatcher`] used to register subscription over a channel.
 #[derive(Clone)]
-pub(crate) struct IngressWatcherHandle {
+pub struct IngressWatcherHandle {
     subscriber_registration_tx: Sender<IngressWatcherSubscription>,
     metrics: HttpHandlerMetrics,
 }

@@ -5,6 +5,7 @@
 # [Misc]
 /.devcontainer/           @dfinity/idx
 /.github/                 @dfinity/idx
+/.github/workflows        @dfinity/idx @dfinity/infrasec
 /.github/CODEOWNERS       @dfinity/ic-owners-owners
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
@@ -48,7 +49,7 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-agent/         @dfinity/finint
 /packages/icrc-ledger-types/         @dfinity/finint
 /packages/ic-ledger-hash-of/         @dfinity/finint
-/packages/pocket-ic/                 @dfinity/utopia
+/packages/pocket-ic/                 @dfinity/pocket-ic
 /packages/ic-vetkd-utils/            @dfinity/dept-crypto-library
 
 # [IC-OS]
@@ -160,7 +161,7 @@ go_deps.bzl               @dfinity/idx
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity/consensus @dfinity/node
 /rs/p2p/                                                @dfinity/networking
 /rs/phantom_newtype/                                    @dfinity/ic-interface-owners
-/rs/pocket_ic_server/                                   @dfinity/utopia
+/rs/pocket_ic_server/                                   @dfinity/pocket-ic
 /rs/prep/                                               @dfinity/utopia
 /rs/protobuf/                                           @dfinity/ic-interface-owners
 /rs/protobuf/def/bitcoin/                               @dfinity/execution
@@ -290,7 +291,7 @@ go_deps.bzl               @dfinity/idx
 
 # [No-Approvals]
 # Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
-*.lock                    
-Cargo.toml                
-.gitignore                
-stackage_snapshot.json    
+*.lock
+Cargo.toml
+.gitignore
+stackage_snapshot.json

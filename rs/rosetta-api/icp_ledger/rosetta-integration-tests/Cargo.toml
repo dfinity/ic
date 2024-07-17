@@ -28,3 +28,4 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = "2.2.1"
+num-traits = { workspace = true }
