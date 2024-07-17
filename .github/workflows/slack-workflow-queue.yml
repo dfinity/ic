@@ -35,11 +35,10 @@ jobs:
 
             if [ $time_in_queue -ge $WAIT_THRESHOLD_SECONDS ]; then
               workflow_url="https://github.com/${{ github.repository }}/actions/runs/${workflow}"
-              notification_message="${notification_message}\nWorkflow [Run#${workflow}](${workflow_url}) in wait queue more than ${WAIT_THRESHOLD_MINUTES} minutes."
+              notification_message="${notification_message}\\nWorkflow <${workflow_url}|Run ${workflow}> in wait queue more than ${WAIT_THRESHOLD_MINUTES} minutes :alert:"
             fi
           done
           #echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
-          notification_message=$(echo "${notification_message}" | sed ':a;N;$!ba;s/\n/\\n/g')
           echo "message=${notification_message}" >> $GITHUB_OUTPUT
 
       - name: Post Slack Notification
