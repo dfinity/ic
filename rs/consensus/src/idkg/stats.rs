@@ -1,6 +1,6 @@
 //! ECDSA specific stats.
 
-use crate::ecdsa::metrics::{
+use crate::idkg::metrics::{
     IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
 };
 use ic_management_canister_types::MasterPublicKeyId;

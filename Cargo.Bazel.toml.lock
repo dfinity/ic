@@ -2935,7 +2935,6 @@ dependencies = [
  "cvt",
  "dashmap",
  "dyn-clone",
- "ed25519-consensus",
  "ed25519-dalek",
  "educe",
  "either",

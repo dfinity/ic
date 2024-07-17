@@ -4,7 +4,7 @@
 
 use crate::{
     consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
-    ecdsa::{
+    idkg::{
         make_bootstrap_summary,
         payload_builder::make_bootstrap_summary_with_initial_dealings,
         utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},

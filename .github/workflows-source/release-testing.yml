@@ -127,6 +127,7 @@ jobs:
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
       CI_COMMIT_SHA: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
     steps:

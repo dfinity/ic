@@ -17,7 +17,7 @@ use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
     certification::{setup as certification_setup, CertificationCrypto},
     consensus::{dkg_key_manager::DkgKeyManager, setup as consensus_setup},
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
 use ic_consensus_utils::{
@@ -301,7 +301,7 @@ fn start_consensus(
     let (certification_tx, certification_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (dkg_tx, dkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (ecdsa_tx, ecdsa_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+    let (idkg_tx, idkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
 
     {
@@ -429,8 +429,8 @@ fn start_consensus(
             registry_client.get_chain_key_config(subnet_id, registry_client.get_latest_version());
         info!(
             log,
-            "ECDSA: finalized_height = {:?}, chain_key_config = {:?}, \
-                 DKG interval start = {:?}, is_summary = {}, has_ecdsa = {}",
+            "IDKG: finalized_height = {:?}, chain_key_config = {:?}, \
+                 DKG interval start = {:?}, is_summary = {}, has_idkg_payload = {}",
             finalized.height(),
             chain_key_config,
             finalized.payload.as_ref().dkg_interval_start_height(),
@@ -438,7 +438,7 @@ fn start_consensus(
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
 
-        let ecdsa_gossip = Arc::new(ecdsa::EcdsaGossipImpl::new(
+        let idkg_gossip = Arc::new(idkg::IDkgGossipImpl::new(
             subnet_id,
             Arc::clone(&consensus_block_cache),
             Arc::clone(&state_reader),
@@ -446,8 +446,8 @@ fn start_consensus(
         ));
 
         let (client, jh) = create_artifact_handler(
-            ecdsa_tx,
-            ecdsa::EcdsaImpl::new(
+            idkg_tx,
+            idkg::IDkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_block_cache),
                 Arc::clone(&consensus_crypto),
@@ -463,7 +463,7 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(ecdsa_rx, artifact_pools.idkg_pool, ecdsa_gossip, client);
+        new_p2p_consensus.add_client(idkg_rx, artifact_pools.idkg_pool, idkg_gossip, client);
     };
 
     {
@@ -526,7 +526,7 @@ fn init_artifact_pools(
         config.clone(),
         log.clone(),
         metrics_registry.clone(),
-        Box::new(ecdsa::IDkgStatsImpl::new(metrics_registry.clone())),
+        Box::new(idkg::IDkgStatsImpl::new(metrics_registry.clone())),
     );
     idkg_pool.add_initial_dealings(&catch_up_package, time_source);
     let idkg_pool = Arc::new(RwLock::new(idkg_pool));

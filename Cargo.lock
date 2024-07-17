@@ -6565,6 +6565,7 @@ dependencies = [
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "thiserror",
  "wycheproof",
  "zeroize",
 ]
@@ -6691,7 +6692,6 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "curve25519-dalek",
- "ed25519-consensus",
  "hex",
  "ic-crypto-ed25519",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -8275,7 +8275,6 @@ dependencies = [
  "anyhow",
  "candid",
  "clap 4.4.6",
- "ed25519-consensus",
  "hex",
  "ic-agent",
  "ic-crypto-ecdsa-secp256k1",
@@ -9499,6 +9498,7 @@ dependencies = [
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
  "ic-ledger-core",
+ "ic-management-canister-types",
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
@@ -9522,6 +9522,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-test-utilities-compare-dirs",
  "ic-types",
+ "ic-utils 0.9.0",
  "icp-ledger",
  "itertools 0.12.0",
  "lazy_static",
@@ -9563,6 +9564,7 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-swap",
  "ic-types",
+ "ic-utils 0.9.0",
  "icp-ledger",
  "itertools 0.12.0",
  "prost",
@@ -14532,6 +14534,16 @@ name = "new_debug_unreachable"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
+
+[[package]]
+name = "nft_exporter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.6",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "nftables"
