@@ -5197,6 +5197,9 @@ fn test_neuron_split() {
     let mut expected_neuron_ids = vec![id, child_nid];
     expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
+
+    ic_nns_governance::governance::tla::get_state_pairs();
+    assert!(false, "this really shouldn't work");
 }
 
 #[test]

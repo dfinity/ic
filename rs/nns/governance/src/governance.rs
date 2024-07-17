@@ -128,6 +128,15 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "test")]
+#[macro_use]
+pub mod tla;
+#[cfg(feature = "test")]
+use tla::{
+    init_tla_state, split_neuron_desc, tla_log_all_globals, tla_log_locals, tla_update_method,
+    with_tla_state, with_tla_state_pairs,
+};
+
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
 const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -2546,6 +2555,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
+    #[cfg_attr(feature = "test", tla_update_method(split_neuron_desc()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2676,6 +2686,7 @@ impl Governance {
         })?;
 
         let now = self.env.now();
+        tla_log_globals_and_locals!(self, amount: amount_e8s, )
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2686,6 +2697,8 @@ impl Governance {
                 now,
             )
             .await;
+        tla_log_all_globals!(self);
+        tla_log_locals(amount: amount_e8s)
 
         if let Err(error) = result {
             let error = GovernanceError::from(error);

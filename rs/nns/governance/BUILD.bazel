@@ -121,6 +121,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tokio-test",
+    "@crate_index//:tla_instrumentation",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -167,10 +168,13 @@ rust_library(
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + [
+        "@crate_index//:tla_instrumentation_proc_macros"
+    ],
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
+        "@crate_index//:tla_instrumentation"
     ],
 )
 
