@@ -19075,10 +19075,12 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-xrc-types",
+ "reqwest 0.12.5",
  "serde",
  "serde_json",
  "slog",
  "tests",
+ "url",
  "xrc-mock",
 ]
 

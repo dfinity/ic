@@ -185,8 +185,6 @@ pub fn init_ic(
                 test_env.get_mainnet_ic_os_update_img_sha256()?,
                 test_env.get_mainnet_ic_os_update_img_url()?,
             )
-        } else if let Some(iv) = &ic.initial_version {
-            (iv.replica_hash.clone(), iv.replica_url.clone())
         } else {
             (
                 test_env.get_ic_os_update_img_sha256()?,

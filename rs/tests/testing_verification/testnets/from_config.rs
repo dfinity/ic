@@ -13,6 +13,7 @@ use ic_system_test_driver::driver::{
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use serde::Deserialize;
 use slog::info;
+use url::Url;
 
 fn main() -> anyhow::Result<()> {
     SystemTestGroup::new()
@@ -23,7 +24,16 @@ fn main() -> anyhow::Result<()> {
 
 const IC_VERSION_FILE: &str = "ENV_DEPS__IC_VERSION_FILE";
 const CUSTOM_REVISION: &str = "custom_revision";
+
+const CUSTOM_DISK_IMG_TAR_URL: &str = "custom_disk_img_tar_url";
+const DEV_DISK_IMG_TAR_ZST_CAS_URL: &str = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL";
+
+const CUSTOM_DISK_IMG_SHA: &str = "custom_disk_img_sha";
+const DEV_DISK_IMG_TAR_ZST_SHA256: &str = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256";
+
 const IC_CONFIG: &str = "IC_CONFIG";
+
+const TAR_EXTENSION: &str = ".tar.zst";
 
 pub fn setup(env: TestEnv) {
     let mut config = std::env::var(IC_CONFIG)
@@ -38,17 +48,33 @@ pub fn setup(env: TestEnv) {
 
     let mut ic = InternetComputer::new();
     if let Some(v) = parsed.initial_version {
-        ic = ic.with_initial_replica(v.clone());
-        let path = env.get_dependency_path(CUSTOM_REVISION);
-        std::fs::write(&path, v.replica_version.to_string())
-            .unwrap_or_else(|_| panic!("Failed to write to path: {}", path.display()));
-        std::env::set_var(IC_VERSION_FILE, CUSTOM_REVISION);
-        info!(
-            env.logger(),
-            "Overriden env variable `{}` to value: {}",
-            IC_VERSION_FILE,
-            path.display()
-        )
+        ic = ic.with_initial_replica(NodeSoftwareVersion {
+            replica_version: v.clone().try_into().unwrap(),
+            replica_url: Url::parse("https://unimportant.com").unwrap(),
+            replica_hash: "".to_string(),
+            orchestrator_url: Url::parse("https://unimportant.com").unwrap(),
+            orchestrator_hash: "".to_string(),
+        });
+        write_file_and_update_env_variable(
+            &env,
+            vec![
+                (
+                    CUSTOM_REVISION,
+                    v.to_string(),
+                    IC_VERSION_FILE,
+                ),
+                (
+                    CUSTOM_DISK_IMG_TAR_URL,
+                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/disk-img/disk-img.tar.zst", v.to_string()),
+                    DEV_DISK_IMG_TAR_ZST_CAS_URL,
+                ),
+                (
+                    CUSTOM_DISK_IMG_SHA,
+                    fetch_shasum_for_disk_img(v.to_string()),
+                    DEV_DISK_IMG_TAR_ZST_SHA256,
+                ),
+            ],
+        );
     }
     if let Some(subnets) = parsed.subnets {
         subnets.iter().for_each(|s| {
@@ -98,12 +124,64 @@ pub fn setup(env: TestEnv) {
     env.sync_with_prometheus();
 }
 
+fn write_file_and_update_env_variable(env: &TestEnv, pairs: Vec<(&str, String, &str)>) {
+    for (file_name, value_in_file, env_variable) in pairs {
+        let path = env.get_dependency_path(file_name);
+        std::fs::write(&path, value_in_file)
+            .unwrap_or_else(|_| panic!("Failed to write to path: {}", path.display()));
+        std::env::set_var(env_variable, file_name);
+        info!(
+            env.logger(),
+            "Overriden env variable `{}` to value: {}",
+            env_variable,
+            path.display()
+        )
+    }
+}
+
+fn fetch_shasum_for_disk_img(version: String) -> String {
+    let url = format!(
+        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/disk-img/SHA256SUMS",
+        version
+    );
+    let response = reqwest::blocking::get(&url)
+        .unwrap_or_else(|e| panic!("Failed to fetch url `{}` with err: {:?}", &url, e));
+    if !response.status().is_success() {
+        panic!(
+            "Received non-success response status: {:?}",
+            response.status()
+        )
+    }
+
+    String::from_utf8(
+        response
+            .bytes()
+            .expect("Failed to deserialize bytes")
+            .to_vec(),
+    )
+    .expect("Failed to convert to UTF8")
+    .lines()
+    .into_iter()
+    .find(|l| l.ends_with(TAR_EXTENSION))
+    .unwrap_or_else(|| {
+        panic!(
+            "Failed to find a hash ending with `{}` from: {}",
+            &url, TAR_EXTENSION
+        )
+    })
+    .split_whitespace()
+    .into_iter()
+    .next()
+    .expect("The format of hash should contain whitespace")
+    .to_string()
+}
+
 #[derive(Deserialize, Debug)]
 struct IcConfig {
     subnets: Option<Vec<ConfigurableSubnet>>,
     unassigned_nodes: Option<ConfigurableUnassignedNodes>,
     boundary_nodes: Option<Vec<ConfigurableBoundaryNode>>,
-    initial_version: Option<NodeSoftwareVersion>,
+    initial_version: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
