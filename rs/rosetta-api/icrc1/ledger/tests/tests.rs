@@ -1639,7 +1639,7 @@ mod incompatible_token_type_upgrade {
     }
 
     #[test]
-    fn should_fail_to_upgrade_to_u256_ledger_wasm_if_balance_too_large() {
+    fn should_fail_to_upgrade_to_u64_ledger_wasm_if_total_supply_too_large() {
         let env = StateMachine::new();
         let ledger_id = env
             .install_canister(ledger_mainnet_u256_wasm(), default_init_args(), None)
@@ -1661,7 +1661,7 @@ mod incompatible_token_type_upgrade {
     }
 
     #[test]
-    fn should_fail_to_upgrade_to_u256_ledger_wasm_if_allowance_too_large() {
+    fn should_fail_to_upgrade_to_u64_ledger_wasm_if_allowance_too_large() {
         let env = StateMachine::new();
         let ledger_id = env
             .install_canister(ledger_mainnet_u256_wasm(), default_init_args(), None)
