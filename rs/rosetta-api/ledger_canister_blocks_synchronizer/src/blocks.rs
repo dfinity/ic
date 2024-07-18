@@ -1536,7 +1536,7 @@ impl Blocks {
         drop(select_hashed_blocks_stmt);
         sql_tx.commit().unwrap();
 
-        info!(
+        tracing::debug!(
            "Created {} Rosetta Blocks. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {}",num_rosetta_blocks_created.into_inner(), next_block_indices.first_block_index..=certified_tip_index,current_rosetta_block_index.into_inner().saturating_sub(1));
 
         Ok(())
