@@ -11,6 +11,7 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    if: ${{ github.repository != 'dfinity/ic' }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
