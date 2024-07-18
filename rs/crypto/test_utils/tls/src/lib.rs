@@ -62,13 +62,18 @@ impl From<&CipherSuite> for rustls::SupportedCipherSuite {
 pub fn temp_crypto_component_with_tls_keys(
     registry: Arc<FakeRegistryClient>,
     node_id: NodeId,
+    with_remote_vault: bool,
 ) -> (TempCryptoComponent, TlsPublicKeyCert) {
-    let temp_crypto = TempCryptoComponent::builder()
+    let mut temp_crypto_builder = TempCryptoComponent::builder()
         .with_registry(registry)
         .with_node_id(node_id)
-        .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
-        .with_remote_vault()
-        .build();
+        .with_keys(NodeKeysToGenerate::only_tls_key_and_cert());
+
+    if with_remote_vault {
+        temp_crypto_builder = temp_crypto_builder.with_remote_vault();
+    }
+
+    let temp_crypto = temp_crypto_builder.build();
     let tls_certificate = temp_crypto
         .current_node_public_keys()
         .expect("Failed to retrieve node public keys")
