@@ -4,9 +4,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::NumInstructions;
 
+use ic_config::flag_status::FlagStatus;
 use std::{ops::RangeInclusive, path::Path, process::Command, str::FromStr};
 use tempfile::TempDir;
-
 // TODO: Add support for PocketIc.
 
 pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine {
@@ -20,6 +20,10 @@ pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine 
             CanisterId::from_u64(0x2300000),
             CanisterId::from_u64(0x23FFFFE),
         ),
+        hypervisor_config: Some(Config {
+            rate_limiting_of_instructions: FlagStatus::Disabled,
+            ..Config::default()
+        }),
         scp_location: FIDUCIARY_STATE_SOURCE,
         subnet_id: fiduciary_subnet_id,
         subnet_type: SubnetType::Application,
@@ -42,6 +46,7 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
         ),
+        hypervisor_config: None,
         scp_location: NNS_STATE_SOURCE,
         subnet_id: nns_subnet_id,
         subnet_type: SubnetType::System,
@@ -60,6 +65,10 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
             CanisterId::from_u64(0x2000000),
             CanisterId::from_u64(0x20FFFFE),
         ),
+        hypervisor_config: Some(Config {
+            rate_limiting_of_instructions: FlagStatus::Disabled,
+            ..Config::default()
+        }),
         scp_location: SNS_STATE_SOURCE,
         subnet_id: sns_subnet_id,
         subnet_type: SubnetType::Application,
@@ -71,6 +80,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
     let SetupConfig {
         archive_state_dir_name,
         extra_canister_range,
+        hypervisor_config,
         scp_location,
         subnet_id,
         subnet_type,
@@ -88,7 +98,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
     let state_machine_builder = state_machine_builder.with_config(Some(StateMachineConfig::new(
         subnet_config,
-        Config::default(),
+        hypervisor_config.unwrap_or_default(),
     )));
 
     let state_dir =
@@ -165,6 +175,7 @@ impl ScpLocation {
 struct SetupConfig {
     archive_state_dir_name: &'static str,
     extra_canister_range: RangeInclusive<CanisterId>,
+    hypervisor_config: Option<Config>,
     scp_location: ScpLocation,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
