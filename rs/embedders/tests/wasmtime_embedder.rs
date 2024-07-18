@@ -1880,6 +1880,33 @@ fn wasm64_memory_copy_test() {
 }
 
 #[test]
+fn wasm64_memory_init_test() {
+    let wat = r#"
+       (module
+            (export "memory" (memory 0))
+            (func (export "canister_update test")
+                i64.const 1024  ;; target memory address
+                i32.const 0     ;; data segment offset
+                i32.const 4     ;; byte length
+                memory.init 0   ;; load passive data segment by index
+            )
+            (memory i64 1)
+            (data (;0;) "\01\02\03\04")
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
+        Ok(_) => {}
+        Err(e) => panic!("Error: {:?}", e),
+    }
+}
+
+#[test]
 // Verify behavior of failed memory grow in wasm64 mode
 fn wasm64_handles_memory_grow_failure_test() {
     let wat = r#"
