@@ -22,7 +22,7 @@ use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
 use ic_cketh_minter::eth_rpc::FixedSizeData;
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
-use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
+use ic_cketh_minter::SCRAPING_ETH_LOGS_INTERVAL;
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
@@ -544,7 +544,7 @@ impl CkErc20DepositFlow {
         let max_eth_logs_block_range = self.as_ref().max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
-        self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
             .respond_for_all_with(block_response(latest_finalized_block))
             .build()

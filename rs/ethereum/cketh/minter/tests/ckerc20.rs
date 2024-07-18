@@ -9,7 +9,7 @@ use ic_cketh_minter::endpoints::{
 };
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
-use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPPING_ETH_LOGS_INTERVAL};
+use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::ckerc20::{CkErc20DepositParams, CkErc20Setup, Erc20Token, ONE_USDC};
 use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
@@ -1520,7 +1520,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Set latest_finalized_block so that we scraped twice each time.
     let latest_finalized_block =
         LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
-    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
@@ -1599,7 +1599,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // Advance block height and scrape again
     let latest_finalized_block =
         u64::try_from(second_to_block.into_inner()).unwrap() + max_eth_logs_block_range;
-    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
@@ -1641,7 +1641,7 @@ fn should_not_scrape_when_no_erc20_token() {
 
     // Set latest_finalized_block so that we scrapped twice each time.
     let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range;
-    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
