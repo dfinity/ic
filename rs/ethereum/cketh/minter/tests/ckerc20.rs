@@ -1517,7 +1517,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     let mut ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let max_eth_logs_block_range = ckerc20.as_ref().max_logs_block_range();
 
-    // Set latest_finalized_block so that we scrapped twice each time.
+    // Set latest_finalized_block so that we scraped twice each time.
     let latest_finalized_block =
         LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
     ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);

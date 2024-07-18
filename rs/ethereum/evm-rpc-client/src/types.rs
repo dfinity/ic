@@ -61,7 +61,7 @@ pub mod candid {
     pub struct LogEntry {
         /// The address from which this log originated.
         pub address: String,
-        /// Array of 0 to 4 32 Bytes DATA of indexed log arguments.
+        /// Array of 0 to 4 32-byte DATA elements of indexed log arguments.
         /// In solidity: The first topic is the event signature hash (e.g. Deposit(address,bytes32,uint256)),
         /// unless you declared the event with the anonymous specifier.
         pub topics: Vec<String>,
@@ -71,15 +71,15 @@ pub mod candid {
         /// None if the block is pending.
         #[serde(rename = "blockNumber")]
         pub block_number: Option<Nat>,
-        /// 32 Bytes - hash of the transactions from which this log was created.
-        /// None when its pending log.
+        /// 32-byte hash of the transaction from which this log was created.
+        /// None if the transaction is still pending.
         #[serde(rename = "transactionHash")]
         pub transaction_hash: Option<String>,
-        /// Integer of the transactions position within the block the log was created from.
-        /// None if the log is pending.
+        /// Integer of the transaction's position within the block the log was created from.
+        /// None if the transaction is still pending.
         #[serde(rename = "transactionIndex")]
         pub transaction_index: Option<Nat>,
-        /// 32 Bytes - hash of the block in which this log appeared.
+        /// 32-byte hash of the block in which this log appeared.
         /// None if the block is pending.
         #[serde(rename = "blockHash")]
         pub block_hash: Option<String>,
@@ -88,7 +88,7 @@ pub mod candid {
         #[serde(rename = "logIndex")]
         pub log_index: Option<Nat>,
         /// "true" when the log was removed due to a chain reorganization.
-        /// "false" if it's a valid log.
+        /// "false" if it is a valid log.
         #[serde(default)]
         pub removed: bool,
     }

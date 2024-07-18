@@ -587,7 +587,7 @@ impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> 
 }
 
 // TODO XC-131: add proptest to ensure HttpOutcallError are kept, so that the halving
-// of the log scrapping happens correctly
+// of the log scraping happens correctly
 
 impl<T> MultiCallError<T> {
     pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(
