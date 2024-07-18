@@ -1187,6 +1187,9 @@ impl PocketIc {
     }
 
     /// Get the pending canister HTTP outcalls.
+    /// Note that an additional `PocketIc::tick` is necessary after a canister
+    /// executes a message making a canister HTTP outcall for the HTTP outcall
+    /// to be retrievable here.
     /// Note that, unless a PocketIC instance is in auto progress mode,
     /// a response to the pending canister HTTP outcalls
     /// must be produced by the test driver and passed on to the PocketIC instace
