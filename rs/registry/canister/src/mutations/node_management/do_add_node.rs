@@ -90,10 +90,10 @@ impl Registry {
             .as_ref()
             .map(|domain| {
                 match domain_to_ascii_strict(domain) {
-                    Err(err) => {
+                    Err(_) => {
                         return Err(format!(
-                        "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format: {err}"
-                    ))
+                            "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format"
+                        ))
                     }
                     Ok(parsed_domain) => {
                         if parsed_domain != *domain {
