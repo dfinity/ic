@@ -1280,7 +1280,6 @@ pub enum CallRequestVersion {
 pub struct CallRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub runtime: Arc<Runtime>,
     pub version: CallRequestVersion,
 }
 
@@ -1345,7 +1344,7 @@ impl Operation for CallRequest {
                 // forwards it to the state machine. The task will automatically terminate
                 // once it submits an ingress message received from the call service to the
                 // `StateMachine`, or if the call service is dropped (in which case `r.recv().await` returns `None`).
-                let _ = self.runtime.spawn(async move {
+                pic.runtime.spawn(async move {
                     if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
                         r.recv().await
                     {
@@ -1388,16 +1387,19 @@ impl Operation for CallRequest {
                     .body(self.bytes.clone().into())
                     .unwrap();
 
-                // but fine for now to unblock agent-rs.
-                let resp = std::thread::scope(|s| {
-                    let cancellation_token = CancellationToken::new();
-                    let cancellation_token_clone = cancellation_token.clone();
+                let cancellation_token = CancellationToken::new();
+                let cancellation_token_clone = cancellation_token.clone();
 
+                // TODO: Allow parallel execution of V3 ingress messages.
+                //
+                // We are blocking the pic here, when in the CallRequest operation.
+                // This won't let us execute V3 ingress messages concurrently.
+                let resp = std::thread::scope(|s| {
                     // We have to execute rounds for V3 calls, since the endpoint
                     // waits for message to be executed and certified.
                     if let CallRequestVersion::V3 = self.version {
-                        s.spawn(move || {
-                            while !&cancellation_token_clone.is_cancelled() {
+                        s.spawn(|| {
+                            while !cancellation_token_clone.is_cancelled() {
                                 for subnet in pic.subnets.read().unwrap().values() {
                                     subnet.execute_round();
                                 }
@@ -1406,7 +1408,7 @@ impl Operation for CallRequest {
                         });
                     }
 
-                    let response = self.runtime.block_on(svc.oneshot(request)).unwrap();
+                    let response = pic.runtime.block_on(svc.oneshot(request)).unwrap();
                     cancellation_token.cancel();
                     response
                 });

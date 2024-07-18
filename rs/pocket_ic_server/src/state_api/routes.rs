@@ -616,32 +616,26 @@ pub async fn handler_status(
 }
 
 pub async fn handler_call_v3(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
         effective_canister_id,
         bytes,
-        runtime,
         version: CallRequestVersion::V3,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_call_v2(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
         effective_canister_id,
         bytes,
-        runtime,
         version: CallRequestVersion::V2,
     };
     handle_raw(api_state, instance_id, op).await
