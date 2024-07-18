@@ -38,6 +38,12 @@ jobs:
             RUN_STARTED_TIME=$(date -d "$RUN_STARTED_AT" +%s)
             TIME_IN_QUEUE=$((CURRENT_TIME - RUN_STARTED_TIME))
 
+            # exclude workflows with long wait times
+            WORKFLOW_NAME=$(echo "${WORKFLOW}" | jq -r '.name') # Extract name
+            if [ "$WORKFLOW_NAME" = "Schedule Daily" ]; then
+              continue
+            fi
+
             if [ $TIME_IN_QUEUE -ge $WAIT_THRESHOLD_SECONDS ]; then
               WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${WORKFLOW}"
               MESSAGE="${MESSAGE} <${WORKFLOW_URL}|${WORKFLOW}>"
