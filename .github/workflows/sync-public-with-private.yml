@@ -23,5 +23,5 @@ jobs:
         git config --global user.email "IDX GitHub Automation"  
 
         git remote add public https://github.com/dfinity/ic.git
-        git pull public master -X theirs
-        git push origin master-private
+        git fetch public master
+        git push --force origin public/master:master-private
