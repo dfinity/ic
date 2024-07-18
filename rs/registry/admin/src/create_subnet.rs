@@ -228,16 +228,6 @@ impl ProposeToCreateSubnetCmd {
             self.dkg_interval_length
                 .get_or_insert(subnet_config.dkg_interval_length.get());
         }
-        // Set default scheduler parameters.
-        {
-            let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
-            self.max_instructions_per_message
-                .get_or_insert(scheduler_config.max_instructions_per_message.get());
-            self.max_instructions_per_round
-                .get_or_insert(scheduler_config.max_instructions_per_round.get());
-            self.max_instructions_per_install_code
-                .get_or_insert(scheduler_config.max_instructions_per_install_code.get());
-        }
         // Other default parameters.
         {
             self.replica_version_id

@@ -102,9 +102,6 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
-        max_instructions_per_message: None,
-        max_instructions_per_round: None,
-        max_instructions_per_install_code: None,
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
@@ -617,7 +614,6 @@ pub(crate) async fn create_new_subnet_with_keys(
         SubnetType::Application,
         node_ids.len(),
     );
-    let scheduler = ic_config::subnet_config::SchedulerConfig::application_subnet();
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
@@ -634,9 +630,6 @@ pub(crate) async fn create_new_subnet_with_keys(
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
-        max_instructions_per_message: scheduler.max_instructions_per_message.get(),
-        max_instructions_per_round: scheduler.max_instructions_per_round.get(),
-        max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
         features: Default::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
