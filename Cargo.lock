@@ -12746,7 +12746,12 @@ dependencies = [
 name = "ic_consensus_system_test_utils"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
  "ic-system-test-driver",
+ "reqwest 0.12.5",
+ "slog",
 ]
 
 [[package]]
