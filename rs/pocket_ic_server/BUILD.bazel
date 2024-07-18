@@ -71,10 +71,10 @@ LIB_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/types/management_canister_types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:hex",
@@ -142,7 +142,7 @@ rust_test(
         "tests/test.rs",
     ],
     aliases = {
-        "@crate_index//:ic_agent_call_v3" : "ic_agent_call_v3",
+        "@crate_index//:ic_agent_call_v3": "ic_agent_call_v3",
     },
     data = [
         ":pocket-ic-server",
