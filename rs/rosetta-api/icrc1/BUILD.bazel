@@ -79,6 +79,26 @@ rust_test(
     ] + DEV_DEPENDENCIES,
 )
 
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test
+#
+# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
+# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
+# is run. This authorizes the test to download the test data.
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+#
+# See the .bazelrc for more configuration information.
 rust_ic_test(
     name = "icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test",
     # This uses on the order of 10 GB of disk space.
