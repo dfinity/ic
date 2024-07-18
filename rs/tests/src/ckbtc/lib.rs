@@ -47,7 +47,7 @@ use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
-use std::{str::FromStr, time::Duration};
+use std::{env, str::FromStr, time::Duration};
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
@@ -336,6 +336,7 @@ pub(crate) async fn install_kyt(
 
     install_rust_canister_from_path(
         kyt_canister,
+        &env::var("IC_CKBTC_KYT_WASM_PATH").unwrap()
         env.get_dependency_path("rs/bitcoin/ckbtc/kyt/kyt_canister.wasm"),
         Some(Encode!(&kyt_init_args).unwrap()),
     )
