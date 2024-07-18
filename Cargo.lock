@@ -19061,6 +19061,7 @@ dependencies = [
  "anyhow",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "slog",
  "spec-compliance",
  "tests",
 ]
