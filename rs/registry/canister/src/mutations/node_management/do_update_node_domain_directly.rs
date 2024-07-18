@@ -55,7 +55,7 @@ impl Registry {
         // Ensure domain name is valid
         if let Some(ref domain) = domain {
             let parsed_domain = domain_to_ascii_strict(domain).expect("invalid domain");
-            assert_eq!(parsed_domain, *domain);
+            assert_eq!(parsed_domain, *domain, "invalid domain");
         }
         node_record.domain = domain;
 
