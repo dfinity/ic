@@ -67,11 +67,6 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         let min = ty.minimum().min(max_pages) as usize;
         let max = ty.maximum().unwrap_or(max_pages).min(max_pages) as usize;
 
-        println!(
-            "Creating memory with min={} max={}, max_pages={}",
-            min, max, max_pages
-        );
-
         let Some(reserved_size) = reserved_size_in_bytes else {
             panic!(
                 "Wasmtime issued request to create a memory without specifying a reserved size."

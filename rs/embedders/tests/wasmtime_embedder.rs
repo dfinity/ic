@@ -2748,7 +2748,9 @@ fn large_wasm64_memory_allocation_test() {
         .with_config(config)
         .with_wat(wat)
         .build();
-    let _res = instance
-        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
-        .unwrap();
+
+    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
+        Ok(_) => {}
+        Err(e) => panic!("Unexpected error: {:?}", e),
+    }
 }
