@@ -1,4 +1,4 @@
-name: Sync IC public with ic-private
+name: Sync IC private from IC public
 
 on:
   schedule:
