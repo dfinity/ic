@@ -1,5 +1,7 @@
 use candid::Encode;
+use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_nns_test_utils::governance::bump_gzip_timestamp;
 use ic_nns_test_utils_golden_nns_state::{
     new_state_machine_with_golden_fiduciary_state_or_panic,
     new_state_machine_with_golden_sns_state_or_panic,
@@ -64,9 +66,17 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
 
     for canister in canisters {
         upgrade_canister(&state_machine, canister, ledger_wasm.clone());
+        // Upgrade again with bumped wasm timestamp to test pre_upgrade
+        upgrade_canister(&state_machine, canister, bump_gzip_timestamp(&ledger_wasm));
     }
     for canister_u256 in canisters_u256 {
         upgrade_canister(&state_machine, canister_u256, ledger_wasm_u256.clone());
+        // Upgrade again with bumped wasm timestamp to test pre_upgrade
+        upgrade_canister(
+            &state_machine,
+            canister_u256,
+            bump_gzip_timestamp(&ledger_wasm_u256),
+        );
     }
 }
 
@@ -107,13 +117,15 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
     for canister in canisters {
         upgrade_canister(&state_machine, canister, ledger_wasm.clone());
+        // Upgrade again with bumped wasm timestamp to test pre_upgrade
+        upgrade_canister(&state_machine, canister, bump_gzip_timestamp(&ledger_wasm));
     }
 }
 
 fn upgrade_canister(
     state_machine: &StateMachine,
     (canister_id_str, canister_name): (&str, &str),
-    ledger_wasm: Vec<u8>,
+    ledger_wasm: Wasm,
 ) {
     let canister_id =
         CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
@@ -121,26 +133,26 @@ fn upgrade_canister(
     println!("{} '{}':", canister_name, canister_id_str);
 }
 
-fn ledger_wasm() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
+fn ledger_wasm() -> Wasm {
+    Wasm::from_bytes(ic_test_utilities_load_wasm::load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("ledger"),
         "ic-icrc1-ledger",
         &[],
-    )
+    ))
 }
 
-fn ledger_wasm_u256() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
+fn ledger_wasm_u256() -> Wasm {
+    Wasm::from_bytes(ic_test_utilities_load_wasm::load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("ledger"),
         "ic-icrc1-ledger",
         &["u256"],
-    )
+    ))
 }
 
-fn upgrade_ledger(state_machine: &StateMachine, wasm_bytes: Vec<u8>, canister_id: CanisterId) {
+fn upgrade_ledger(state_machine: &StateMachine, wasm: Wasm, canister_id: CanisterId) {
     let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
     let args = Encode!(&args).unwrap();
     state_machine
-        .upgrade_canister(canister_id, wasm_bytes, args)
+        .upgrade_canister(canister_id, wasm.bytes(), args)
         .expect("should successfully upgrade ledger canister");
 }

@@ -8267,6 +8267,7 @@ name = "ic-icrc1"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "canister-test",
  "ciborium",
  "hex",
  "ic-base-types",
@@ -8279,6 +8280,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-nns-test-utils",
  "ic-nns-test-utils-golden-nns-state",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
