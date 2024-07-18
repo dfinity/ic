@@ -970,92 +970,88 @@ fn process_mock_canister_https_response(
 ) -> OpOut {
     let subnet_id =
         ic_types::SubnetId::new(ic_types::PrincipalId(mock_canister_http_response.subnet_id));
-    let subnet = pic.get_subnet_with_id(subnet_id);
-    match subnet {
-        Some(subnet) => {
-            let canister_http_request_id =
-                CanisterHttpRequestId::from(mock_canister_http_response.request_id);
-            let contexts = subnet.canister_http_request_contexts();
-            if let Some(context) = contexts.get(&canister_http_request_id) {
-                let timeout = context.time + Duration::from_secs(5 * 60);
-                let canister_id = context.request.sender;
-                let content = match &mock_canister_http_response.response {
-                    CanisterHttpResponse::CanisterHttpReply(reply) => {
-                        let grpc_channel = pic.runtime.block_on(setup_adapter_mock(Ok(
-                            CanisterHttpSendResponse {
-                                status: reply.status.into(),
-                                headers: reply
-                                    .headers
-                                    .iter()
-                                    .map(|h| ic_https_outcalls_service::HttpHeader {
-                                        name: h.name.clone(),
-                                        value: h.value.clone(),
-                                    })
-                                    .collect(),
-                                content: reply.body.clone(),
-                            },
-                        )));
-                        let query_handler = subnet.query_handler.clone();
-                        let query_handler = BoxCloneService::new(service_fn(move |arg| {
-                            let query_handler = query_handler.clone();
-                            async {
-                                let r = query_handler
-                                    .oneshot(arg)
-                                    .await
-                                    .expect("Inner service should be alive. I hope.");
-                                Ok(r)
-                            }
-                        }));
-                        let mut client = CanisterHttpAdapterClientImpl::new(
-                            pic.runtime.handle().clone(),
-                            grpc_channel,
-                            query_handler.clone(),
-                            1,
-                            MetricsRegistry::new(),
-                            subnet.get_subnet_type(),
-                        );
-                        client
-                            .send(ic_types::canister_http::CanisterHttpRequest {
-                                timeout,
-                                id: canister_http_request_id,
-                                context: context.clone(),
-                            })
-                            .unwrap();
-                        let response = loop {
-                            match client.try_receive() {
-                                Err(_) => std::thread::sleep(Duration::from_millis(10)),
-                                Ok(r) => {
-                                    break r;
-                                }
-                            }
-                        };
-                        response.content
-                    }
-                    CanisterHttpResponse::CanisterHttpReject(reject) => {
-                        CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                            reject_code: RejectCode::try_from(reject.reject_code).unwrap(),
-                            message: reject.message.clone(),
-                        })
-                    }
-                };
-                subnet.mock_canister_http_response(
-                    mock_canister_http_response.request_id,
-                    timeout,
-                    canister_id,
-                    content,
-                );
-                OpOut::NoOutput
-            } else {
-                OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
-                    subnet_id,
-                    canister_http_request_id,
-                )))
-            }
-        }
-        None => OpOut::Error(PocketIcError::SubnetNotFound(
+    let Some(subnet) = pic.get_subnet_with_id(subnet_id) else {
+        return OpOut::Error(PocketIcError::SubnetNotFound(
             mock_canister_http_response.subnet_id,
-        )),
-    }
+        ));
+    };
+    let canister_http_request_id =
+        CanisterHttpRequestId::from(mock_canister_http_response.request_id);
+    let contexts = subnet.canister_http_request_contexts();
+    let Some(context) = contexts.get(&canister_http_request_id) else {
+        return OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
+            subnet_id,
+            canister_http_request_id,
+        )));
+    };
+    let timeout = context.time + Duration::from_secs(5 * 60);
+    let canister_id = context.request.sender;
+    let content = match &mock_canister_http_response.response {
+        CanisterHttpResponse::CanisterHttpReply(reply) => {
+            let grpc_channel =
+                pic.runtime
+                    .block_on(setup_adapter_mock(Ok(CanisterHttpSendResponse {
+                        status: reply.status.into(),
+                        headers: reply
+                            .headers
+                            .iter()
+                            .map(|h| ic_https_outcalls_service::HttpHeader {
+                                name: h.name.clone(),
+                                value: h.value.clone(),
+                            })
+                            .collect(),
+                        content: reply.body.clone(),
+                    })));
+            let query_handler = subnet.query_handler.clone();
+            let query_handler = BoxCloneService::new(service_fn(move |arg| {
+                let query_handler = query_handler.clone();
+                async {
+                    let r = query_handler
+                        .oneshot(arg)
+                        .await
+                        .expect("Inner service should be alive. I hope.");
+                    Ok(r)
+                }
+            }));
+            let mut client = CanisterHttpAdapterClientImpl::new(
+                pic.runtime.handle().clone(),
+                grpc_channel,
+                query_handler.clone(),
+                1,
+                MetricsRegistry::new(),
+                subnet.get_subnet_type(),
+            );
+            client
+                .send(ic_types::canister_http::CanisterHttpRequest {
+                    timeout,
+                    id: canister_http_request_id,
+                    context: context.clone(),
+                })
+                .unwrap();
+            let response = loop {
+                match client.try_receive() {
+                    Err(_) => std::thread::sleep(Duration::from_millis(10)),
+                    Ok(r) => {
+                        break r;
+                    }
+                }
+            };
+            response.content
+        }
+        CanisterHttpResponse::CanisterHttpReject(reject) => {
+            CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                reject_code: RejectCode::try_from(reject.reject_code).unwrap(),
+                message: reject.message.clone(),
+            })
+        }
+    };
+    subnet.mock_canister_http_response(
+        mock_canister_http_response.request_id,
+        timeout,
+        canister_id,
+        content,
+    );
+    OpOut::NoOutput
 }
 
 #[derive(Clone, Debug)]
