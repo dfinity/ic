@@ -725,16 +725,6 @@ impl AllowancesData for StableAllowancesData {
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
     }
 
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| allowances.pop_first())
-    }
-
-    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        ALLOWANCES_ARRIVALS_MEMORY.with_borrow_mut(|arrivals| arrivals.pop_first().map(|kv| kv.0))
-    }
-
     fn len_allowances(&self) -> usize {
         ALLOWANCES_MEMORY
             .with_borrow(|allowances| allowances.len())
