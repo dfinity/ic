@@ -36,6 +36,9 @@ pub mod responses;
 #[cfg(test)]
 mod tests;
 
+// We expect most of the calls to contain zero events.
+const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
+
 #[derive(Debug)]
 pub struct EthRpcClient {
     evm_rpc_client: Option<EvmRpcClient<IcRuntime, PrintProxySink>>,
@@ -66,8 +69,9 @@ impl EthRpcClient {
                     .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
                     .with_override_rpc_config(OverrideRpcConfig {
                         eth_get_logs: Some(RpcConfig {
-                            // We expect most of the calls to contain zero events.
-                            response_size_estimate: Some(100 + HEADER_SIZE_LIMIT),
+                            response_size_estimate: Some(
+                                ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
+                            ),
                         }),
                         ..Default::default()
                     })
@@ -179,9 +183,12 @@ impl EthRpcClient {
             return ReducedResult::from(result).into();
         }
 
-        // We expect most of the calls to contain zero events.
         let results: MultiCallResults<Vec<LogEntry>> = self
-            .parallel_call("eth_getLogs", vec![params], ResponseSizeEstimate::new(100))
+            .parallel_call(
+                "eth_getLogs",
+                vec![params],
+                ResponseSizeEstimate::new(ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE),
+            )
             .await;
         results.reduce_with_equality()
     }

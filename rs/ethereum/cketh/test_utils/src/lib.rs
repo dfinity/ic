@@ -605,7 +605,8 @@ impl CkEthSetup {
     }
 
     fn eth_get_logs_response_size_initial_estimate(&self) -> u64 {
-        100 + HEADER_SIZE_LIMIT
+        const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
+        ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT
     }
 
     pub fn all_eth_get_logs_response_size_estimates(&self) -> Vec<u64> {
