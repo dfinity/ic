@@ -67,10 +67,18 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
     for canister_id_and_name in canister_ids_and_names {
         upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        upgrade_canister(&state_machine, canister_id_and_name, bump_gzip_timestamp(&ledger_wasm));
+        upgrade_canister(
+            &state_machine,
+            canister_id_and_name,
+            bump_gzip_timestamp(&ledger_wasm),
+        );
     }
     for canister_id_and_name_u256 in canister_ids_and_names_u256 {
-        upgrade_canister(&state_machine, canister_id_and_name_u256, ledger_wasm_u256.clone());
+        upgrade_canister(
+            &state_machine,
+            canister_id_and_name_u256,
+            ledger_wasm_u256.clone(),
+        );
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
         upgrade_canister(
             &state_machine,
@@ -118,7 +126,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     for canister_id_and_name in canister_id_and_names {
         upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        upgrade_canister(&state_machine, canister_id_and_name, bump_gzip_timestamp(&ledger_wasm));
+        upgrade_canister(
+            &state_machine,
+            canister_id_and_name,
+            bump_gzip_timestamp(&ledger_wasm),
+        );
     }
 }
 
