@@ -12,5 +12,5 @@ serde_json = { workspace = true }
 serde_with = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 utils = { path = "../utils"}
