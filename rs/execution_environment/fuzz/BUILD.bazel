@@ -35,7 +35,10 @@ rust_canister(
 rust_binary(
     name = "decode_candid_by_instructions",
     testonly = True,
-    srcs = ["fuzz_targets/decode_candid_by_instructions.rs"],
+    srcs = [
+        "fuzz_targets/decode_candid_by_instructions.rs",
+        "fuzz_targets/decode_map.rs",
+    ],
     data = [":fuzz_canister"] + glob(["corpus/**"]),
     env = {
         "FUZZ_CANISTER_WASM_PATH": "$(rootpath :fuzz_canister)",

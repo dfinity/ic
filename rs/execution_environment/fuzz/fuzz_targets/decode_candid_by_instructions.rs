@@ -1,14 +1,11 @@
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use once_cell::sync::Lazy;
-use serde::Deserialize;
-use serde::Serialize;
-use std::borrow::Cow;
 use std::cell::RefCell;
-use std::fmt::Debug;
 use std::fs;
 use std::fs::File;
 use std::io::Read;
+use std::ptr::addr_of;
 
 use libafl::{
     corpus::InMemoryCorpus,
@@ -27,71 +24,13 @@ use libafl::{
 
 use libafl::monitors::SimpleMonitor;
 // use libafl::monitors::tui::{ui::TuiUI, TuiMonitor};
+use libafl_bolts::{current_nanos, rands::StdRand, tuples::tuple_list, HasLen};
 
-use libafl_bolts::{current_nanos, rands::StdRand, tuples::tuple_list, HasLen, Named};
+mod decode_map;
+use decode_map::{DecodingMapFeedback, DECODING_MAP_OBSERVER_NAME, MAP};
 
 // TODO: This should be obtained from env
 const CORPUS_DIR: &str = "rs/execution_environment/fuzz/corpus";
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-struct DecodingMap {
-    previous_ratio: u64,
-    increased: bool,
-}
-
-// There are deprecated fields in this method
-#[derive(Serialize, Clone, Debug)]
-pub struct DecodingMapFeedback {}
-
-impl<S> Feedback<S> for DecodingMapFeedback
-where
-    S: State,
-{
-    #[allow(clippy::wrong_self_convention)]
-    fn is_interesting<EM, OT>(
-        &mut self,
-        _state: &mut S,
-        _manager: &mut EM,
-        _input: &S::Input,
-        observers: &OT,
-        _exit_kind: &ExitKind,
-    ) -> Result<bool, Error>
-    where
-        EM: EventFirer<State = S>,
-        OT: ObserversTuple<S>,
-    {
-        let observer = observers
-            .match_name::<RefCellValueObserver<DecodingMap>>("DecodingMapObserver")
-            .unwrap();
-        Ok(observer.get_ref().increased)
-    }
-}
-
-impl Named for DecodingMapFeedback {
-    #[inline]
-    fn name(&self) -> &Cow<'static, str> {
-        static NAME: Cow<'static, str> = Cow::Borrowed("DecodingMapFeedback");
-        &NAME
-    }
-}
-
-impl DecodingMapFeedback {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for DecodingMapFeedback {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-static mut MAP: RefCell<DecodingMap> = RefCell::new(DecodingMap {
-    previous_ratio: 0u64,
-    increased: false,
-});
 
 static mut TEST: Lazy<RefCell<(ExecutionTest, CanisterId)>> =
     Lazy::new(|| RefCell::new(create_execution_test()));
@@ -152,8 +91,8 @@ pub fn main() {
 
     let observer = unsafe {
         RefCellValueObserver::new(
-            "DecodingMapObserver",
-            libafl_bolts::ownedref::OwnedRef::Ref(&MAP),
+            DECODING_MAP_OBSERVER_NAME,
+            libafl_bolts::ownedref::OwnedRef::from_ptr(addr_of!(MAP)),
         )
     };
     let mut feedback = DecodingMapFeedback::new();
