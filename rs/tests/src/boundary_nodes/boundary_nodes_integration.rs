@@ -1211,7 +1211,7 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm(&env::var("KV_STORE_WASM_PATH").unwrap());
+        let http_counter_canister = env.load_wasm(&env::var("HTTP_COUNTER_WASM_PATH").unwrap());
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.clone().unwrap().1, &http_counter_canister, None)
@@ -1322,7 +1322,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm(&env::var("KV_STORE_WASM_PATH").unwrap());
+        let http_counter_canister = env.load_wasm(&env::var("HTTP_COUNTER_WASM_PATH").unwrap());
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.clone().unwrap().1, &http_counter_canister, None)
