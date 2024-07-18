@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   specifies if non-mainnet features (e.g., best-effort responses) should be enabled for the PocketIC instance.
   The topology contains a new field `subnet_seed` which is equal to the directory name of the directory in the `state_dir`
   storing the state of the corresponding subnet.
+  The state directory (if specified) also contains a file `registry.proto` containing the current snapshot of the registry.
 
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.
