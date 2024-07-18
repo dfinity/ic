@@ -668,15 +668,18 @@ fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<
     if domain.is_empty() {
         return Ok(None);
     }
-    if let Ok(parsed_domain) = domain_to_ascii_strict(domain) {
-        if parsed_domain == *domain {
-            return Ok(Some(parsed_domain));
-        }
+
+    if domain_to_ascii_strict(domain)
+        .ok()
+        .filter(|s| s == domain)
+        .is_none()
+    {
+        return Err(OrchestratorError::invalid_configuration_error(format!(
+            "Provided domain name {domain} is invalid",
+        )));
     }
 
-    Err(OrchestratorError::invalid_configuration_error(format!(
-        "Provided domain name {domain} is invalid",
-    )))
+    Ok(Some(domain.to_string()))
 }
 
 /// Create a nonce to be included with the ingress message sent to the node
