@@ -1,6 +1,6 @@
 ---
 - name: Start guest
-  ansible.builtin.shell: |
+  shell: |
     set -eExuo pipefail
     virsh start "{{ item }}" || true
     virsh autostart "{{ item }}" || true
