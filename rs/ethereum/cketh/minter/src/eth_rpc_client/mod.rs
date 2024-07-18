@@ -66,6 +66,7 @@ impl EthRpcClient {
                     .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
                     .with_override_rpc_config(OverrideRpcConfig {
                         eth_get_logs: Some(RpcConfig {
+                            // We expect most of the calls to contain zero events.
                             response_size_estimate: Some(100 + HEADER_SIZE_LIMIT),
                         }),
                         ..Default::default()
