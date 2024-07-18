@@ -13,6 +13,7 @@ mod common {
     use futures::{future::join_all, Future};
     use slog::info;
     use xnet_test::CanisterId;
+    use std::env;
 
     use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::HasDependencies};
 

@@ -26,6 +26,7 @@ Success::
 end::catalog[] */
 
 use std::time::Duration;
+use std::env;
 
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
