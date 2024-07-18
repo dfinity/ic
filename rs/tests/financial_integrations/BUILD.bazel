@@ -27,9 +27,6 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         BTC_RUNTIME_DEPS,
-    env = {
-        "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-    }
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -43,6 +40,9 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
+    env = {
+        "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+    }
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
