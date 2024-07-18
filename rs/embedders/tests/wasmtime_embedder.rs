@@ -2733,3 +2733,22 @@ fn wasm64_cycles_burn128() {
 
     assert_eq!(wasm_heap, expected_heap);
 }
+
+#[test]
+fn large_wasm64_memory_allocation_test() {
+    let wat = r#"
+    (module
+        (func $test (export "canister_update test"))
+        (memory i64 0 16777216)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    let _res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+}
