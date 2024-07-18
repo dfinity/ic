@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The topology contains a new field `subnet_seed` which is equal to the directory name of the directory in the `state_dir`
   storing the state of the corresponding subnet.
   The state directory (if specified) also contains a file `registry.proto` containing the current snapshot of the registry.
+- Added new endpoint `/instance/<instance_id>/api/v3/canister/<effective_canister_id>/call` to support update calls to the new
+  synchronous ingress message endpoint.
 
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.
