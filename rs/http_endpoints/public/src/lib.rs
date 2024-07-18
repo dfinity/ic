@@ -25,7 +25,9 @@ cfg_if::cfg_if! {
     }
 }
 
-pub use call::{CallServiceV2, CallServiceV3, IngressValidatorBuilder};
+pub use call::{
+    CallServiceV2, CallServiceV3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
+};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
@@ -336,18 +338,22 @@ pub fn start_server(
     .build();
 
     let call_router = call::CallServiceV2::new_router(call_handler.clone());
-
-    let call_v3_router = call::CallServiceV3::new_router(
-        call_handler,
-        config.ingress_message_certificate_timeout_seconds,
-        delegation_from_nns.clone(),
-        state_reader.clone(),
+    let (ingress_watcher_handle, _) = IngressWatcher::start(
         rt_handle.clone(),
         log.clone(),
         metrics.clone(),
         certified_height_watcher,
         completed_execution_messages_rx,
         CancellationToken::new(),
+    );
+
+    let call_v3_router = call::CallServiceV3::new_router(
+        call_handler,
+        ingress_watcher_handle,
+        metrics.clone(),
+        config.ingress_message_certificate_timeout_seconds,
+        delegation_from_nns.clone(),
+        state_reader.clone(),
     );
 
     let query_router = QueryServiceBuilder::builder(

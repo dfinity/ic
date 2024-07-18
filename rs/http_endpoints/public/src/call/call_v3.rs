@@ -1,7 +1,7 @@
 //! Module that deals with requests to /api/v3/canister/.../call.
 
 use super::{
-    ingress_watcher::{IngressWatcher, IngressWatcherHandle, SubscriptionError},
+    ingress_watcher::{IngressWatcherHandle, SubscriptionError},
     IngressError, IngressValidator,
 };
 use crate::{
@@ -27,14 +27,11 @@ use ic_crypto_tree_hash::{
 };
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::ReplicaLogger;
 use ic_logger::{error, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
-    },
-    CanisterId, Height,
+    messages::{Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope},
+    CanisterId,
 };
 use serde_cbor::Value as CBOR;
 use std::{
@@ -43,11 +40,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-use tokio::{
-    runtime::Handle,
-    sync::{mpsc, watch},
-};
-use tokio_util::{sync::CancellationToken, time::FutureExt};
+use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
 enum CallV3Response {
@@ -129,25 +122,12 @@ impl CallServiceV3 {
 
     pub(crate) fn new_router(
         call_handler: IngressValidator,
+        ingress_watcher_handle: IngressWatcherHandle,
+        metrics: HttpHandlerMetrics,
         ingress_message_certificate_timeout_seconds: u64,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        runtime_handle: Handle,
-        logger: ReplicaLogger,
-        metrics: HttpHandlerMetrics,
-        certified_height_watcher: watch::Receiver<Height>,
-        completed_execution_messages_rx: mpsc::Receiver<(MessageId, Height)>,
-        cancellation_token: CancellationToken,
     ) -> Router {
-        let (ingress_watcher_handle, _) = IngressWatcher::start(
-            runtime_handle,
-            logger,
-            metrics.clone(),
-            certified_height_watcher,
-            completed_execution_messages_rx,
-            cancellation_token,
-        );
-
         let call_service = Self {
             delegation_from_nns,
             ingress_watcher_handle,
@@ -165,29 +145,22 @@ impl CallServiceV3 {
         )
     }
 
+    #[allow(dead_code)]
     pub fn new_service(
         call_handler: IngressValidator,
+        ingress_watcher_handle: IngressWatcherHandle,
+        metrics: HttpHandlerMetrics,
         ingress_message_certificate_timeout_seconds: u64,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        runtime_handle: Handle,
-        logger: ReplicaLogger,
-        metrics: HttpHandlerMetrics,
-        certified_height_watcher: watch::Receiver<Height>,
-        completed_execution_messages_rx: mpsc::Receiver<(MessageId, Height)>,
-        cancellation_token: CancellationToken,
     ) -> BoxCloneService<Request<Body>, Response, Infallible> {
         let router = Self::new_router(
             call_handler,
+            ingress_watcher_handle,
+            metrics,
             ingress_message_certificate_timeout_seconds,
             delegation_from_nns,
             state_reader,
-            runtime_handle,
-            logger,
-            metrics,
-            certified_height_watcher,
-            completed_execution_messages_rx,
-            cancellation_token,
         );
         BoxCloneService::new(router.into_service())
     }
