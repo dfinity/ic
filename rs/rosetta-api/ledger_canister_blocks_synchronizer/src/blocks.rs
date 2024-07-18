@@ -1423,20 +1423,20 @@ impl Blocks {
             .transaction()
             .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
 
-        let mut statement1 = sql_tx
+        let mut insert_rosetta_block_stmt = sql_tx
             .prepare_cached(
                 r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
                 VALUES (:idx, :hash, :timestamp)"#,
             )
             .unwrap();
-        let mut statement2 = sql_tx
+        let mut insert_rosetta_block_transaction_stmt = sql_tx
             .prepare_cached(
                 r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
         VALUES (:idx, :block_idx)"#,
             )
             .unwrap();
 
-        let mut statement3 = sql_tx
+        let mut select_hashed_blocks_stmt = sql_tx
             .prepare_cached(
                 r#"SELECT hash, block, parent_hash, idx, timestamp
            FROM blocks WHERE idx >= :start AND idx <= :end"#,
@@ -1481,14 +1481,18 @@ impl Blocks {
                 current_rosetta_block_timestamp.replace(current_icp_block_timestamp);
                 icp_transactions_per_rosetta_block.replace(HashMap::new());
 
-                self.store_rosetta_block(rosetta_block, &mut statement1, &mut statement2)?;
+                self.store_rosetta_block(
+                    rosetta_block,
+                    &mut insert_rosetta_block_stmt,
+                    &mut insert_rosetta_block_transaction_stmt,
+                )?;
                 Ok(())
             };
 
         loop {
             // We extract the icp block indices from the current interval
             let hashed_blocks = database_access::read_hashed_blocks(
-                &mut statement3,
+                &mut select_hashed_blocks_stmt,
                 named_params! {
                     ":start":hashed_block_idx_interval.start(),
                     ":end":hashed_block_idx_interval.end()
@@ -1530,9 +1534,9 @@ impl Blocks {
         }
 
         // We need to free up the prepared statements before we commit the transaction
-        drop(statement1);
-        drop(statement2);
-        drop(statement3);
+        drop(insert_rosetta_block_stmt);
+        drop(insert_rosetta_block_transaction_stmt);
+        drop(select_hashed_blocks_stmt);
         sql_tx.commit().unwrap();
 
         info!(
@@ -1544,12 +1548,12 @@ impl Blocks {
     pub(crate) fn store_rosetta_block(
         &self,
         rosetta_block: RosettaBlock,
-        statement1: &mut CachedStatement,
-        statement2: &mut CachedStatement,
+        insert_rosetta_block_stmt: &mut CachedStatement,
+        insert_rosetta_block_transaction_stmt: &mut CachedStatement,
     ) -> Result<(), BlockStoreError> {
         // Store the metainfo of the rosetta block
         {
-            let _ = statement1
+            let _ = insert_rosetta_block_stmt
                 .execute(named_params! {
                     ":idx": rosetta_block.index,
                     ":hash": rosetta_block.hash(),
@@ -1561,7 +1565,7 @@ impl Blocks {
         // Store the blocks that form this rosetta block
         {
             for block_index in rosetta_block.transactions.keys() {
-                let _ = statement2
+                let _ = insert_rosetta_block_transaction_stmt
                     .execute(named_params! {
                         ":idx": rosetta_block.index,
                         ":block_idx": block_index,
@@ -1741,13 +1745,13 @@ mod tests {
         let mut connection = blocks.connection.lock().unwrap();
         let transaction = connection.transaction().unwrap();
 
-        let mut statement1 = transaction
+        let mut insert_rosetta_block_stmt = transaction
             .prepare_cached(
                 r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
         VALUES (:idx, :hash, :timestamp)"#,
             )
             .unwrap();
-        let mut statement2 = transaction
+        let mut insert_rosetta_block_transaction_stmt = transaction
             .prepare_cached(
                 r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
 VALUES (:idx, :block_idx)"#,
@@ -1755,11 +1759,15 @@ VALUES (:idx, :block_idx)"#,
             .unwrap();
 
         blocks
-            .store_rosetta_block(rosetta_block.clone(), &mut statement1, &mut statement2)
+            .store_rosetta_block(
+                rosetta_block.clone(),
+                &mut insert_rosetta_block_stmt,
+                &mut insert_rosetta_block_transaction_stmt,
+            )
             .unwrap();
 
-        drop(statement1);
-        drop(statement2);
+        drop(insert_rosetta_block_stmt);
+        drop(insert_rosetta_block_transaction_stmt);
         transaction.commit().unwrap();
         drop(connection);
         let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
