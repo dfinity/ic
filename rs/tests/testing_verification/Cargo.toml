@@ -14,6 +14,10 @@ tests = { path = ".." }
 spec-compliance = { path = "./spec_compliance" }
 
 [[bin]]
+name = "ic-systest-basic-health-test"
+path = "basic_health_test.rs"
+
+[[bin]]
 name = "ic-systest-spec-compliance-application-subnet"
 path = "spec_compliance_application_subnet_test.rs"
 
