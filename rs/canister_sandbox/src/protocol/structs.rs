@@ -15,7 +15,7 @@ use super::id::MemoryId;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Round(pub u64);
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SandboxExecInput {
     pub func_ref: FuncRef,
     pub api_type: ApiType,

@@ -20,6 +20,8 @@ slog = { workspace = true }
 xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
 serde_json = { workspace = true }
 serde = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }
 
 [[bin]]
 name = "large"
