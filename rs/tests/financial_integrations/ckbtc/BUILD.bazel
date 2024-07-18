@@ -26,6 +26,7 @@ system_test(
         CKBTC_RUNTIME_DEPS,
     env = {
         "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter/ckbtc_minter_debug)",
     },
     deps = DEPENDENCIES + ["//rs/tests"],
 )

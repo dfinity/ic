@@ -313,7 +313,7 @@ pub(crate) async fn install_minter(
 
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path("rs/bitcoin/ckbtc/minter/ckbtc_minter_debug.wasm"), // TODO: do me
+        env.get_dependency_path(&env::var("IC_CKBTC_MINTER_WASM_PATH").unwrap()),
         Some(Encode!(&minter_arg).unwrap()),
     )
     .await;
