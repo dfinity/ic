@@ -692,8 +692,7 @@ spec:
                 return Err(anyhow::anyhow!("Playnet pool is full"));
             }
 
-            let random_number = (1..=PLAYNET_POOL_SIZE)
-                .into_iter()
+            let random_number = *(1..=PLAYNET_POOL_SIZE)
                 .filter(|n| {
                     !existing_playnets.iter().any(|cm| {
                         cm.metadata
@@ -708,8 +707,7 @@ spec:
                 .collect::<Vec<_>>()
                 .choose_multiple(&mut rand::thread_rng(), 1)
                 .next()
-                .expect("should be able to choose one playnet")
-                .clone();
+                .expect("should be able to choose one playnet");
             config_map_api
                 .create(
                     &PostParams::default(),
@@ -749,14 +747,12 @@ spec:
             .expect("must have annotations")
             .get("cert-manager.io/alt-names")
             .expect("should have cert-manager.io/alt-names annotation")
-            .split(",")
-            .into_iter()
-            .filter(|n| {
+            .split(',')
+            .find(|n| {
                 Regex::new(&format!(r"^ic0*{playnet_id}\..+\.dfinity\.network$"))
                     .unwrap()
                     .is_match(n)
             })
-            .next()
             .unwrap()
             .to_string();
 

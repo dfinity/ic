@@ -235,7 +235,7 @@ impl BoundaryNodeWithVm {
             existing_playnet
                 .aaaa_records
                 .push(self.allocated_vm.ipv6.to_string());
-            if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
+            if InfraProvider::read_attribute(env) == InfraProvider::Farm {
                 env.create_playnet_dns_records(vec![
                     DnsRecord {
                         name: "".to_string(),
