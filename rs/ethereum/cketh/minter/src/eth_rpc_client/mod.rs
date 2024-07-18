@@ -53,6 +53,8 @@ impl EthRpcClient {
     pub fn from_state(state: &State) -> Self {
         let mut client = Self::new(state.ethereum_network());
         if let Some(evm_rpc_id) = state.evm_rpc_id {
+            const MIN_ATTACHED_CYCLES: u128 = 300_000_000_000;
+
             let providers = match client.chain {
                 EthereumNetwork::Mainnet => EthereumProvider::evm_rpc_node_providers(),
                 EthereumNetwork::Sepolia => SepoliaProvider::evm_rpc_node_providers(),
@@ -61,7 +63,7 @@ impl EthRpcClient {
                 EvmRpcClient::builder_for_ic(TRACE_HTTP)
                     .with_providers(providers)
                     .with_evm_canister_id(evm_rpc_id)
-                    .with_min_attached_cycles(300_000_000_000)
+                    .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
                     .with_override_rpc_config(OverrideRpcConfig {
                         eth_get_logs: Some(RpcConfig {
                             response_size_estimate: Some(100 + HEADER_SIZE_LIMIT),
