@@ -12763,9 +12763,13 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-agent",
+ "ic-base-types",
  "ic-system-test-driver",
+ "leb128",
  "reqwest 0.12.5",
  "slog",
+ "tokio",
+ "url",
 ]
 
 [[package]]

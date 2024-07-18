@@ -24,6 +24,10 @@ end::catalog[] */
 use anyhow::Result;
 use canister_http::get_universal_vm_address;
 use ic_agent::Agent;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message,
+};
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
@@ -39,10 +43,6 @@ use ic_system_test_driver::driver::universal_vm::{
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, MessageCanister};
-use ic_tests::orchestrator::utils::rw_message::install_nns_and_check_progress;
-use ic_tests::orchestrator::utils::rw_message::{
-    can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
-};
 use ic_tests::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
 use ic_types::Height;
 use slog::info;
