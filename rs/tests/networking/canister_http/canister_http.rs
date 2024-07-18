@@ -15,6 +15,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::util::{self, create_and_install};
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
+use std::env;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
@@ -234,7 +235,7 @@ pub fn create_proxy_canister<'a>(
     let proxy_canister_id = rt.block_on(create_and_install(
         &node.build_default_agent(),
         node.effective_canister_id(),
-        &env.load_wasm("rs/rust_canisters/proxy_canister/proxy_canister.wasm"),
+        &env.load_wasm(&env::var("PROXY_WASM_PATH").unwrap()),
     ));
     info!(
         &env.logger(),

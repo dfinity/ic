@@ -17,7 +17,7 @@ use ic_system_test_driver::{
 };
 
 use serde_json::json;
-use std::{io::Read, net::SocketAddrV6, time::Duration};
+use std::{env, io::Read, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, Context, Error};
 use candid::{Encode, Principal};
@@ -35,9 +35,6 @@ use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use reqwest::{redirect::Policy, Client, ClientBuilder};
 use tokio::task::{self, JoinHandle};
-
-const CERTIFICATE_ORCHESTRATOR_WASM: &str =
-    "rs/boundary_node/certificate_issuance/certificate_orchestrator/certificate_orchestrator.wasm";
 
 pub(crate) const CLOUDFLARE_API_PYTHON_PATH: &str = "/config/cloudflare_api.py";
 pub(crate) const PEBBLE_CACHE_PYTHON_PATH: &str = "/config/pebble_cache.py";
@@ -419,7 +416,7 @@ async fn setup_certificate_orchestartor(
         move || {
             env.get_first_healthy_application_node_snapshot()
                 .create_and_install_canister_with_arg(
-                    CERTIFICATE_ORCHESTRATOR_WASM,
+                    &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
                     Encode!(&InitArg {
                         id_seed: 0,
                         root_principals,

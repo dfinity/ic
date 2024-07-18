@@ -70,6 +70,9 @@ system_test(
                    NNS_CANISTER_RUNTIME_DEPS +
                    UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
+    env = {
+        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
+    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -142,6 +145,9 @@ system_test(
                    UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS +
                    CUSTOM_DOMAINS_RUNTIME_DEPS,
+    env = {
+        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
+    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 

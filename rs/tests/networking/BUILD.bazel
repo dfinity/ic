@@ -33,6 +33,9 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
@@ -53,6 +56,9 @@ system_test(
         NNS_CANISTER_RUNTIME_DEPS +
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -70,6 +76,9 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities",
@@ -93,6 +102,9 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -118,6 +130,9 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     deps = CANISTER_HTTP_BASE_DEPS,
 )
 

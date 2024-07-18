@@ -26,6 +26,7 @@ use ic_system_test_driver::{
 };
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::env;
 
 use anyhow::{anyhow, bail, Error};
 use candid::{Decode, Encode, Principal};
@@ -58,9 +59,6 @@ pub fn config(env: TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
 }
-
-const CERTIFICATE_ORCHESTRATOR_WASM: &str =
-    "rs/boundary_node/certificate_issuance/certificate_orchestrator/certificate_orchestrator.wasm";
 
 const CHECK_TIMEOUT: Duration = Duration::from_secs(60);
 const CHECK_SLEEP: Duration = Duration::from_secs(1);
@@ -100,7 +98,7 @@ pub fn access_control_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let cid =
-        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -256,7 +254,7 @@ pub fn registration_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let cid =
-        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -616,7 +614,7 @@ pub fn expiration_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let cid =
-        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -870,7 +868,7 @@ pub fn renewal_expiration_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let cid =
-        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -1094,7 +1092,7 @@ pub fn task_queue_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let cid =
-        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -1475,7 +1473,7 @@ pub fn retry_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let cid =
-        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -1650,7 +1648,7 @@ pub fn certificate_export_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let cid =
-        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
