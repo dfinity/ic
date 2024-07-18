@@ -405,7 +405,7 @@ pub async fn install_icrc1_ledger<'a>(
 ) {
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path(&env::var("LEDGER_WASM_PATH").unwrap()),
+        env.get_dependency_path(&env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),
         Some(Encode!(&args).unwrap()),
     )
     .await
