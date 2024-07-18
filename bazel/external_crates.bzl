@@ -1000,6 +1000,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rgb": crate.spec(
                 version = "^0.8.37",
             ),
+            "reed-solomon-simd": crate.spec(
+                version = "^2.2.0",
+            ),
             "regex": crate.spec(
                 version = "^1.10.4",
             ),

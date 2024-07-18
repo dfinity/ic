@@ -63,7 +63,7 @@ impl ConnectionHandle {
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
 
-        let (mut send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
+        let (send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
@@ -77,28 +77,10 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        write_request(&mut send_stream, request)
-            .await
-            .map_err(|err| {
-                self.metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
-                    .inc();
-                err
-            })?;
-
-        send_stream.finish().map_err(|err| {
+        write_request(send_stream, request).await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
-                .inc();
-            err
-        })?;
-
-        send_stream.stopped().await.map_err(|err| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
+                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
                 .inc();
             err
         })?;
@@ -129,7 +111,7 @@ impl ConnectionHandle {
             .with_label_values(&[request.uri().path()])
             .inc_by(request.body().len() as u64);
 
-        let mut send_stream = self.connection.open_uni().await.map_err(|err| {
+        let send_stream = self.connection.open_uni().await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
@@ -143,28 +125,10 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        write_request(&mut send_stream, request)
-            .await
-            .map_err(|err| {
-                self.metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE])
-                    .inc();
-                err
-            })?;
-
-        send_stream.finish().map_err(|err| {
+        write_request(send_stream, request).await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH])
-                .inc();
-            err
-        })?;
-
-        send_stream.stopped().await.map_err(|err| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE])
                 .inc();
             err
         })?;
