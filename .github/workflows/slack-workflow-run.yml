@@ -22,7 +22,6 @@ jobs:
         id: setup
         shell: bash
         run: |
-          # TODO: change to 'eng-idx-alerts,release-management-alerts'
           CHANNEL="eng-idx-alerts"
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
