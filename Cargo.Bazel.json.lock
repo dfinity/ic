@@ -1,5 +1,5 @@
 {
-  "checksum": "1d88ca4cc80a2373634879485c0cfc7ebf94d20eafd2a10aafa1eeaf4d2b9b9a",
+  "checksum": "5ef11e4b29f104e280c6b220169e0ddba9e6c88e2c4aab3c99624a357572eb81",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17154,6 +17154,10 @@
               "target": "humantime"
             },
             {
+              "id": "humantime-serde 1.1.1",
+              "target": "humantime_serde"
+            },
+            {
               "id": "hyper 0.14.27",
               "target": "hyper",
               "alias": "hyper_0_14_27"
@@ -26276,6 +26280,58 @@
         "version": "2.1.0"
       },
       "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "humantime-serde 1.1.1": {
+      "name": "humantime-serde",
+      "version": "1.1.1",
+      "package_url": "https://github.com/jean-airoldie/humantime-serde",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/humantime-serde/1.1.1/download",
+          "sha256": "57a3db5ea5923d99402c94e9feb261dc5ee9b4efa158b0315f788cf549cc200c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "humantime_serde",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "humantime_serde",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "humantime 2.1.0",
+              "target": "humantime"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.1.1"
+      },
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -77059,6 +77115,7 @@
     "http-body-util 0.1.0",
     "httptest 0.15.4",
     "humantime 2.1.0",
+    "humantime-serde 1.1.1",
     "hyper 0.14.27",
     "hyper 1.4.1",
     "hyper-rustls 0.24.2",
