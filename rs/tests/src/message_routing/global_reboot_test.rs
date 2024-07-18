@@ -78,7 +78,8 @@ pub fn test(env: TestEnv) {
         .collect();
     // Step 1: Install Xnet canisters on each subnet.
     let wasm = Wasm::from_file(
-        env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
+        &env::var("XNET_TEST_CANISTER_WASM_PATH").unwrap(),
+        //env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
     );
     info!(log, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(&runtimes, SUBNETS_COUNT, CANISTERS_PER_SUBNET, wasm);

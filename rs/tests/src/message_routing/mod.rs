@@ -59,7 +59,7 @@ mod common {
     ) -> Vec<Vec<Canister>> {
         let logger = env.logger();
         let wasm = Wasm::from_file(
-            env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
+            &env::var("XNET_TEST_CANISTER_WASM_PATH").unwrap(),
         );
         let mut futures: Vec<Vec<_>> = Vec::new();
         for subnet_idx in 0..subnets {
