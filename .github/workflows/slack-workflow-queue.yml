@@ -7,7 +7,7 @@ on:
     paths:
       - '.github/workflows/slack-workflow-queue.yml'
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/20 * * * *"
 
 jobs:
   check-queue:
@@ -22,7 +22,7 @@ jobs:
           set -euo pipefail
 
           GITHUB_API_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs"
-          WAIT_THRESHOLD_MINUTES=5
+          WAIT_THRESHOLD_MINUTES=20
           WAIT_THRESHOLD_SECONDS=$((WAIT_THRESHOLD_MINUTES * 60))
 
           # Fetch workflow runs
