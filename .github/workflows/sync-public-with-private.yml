@@ -25,4 +25,4 @@ jobs:
 
         git remote add public https://github.com/dfinity/ic.git
         git fetch public master
-        git push --force origin public/master:master-private
+        git push origin public/master:master-private
