@@ -54,8 +54,13 @@ impl Registry {
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain {
-            let parsed_domain = domain_to_ascii_strict(domain).expect("invalid domain");
-            assert_eq!(parsed_domain, *domain, "invalid domain");
+            if domain_to_ascii_strict(domain)
+                .ok()
+                .filter(|s| s == domain)
+                .is_none()
+            {
+                panic!("invalid domain");
+            }
         }
         node_record.domain = domain;
 
@@ -152,7 +157,7 @@ mod tests {
                 .expect("failed to get the node operator id");
 
         // Assert setting domain name to Some() works
-        let new_domain = Some("invalid".to_string());
+        let new_domain = Some("_invalid".to_string());
         registry.do_update_node_domain(
             UpdateNodeDomainDirectlyPayload {
                 node_id,
