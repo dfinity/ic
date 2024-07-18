@@ -35,7 +35,7 @@ use ic_system_test_driver::{
     },
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
-use std::{iter, net::SocketAddrV6, time::Duration};
+use std::{iter, net::SocketAddrV6, time::Duration, env};
 
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
@@ -638,7 +638,7 @@ pub fn http_canister_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+        let kv_store_canister = env.load_wasm(&env::var("KV_STORE_WASM_PATH").unwrap());
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -819,7 +819,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+        let kv_store_canister = env.load_wasm(&env::var("KV_STORE_WASM_PATH").unwrap());
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -992,7 +992,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+        let kv_store_canister = env.load_wasm(&env::var("KV_STORE_WASM_PATH").unwrap());
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
