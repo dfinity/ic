@@ -27,6 +27,7 @@ ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 humantime = "2.0"
+humantime-serde = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }

@@ -1,4 +1,4 @@
-//! ECDSA related public interfaces.
+//! IDKG related public interfaces.
 
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
@@ -7,7 +7,6 @@ use ic_types::consensus::idkg::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
-// TODO: purge/remove from validated
 #[derive(Debug)]
 pub enum IDkgChangeAction {
     AddToValidated(IDkgMessage),
@@ -135,7 +134,7 @@ pub trait MutableIDkgPoolSection: Send + Sync {
     fn as_pool_section(&self) -> &dyn IDkgPoolSection;
 }
 
-/// Artifact pool for the ECDSA messages (query interface)
+/// Artifact pool for the IDKG messages (query interface)
 pub trait IDkgPool: Send + Sync {
     /// Return a reference to the validated PoolSection.
     fn validated(&self) -> &dyn IDkgPoolSection;

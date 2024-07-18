@@ -15,7 +15,7 @@ use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(CandidType, Serialize, Deserialize, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ChangeCanisterRequest {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.

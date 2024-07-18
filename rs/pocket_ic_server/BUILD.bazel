@@ -73,6 +73,7 @@ TEST_DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/management_canister_types",
     "//packages/pocket-ic:pocket-ic",
+    "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/types/types",
     "@crate_index//:candid",
@@ -165,8 +166,10 @@ rust_test(
     data = [
         ":pocket-ic-server",
         "//rs/tests:ic-hs",
+        "//rs/tests/httpbin-rs:httpbin",
     ],
     env = {
+        "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
     },

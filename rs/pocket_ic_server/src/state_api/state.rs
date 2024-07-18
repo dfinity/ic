@@ -22,19 +22,22 @@ use std::{
 };
 use tokio::{
     sync::mpsc::error::TryRecvError,
+    sync::mpsc::Receiver,
     sync::{mpsc, Mutex, RwLock},
     task::{spawn, spawn_blocking, JoinHandle},
-    time::{self, sleep},
+    time::{self, sleep, Instant},
 };
 use tracing::{error, info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
 
-// The minimum delay between consecutive ticks in auto progress mode.
-const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
-// The retry delay when polling for status of a long-running tick.
-const POLL_TICK_STATUS_DELAY: Duration = Duration::from_millis(100);
+// The timeout for executing an operation in auto progress mode.
+const AUTO_PROGRESS_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
+// The minimum delay between consecutive attempts to run an operation in auto progress mode.
+const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
+// The minimum delay between consecutive attempts to read the graph in auto progress mode.
+const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
 pub const STATE_LABEL_HASH_SIZE: usize = 32;
 
@@ -335,7 +338,61 @@ impl std::fmt::Display for ApiVersion {
     }
 }
 
+fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
+    match rx.try_recv() {
+        Ok(_) | Err(TryRecvError::Disconnected) => true,
+        Err(TryRecvError::Empty) => false,
+    }
+}
+
 impl ApiState {
+    // Helper function for auto progress mode.
+    // Executes an operation to completion and returns its `OpOut`
+    // or `None` if the auto progress mode received a stop signal.
+    async fn execute_operation(
+        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+        instance_id: InstanceId,
+        op: impl Operation + Send + Sync + 'static,
+        rx: &mut Receiver<()>,
+    ) -> Option<OpOut> {
+        let op = Arc::new(op);
+        loop {
+            // It is safe to unwrap as there can only be an error if the instance does not exist
+            // and there cannot be a progress thread for a non-existing instance (progress threads
+            // are stopped before an instance is deleted).
+            match Self::update_instances_with_timeout(
+                instances.clone(),
+                graph.clone(),
+                op.clone(),
+                instance_id,
+                AUTO_PROGRESS_OPERATION_TIMEOUT,
+            )
+            .await
+            .unwrap()
+            {
+                UpdateReply::Started { state_label, op_id } => {
+                    break loop {
+                        sleep(READ_GRAPH_DELAY).await;
+                        if let Some((_, op_out)) =
+                            Self::read_result(graph.clone(), &state_label, &op_id)
+                        {
+                            break Some(op_out);
+                        }
+                        if received_stop_signal(rx) {
+                            break None;
+                        }
+                    }
+                }
+                UpdateReply::Busy { .. } => {}
+                UpdateReply::Output(op_out) => break Some(op_out),
+            };
+            if received_stop_signal(rx) {
+                break None;
+            }
+        }
+    }
+
     /// For polling:
     /// The client lib dispatches a long running operation and gets a Started {state_label, op_id}.
     /// It then polls on that via this state tree api function.
@@ -649,56 +706,30 @@ impl ApiState {
         let mut progress_thread = progress_threads[instance_id].lock().await;
         let instances = self.instances.clone();
         let graph = self.graph.clone();
-        let sync_wait_time = self.sync_wait_time;
         if progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
-                use std::time::Instant;
                 let mut now = Instant::now();
-                let mut advance_time = Duration::default();
                 loop {
                     let start = Instant::now();
                     let old = std::mem::replace(&mut now, Instant::now());
-                    advance_time += now.duration_since(old);
-                    let cur_op = AdvanceTimeAndTick(advance_time);
-                    let retry_immediately = match Self::update_instances_with_timeout(
+                    let op = AdvanceTimeAndTick(now.duration_since(old));
+                    if Self::execute_operation(
                         instances.clone(),
                         graph.clone(),
-                        cur_op.into(),
                         instance_id,
-                        sync_wait_time,
+                        op,
+                        &mut rx,
                     )
                     .await
+                    .is_none()
                     {
-                        Ok(UpdateReply::Busy { .. }) => true,
-                        Ok(UpdateReply::Output(_)) => {
-                            advance_time = Duration::default();
-                            false
-                        }
-                        Ok(UpdateReply::Started { state_label, op_id }) => loop {
-                            if Self::read_result(graph.clone(), &state_label, &op_id).is_some() {
-                                advance_time = Duration::default();
-                                break false;
-                            }
-                            sleep(POLL_TICK_STATUS_DELAY).await;
-                            match rx.try_recv() {
-                                Ok(_) | Err(TryRecvError::Disconnected) => {
-                                    return;
-                                }
-                                Err(TryRecvError::Empty) => {}
-                            };
-                        },
-                        Err(_) => true,
-                    };
-                    let duration = start.elapsed();
-                    if !retry_immediately {
-                        sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                        return;
                     }
-                    match rx.try_recv() {
-                        Ok(_) | Err(TryRecvError::Disconnected) => {
-                            return;
-                        }
-                        Err(TryRecvError::Empty) => {}
+                    let duration = start.elapsed();
+                    sleep(std::cmp::max(duration, MIN_OPERATION_DELAY)).await;
+                    if received_stop_signal(&mut rx) {
+                        return;
                     }
                 }
             });

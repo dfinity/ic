@@ -11,6 +11,7 @@ use crate::icrc21::requests::ConsentMessageMetadata;
 use candid::Decode;
 use candid::{Nat, Principal};
 use itertools::Itertools;
+use num_traits::{Pow, ToPrimitive};
 use serde_bytes::ByteBuf;
 use strum;
 use strum::EnumString;
@@ -42,10 +43,11 @@ pub struct ConsentMessageBuilder {
     expected_allowance: Option<Nat>,
     expires_at: Option<u64>,
     utc_offset_minutes: Option<i16>,
+    decimals: u8,
 }
 
 impl ConsentMessageBuilder {
-    pub fn new(icrc21_function: &str) -> Result<Self, Icrc21Error> {
+    pub fn new(icrc21_function: &str, decimals: u8) -> Result<Self, Icrc21Error> {
         let icrc21_function =
             icrc21_function
                 .parse::<Icrc21Function>()
@@ -68,6 +70,7 @@ impl ConsentMessageBuilder {
             memo: None,
             expected_allowance: None,
             expires_at: None,
+            decimals,
         })
     }
 
@@ -144,26 +147,24 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Receiver Account has to be specified.".to_owned(),
                 })?;
-                let fee = self
-                    .ledger_fee
-                    .ok_or(Icrc21Error::GenericError {
+                let fee = convert_tokens_to_string_representation(
+                    self.ledger_fee.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Ledger Fee must be specified.".to_owned(),
-                    })?
-                    .to_string()
-                    .replace('_', "'");
+                    })?,
+                    self.decimals,
+                )?;
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Token Symbol must be specified.".to_owned(),
                 })?;
-                let amount = self
-                    .amount
-                    .ok_or(Icrc21Error::GenericError {
+                let amount = convert_tokens_to_string_representation(
+                    self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Amount has to be specified.".to_owned(),
-                    })?
-                    .to_string()
-                    .replace('_', "'");
+                    })?,
+                    self.decimals,
+                )?;
 
                 message.push_str(&format!("\n\n**Amount:**\n{} {}", amount, token_symbol));
                 if from_account.owner == Principal::anonymous() {
@@ -193,26 +194,24 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Spender Account has to be specified.".to_owned(),
                 })?;
-                let fee = self
-                    .ledger_fee
-                    .ok_or(Icrc21Error::GenericError {
+                let fee = convert_tokens_to_string_representation(
+                    self.ledger_fee.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Ledger Fee must be specified.".to_owned(),
-                    })?
-                    .to_string()
-                    .replace('_', "'");
+                    })?,
+                    self.decimals,
+                )?;
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Token Symbol must be specified.".to_owned(),
                 })?;
-                let amount = self
-                    .amount
-                    .ok_or(Icrc21Error::GenericError {
+                let amount = convert_tokens_to_string_representation(
+                    self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Amount has to be specified.".to_owned(),
-                    })?
-                    .to_string()
-                    .replace('_', "'");
+                    })?,
+                    self.decimals,
+                )?;
                 let expires_at = self
                     .expires_at
                     .map(|ts| {
@@ -267,9 +266,9 @@ impl ConsentMessageBuilder {
                     "\n\n**Requested withdrawal allowance:**\n{} {}",
                     amount, token_symbol
                 ));
-                message.push_str(&self.expected_allowance.map(
-                    |expected_allowance| format!("\n\n**Current withdrawal allowance:**\n{} {}", expected_allowance.to_string().replace('_', "'"),token_symbol))
-                    .unwrap_or_else(|| format!("\u{26A0} The allowance will be set to {} {} independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",amount,token_symbol)));
+                message.push_str(&match self.expected_allowance{
+                    Some(expected_allowance) => format!("\n\n**Current withdrawal allowance:**\n{} {}", convert_tokens_to_string_representation(expected_allowance,self.decimals)?,token_symbol),
+                    None => format!("\n\u{26A0} The allowance will be set to {} {} independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",amount,token_symbol)});
                 message.push_str(&format!("\n\n**Expiration date:**\n{}", expires_at));
                 message.push_str(&format!("\n\n**Approval fee:**\n{} {}", fee, token_symbol));
                 if approver_account.owner == Principal::anonymous() {
@@ -304,26 +303,25 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Spender Account has to be specified.".to_owned(),
                 })?;
-                let fee = self
-                    .ledger_fee
-                    .ok_or(Icrc21Error::GenericError {
+                let fee = convert_tokens_to_string_representation(
+                    self.ledger_fee.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Ledger Fee must be specified.".to_owned(),
-                    })?
-                    .to_string()
-                    .replace('_', "'");
+                    })?,
+                    self.decimals,
+                )?;
+
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Token Symbol must be specified.".to_owned(),
                 })?;
-                let amount = self
-                    .amount
-                    .ok_or(Icrc21Error::GenericError {
+                let amount = convert_tokens_to_string_representation(
+                    self.amount.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Amount has to be specified.".to_owned(),
-                    })?
-                    .to_string()
-                    .replace('_', "'");
+                    })?,
+                    self.decimals,
+                )?;
 
                 message.push_str(&format!("\n\n**Withdrawal Account:**\n{}", from_account));
                 if spender_account.owner == Principal::anonymous() {
@@ -435,6 +433,7 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     caller_principal: Principal,
     ledger_fee: Nat,
     token_symbol: String,
+    decimals: u8,
 ) -> Result<ConsentInfo, Icrc21Error> {
     if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
         return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
@@ -454,9 +453,10 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             .utc_offset_minutes,
     };
 
-    let mut display_message_builder = ConsentMessageBuilder::new(&consent_msg_request.method)?
-        .with_ledger_fee(ledger_fee)
-        .with_token_symbol(token_symbol);
+    let mut display_message_builder =
+        ConsentMessageBuilder::new(&consent_msg_request.method, decimals)?
+            .with_ledger_fee(ledger_fee)
+            .with_token_symbol(token_symbol);
 
     if let Some(offset) = consent_msg_request
         .user_preferences
@@ -589,4 +589,15 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         metadata,
         consent_message,
     })
+}
+
+fn convert_tokens_to_string_representation(
+    tokens: Nat,
+    decimals: u8,
+) -> Result<String, Icrc21Error> {
+    let tokens = tokens.0.to_f64().ok_or(Icrc21Error::GenericError {
+        error_code: Nat::from(500u64),
+        description: "Failed to convert tokens to u64".to_owned(),
+    })?;
+    Ok(format!("{}", tokens / 10_f64.pow(decimals)))
 }

@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:base64",
     "@crate_index//:curve25519-dalek",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",

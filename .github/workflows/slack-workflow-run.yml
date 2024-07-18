@@ -11,6 +11,7 @@ on:
       - Schedule Daily
       - Schedule Weekly
       - Release Testing
+      - Container IC Base Images
 
 jobs:
   slack-workflow-run:
@@ -21,7 +22,6 @@ jobs:
         id: setup
         shell: bash
         run: |
-          # TODO: change to 'eng-idx-alerts,release-management-alerts'
           CHANNEL="eng-idx-alerts"
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
@@ -30,6 +30,7 @@ jobs:
           if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
             if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
               FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
+              CHANNEL="release-management-alerts"
             fi
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"

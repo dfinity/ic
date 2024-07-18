@@ -599,23 +599,19 @@ pub async fn handler_pub_key(
 }
 
 pub async fn handler_dashboard(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = DashboardRequest { runtime };
+    let op = DashboardRequest {};
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_status(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = StatusRequest { bytes, runtime };
+    let op = StatusRequest { bytes };
     handle_raw(api_state, instance_id, op).await
 }
 
@@ -652,31 +648,25 @@ pub async fn handler_call_v2(
 }
 
 pub async fn handler_query(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = QueryRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_read_state(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = ReadStateRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
     handle_raw(api_state, instance_id, op).await
 }

@@ -62,7 +62,7 @@ fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
 fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
     let mut ckerc20 = CkErc20Setup::default();
 
-    for token in supported_erc20_tokens(ckerc20.cketh.minter_id.into()) {
+    for token in supported_erc20_tokens() {
         ckerc20.orchestrator = ckerc20
             .orchestrator
             .add_erc20_token(token.clone())
@@ -91,7 +91,7 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
     const RETRY_FREQUENCY: Duration = Duration::from_secs(5);
 
     let mut ckerc20 = CkErc20Setup::default();
-    let usdc = usdc(Principal::anonymous());
+    let usdc = usdc();
     let stop_msg_id = ckerc20
         .env
         .stop_canister_non_blocking(ckerc20.cketh.minter_id);

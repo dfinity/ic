@@ -38,7 +38,7 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     dkg::DkgPool,
-    ecdsa::IDkgPool,
+    idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::consensus::{ChangeSetProducer, PriorityFn, PriorityFnFactory},

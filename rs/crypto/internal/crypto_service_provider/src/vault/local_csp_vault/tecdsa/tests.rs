@@ -482,7 +482,7 @@ mod ecdsa_sign_share {
             let [key, kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda] =
                 distinct_transcripts();
             let kappa_unmasked = IDkgTranscriptInternal {
-                combined_commitment: CombinedCommitment::ByInterpolation(
+                combined_commitment: CombinedCommitment::BySummation(
                     kappa_unmasked.combined_commitment.commitment().clone(),
                 ),
             };
