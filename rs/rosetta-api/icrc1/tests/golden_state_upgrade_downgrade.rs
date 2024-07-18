@@ -142,7 +142,7 @@ fn upgrade_canister(
     let canister_id =
         CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
     upgrade_ledger(state_machine, ledger_wasm, canister_id);
-    println!("{} '{}':", canister_name, canister_id_str);
+    println!("Upgraded {} '{}'", canister_name, canister_id_str);
 }
 
 fn ledger_wasm() -> Wasm {
