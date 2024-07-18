@@ -883,7 +883,7 @@ fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
                 http_method: http_method_from(&c.http_method),
                 url: c.url,
                 headers: c.headers.iter().map(http_header_from).collect(),
-                body: c.body,
+                body: c.body.unwrap_or_default(),
                 max_response_bytes: c.max_response_bytes.map(|b| b.get()),
             })
             .collect();

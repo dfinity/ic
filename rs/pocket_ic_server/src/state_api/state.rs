@@ -735,7 +735,7 @@ impl ApiState {
                     value: h.value,
                 })
                 .collect(),
-            body: canister_http_request.body.unwrap_or_default(),
+            body: canister_http_request.body,
             socks_proxy_allowed: false,
         };
         let request = Request::new(canister_http_request);

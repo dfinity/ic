@@ -748,7 +748,9 @@ pub struct RawCanisterHttpRequest {
     pub http_method: CanisterHttpMethod,
     pub url: String,
     pub headers: Vec<CanisterHttpHeader>,
-    pub body: Option<Vec<u8>>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
     pub max_response_bytes: Option<u64>,
 }
 
@@ -759,7 +761,9 @@ pub struct CanisterHttpRequest {
     pub http_method: CanisterHttpMethod,
     pub url: String,
     pub headers: Vec<CanisterHttpHeader>,
-    pub body: Option<Vec<u8>>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
     pub max_response_bytes: Option<u64>,
 }
 
@@ -799,6 +803,8 @@ impl From<CanisterHttpRequest> for RawCanisterHttpRequest {
 pub struct CanisterHttpReply {
     pub status: u16,
     pub headers: Vec<CanisterHttpHeader>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub body: Vec<u8>,
 }
 
