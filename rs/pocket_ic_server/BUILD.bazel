@@ -81,6 +81,7 @@ LIB_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
+    "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/types/types",
     "@crate_index//:candid",

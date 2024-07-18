@@ -4826,6 +4826,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
+name = "humantime-serde"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57a3db5ea5923d99402c94e9feb261dc5ee9b4efa158b0315f788cf549cc200c"
+dependencies = [
+ "humantime",
+ "serde",
+]
+
+[[package]]
 name = "hyper"
 version = "0.14.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9512,6 +9522,7 @@ dependencies = [
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-governance-api",
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
  "ic-protobuf",
@@ -11775,8 +11786,9 @@ dependencies = [
  "hex",
  "http 0.2.12",
  "humantime",
+ "humantime-serde",
  "hyper 0.14.26",
- "hyper-rustls 0.24.2",
+ "hyper-rustls 0.27.1",
  "ic-agent",
  "ic-artifact-pool",
  "ic-base-types",
@@ -15117,6 +15129,7 @@ name = "orchestrator"
 version = "0.9.0"
 dependencies = [
  "async-trait",
+ "backoff",
  "candid",
  "clap 3.2.25",
  "exec",
@@ -19075,10 +19088,12 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-xrc-types",
+ "reqwest 0.12.5",
  "serde",
  "serde_json",
  "slog",
  "tests",
+ "url",
  "xrc-mock",
 ]
 
