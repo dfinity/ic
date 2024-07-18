@@ -11,7 +11,17 @@ Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.
 ---
 
 ## Motivation
-THIS MUST BE FILLED OUT
+
+This upgrades the ledger suite orchestrator and all managed ledger suites to the latest version.
+
+The motivation to upgrade the orchestrator are mainly the following points:
+1. Add logic to upgrade managed canisters.
+2. Simplify upgrade arguments to add new ckERC20 tokens.
+
+The motivation to upgrade all ledger suites is as follows:
+1. Add various metrics to the ledger (number of instructions used during upgrades and the number of approvals).
+
+Upgrading the corresponding index and archive canisters of all managed ledger suites, while not strictly necessary, simplifies version management by ensuring that all canisters use the code from the same git commit.
 
 
 ## Upgrade args
@@ -116,4 +126,15 @@ git fetch
 git checkout de29a1a55b589428d173b31cdb8cec0923245657
 ./gitlab-ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/ic-ledger-suite-orchestrator-canister.wasm.gz
+```
+
+Verify that the hash of the gzipped WASM for the ledger, index and archive match the proposed hash.
+
+```
+git fetch
+git checkout de29a1a55b589428d173b31cdb8cec0923245657
+./gitlab-ci/container/build-ic.sh -c
+sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
+sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
+sha256sum ./artifacts/canisters/ic-icrc1-archive-u256.wasm.gz
 ```
