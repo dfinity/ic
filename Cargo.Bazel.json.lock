@@ -1,5 +1,5 @@
 {
-  "checksum": "df59444ac1fcf04a842b2c05db405baa72c4b508a67c8ba0a6190c69040f0b4b",
+  "checksum": "8c41162ed08c921a9890d37bafb52e20c311abaa45d03d38d14b2847f516a4af",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -377,7 +377,7 @@
               "target": "mime"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -992,7 +992,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -2646,7 +2646,7 @@
               "alias": "dep_num_traits"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -4177,7 +4177,7 @@
               "target": "mime"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -4367,7 +4367,7 @@
               "target": "mime"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -11872,7 +11872,7 @@
               "target": "http"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -11900,11 +11900,11 @@
               "target": "thiserror"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
-              "id": "uuid 1.5.0",
+              "id": "uuid 1.10.0",
               "target": "uuid"
             }
           ],
@@ -12759,7 +12759,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -16101,7 +16101,7 @@
         "deps": {
           "common": [
             {
-              "id": "uuid 1.5.0",
+              "id": "uuid 1.10.0",
               "target": "uuid"
             }
           ],
@@ -17145,7 +17145,7 @@
               "target": "flate2"
             },
             {
-              "id": "form_urlencoded 1.2.0",
+              "id": "form_urlencoded 1.2.1",
               "target": "form_urlencoded"
             },
             {
@@ -18084,11 +18084,11 @@
               "target": "turmoil"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
-              "id": "uuid 1.5.0",
+              "id": "uuid 1.10.0",
               "target": "uuid"
             },
             {
@@ -22189,14 +22189,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "form_urlencoded 1.2.0": {
+    "form_urlencoded 1.2.1": {
       "name": "form_urlencoded",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "package_url": "https://github.com/servo/rust-url",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/form_urlencoded/1.2.0/download",
-          "sha256": "a62bc1cf6f830c2ec14a513a9fb124d0a213a629668a4186f329db21fe045652"
+          "url": "https://static.crates.io/crates/form_urlencoded/1.2.1/download",
+          "sha256": "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
         }
       },
       "targets": [
@@ -22229,14 +22229,14 @@
         "deps": {
           "common": [
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.2.0"
+        "version": "1.2.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -26041,7 +26041,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -26217,7 +26217,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "form_urlencoded 1.2.0",
+              "id": "form_urlencoded 1.2.1",
               "target": "form_urlencoded"
             },
             {
@@ -27596,7 +27596,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -27811,7 +27811,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -30648,14 +30648,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "idna 0.4.0": {
+    "idna 0.5.0": {
       "name": "idna",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "package_url": "https://github.com/servo/rust-url/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/idna/0.4.0/download",
-          "sha256": "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c"
+          "url": "https://static.crates.io/crates/idna/0.5.0/download",
+          "sha256": "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
         }
       },
       "targets": [
@@ -30699,7 +30699,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.0"
+        "version": "0.5.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -33545,7 +33545,7 @@
               "target": "chrono"
             },
             {
-              "id": "form_urlencoded 1.2.0",
+              "id": "form_urlencoded 1.2.1",
               "target": "form_urlencoded"
             },
             {
@@ -37445,7 +37445,7 @@
               "target": "tower_http"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -38293,7 +38293,7 @@
               "target": "triomphe"
             },
             {
-              "id": "uuid 1.5.0",
+              "id": "uuid 1.10.0",
               "target": "uuid"
             }
           ],
@@ -41816,7 +41816,7 @@
               "target": "opentelemetry_api"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -41921,7 +41921,7 @@
               "target": "ordered_float"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -42037,7 +42037,7 @@
               "target": "ordered_float"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -42156,7 +42156,7 @@
               "target": "ordered_float"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -43760,14 +43760,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "percent-encoding 2.3.0": {
+    "percent-encoding 2.3.1": {
       "name": "percent-encoding",
-      "version": "2.3.0",
+      "version": "2.3.1",
       "package_url": "https://github.com/servo/rust-url/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/percent-encoding/2.3.0/download",
-          "sha256": "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
+          "url": "https://static.crates.io/crates/percent-encoding/2.3.1/download",
+          "sha256": "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
         }
       },
       "targets": [
@@ -43798,7 +43798,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.3.0"
+        "version": "2.3.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -51490,7 +51490,7 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -51533,7 +51533,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "percent-encoding 2.3.0",
+                "id": "percent-encoding 2.3.1",
                 "target": "percent_encoding"
               },
               {
@@ -51806,7 +51806,7 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -51857,7 +51857,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "percent-encoding 2.3.0",
+                "id": "percent-encoding 2.3.1",
                 "target": "percent_encoding"
               },
               {
@@ -57620,7 +57620,7 @@
         "deps": {
           "common": [
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -57685,7 +57685,7 @@
               "target": "futures"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -57963,7 +57963,7 @@
         "deps": {
           "common": [
             {
-              "id": "form_urlencoded 1.2.0",
+              "id": "form_urlencoded 1.2.1",
               "target": "form_urlencoded"
             },
             {
@@ -62052,7 +62052,7 @@
               "target": "stable_deref_trait"
             },
             {
-              "id": "uuid 1.5.0",
+              "id": "uuid 1.10.0",
               "target": "uuid"
             }
           ],
@@ -65738,7 +65738,7 @@
               "target": "hyper_timeout"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -66122,7 +66122,7 @@
               "target": "tracing"
             },
             {
-              "id": "uuid 1.5.0",
+              "id": "uuid 1.10.0",
               "target": "uuid"
             }
           ],
@@ -66249,7 +66249,7 @@
               "target": "tracing"
             },
             {
-              "id": "uuid 1.5.0",
+              "id": "uuid 1.10.0",
               "target": "uuid"
             }
           ],
@@ -67567,7 +67567,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -67819,7 +67819,7 @@
               "target": "thiserror"
             },
             {
-              "id": "url 2.4.1",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
@@ -69041,14 +69041,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "url 2.4.1": {
+    "url 2.5.2": {
       "name": "url",
-      "version": "2.4.1",
+      "version": "2.5.2",
       "package_url": "https://github.com/servo/rust-url",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/url/2.4.1/download",
-          "sha256": "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
+          "url": "https://static.crates.io/crates/url/2.5.2/download",
+          "sha256": "22784dbdf76fdde8af1aeda5622b546b422b6fc585325248a2bf9f5e41e94d6c"
         }
       },
       "targets": [
@@ -69080,15 +69080,15 @@
         "deps": {
           "common": [
             {
-              "id": "form_urlencoded 1.2.0",
+              "id": "form_urlencoded 1.2.1",
               "target": "form_urlencoded"
             },
             {
-              "id": "idna 0.4.0",
+              "id": "idna 0.5.0",
               "target": "idna"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -69099,7 +69099,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.4.1"
+        "version": "2.5.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69268,14 +69268,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "uuid 1.5.0": {
+    "uuid 1.10.0": {
       "name": "uuid",
-      "version": "1.5.0",
+      "version": "1.10.0",
       "package_url": "https://github.com/uuid-rs/uuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/uuid/1.5.0/download",
-          "sha256": "88ad59a7560b41a70d191093a945f0b87bc1deeda46fb237479708a1d6b6cdfc"
+          "url": "https://static.crates.io/crates/uuid/1.10.0/download",
+          "sha256": "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
         }
       },
       "targets": [
@@ -69300,7 +69300,6 @@
         "crate_features": {
           "common": [
             "default",
-            "getrandom",
             "rng",
             "serde",
             "std",
@@ -69322,7 +69321,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.5.0"
+        "version": "1.10.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -70051,7 +70050,7 @@
               "target": "multer"
             },
             {
-              "id": "percent-encoding 2.3.0",
+              "id": "percent-encoding 2.3.1",
               "target": "percent_encoding"
             },
             {
@@ -77848,7 +77847,7 @@
     "eyre 0.6.8",
     "ff 0.12.1",
     "flate2 1.0.30",
-    "form_urlencoded 1.2.0",
+    "form_urlencoded 1.2.1",
     "fs_extra 1.3.0",
     "futures 0.3.30",
     "futures-util 0.3.30",
@@ -78089,8 +78088,8 @@
     "tracing-subscriber 0.3.18",
     "trust-dns-resolver 0.22.0",
     "turmoil 0.6.2",
-    "url 2.4.1",
-    "uuid 1.5.0",
+    "url 2.5.2",
+    "uuid 1.10.0",
     "vsock 0.4.0",
     "walkdir 2.3.3",
     "walrus 0.19.0",
