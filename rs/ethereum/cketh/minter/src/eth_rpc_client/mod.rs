@@ -560,7 +560,7 @@ impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> 
         }
 
         fn map_single_log(log: EvmLogEntry) -> Result<LogEntry, String> {
-            Ok::<LogEntry, String>(LogEntry {
+            Ok(LogEntry {
                 address: Address::from_str(&log.address)?,
                 topics: log
                     .topics
