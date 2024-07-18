@@ -507,6 +507,8 @@ message CfNeuron {
   // The amount of ICP that the Neurons' Fund invests associated
   // with this neuron.
   uint64 amount_icp_e8s = 2;
+  // The principals that can vote, propose, and follow on behalf of this neuron.
+  optional ic_nervous_system.pb.v1.Principals hotkeys = 4;
 
   // Idempotency flag indicating whether the neuron recipes have been created for
   // the CfNeuron. When set to true, it signifies that the action of creating neuron
@@ -517,10 +519,15 @@ message CfNeuron {
 
 // Represents a Neurons' Fund participant, possibly with several neurons.
 message CfParticipant {
-  // The principal that can vote on behalf of these Neurons' Fund neurons.
-  string hotkey_principal = 1;
+  // The principal that can manage this neuron.
+  optional ic_base_types.pb.v1.PrincipalId controller = 6;
   // Information about the participating neurons. Must not be empty.
   repeated CfNeuron cf_neurons = 2;
+
+  // The principal that can vote on behalf of these Neurons' Fund neurons.
+  // Deprecated. Please use `controller` instead (not `hotkeys`!)
+  // TODO(NNS1-3198): Remove
+  string hotkey_principal = 1 [deprecated = true];
 }
 
 // The construction parameters for the basket of neurons created for all
@@ -681,8 +688,16 @@ message DirectInvestment {
 // Information about a Neurons' Fund investment. The NNS Governance
 // canister is the controller of these neurons.
 message CfInvestment {
-  string hotkey_principal = 1;
+  // The principal that can manage this neuron.
+  optional ic_base_types.pb.v1.PrincipalId controller = 6;
+  // The principals that can vote, propose, and follow on behalf of this neuron.
+  optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
+
   fixed64 nns_neuron_id = 2;
+
+  // Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+  // TODO(NNS1-3198): Remove
+  string hotkey_principal = 1 [deprecated = true];
 }
 
 message TimeWindow {
@@ -1185,6 +1200,7 @@ message SettleNeuronsFundParticipationResponse {
     optional bool is_capped = 4;
 
     // Deprecated. Please use `controller` instead (not `hotkeys`!)
+    // TODO(NNS1-3198): Remove
     optional string hotkey_principal = 3 [deprecated = true];
   }
 

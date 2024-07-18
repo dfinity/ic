@@ -42,10 +42,12 @@ type CanisterSummary = record {
 };
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
+  hotkeys : opt Principals;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
 type CfParticipant = record {
+  controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
