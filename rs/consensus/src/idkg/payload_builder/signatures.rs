@@ -11,7 +11,7 @@ use ic_types::{
     Time,
 };
 
-use crate::{ecdsa::metrics::IDkgPayloadMetrics, ecdsa::signer::ThresholdSignatureBuilder};
+use crate::{idkg::metrics::IDkgPayloadMetrics, idkg::signer::ThresholdSignatureBuilder};
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message
@@ -172,7 +172,7 @@ mod tests {
         Height,
     };
 
-    use crate::ecdsa::test_utils::{
+    use crate::idkg::test_utils::{
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
         fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
         fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,

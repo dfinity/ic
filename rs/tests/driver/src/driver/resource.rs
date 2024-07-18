@@ -44,14 +44,14 @@ pub struct ResourceRequest {
     pub vm_configs: Vec<VmSpec>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct DiskImage {
     pub image_type: ImageType,
     pub url: Url,
     pub sha256: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub enum ImageType {
     IcOsImage,
     PrometheusImage,

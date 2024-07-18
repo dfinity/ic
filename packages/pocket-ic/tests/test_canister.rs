@@ -3,7 +3,11 @@ use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
 };
-use ic_cdk::update;
+use ic_cdk::api::management_canister::http_request::{
+    http_request, CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs,
+    TransformContext, TransformFunc,
+};
+use ic_cdk::{query, update};
 
 #[update]
 async fn ecdsa_public_key(
@@ -44,6 +48,49 @@ async fn sign_with_ecdsa(
         .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
         .0
         .signature)
+}
+
+#[update]
+async fn canister_http() -> HttpResponse {
+    let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
+        url: "https://example.com".to_string(),
+        max_response_bytes: None,
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        transform: None,
+    };
+    let cycles = 20_849_238_800; // magic number derived from the error message when setting this to zero
+    http_request(arg, cycles).await.unwrap().0
+}
+
+#[query]
+async fn transform(transform_args: TransformArgs) -> HttpResponse {
+    let mut resp = transform_args.response;
+    resp.headers = vec![];
+    resp.body = transform_args.context;
+    resp
+}
+
+#[update]
+async fn canister_http_with_transform() -> HttpResponse {
+    let context = b"this is my transform context".to_vec();
+    let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
+        url: "https://example.com".to_string(),
+        max_response_bytes: None,
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                method: "transform".to_string(),
+                principal: ic_cdk::id(),
+            }),
+            context,
+        }),
+    };
+    let cycles = 20_849_431_200; // magic number derived from the error message when setting this to zero
+    http_request(arg, cycles).await.unwrap().0
 }
 
 fn main() {}

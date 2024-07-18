@@ -23,5 +23,7 @@ pub static TNET_STATIC_LABELS: Lazy<BTreeMap<String, String>> =
     Lazy::new(|| BTreeMap::from([("app".to_string(), "tnet".to_string())]));
 
 pub static TNET_NAME_LABEL: &str = "tnet.internetcomputer.org/name";
+pub static TNET_PLAYNET_LABEL: &str = "tnet.internetcomputer.org/playnet";
+pub static TNET_PLAYNET_SECRET: &str = "playnet-tls";
 
 pub static TNET_TERMINATE_TIME_ANNOTATION: &str = "tnet.internetcomputer.org/terminate-time";

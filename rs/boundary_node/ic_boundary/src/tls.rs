@@ -402,6 +402,7 @@ pub async fn load_or_create_acme_account(
         return Ok(account);
     }
 
+    warn!("TLS: Creating new ACME account");
     // Create new account
     let account = Account::create_with_http(
         &NewAccount {
@@ -453,6 +454,8 @@ async fn prepare_acme_provisioner(
     tls_loader: Loader,
     token_owner: Arc<TokenOwner>,
 ) -> Result<Box<dyn Provision>, Error> {
+    warn!("TLS: Using ACME provisioner");
+
     // ACME client
     let acme_http_client = hyper::Client::builder().build(
         hyper_rustls::HttpsConnectorBuilder::new()
@@ -470,6 +473,7 @@ async fn prepare_acme_provisioner(
     .await
     .context("failed to load acme credentials")?;
 
+    warn!("TLS: Trying to provision certificate");
     let acme_client = Acme::new(acme_account);
 
     let acme_order = acme_client.clone();
@@ -501,7 +505,7 @@ async fn prepare_acme_provisioner(
     let tls_provisioner = WithLoad(tls_provisioner, tls_loader, renew_before);
     let tls_provisioner = Box::new(tls_provisioner);
 
-    warn!("TLS: Using ACME provisioner");
+    warn!("TLS: Successfully set up ACME provisioner");
     Ok(tls_provisioner)
 }
 

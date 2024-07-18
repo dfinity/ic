@@ -1,5 +1,5 @@
 {
-  "checksum": "2d859c6729a6586b14b2db3baa7a38bdd3a795a4efb82ff4e2228ce195768e74",
+  "checksum": "7eeb9e865201c6532b062513a6de46194ea2bb1f0b44773e7c60bf73f3c2ef6a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17203,10 +17203,6 @@
               "target": "dyn_clone"
             },
             {
-              "id": "ed25519-consensus 2.1.0",
-              "target": "ed25519_consensus"
-            },
-            {
               "id": "ed25519-dalek 2.1.1",
               "target": "ed25519_dalek"
             },
@@ -17323,6 +17319,10 @@
             {
               "id": "humantime 2.1.0",
               "target": "humantime"
+            },
+            {
+              "id": "humantime-serde 1.1.1",
+              "target": "humantime_serde"
             },
             {
               "id": "hyper 0.14.27",
@@ -26377,6 +26377,58 @@
         "version": "2.1.0"
       },
       "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "humantime-serde 1.1.1": {
+      "name": "humantime-serde",
+      "version": "1.1.1",
+      "package_url": "https://github.com/jean-airoldie/humantime-serde",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/humantime-serde/1.1.1/download",
+          "sha256": "57a3db5ea5923d99402c94e9feb261dc5ee9b4efa158b0315f788cf549cc200c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "humantime_serde",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "humantime_serde",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "humantime 2.1.0",
+              "target": "humantime"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.1.1"
+      },
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -76916,7 +76968,6 @@
     "cvt 0.1.2",
     "dashmap 5.5.3",
     "dyn-clone 1.0.14",
-    "ed25519-consensus 2.1.0",
     "ed25519-dalek 2.1.1",
     "educe 0.4.23",
     "either 1.9.0",
@@ -76947,6 +76998,7 @@
     "http-body-util 0.1.0",
     "httptest 0.15.4",
     "humantime 2.1.0",
+    "humantime-serde 1.1.1",
     "hyper 0.14.27",
     "hyper 1.4.1",
     "hyper-rustls 0.24.2",

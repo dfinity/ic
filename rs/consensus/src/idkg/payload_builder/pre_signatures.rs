@@ -1,6 +1,6 @@
 use super::IDkgPayloadError;
 
-use crate::ecdsa::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -447,7 +447,7 @@ pub fn new_random_unmasked_config(
 
 #[cfg(test)]
 pub(super) mod test_utils {
-    use crate::ecdsa::test_utils::IDkgPayloadTestHelper;
+    use crate::idkg::test_utils::IDkgPayloadTestHelper;
 
     use super::*;
 
@@ -532,7 +532,7 @@ pub(super) mod tests {
     use super::test_utils::*;
     use super::*;
 
-    use crate::ecdsa::test_utils::{
+    use crate::idkg::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_schnorr_key_id, fake_schnorr_master_public_key_id,
