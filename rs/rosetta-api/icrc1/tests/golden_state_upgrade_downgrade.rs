@@ -52,8 +52,8 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
     let ledger_wasm = ledger_wasm();
     let ledger_wasm_u256 = ledger_wasm_u256();
 
-    let canisters = vec![CK_BTC_LEDGER];
-    let canisters_u256 = vec![
+    let canister_ids_and_names = vec![CK_BTC_LEDGER];
+    let canister_ids_and_names_u256 = vec![
         CK_ETH_LEDGER,
         CK_USDC_LEDGER,
         CK_LINK_LEDGER,
@@ -64,17 +64,17 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
-    for canister in canisters {
-        upgrade_canister(&state_machine, canister, ledger_wasm.clone());
+    for canister_id_and_name in canister_ids_and_names {
+        upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        upgrade_canister(&state_machine, canister, bump_gzip_timestamp(&ledger_wasm));
+        upgrade_canister(&state_machine, canister_id_and_name, bump_gzip_timestamp(&ledger_wasm));
     }
-    for canister_u256 in canisters_u256 {
-        upgrade_canister(&state_machine, canister_u256, ledger_wasm_u256.clone());
+    for canister_id_and_name_u256 in canister_ids_and_names_u256 {
+        upgrade_canister(&state_machine, canister_id_and_name_u256, ledger_wasm_u256.clone());
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
         upgrade_canister(
             &state_machine,
-            canister_u256,
+            canister_id_and_name_u256,
             bump_gzip_timestamp(&ledger_wasm_u256),
         );
     }
@@ -84,7 +84,7 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     let ledger_wasm = ledger_wasm();
 
-    let canisters = vec![
+    let canister_id_and_names = vec![
         DRAGGINZ,
         OPENCHAT,
         ICPSWAP,
@@ -115,10 +115,10 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_sns_state_or_panic();
 
-    for canister in canisters {
-        upgrade_canister(&state_machine, canister, ledger_wasm.clone());
+    for canister_id_and_name in canister_id_and_names {
+        upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        upgrade_canister(&state_machine, canister, bump_gzip_timestamp(&ledger_wasm));
+        upgrade_canister(&state_machine, canister_id_and_name, bump_gzip_timestamp(&ledger_wasm));
     }
 }
 
