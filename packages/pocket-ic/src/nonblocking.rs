@@ -1187,6 +1187,10 @@ impl PocketIc {
     }
 
     /// Get the pending canister HTTP outcalls.
+    /// Note that, unless a PocketIC instance is in auto progress mode,
+    /// a response to the pending canister HTTP outcalls
+    /// must be produced by the test driver and passed on to the PocketIC instace
+    /// using `PocketIc::mock_canister_http_response`.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
     pub async fn get_canister_http(&self) -> Vec<CanisterHttpRequest> {
         let endpoint = "read/get_canister_http";
