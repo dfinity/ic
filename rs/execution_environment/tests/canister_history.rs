@@ -1058,13 +1058,18 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
 
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.execute_ingress_as(
-        ucan.into(),
-        ic00::IC_00,
-        Method::InstallCode,
-        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
-    )
-    .unwrap();
+    let wasm_result = env
+        .execute_ingress_as(
+            ucan.into(),
+            ic00::IC_00,
+            Method::InstallCode,
+            InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
+        )
+        .unwrap();
+    match wasm_result {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(reason) => panic!("install_code call rejected: {}", reason),
+    };
     // Check canister history.
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
