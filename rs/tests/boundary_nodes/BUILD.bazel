@@ -24,6 +24,7 @@ system_test(
     deps = DEPENDENCIES + ["//rs/tests"],
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
+        "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
     },
 )
 
@@ -40,6 +41,7 @@ system_test(
     deps = DEPENDENCIES + ["//rs/tests"],
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
+        "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
     },
 )
 
