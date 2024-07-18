@@ -1350,18 +1350,8 @@ mod verify_transcript {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in all_canister_threshold_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                generate_ecdsa_presig_quadruple(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    alg,
-                    &key_transcript,
-                    use_random_unmasked_kappa,
-                    rng,
-                );
-            }
+            let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+            generate_ecdsa_presig_quadruple(&env, &dealers, &receivers, alg, &key_transcript, rng);
         }
     }
 
@@ -1995,82 +1985,79 @@ mod load_transcript_with_openings {
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let random_sharing_params =
-                    setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
-                let random_sharing_transcript = env
-                    .nodes
-                    .run_idkg_and_create_and_verify_transcript(&random_sharing_params, rng);
-                let unmasked_key_params = build_params_from_previous(
-                    random_sharing_params,
-                    IDkgTranscriptOperation::ReshareOfMasked(random_sharing_transcript),
-                    rng,
-                );
-                let mut key_transcript = env
-                    .nodes
-                    .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng);
-                let reconstruction_threshold =
-                    usize::try_from(key_transcript.reconstruction_threshold().get())
-                        .expect("invalid number");
-                let number_of_openings = reconstruction_threshold;
+            let random_sharing_params =
+                setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let random_sharing_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&random_sharing_params, rng);
+            let unmasked_key_params = build_params_from_previous(
+                random_sharing_params,
+                IDkgTranscriptOperation::ReshareOfMasked(random_sharing_transcript),
+                rng,
+            );
+            let mut key_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng);
+            let reconstruction_threshold =
+                usize::try_from(key_transcript.reconstruction_threshold().get())
+                    .expect("invalid number");
+            let number_of_openings = reconstruction_threshold;
 
-                let (complainer, complaint) = corrupt_random_dealing_and_generate_complaint(
-                    &mut key_transcript,
-                    &unmasked_key_params,
-                    &env,
-                    rng,
-                );
-                let complaint_with_openings = generate_and_verify_openings_for_complaint(
-                    number_of_openings,
-                    &key_transcript,
-                    &env,
-                    complainer,
-                    complaint,
-                );
-                complainer
-                    .load_transcript_with_openings(&key_transcript, &complaint_with_openings)
-                    .expect("failed to load transcript with openings");
-                let quadruple = generate_ecdsa_presig_quadruple(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    alg,
-                    &key_transcript,
-                    use_random_unmasked_kappa,
-                    rng,
-                );
-                let inputs = {
-                    let derivation_path = ExtendedDerivationPath {
-                        caller: PrincipalId::new_user_test_id(1),
-                        derivation_path: vec![],
-                    };
-
-                    let hashed_message = rng.gen::<[u8; 32]>();
-                    let seed = Randomness::from(rng.gen::<[u8; 32]>());
-
-                    ThresholdEcdsaSigInputs::new(
-                        &derivation_path,
-                        &hashed_message,
-                        seed,
-                        quadruple,
-                        key_transcript.clone(),
-                    )
-                    .expect("failed to create signature inputs")
+            let (complainer, complaint) = corrupt_random_dealing_and_generate_complaint(
+                &mut key_transcript,
+                &unmasked_key_params,
+                &env,
+                rng,
+            );
+            let complaint_with_openings = generate_and_verify_openings_for_complaint(
+                number_of_openings,
+                &key_transcript,
+                &env,
+                complainer,
+                complaint,
+            );
+            complainer
+                .load_transcript_with_openings(&key_transcript, &complaint_with_openings)
+                .expect("failed to load transcript with openings");
+            let quadruple = generate_ecdsa_presig_quadruple(
+                &env,
+                &dealers,
+                &receivers,
+                alg,
+                &key_transcript,
+                rng,
+            );
+            let inputs = {
+                let derivation_path = ExtendedDerivationPath {
+                    caller: PrincipalId::new_user_test_id(1),
+                    derivation_path: vec![],
                 };
-                complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_unmasked());
-                complainer.load_transcript_or_panic(inputs.presig_quadruple().lambda_masked());
-                complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
-                complainer.load_transcript_or_panic(inputs.presig_quadruple().key_times_lambda());
 
-                let sig_result = complainer.sign_share(&inputs).expect("signing failed");
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers_excluding(complainer, &receivers, rng);
+                let hashed_message = rng.gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
-                verifier
-                    .verify_sig_share(complainer.id(), &inputs, &sig_result)
-                    .expect("verification failed");
-            }
+                ThresholdEcdsaSigInputs::new(
+                    &derivation_path,
+                    &hashed_message,
+                    seed,
+                    quadruple,
+                    key_transcript.clone(),
+                )
+                .expect("failed to create signature inputs")
+            };
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_unmasked());
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().lambda_masked());
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().key_times_lambda());
+
+            let sig_result = complainer.sign_share(&inputs).expect("signing failed");
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers_excluding(complainer, &receivers, rng);
+
+            verifier
+                .verify_sig_share(complainer.id(), &inputs, &sig_result)
+                .expect("verification failed");
         }
     }
 

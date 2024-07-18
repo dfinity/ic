@@ -1373,14 +1373,26 @@ enum Scope {
     BlockEnd,
 }
 
+// Represents the type of the cost operand on the stack.
+// Needed to determine the correct instruction to decrement the instruction counter.
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum CostOperandOnStack {
+    X32Bit,
+    X64Bit,
+}
 // Describes how to calculate the instruction cost at this injection point.
 // `StaticCost` injection points contain information about the cost of the
 // following basic block. `DynamicCost` injection points assume there is an i32
 // on the stack which should be decremented from the instruction counter.
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum InjectionPointCostDetail {
-    StaticCost { scope: Scope, cost: u64 },
-    DynamicCost,
+    StaticCost {
+        scope: Scope,
+        cost: u64,
+    },
+    DynamicCost {
+        operand_on_stack: CostOperandOnStack,
+    },
 }
 
 impl InjectionPointCostDetail {
@@ -1389,7 +1401,7 @@ impl InjectionPointCostDetail {
     fn increment_cost(&mut self, additional_cost: u64) {
         match self {
             Self::StaticCost { scope: _, cost } => *cost += additional_cost,
-            Self::DynamicCost => {}
+            Self::DynamicCost { .. } => {}
         }
     }
 }
@@ -1409,9 +1421,9 @@ impl InjectionPoint {
         }
     }
 
-    fn new_dynamic_cost(position: usize) -> Self {
+    fn new_dynamic_cost(position: usize, operand_on_stack: CostOperandOnStack) -> Self {
         InjectionPoint {
-            cost_detail: InjectionPointCostDetail::DynamicCost,
+            cost_detail: InjectionPointCostDetail::DynamicCost { operand_on_stack },
             position,
         }
     }
@@ -1434,7 +1446,7 @@ fn inject_metering(
 ) {
     let points = match metering_type {
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections(code),
+        MeteringType::New => injections(code, mem_type),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1442,7 +1454,7 @@ fn inject_metering(
             cost: _,
         } => true,
         InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
-        InjectionPointCostDetail::DynamicCost => true,
+        InjectionPointCostDetail::DynamicCost { .. } => true,
     });
     let orig_elems = code;
     let mut elems: Vec<Operator> = Vec::new();
@@ -1481,24 +1493,24 @@ fn inject_metering(
                     ]);
                 }
             }
-            InjectionPointCostDetail::DynamicCost => {
-                match mem_type {
-                    WasmMemoryType::Wasm32 => {
+            InjectionPointCostDetail::DynamicCost { operand_on_stack } => {
+                match operand_on_stack {
+                    CostOperandOnStack::X64Bit => {
+                        elems.extend_from_slice(&[Call {
+                            function_index: export_data_module.decr_instruction_counter_fn,
+                        }]);
+                    }
+                    CostOperandOnStack::X32Bit => {
                         elems.extend_from_slice(&[
                             I64ExtendI32U,
                             Call {
                                 function_index: export_data_module.decr_instruction_counter_fn,
                             },
-                            // decr_instruction_counter returns it's argument unchanged,
+                            // decr_instruction_counter returns its argument unchanged,
                             // so we can convert back to I32 without worrying about
                             // overflows.
                             I32WrapI64,
                         ]);
-                    }
-                    WasmMemoryType::Wasm64 => {
-                        elems.extend_from_slice(&[Call {
-                            function_index: export_data_module.decr_instruction_counter_fn,
-                        }]);
                     }
                 }
             }
@@ -1779,7 +1791,7 @@ fn inject_try_grow_wasm_memory(
 // with no branches) and before each bulk memory instruction. An injection point
 // contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not.
-fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
+fn injections(code: &[Operator], mem_type: WasmMemoryType) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
@@ -1817,13 +1829,29 @@ fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
-            MemoryFill { .. }
-            | MemoryCopy { .. }
-            | MemoryInit { .. }
-            | TableCopy { .. }
-            | TableInit { .. }
-            | TableFill { .. } => {
-                res.push(InjectionPoint::new_dynamic_cost(position));
+            MemoryFill { .. } | MemoryCopy { .. } | TableCopy { .. } | TableFill { .. } => {
+                match mem_type {
+                    WasmMemoryType::Wasm32 => {
+                        // These ops in Wasm32 will need to extend the i32 to i64.
+                        res.push(InjectionPoint::new_dynamic_cost(
+                            position,
+                            CostOperandOnStack::X32Bit,
+                        ));
+                    }
+                    WasmMemoryType::Wasm64 => {
+                        res.push(InjectionPoint::new_dynamic_cost(
+                            position,
+                            CostOperandOnStack::X64Bit,
+                        ));
+                    }
+                }
+            }
+            // MemoryInit and TableInit have i32 arguments even in 64-bit mode.
+            MemoryInit { .. } | TableInit { .. } => {
+                res.push(InjectionPoint::new_dynamic_cost(
+                    position,
+                    CostOperandOnStack::X32Bit,
+                ));
             }
             // Nothing special to be done for other instructions.
             _ => (),
