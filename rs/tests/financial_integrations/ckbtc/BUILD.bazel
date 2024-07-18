@@ -25,7 +25,7 @@ system_test(
         NNS_CANISTER_RUNTIME_DEPS +
         CKBTC_RUNTIME_DEPS,
     env = {
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister.wasm)",
+        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
     },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
