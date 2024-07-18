@@ -3395,7 +3395,7 @@ fn test_icrc21_transfer_message(
     let expected_transfer_message = "# Approve the transfer of funds
 
 **Amount:**
-1.0 XTST
+0.01 XTST
 
 **From:**
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
@@ -3404,7 +3404,7 @@ d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.10101010101010101010101010101010101010101010
 6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
 
 **Fee:**
-0.001 XTST
+0.0001 XTST
 
 **Memo:**
 test_bytes";
@@ -3506,16 +3506,16 @@ djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.30303030303030303030303030303030303030303030
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
 
 **Requested withdrawal allowance:**
-1.0 XTST
+0.01 XTST
 
 **Current withdrawal allowance:**
-1.0 e8s XTST
+0.01 XTST
 
 **Expiration date:**
 Thu, 06 May 2021 20:17:10 +0000
 
 **Approval fee:**
-0.001 e8s XTST
+0.0001 XTST
 
 **Transaction fees to be paid by:**
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
@@ -3556,8 +3556,8 @@ test_bytes";
     );
     // When the expected allowance is not set, a warning should be displayed.
     let expected_message = expected_approve_message.replace(
-    "\n\n**Current withdrawal allowance:**\n1.0 XTST",
-    "\u{26A0} The allowance will be set to 1.0 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
+    "\n\n**Current withdrawal allowance:**\n0.01 XTST",
+    "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
 );
     assert_eq!(
         message, expected_message,
@@ -3657,13 +3657,13 @@ d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.10101010101010101010101010101010101010101010
 djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
 
 **Amount to withdraw:**
-1.0 XTST
+0.01 XTST
 
 **To:**
 6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
 
 **Fee paid by withdrawal account:**
-0.001 e8s XTST
+0.0001 XTST
 
 **Memo:**
 test_bytes";
