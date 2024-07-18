@@ -2287,12 +2287,18 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        let farm_base_url = env.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, log);
-        let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.infra_group_name;
-        farm.create_playnet_dns_records(&group_name, dns_records)
-            .expect("Failed to create playnet DNS records")
+        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
+            let farm_base_url = env.get_farm_url().unwrap();
+            let farm = Farm::new(farm_base_url, log);
+            let group_setup = GroupSetup::read_attribute(&env);
+            let group_name = group_setup.infra_group_name;
+            farm.create_playnet_dns_records(&group_name, dns_records)
+                .expect("Failed to create playnet DNS records")
+        } else {
+            let tnet = TNet::read_attribute(&env);
+            block_on(tnet.create_playnet_dns_records(dns_records))
+                .expect("Failed to acquire a certificate for a playnet")
+        }
     }
 }
 
@@ -2309,12 +2315,18 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
-        let farm_base_url = env.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, log);
-        let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.infra_group_name;
-        farm.acquire_playnet_certificate(&group_name)
-            .expect("Failed to acquire a certificate for a playnet")
+        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
+            let farm_base_url = env.get_farm_url().unwrap();
+            let farm = Farm::new(farm_base_url, log);
+            let group_setup = GroupSetup::read_attribute(&env);
+            let group_name = group_setup.infra_group_name;
+            farm.acquire_playnet_certificate(&group_name)
+                .expect("Failed to acquire a certificate for a playnet")
+        } else {
+            let tnet = TNet::from_env(&env);
+            block_on(tnet.acquire_playnet_certificate())
+                .expect("Failed to acquire a certificate for a playnet")
+        }
     }
 }
 
