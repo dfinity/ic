@@ -86,21 +86,6 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub is_halted: bool,
 
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_message: Option<u64>,
-
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_round: Option<u64>,
-
-    /// The maximum number of instructions an `install_code` message can
-    /// execute. See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_install_code: Option<u64>,
-
     /// Configuration for chain key:
     /// A list of chain key configurations to be requested from other subnets for this subnet,
     /// each with a subnet ID to request this key from.
@@ -303,11 +288,6 @@ impl ProposeToCreateSubnetCmd {
             start_as_nns: self.start_as_nns,
             subnet_type: self.subnet_type,
             is_halted: self.is_halted,
-            max_instructions_per_message: self.max_instructions_per_message.unwrap_or_default(),
-            max_instructions_per_round: self.max_instructions_per_round.unwrap_or_default(),
-            max_instructions_per_install_code: self
-                .max_instructions_per_install_code
-                .unwrap_or_default(),
             features: SubnetFeaturesPb::from(self.features.expect("features must be specified.")),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
@@ -377,9 +357,6 @@ mod tests {
             replica_version_id: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             initial_chain_key_configs_to_request: None,
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
