@@ -1,4 +1,5 @@
 use super::*;
+use ::rustls::{ClientConfig, ServerConfig};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
 use ic_logger::{debug, new_logger};
@@ -13,11 +14,7 @@ impl<CSP> TlsConfig for CryptoComponentImpl<CSP>
 where
     CSP: CryptoServiceProvider + Send + Sync,
 {
-    fn server_config(
-        &self,
-        allowed_clients: SomeOrAllNodes,
-        registry_version: RegistryVersion,
-    ) -> Result<::rustls::ServerConfig, TlsConfigError> {
+    fn server_config(&self, allowed_clients: SomeOrAllNodes) -> ServerConfig {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -26,7 +23,6 @@ where
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
             crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
         );
         let start_time = self.metrics.now();
@@ -35,27 +31,21 @@ where
             self.node_id,
             Arc::clone(&self.registry_client),
             allowed_clients,
-            registry_version,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsConfig,
             MetricsScope::Full,
             "server_config",
-            MetricsResult::from(&result),
+            MetricsResult::Ok,
             start_time,
         );
         debug!(logger;
             crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
         );
         result
     }
 
-    fn server_config_without_client_auth(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> Result<::rustls::ServerConfig, TlsConfigError> {
+    fn server_config_without_client_auth(&self) -> ServerConfig {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -64,36 +54,28 @@ where
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
             crypto.allowed_tls_clients => "all clients allowed",
         );
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::server_config_without_client_auth(
             &self.csp,
             self.node_id,
-            self.registry_client.as_ref(),
-            registry_version,
+            self.registry_client.clone(),
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsConfig,
             MetricsScope::Full,
             "server_config_without_client_auth",
-            MetricsResult::from(&result),
+            MetricsResult::Ok,
             start_time,
         );
         debug!(logger;
             crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
         );
         result
     }
 
-    fn client_config(
-        &self,
-        server: NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<::rustls::ClientConfig, TlsConfigError> {
+    fn client_config(&self, server: NodeId) -> ClientConfig {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -102,7 +84,6 @@ where
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
             crypto.tls_server => format!("{}", server),
         );
         let start_time = self.metrics.now();
@@ -111,19 +92,16 @@ where
             self.node_id,
             Arc::clone(&self.registry_client),
             server,
-            registry_version,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsConfig,
             MetricsScope::Full,
             "client_config",
-            MetricsResult::from(&result),
+            MetricsResult::Ok,
             start_time,
         );
         debug!(logger;
             crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
         );
         result
     }
@@ -192,11 +170,4 @@ impl From<RegistryClientError> for TlsCertFromRegistryError {
     fn from(registry_error: RegistryClientError) -> Self {
         TlsCertFromRegistryError::RegistryError(registry_error)
     }
-}
-
-fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
-    if let Some(error) = error_option {
-        return format!("{}", error);
-    }
-    "none".to_string()
 }

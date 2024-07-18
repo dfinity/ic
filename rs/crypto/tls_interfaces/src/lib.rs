@@ -144,11 +144,7 @@ pub trait TlsConfig {
     /// * If the secret key corresponding to the server certificate cannot be
     ///   found or is malformed in the server's secret key store. Note that this
     ///   is an error in the setup of the node and registry.
-    fn server_config(
-        &self,
-        allowed_clients: SomeOrAllNodes,
-        registry_version: RegistryVersion,
-    ) -> Result<ServerConfig, TlsConfigError>;
+    fn server_config(&self, allowed_clients: SomeOrAllNodes) -> ServerConfig;
 
     /// Generates a rustls server config that does not perform client authentication.
     ///
@@ -170,10 +166,7 @@ pub trait TlsConfig {
     /// * If the secret key corresponding to the server certificate cannot be
     ///   found or is malformed in the server's secret key store. Note that this
     ///   is an error in the setup of the node and registry.
-    fn server_config_without_client_auth(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> Result<ServerConfig, TlsConfigError>;
+    fn server_config_without_client_auth(&self) -> ServerConfig;
 
     /// Generates a rustls client config with an expected peer identity.
     ///
@@ -206,11 +199,7 @@ pub trait TlsConfig {
     /// * If the secret key corresponding to the client certificate cannot be
     ///   found or is malformed in the client's secret key store. Note that this
     ///   is an error in the setup of the node and registry.
-    fn client_config(
-        &self,
-        server: NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<ClientConfig, TlsConfigError>;
+    fn client_config(&self, server: NodeId) -> ClientConfig;
 }
 
 #[derive(Debug, Error)]
