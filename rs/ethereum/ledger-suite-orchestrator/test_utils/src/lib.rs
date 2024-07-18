@@ -8,7 +8,9 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds,
     OrchestratorArg, OrchestratorInfo, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator::state::{ArchiveWasm, IndexWasm, LedgerWasm, Wasm, WasmHash};
+use ic_ledger_suite_orchestrator::state::{
+    ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
+};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
 };
@@ -43,7 +45,7 @@ pub struct LedgerSuiteOrchestrator {
 
 impl Default for LedgerSuiteOrchestrator {
     fn default() -> Self {
-        Self::new(Arc::new(new_state_machine()), default_init_arg())
+        Self::new(Arc::new(new_state_machine()), default_init_arg()).register_embedded_wasms()
     }
 }
 
@@ -101,10 +103,33 @@ impl LedgerSuiteOrchestrator {
         self
     }
 
-    fn upgrade_ledger_suite_orchestrator_expecting_ok(self, upgrade_arg: &OrchestratorArg) -> Self {
+    pub fn upgrade_ledger_suite_orchestrator_expecting_ok(
+        self,
+        upgrade_arg: &OrchestratorArg,
+    ) -> Self {
         self.upgrade_ledger_suite_orchestrator_with_same_wasm(upgrade_arg)
             .expect("Failed to upgrade ledger suite orchestrator");
         self
+    }
+
+    pub fn register_embedded_wasms(self) -> Self {
+        self.upgrade_ledger_suite_orchestrator_expecting_ok(&OrchestratorArg::UpgradeArg(
+            UpgradeArg {
+                git_commit_hash: Some(GIT_COMMIT_HASH.to_string()),
+                ledger_compressed_wasm_hash: None,
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: None,
+                cycles_management: None,
+            },
+        ))
+    }
+
+    pub fn embedded_ledger_suite_version(&self) -> LedgerSuiteVersion {
+        LedgerSuiteVersion {
+            ledger_compressed_wasm_hash: self.embedded_ledger_wasm_hash.clone(),
+            index_compressed_wasm_hash: self.embedded_index_wasm_hash.clone(),
+            archive_compressed_wasm_hash: self.embedded_archive_wasm_hash.clone(),
+        }
     }
 
     pub fn upgrade_ledger_suite_orchestrator_with_same_wasm(
@@ -356,36 +381,14 @@ pub fn tweak_ledger_suite_wasms() -> (LedgerWasm, IndexWasm, ArchiveWasm) {
     )
 }
 
-pub fn supported_erc20_tokens(
-    minter: Principal,
-    ledger_compressed_wasm_hash: WasmHash,
-    index_compressed_wasm_hash: WasmHash,
-) -> Vec<AddErc20Arg> {
-    vec![
-        usdc(
-            minter,
-            ledger_compressed_wasm_hash.clone(),
-            index_compressed_wasm_hash.clone(),
-        ),
-        usdt(
-            minter,
-            ledger_compressed_wasm_hash,
-            index_compressed_wasm_hash,
-        ),
-    ]
+pub fn supported_erc20_tokens(minter: Principal) -> Vec<AddErc20Arg> {
+    vec![usdc(minter), usdt(minter)]
 }
 
-pub fn usdc(
-    minter: Principal,
-    ledger_compressed_wasm_hash: WasmHash,
-    index_compressed_wasm_hash: WasmHash,
-) -> AddErc20Arg {
+pub fn usdc(minter: Principal) -> AddErc20Arg {
     AddErc20Arg {
         contract: usdc_erc20_contract(),
         ledger_init_arg: ledger_init_arg(minter, "Chain-Key USD Coin", "ckUSDC"),
-        git_commit_hash: GIT_COMMIT_HASH.to_string(),
-        ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
-        index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
     }
 }
 
@@ -396,17 +399,10 @@ pub fn usdc_erc20_contract() -> Erc20Contract {
     }
 }
 
-pub fn usdt(
-    minter: Principal,
-    ledger_compressed_wasm_hash: WasmHash,
-    index_compressed_wasm_hash: WasmHash,
-) -> AddErc20Arg {
+pub fn usdt(minter: Principal) -> AddErc20Arg {
     AddErc20Arg {
         contract: usdt_erc20_contract(),
         ledger_init_arg: ledger_init_arg(minter, "Chain-Key Tether USD", "ckUSDT"),
-        git_commit_hash: GIT_COMMIT_HASH.to_string(),
-        ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
-        index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
     }
 }
 

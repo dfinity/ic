@@ -2410,8 +2410,18 @@ pub fn icrc1_test_approval_upgrade<T>(
             subaccount: Some([4; 32]),
         },
     ];
+    let additional_accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(5).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(6).0,
+            subaccount: Some([6; 32]),
+        },
+    ];
     let mut initial_balances = vec![];
     for account in &accounts {
+        initial_balances.push((*account, 10_000_000u64));
+    }
+    for account in &additional_accounts {
         initial_balances.push((*account, 10_000_000u64));
     }
 
@@ -2422,6 +2432,7 @@ pub fn icrc1_test_approval_upgrade<T>(
         initial_balances,
     );
 
+    const APPROVE_AMOUNT: u64 = 150_000;
     let expiration =
         system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
 
@@ -2429,13 +2440,13 @@ pub fn icrc1_test_approval_upgrade<T>(
 
     for i in 0..accounts.len() {
         for j in i + 1..accounts.len() {
-            let mut approve_args = default_approve_args(accounts[j], 150_000);
+            let mut approve_args = default_approve_args(accounts[j], APPROVE_AMOUNT);
             approve_args.from_subaccount = accounts[i].subaccount;
             send_approval(&env, canister_id, accounts[i].owner, &approve_args)
                 .expect("approval failed");
             expected_allowances.push(get_allowance(&env, canister_id, accounts[i], accounts[j]));
 
-            let mut approve_args = default_approve_args(accounts[i], 150_000);
+            let mut approve_args = default_approve_args(accounts[i], APPROVE_AMOUNT);
             approve_args.expires_at = Some(expiration);
             approve_args.from_subaccount = accounts[j].subaccount;
             send_approval(&env, canister_id, accounts[j].owner, &approve_args)
@@ -2456,10 +2467,10 @@ pub fn icrc1_test_approval_upgrade<T>(
         for i in 0..accounts.len() {
             for j in i + 1..accounts.len() {
                 let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
-                assert_eq!(allowance.allowance, Nat::from(150_000u64));
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
                 allowances.push(allowance);
                 let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
-                assert_eq!(allowance.allowance, Nat::from(150_000u64));
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
                 allowances.push(allowance);
             }
         }
@@ -2470,8 +2481,36 @@ pub fn icrc1_test_approval_upgrade<T>(
     test_upgrade(ledger_wasm_current.clone());
     // Test if new approvals serialization also works
     test_upgrade(ledger_wasm_current);
+
+    // Add some more approvals
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let mut approve_args = default_approve_args(*a2, APPROVE_AMOUNT);
+            approve_args.from_subaccount = a1.subaccount;
+            send_approval(&env, canister_id, a1.owner, &approve_args).expect("approval failed");
+
+            let mut approve_args = default_approve_args(*a1, APPROVE_AMOUNT);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = a2.subaccount;
+            send_approval(&env, canister_id, a2.owner, &approve_args).expect("approval failed");
+        }
+    }
+
     // Test if downgrade works
     test_upgrade(ledger_wasm_mainnet);
+
+    // See if the additional approvals are there
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let allowance = get_allowance(&env, canister_id, *a1, *a2);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, None);
+
+            let allowance = get_allowance(&env, canister_id, *a2, *a1);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, Some(expiration));
+        }
+    }
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {

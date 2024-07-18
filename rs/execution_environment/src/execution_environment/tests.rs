@@ -2244,7 +2244,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
         assert_eq!(
             get_reject_message(response),
             format!(
-                "Subnet {} does not hold iDKG key {}.",
+                "Subnet {} does not hold threshold key {}.",
                 own_subnet, unknown_key
             ),
         )
@@ -2416,7 +2416,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         assert_eq!(
             WasmResult::Reject(
                 format!(
-                    "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown or signing disabled iDKG key: {}, existing keys with signing enabled: [{}]\")",
+                    "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: [{}]\")",
                     method,
                     wrong_key,
                     correct_key,
@@ -2491,11 +2491,11 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
             // However, this is enough to assert that the correct endpoint is reached.
             "InternalError(\"InvalidPoint\")".to_string(),
             format!(
-                "unknown or signing disabled iDKG key {}",
+                "unknown or signing disabled threshold key {}",
                 signing_disabled_key
             ),
-            format!("does not hold iDKG key {}", unknown_key),
-            format!("does not hold iDKG key {}", unknown_key),
+            format!("does not hold threshold key {}", unknown_key),
+            format!("does not hold threshold key {}", unknown_key),
         ];
 
         for (i, expected) in expected.iter().enumerate() {
@@ -2547,7 +2547,7 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
         assert_eq!(
         WasmResult::Reject(
             format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys: [{}]\")",
+                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown threshold key: {}, existing keys: [{}]\")",
                 method,
                 wrong_key,
                 correct_key,

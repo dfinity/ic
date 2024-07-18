@@ -11,6 +11,7 @@ on:
       - Schedule Daily
       - Schedule Weekly
       - Release Testing
+      - Container IC Base Images
 
 jobs:
   slack-workflow-run:

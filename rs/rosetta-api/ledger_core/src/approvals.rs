@@ -21,6 +21,11 @@ pub enum ApproveError<Tokens> {
     SelfApproval,
 }
 
+// The implementations of this trait should store the allowance data
+// for (account, spender) pairs and the expirations and arrivals
+// of the allowances. The functions of the trait are meant to be simple
+// `insert` and `remove` type functions that can be implemented with
+// regular BTreeMaps or using the stable structures.
 pub trait AllowancesData {
     type AccountId;
     type Tokens;
@@ -67,14 +72,6 @@ pub trait AllowancesData {
 
     #[allow(clippy::type_complexity)]
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
-
-    #[allow(clippy::type_complexity)]
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
-
-    #[allow(clippy::type_complexity)]
-    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 
@@ -173,16 +170,6 @@ where
 
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         self.expiration_queue.pop_first()
-    }
-
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        self.allowances.pop_first()
-    }
-
-    fn pop_first_arrival(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        self.arrival_queue.pop_first()
     }
 
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
@@ -398,9 +385,7 @@ where
     }
 
     /// Consumes amount from the spender's allowance for the account.
-    ///
-    /// This method behaves like [decrease_amount] but bails out if the
-    /// allowance goes negative.
+    /// Returns an error if the allowance would go negative.
     pub fn use_allowance(
         &mut self,
         account: &AD::AccountId,
@@ -450,6 +435,7 @@ where
         self.allowances_data.oldest_arrivals(n)
     }
 
+    /// Prunes allowances that are expired, removes at most `limit` allowances.
     pub fn prune(&mut self, now: TimeStamp, limit: usize) -> usize {
         self.with_postconditions_check(|table| {
             let mut pruned = 0;

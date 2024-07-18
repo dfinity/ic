@@ -53,6 +53,7 @@ ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
+ic_consensus_system_test_utils = { path = "./consensus/utils" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -158,7 +159,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-sha2 = "0.10"
+sha2 = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
@@ -594,8 +595,8 @@ name = "ic-systest-consensus-performance"
 path = "consensus/consensus_performance.rs"
 
 [[bin]]
-name = "ic-systest-tecdsa-performance"
-path = "consensus/tecdsa/tecdsa_performance.rs"
+name = "ic-systest-tecdsa-performance-test"
+path = "consensus/tecdsa/tecdsa_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-performance"

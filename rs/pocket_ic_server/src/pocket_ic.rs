@@ -136,8 +136,8 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
+        let subnets = self.subnets.read().unwrap();
         if let Some(ref state_dir) = self.state_dir {
-            let subnets = self.subnets.read().unwrap();
             for subnet in subnets.values() {
                 subnet.checkpointed_tick();
             }
@@ -164,6 +164,9 @@ impl Drop for PocketIc {
             );
             let topology_json = serde_json::to_string(&raw_topology).unwrap();
             topology_file.write_all(topology_json.as_bytes()).unwrap();
+        }
+        for subnet in subnets.values() {
+            subnet.drop_payload_builder();
         }
     }
 }

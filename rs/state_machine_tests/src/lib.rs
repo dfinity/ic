@@ -1067,6 +1067,15 @@ impl StateMachine {
         StateMachineBuilder::new().build()
     }
 
+    /// Drops the payload builder of this `StateMachine`.
+    /// This function should be called when this `StateMachine` is supposed to be dropped
+    /// if this `StateMachine` was created using `StateMachineBuilder::build_with_subnets`
+    /// because the payload builder contains an `Arc` of this `StateMachine`
+    /// which creates a circular dependency preventing this `StateMachine`s from being dropped.
+    pub fn drop_payload_builder(&self) {
+        self.payload_builder.write().unwrap().take();
+    }
+
     // TODO: cleanup, replace external calls with `StateMachineBuilder`.
     /// Constructs a new environment with the specified configuration.
     pub fn new_with_config(config: StateMachineConfig) -> Self {

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Runs the Wasm instructions benchmarks, confirms the results are not optimized
 # by the `wasmtime` compiler, and produces a Wasm instructions costs report
 # in Markdown format (see `WASM_BENCHMARKS.md`).
@@ -35,10 +35,12 @@ RES_FILE="${0##*/}.res.tmp"
 CONFIRMATION_RES_FILE="${0##*/}.confirmation.res.tmp"
 
 # Re-run all the benchmarks (or use the cached results).
+set -eo pipefail
 [ -s "${CACHE_FILE}" -a "${1}" != "-f" ] \
     || bazel run //rs/execution_environment:wasm_instructions_bench \
         -- ${BENCHMARK_ARGS} --output-format bencher \
-    | pee "cat" "rg '^test wasm_' > '${CACHE_FILE}'"
+    | pee "cat" "rg '^test wasm_' > '${CACHE_FILE}' || true"
+set +eo pipefail
 
 # Split the cache into the results and confirmations.
 cat "${CACHE_FILE}" | rg -v '/confirmation' >"${RES_FILE}"

@@ -2,6 +2,7 @@ type AccountIdentifier = record { hash : blob };
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   ManageNeuron : ManageNeuron;
+  InstallCode : InstallCode;
   CreateServiceNervousSystem : CreateServiceNervousSystem;
   ExecuteNnsFunction : ExecuteNnsFunction;
   RewardNodeProvider : RewardNodeProvider;
@@ -10,7 +11,7 @@ type Action = variant {
   SetDefaultFollowees : SetDefaultFollowees;
   RewardNodeProviders : RewardNodeProviders;
   ManageNetworkEconomics : NetworkEconomics;
-  ApproveGenesisKyc : ApproveGenesisKyc;
+  ApproveGenesisKyc : Principals;
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
 };
@@ -250,6 +251,13 @@ type InitialTokenDistribution = record {
   developer_distribution : opt DeveloperDistribution;
   swap_distribution : opt SwapDistribution;
 };
+type InstallCode = record {
+  arg : opt blob;
+  wasm_module : opt blob;
+  skip_stopping_before_installing : opt bool;
+  canister_id : opt principal;
+  install_mode : opt int32;
+};
 type KnownNeuron = record {
   id : opt NeuronId;
   known_neuron_data : opt KnownNeuronData;
@@ -439,7 +447,9 @@ type NeuronsFundMatchedFundingCurveCoefficients = record {
   full_participation_milestone_xdr : opt Decimal;
 };
 type NeuronsFundNeuron = record {
+  controller : opt principal;
   hotkey_principal : opt text;
+  hotkeys : opt Principals;
   is_capped : opt bool;
   nns_neuron_id : opt nat64;
   amount_icp_e8s : opt nat64;
@@ -502,6 +512,7 @@ type Params = record {
   max_direct_participation_icp_e8s : opt nat64;
 };
 type Percentage = record { basis_points : opt nat64 };
+type Principals = record { principals : vec principal };
 type Progress = variant { LastNeuronId : NeuronId };
 type Proposal = record {
   url : text;

@@ -1,9 +1,9 @@
-use candid::{Encode, Principal};
+use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
-use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
@@ -11,13 +11,18 @@ use ic_management_canister_types::{
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
     SignWithSchnorrReply,
 };
+use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::{nns::vote_and_execute_proposal, util::MessageCanister};
+use ic_system_test_driver::{
+    canister_api::{CallMode, Request},
+    nns::vote_and_execute_proposal,
+    util::MessageCanister,
+};
 use ic_types::{PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
@@ -54,7 +59,7 @@ pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     }
 }
 
-pub(crate) fn make_ecdsa_key_id() -> MasterPublicKeyId {
+pub fn make_ecdsa_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: "some_ecdsa_key".to_string(),
@@ -701,4 +706,96 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
         },
     };
     assert!(res);
+}
+
+#[derive(CandidType, Deserialize, Debug)]
+pub enum SignWithChainKeyReply {
+    Ecdsa(SignWithECDSAReply),
+    Schnorr(SignWithSchnorrReply),
+}
+
+#[derive(Clone)]
+pub struct ChainSignatureRequest {
+    pub key_id: MasterPublicKeyId,
+    pub principal: Principal,
+    pub payload: Vec<u8>,
+}
+
+impl ChainSignatureRequest {
+    pub fn new(
+        principal: Principal,
+        key_id: MasterPublicKeyId,
+        schnorr_message_size: usize,
+    ) -> Self {
+        let params = match key_id.clone() {
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => Self::ecdsa_params(ecdsa_key_id),
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+                Self::schnorr_params(schnorr_key_id, schnorr_message_size)
+            }
+        };
+        let payload = Encode!(&params).unwrap();
+
+        Self {
+            key_id,
+            principal,
+            payload,
+        }
+    }
+
+    fn ecdsa_params(ecdsa_key_id: EcdsaKeyId) -> ForwardParams {
+        let signature_request = SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: ecdsa_key_id,
+        };
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_ecdsa".to_string(),
+            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
+            payload: Encode!(&signature_request).unwrap(),
+        }
+    }
+
+    fn schnorr_params(schnorr_key_id: SchnorrKeyId, message_size: usize) -> ForwardParams {
+        let signature_request = SignWithSchnorrArgs {
+            message: vec![1; message_size],
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: schnorr_key_id,
+        };
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_schnorr".to_string(),
+            cycles: SCHNORR_SIGNATURE_FEE.get() * 2,
+            payload: Encode!(&signature_request).unwrap(),
+        }
+    }
+}
+
+impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+
+    fn canister_id(&self) -> Principal {
+        self.principal
+    }
+
+    fn method_name(&self) -> String {
+        "forward".to_string()
+    }
+
+    fn payload(&self) -> Vec<u8> {
+        self.payload.clone()
+    }
+
+    fn parse_response(&self, raw_response: &[u8]) -> anyhow::Result<SignWithChainKeyReply> {
+        Ok(match self.key_id {
+            MasterPublicKeyId::Ecdsa(_) => {
+                SignWithChainKeyReply::Ecdsa(SignWithECDSAReply::decode(raw_response)?)
+            }
+            MasterPublicKeyId::Schnorr(_) => {
+                SignWithChainKeyReply::Schnorr(SignWithSchnorrReply::decode(raw_response)?)
+            }
+        })
+    }
 }

@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/load_wasm",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
+    "@crate_index//:num-traits",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",

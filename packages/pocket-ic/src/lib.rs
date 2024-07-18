@@ -88,7 +88,7 @@ impl PocketIcBuilder {
     }
 
     pub fn build(self) -> PocketIc {
-        let server_url = self.server_url.unwrap_or(crate::start_or_reuse_server());
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIc::from_components(
             self.config,
             server_url,
@@ -99,7 +99,7 @@ impl PocketIcBuilder {
     }
 
     pub async fn build_async(self) -> PocketIcAsync {
-        let server_url = self.server_url.unwrap_or(crate::start_or_reuse_server());
+        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIcAsync::from_components(
             self.config,
             server_url,
