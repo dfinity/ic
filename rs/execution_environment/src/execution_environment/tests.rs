@@ -1685,23 +1685,6 @@ fn metrics_are_observed_for_using_deprecated_fields() {
         ),
         Some(1),
     );
-
-    let payload = ic00::UpdateSettingsArgs::new(
-        canister_id,
-        ic00::CanisterSettingsArgsBuilder::new()
-            .with_controller(canister_id.into())
-            .build(),
-    );
-
-    test.subnet_message(Method::UpdateSettings, payload.encode())
-        .unwrap();
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_controller_in_update_settings_total"
-        ),
-        Some(1),
-    );
 }
 
 #[test]

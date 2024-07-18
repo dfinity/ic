@@ -18,7 +18,6 @@ const MAX_WASM_MEMORY_LIMIT: u64 = 1 << 48;
 /// Struct used for decoding CanisterSettingsArgs
 #[derive(Default)]
 pub(crate) struct CanisterSettings {
-    pub(crate) controller: Option<PrincipalId>,
     pub(crate) controllers: Option<Vec<PrincipalId>>,
     pub(crate) compute_allocation: Option<ComputeAllocation>,
     pub(crate) memory_allocation: Option<MemoryAllocation>,
@@ -30,7 +29,6 @@ pub(crate) struct CanisterSettings {
 
 impl CanisterSettings {
     pub fn new(
-        controller: Option<PrincipalId>,
         controllers: Option<Vec<PrincipalId>>,
         compute_allocation: Option<ComputeAllocation>,
         memory_allocation: Option<MemoryAllocation>,
@@ -40,7 +38,6 @@ impl CanisterSettings {
         wasm_memory_limit: Option<NumBytes>,
     ) -> Self {
         Self {
-            controller,
             controllers,
             compute_allocation,
             memory_allocation,
@@ -49,10 +46,6 @@ impl CanisterSettings {
             log_visibility,
             wasm_memory_limit,
         }
-    }
-
-    pub fn controller(&self) -> Option<PrincipalId> {
-        self.controller
     }
 
     pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
@@ -88,7 +81,6 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
     type Error = UpdateSettingsError;
 
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
-        let controller = input.get_controller();
         let compute_allocation = match input.compute_allocation {
             Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
                 || UpdateSettingsError::ComputeAllocation(InvalidComputeAllocationError::new(ca)),
@@ -136,7 +128,6 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         };
 
         Ok(CanisterSettings::new(
-            controller,
             input
                 .controllers
                 .map(|controllers| controllers.get().clone()),
@@ -162,7 +153,6 @@ impl TryFrom<Option<CanisterSettingsArgs>> for CanisterSettings {
 }
 
 pub(crate) struct CanisterSettingsBuilder {
-    controller: Option<PrincipalId>,
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
@@ -176,7 +166,6 @@ pub(crate) struct CanisterSettingsBuilder {
 impl CanisterSettingsBuilder {
     pub fn new() -> Self {
         Self {
-            controller: None,
             controllers: None,
             compute_allocation: None,
             memory_allocation: None,
@@ -189,7 +178,6 @@ impl CanisterSettingsBuilder {
 
     pub fn build(self) -> CanisterSettings {
         CanisterSettings {
-            controller: self.controller,
             controllers: self.controllers,
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
@@ -197,13 +185,6 @@ impl CanisterSettingsBuilder {
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
-        }
-    }
-
-    pub fn with_controller(self, controller: PrincipalId) -> Self {
-        Self {
-            controller: Some(controller),
-            ..self
         }
     }
 
@@ -322,7 +303,6 @@ impl From<InvalidMemoryAllocationError> for UpdateSettingsError {
 }
 
 pub(crate) struct ValidatedCanisterSettings {
-    controller: Option<PrincipalId>,
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
@@ -334,10 +314,6 @@ pub(crate) struct ValidatedCanisterSettings {
 }
 
 impl ValidatedCanisterSettings {
-    pub fn controller(&self) -> Option<PrincipalId> {
-        self.controller
-    }
-
     pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
         self.controllers.clone()
     }
@@ -452,15 +428,7 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    // Field `controller` is kept for backward compatibility. However, specifying
-    // both `controller` and `controllers` fields in the same request results in an
-    // error.
     let controllers = settings.controllers();
-    if let (Some(_), Some(_)) = (settings.controller(), &controllers) {
-        return Err(CanisterManagerError::InvalidSettings {
-                message: "Invalid settings: 'controller' and 'controllers' fields cannot be set simultaneously.".to_string(),
-            });
-    }
     match &controllers {
         Some(controllers) => {
             if controllers.len() > max_controllers {
@@ -564,7 +532,6 @@ pub(crate) fn validate_canister_settings(
     }
 
     Ok(ValidatedCanisterSettings {
-        controller: settings.controller(),
         controllers: settings.controllers(),
         compute_allocation: settings.compute_allocation(),
         memory_allocation: settings.memory_allocation(),
