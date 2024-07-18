@@ -51,7 +51,7 @@ slog-async = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }

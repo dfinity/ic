@@ -1946,8 +1946,18 @@ fn update_memories(
     let mut stable_index = 0;
 
     if let Some(mem) = module.memories.first_mut() {
-        if mem.memory64 && mem.maximum.is_none() {
-            mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+        if mem.memory64 {
+            match mem.maximum {
+                Some(max) => {
+                    // In case the maximum memory size is larger than the maximum allowed, cap it.
+                    if max > MAX_WASM_MEMORY_IN_WASM_PAGES {
+                        mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+                    }
+                }
+                None => {
+                    mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+                }
+            }
         }
     }
 
