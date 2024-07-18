@@ -39,6 +39,7 @@ jobs:
             TIME_IN_QUEUE=$((CURRENT_TIME - RUN_STARTED_TIME))
 
             # exclude workflows with long wait times
+            echo "${WORKFLOW}"
             WORKFLOW_NAME=$(echo "${WORKFLOW}" | jq -r '.name') # Extract name
             if [ "$WORKFLOW_NAME" = "Schedule Daily" ]; then
               continue
