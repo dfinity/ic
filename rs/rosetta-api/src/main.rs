@@ -101,7 +101,6 @@ fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
         FilterFn::new(|metadata| metadata.module_path().map_or(true, rosetta_filter));
     let stdout_filter = LevelFilter::from_level(level).and(rosetta_filter);
     let stdout_layer = tracing_subscriber::fmt::Layer::default()
-        .with_span_events(FmtSpan::FULL)
         .with_target(false) // instead include file and lines in the next lines
         .with_file(true) // display source code file paths
         .with_line_number(true) // display source code line numbers
@@ -116,7 +115,6 @@ fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
     .map_err(std::io::Error::other)?;
     let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
     let file_layer = tracing_subscriber::fmt::Layer::default()
-        .with_span_events(FmtSpan::FULL)
         .with_target(false) // instead include file and lines in the next lines
         .with_file(true) // display source code file paths
         .with_line_number(true) // display source code line numbers

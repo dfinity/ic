@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
-use tracing::{info, span, Level};
+use tracing::info;
 
 mod database_access {
     use super::{sql_bytes_to_block, vec_into_array};
@@ -1376,9 +1376,6 @@ impl Blocks {
         &self,
         certified_tip_index: BlockIndex,
     ) -> Result<(), BlockStoreError> {
-        let rosetta_span = span!(Level::INFO, "make_rosetta_blocks");
-        let _w = rosetta_span.enter();
-
         let next_block_indices = match self.rosetta_blocks_mode {
             RosettaBlocksMode::Disabled => return Ok(()),
             RosettaBlocksMode::Enabled {
