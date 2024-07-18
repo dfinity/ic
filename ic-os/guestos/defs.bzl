@@ -28,7 +28,7 @@ def image_deps(mode, malicious = False):
         "bootfs": {},
         "rootfs": {
             # additional files to install
-            # Required by the IC protocol 
+            # Required by the IC protocol
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",  # Need for the canister sandboxing to work.
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",  # Need for the Wasm compilation sandboxing to work.
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",  # Need for the canister/compilation sandboxing to work.
