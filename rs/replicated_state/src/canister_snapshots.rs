@@ -67,10 +67,10 @@ impl CanisterSnapshots {
             Some(snapshot) => {
                 self.unflushed_changes
                     .push(SnapshotOperation::Delete(snapshot_id));
+                let canister_id = snapshot.canister_id();
 
                 // The snapshot ID if present in the `self.snapshots`,
                 // must also be present in the `self.snapshot_ids`.
-                let canister_id = snapshot.canister_id();
                 debug_assert!(self.snapshot_ids.contains_key(&canister_id));
                 let snapshot_ids = self.snapshot_ids.get_mut(&canister_id).unwrap();
                 debug_assert!(snapshot_ids.contains(&snapshot_id));
@@ -160,35 +160,23 @@ impl CanisterSnapshots {
     where
         F: Fn(CanisterId) -> bool,
     {
+        let old_snapshot_ids = self.snapshots.keys().cloned().collect::<Vec<_>>();
+        for snapshot_id in old_snapshot_ids {
+            // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
+            let snapshot = self.snapshots.get(&snapshot_id).unwrap();
+            let canister_id = snapshot.canister_id;
+            if !is_local_canister(canister_id) {
+                self.remove(snapshot_id);
+            }
+        }
+
         // Destructure `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever new fields are added.
         let CanisterSnapshots {
-            ref mut snapshots,
-            ref mut unflushed_changes,
-            ref mut snapshot_ids,
+            snapshots: _,
+            unflushed_changes: _,
+            snapshot_ids: _,
         } = self;
-
-        let old_snapshot_ids = snapshots.keys().cloned().collect::<Vec<_>>();
-        for snapshot_id in old_snapshot_ids {
-            // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
-            let snapshot = snapshots.get(&snapshot_id).unwrap();
-            let canister_id = snapshot.canister_id;
-            if !is_local_canister(snapshot.canister_id) {
-                snapshots.remove(&snapshot_id);
-                unflushed_changes.push(SnapshotOperation::Delete(snapshot_id));
-
-                // Remove the associated snapshot_id from `snapshot_ids`.
-                debug_assert!(snapshot_ids.contains_key(&canister_id));
-                let snapshot_ids_set = snapshot_ids.get_mut(&canister_id).unwrap();
-                debug_assert!(snapshot_ids_set.contains(&snapshot_id));
-                snapshot_ids_set.remove(&snapshot_id);
-
-                // Remove the snapshot ID set associated with the specified `canister_id` if it's empty.
-                if snapshot_ids_set.is_empty() {
-                    snapshot_ids.remove(&canister_id);
-                }
-            }
-        }
     }
 }
 
