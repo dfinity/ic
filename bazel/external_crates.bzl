@@ -712,6 +712,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "leb128": crate.spec(
                 version = "^0.2.5",
             ),
+            "libafl": crate.spec(
+                version = "^0.13.1",
+            ),
+            "libafl_bolts": crate.spec(
+                version = "^0.13.1",
+            ),
             "libc": crate.spec(
                 version = "^0.2.155",
             ),
