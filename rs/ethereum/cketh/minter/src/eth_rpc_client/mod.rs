@@ -454,11 +454,11 @@ impl<T> ReducedResult<T> {
         R: FnOnce(MultiCallResults<U>) -> Result<U, MultiCallError<U>>,
     >(
         self,
-        faillible_op: &F,
+        fallible_op: &F,
         reduction: R,
     ) -> ReducedResult<U> {
         let result = match self.result {
-            Ok(t) => faillible_op(t)
+            Ok(t) => fallible_op(t)
                 .map_err(|e| MultiCallError::<U>::ConsistentEvmRpcCanisterError(e.to_string())),
             Err(MultiCallError::ConsistentHttpOutcallError(e)) => {
                 Err(MultiCallError::<U>::ConsistentHttpOutcallError(e))
@@ -470,7 +470,7 @@ impl<T> ReducedResult<T> {
                 Err(MultiCallError::<U>::ConsistentEvmRpcCanisterError(e))
             }
             Err(MultiCallError::InconsistentResults(results)) => {
-                reduction(results.map(faillible_op, &|e| {
+                reduction(results.map(fallible_op, &|e| {
                     SingleCallError::EvmRpcError(e.to_string())
                 }))
             }
