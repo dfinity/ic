@@ -191,10 +191,6 @@ name = "ic-colocate"
 path = "testing_verification/colocate_test.rs"
 
 [[bin]]
-name = "ic-systest-basic-health"
-path = "testing_verification/basic_health_test.rs"
-
-[[bin]]
 name = "ic-ii-delegation-test"
 path = "testing_verification/ii_delegation_test.rs"
 
