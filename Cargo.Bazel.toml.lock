@@ -4847,7 +4847,7 @@ dependencies = [
  "rangemap",
  "reqwest 0.12.4",
  "ring 0.17.7",
- "rustls-webpki 0.102.4",
+ "rustls-webpki 0.102.5",
  "sec1",
  "serde",
  "serde_bytes",
