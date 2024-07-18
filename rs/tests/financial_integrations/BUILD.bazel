@@ -42,7 +42,7 @@ system_test(
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
     env = {
         "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-    }
+    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
