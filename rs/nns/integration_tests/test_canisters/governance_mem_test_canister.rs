@@ -314,6 +314,7 @@ fn allocate_neuron(id: u64) -> Neuron {
         known_neuron_data: None,
         spawn_at_timestamp_seconds: None,
         neuron_type: None,
+        visibility: None,
     }
 }
 

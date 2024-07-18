@@ -91,6 +91,9 @@ pub struct NeuronInfo {
     /// of the different states.
     #[prost(enumeration = "NeuronType", optional, tag = "11")]
     pub neuron_type: ::core::option::Option<i32>,
+    /// See the Visibility enum.
+    #[prost(enumeration = "Visibility", optional, tag = "12")]
+    pub visibility: ::core::option::Option<i32>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -246,6 +249,9 @@ pub struct Neuron {
     /// of the different states.
     #[prost(enumeration = "NeuronType", optional, tag = "22")]
     pub neuron_type: ::core::option::Option<i32>,
+    /// See the Visibility enum.
+    #[prost(enumeration = "Visibility", optional, tag = "23")]
+    pub visibility: ::core::option::Option<i32>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -350,6 +356,8 @@ pub struct AbridgedNeuron {
     pub joined_community_fund_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(enumeration = "NeuronType", optional, tag = "22")]
     pub neuron_type: ::core::option::Option<i32>,
+    #[prost(enumeration = "Visibility", optional, tag = "23")]
+    pub visibility: ::core::option::Option<i32>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -3748,6 +3756,55 @@ impl NeuronState {
             "NEURON_STATE_DISSOLVING" => Some(Self::Dissolving),
             "NEURON_STATE_DISSOLVED" => Some(Self::Dissolved),
             "NEURON_STATE_SPAWNING" => Some(Self::Spawning),
+            _ => None,
+        }
+    }
+}
+/// Controls how much information non-controller and non-hot-key principals can
+/// see about this neuron. Currently, if a neuron is private, recent_ballots and
+/// joined_community_fund_timestamp_seconds are redacted when being read by an
+/// unprivileged principal.
+///
+/// <https://forum.dfinity.org/t/request-for-comments-api-changes-for-public-private-neurons/33360>
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum Visibility {
+    Unspecified = 0,
+    Private = 1,
+    Public = 2,
+}
+impl Visibility {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Visibility::Unspecified => "VISIBILITY_UNSPECIFIED",
+            Visibility::Private => "VISIBILITY_PRIVATE",
+            Visibility::Public => "VISIBILITY_PUBLIC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "VISIBILITY_PRIVATE" => Some(Self::Private),
+            "VISIBILITY_PUBLIC" => Some(Self::Public),
             _ => None,
         }
     }
