@@ -323,10 +323,6 @@ name = "ic-systest-node-assign-test"
 path = "consensus/orchestrator/node_assign_test.rs"
 
 [[bin]]
-name = "ic-systest-ssh-access-to-nodes-test"
-path = "consensus/orchestrator/ssh_access_to_nodes_test.rs"
-
-[[bin]]
 name = "ic-systest-node-registration-test"
 path = "consensus/orchestrator/node_registration_test.rs"
 

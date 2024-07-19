@@ -2282,6 +2282,7 @@ dependencies = [
  "anyhow",
  "canister_http",
  "ic-agent",
+ "ic-nns-common",
  "ic-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -2290,7 +2291,6 @@ dependencies = [
  "ic_consensus_system_test_utils",
  "slog",
  "tempfile",
- "tests",
  "url",
 ]
 

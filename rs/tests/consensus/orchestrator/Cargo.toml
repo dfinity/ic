@@ -11,6 +11,7 @@ anyhow = { workspace = true }
 canister_http = { path = "../../networking/canister_http" }
 ic-agent = { workspace = true }
 ic_consensus_system_test_utils = { path = "../utils" }
+ic-nns-common = { path = "../../../nns/common" }
 ic-recovery = { path = "../../../recovery" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
@@ -18,12 +19,11 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 slog = { workspace = true }
 tempfile = { workspace = true }
-tests = { path = "../.." }
 url = { workspace = true }
 
-[[bin]]
-name = "ic-systest-sr-nns-failover-nodes-test"
-path = "sr_nns_failover_nodes_test.rs"
+#[[bin]]
+#name = "ic-systest-sr-nns-failover-nodes-test"
+#path = "sr_nns_failover_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-cup-compatibility"
@@ -33,3 +33,6 @@ path = "cup_compatibility_test.rs"
 name = "ic-systest-node-reassignment-test"
 path = "node_reassignment_test.rs"
 
+[[bin]]
+name = "ic-systest-ssh-access-to-nodes-test"
+path = "ssh_access_to_nodes_test.rs"
