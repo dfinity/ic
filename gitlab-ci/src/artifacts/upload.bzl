@@ -52,7 +52,7 @@ def _upload_artifact_impl(ctx):
     )
 
     fileurl = []
-    allinputs = ctx.files.inputs + [checksum] if s3_upload else [checksum]
+    allinputs = ctx.files.inputs + [checksum] if s3_upload else []
     for f in allinputs:
         filename = ctx.label.name + "_" + f.basename
         url = ctx.actions.declare_file(filename + ".url")
