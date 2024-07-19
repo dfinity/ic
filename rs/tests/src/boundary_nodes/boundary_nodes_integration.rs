@@ -35,7 +35,7 @@ use ic_system_test_driver::{
     },
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
-use std::{iter, net::SocketAddrV6, time::Duration, env};
+use std::{env, iter, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;

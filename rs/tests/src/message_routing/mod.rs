@@ -12,8 +12,8 @@ mod common {
     use dfn_candid::candid;
     use futures::{future::join_all, Future};
     use slog::info;
-    use xnet_test::CanisterId;
     use std::env;
+    use xnet_test::CanisterId;
 
     use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::HasDependencies};
 
