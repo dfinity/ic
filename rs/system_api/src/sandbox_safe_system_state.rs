@@ -558,6 +558,7 @@ pub struct SandboxSafeSystemState {
     dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
@@ -588,6 +589,7 @@ impl SandboxSafeSystemState {
         status: CanisterStatusView,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
@@ -617,6 +619,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            wasm_memory_threshold,
             compute_allocation,
             system_state_changes: SystemStateChanges {
                 // Start indexing new batch of canister log records from the given index.
@@ -701,6 +704,7 @@ impl SandboxSafeSystemState {
             CanisterStatusView::from_full_status(&system_state.status),
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            system_state.wasm_memory_threshold,
             compute_allocation,
             system_state.balance(),
             system_state.reserved_balance(),
@@ -1288,7 +1292,8 @@ mod tests {
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
         time::CoarseTime,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        Time,
     };
 
     use crate::{
@@ -1366,6 +1371,7 @@ mod tests {
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
+            NumBytes::new(0),
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),

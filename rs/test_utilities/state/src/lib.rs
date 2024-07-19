@@ -198,6 +198,7 @@ pub struct CanisterStateBuilder {
     stable_memory: Option<Vec<u8>>,
     wasm: Option<Vec<u8>>,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     ingress_queue: Vec<Ingress>,
     status: CanisterStatusType,
@@ -242,6 +243,11 @@ impl CanisterStateBuilder {
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
         self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self
+    }
+
+    pub fn with_wasm_memory_threshold<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
+        self.wasm_memory_threshold = num_bytes.into();
         self
     }
 
@@ -398,6 +404,7 @@ impl Default for CanisterStateBuilder {
             stable_memory: None,
             wasm: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),
             status: CanisterStatusType::Running,
@@ -453,6 +460,11 @@ impl SystemStateBuilder {
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
         self.system_state.memory_allocation =
             MemoryAllocation::try_from(memory_allocation).unwrap();
+        self
+    }
+
+    pub fn wasm_memory_threshold(mut self, wasm_memory_threshold: NumBytes) -> Self {
+        self.system_state.wasm_memory_threshold = wasm_memory_threshold;
         self
     }
 

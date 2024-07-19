@@ -401,6 +401,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         *canister_id,
         queues,
         canister_state_bits.memory_allocation,
+        canister_state_bits.wasm_memory_threshold,
         canister_state_bits.freeze_threshold,
         canister_state_bits.status,
         canister_state_bits.certified_data,
