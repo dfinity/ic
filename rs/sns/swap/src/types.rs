@@ -743,31 +743,6 @@ impl CfInvestment {
     }
 }
 
-impl CfParticipant {
-    pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
-        match (
-            self.controller,
-            crate::swap::string_to_principal(&self.hotkey_principal),
-        ) {
-            (Some(p1), Some(p2)) if p1 == p2 => Ok(p1),
-            // If hotkey_principal refers to a different principal than controller,
-            // or if neither is set, something has gone wrong.
-            (Some(_), Some(_)) => Err(
-                "Invalid NF participant: controller and hotkey_principal do not match".to_string(),
-            ),
-            // If both fields are none, something has also gone wrong.
-            (None, None) => Err(
-                "Invalid NF participant: controller and hotkey_principal are both unset"
-                    .to_string(),
-            ),
-            // If only one is set, just use that one
-            (Some(p), None) => Ok(p),
-            (None, Some(p)) => Ok(p),
-        }
-    }
-}
-
 impl SnsNeuronRecipe {
     pub fn validate(&self) -> Result<(), String> {
         if let Some(sns) = &self.sns {
@@ -799,11 +774,35 @@ impl CfParticipant {
         }
         Ok(())
     }
+
     pub fn participant_total_icp_e8s(&self) -> u64 {
         self.cf_neurons
             .iter()
             .map(|x| x.amount_icp_e8s)
             .fold(0, |sum, v| sum.saturating_add(v))
+    }
+
+    pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
+        match (
+            self.controller,
+            crate::swap::string_to_principal(&self.hotkey_principal),
+        ) {
+            (Some(p1), Some(p2)) if p1 == p2 => Ok(p1),
+            // If hotkey_principal refers to a different principal than controller,
+            // or if neither is set, something has gone wrong.
+            (Some(_), Some(_)) => Err(
+                "Invalid NF participant: controller and hotkey_principal do not match".to_string(),
+            ),
+            // If both fields are none, something has also gone wrong.
+            (None, None) => Err(
+                "Invalid NF participant: controller and hotkey_principal are both unset"
+                    .to_string(),
+            ),
+            // If only one is set, just use that one
+            (Some(p), None) => Ok(p),
+            (None, Some(p)) => Ok(p),
+        }
     }
 }
 

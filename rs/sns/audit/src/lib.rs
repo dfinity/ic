@@ -198,7 +198,7 @@ async fn validate_neurons_fund_sns_swap_participation(
         .neurons_fund_reserves
         .unwrap()
         .neurons_fund_neuron_portions;
-    let mut initial_amounts_per_controller: BTreeMap<_, _> = BTreeMap::new();
+    let mut initial_amounts_per_controller = BTreeMap::new();
     for initial_neuron_portion in initial_neuron_portions.iter() {
         #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let controller = initial_neuron_portion

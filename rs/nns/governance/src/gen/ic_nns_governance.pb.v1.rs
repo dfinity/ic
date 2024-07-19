@@ -1603,7 +1603,7 @@ pub mod neurons_fund_snapshot {
         /// participation constraints.
         #[prost(bool, optional, tag = "5")]
         pub is_capped: ::core::option::Option<bool>,
-        /// The principal that can manage this neuron.
+        /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
@@ -3206,7 +3206,7 @@ pub mod settle_neurons_fund_participation_response {
         /// The amount of Neurons' Fund participation associated with this neuron.
         #[prost(uint64, optional, tag = "2")]
         pub amount_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can manage this neuron.
+        /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.

@@ -519,8 +519,8 @@ message CfNeuron {
 
 // Represents a Neurons' Fund participant, possibly with several neurons.
 message CfParticipant {
-  // The principal that can manage this neuron.
-  optional ic_base_types.pb.v1.PrincipalId controller = 6;
+  // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+  optional ic_base_types.pb.v1.PrincipalId controller = 3;
   // Information about the participating neurons. Must not be empty.
   repeated CfNeuron cf_neurons = 2;
 
@@ -688,9 +688,12 @@ message DirectInvestment {
 // Information about a Neurons' Fund investment. The NNS Governance
 // canister is the controller of these neurons.
 message CfInvestment {
-  // The principal that can manage this neuron.
-  optional ic_base_types.pb.v1.PrincipalId controller = 6;
+  // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+  optional ic_base_types.pb.v1.PrincipalId controller = 3;
   // The principals that can vote, propose, and follow on behalf of this neuron.
+  // The controller of the corresponding NNS neuron is in the CfParticipant,
+  // which contains a vector of CfInvestments. This is because the controller
+  // is the same for all CfInvestments but the hotkeys may differ.
   optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
 
   fixed64 nns_neuron_id = 2;

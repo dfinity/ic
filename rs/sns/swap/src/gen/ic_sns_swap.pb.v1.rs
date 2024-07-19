@@ -501,8 +501,8 @@ pub struct CfNeuron {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CfParticipant {
-    /// The principal that can manage this neuron.
-    #[prost(message, optional, tag = "6")]
+    /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+    #[prost(message, optional, tag = "3")]
     pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// Information about the participating neurons. Must not be empty.
     #[prost(message, repeated, tag = "2")]
@@ -690,10 +690,13 @@ pub struct DirectInvestment {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CfInvestment {
-    /// The principal that can manage this neuron.
-    #[prost(message, optional, tag = "6")]
+    /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+    #[prost(message, optional, tag = "3")]
     pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// The principals that can vote, propose, and follow on behalf of this neuron.
+    /// The controller of the corresponding NNS neuron is in the CfParticipant,
+    /// which contains a vector of CfInvestments. This is because the controller
+    /// is the same for all CfInvestments but the hotkeys may differ.
     #[prost(message, optional, tag = "7")]
     pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     #[prost(fixed64, tag = "2")]

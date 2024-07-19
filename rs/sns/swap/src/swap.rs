@@ -855,12 +855,12 @@ impl Swap {
                 total_participant_icp_e8s,
             );
 
-            let Some(parsed_principal) = string_to_principal(buyer_principal) else {
+            let Some(buyer_principal) = string_to_principal(buyer_principal) else {
                 sweep_result.invalid += neuron_basket_construction_parameters.count as u32;
                 continue;
             };
             match create_sns_neuron_basket_for_direct_participant(
-                &parsed_principal,
+                &buyer_principal,
                 amount_sns_e8s,
                 neuron_basket_construction_parameters,
                 NEURON_BASKET_MEMO_RANGE_START,
@@ -877,7 +877,7 @@ impl Swap {
                     log!(
                         ERROR,
                         "Error creating a neuron basked for identity {}. Reason: {}",
-                        parsed_principal,
+                        buyer_principal,
                         error_message
                     );
                     sweep_result.failure += neuron_basket_construction_parameters.count as u32;
@@ -894,9 +894,24 @@ impl Swap {
         // for all NF investors.
         let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
         for cf_participant in self.cf_participants.iter_mut() {
+            let controller = cf_participant.try_get_controller();
+
             for cf_neuron in cf_participant.cf_neurons.iter_mut() {
                 // Create a closure to ensure `global_cf_memo` is incremented in all cases
                 let mut process_cf_neuron = || {
+                    let controller = match controller.clone() {
+                        Ok(nns_neuron_controller_principal) => nns_neuron_controller_principal,
+                        Err(e) => {
+                            log!(
+                                ERROR,
+                                "Error getting the controller for {cf_neuron:?} principal: {e}"
+                            );
+                            sweep_result.invalid +=
+                                neuron_basket_construction_parameters.count as u32;
+                            return;
+                        }
+                    };
+
                     // The case that on a previous attempt at creating this neuron recipe, it was
                     // successfully created and recorded. Count the number of neuron recipes that
                     // would have been created.
@@ -911,18 +926,8 @@ impl Swap {
                         total_participant_icp_e8s,
                     );
 
-                    #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
-                    let Some(parsed_principal) =
-                    // TODO(NNS1-3198): Simplify once hotkey_principal is removed
-                    cf_participant
-                        .controller
-                        .or(string_to_principal(&cf_participant.hotkey_principal))
-                    else {
-                        sweep_result.invalid += neuron_basket_construction_parameters.count as u32;
-                        return;
-                    };
                     match create_sns_neuron_basket_for_cf_participant(
-                        &parsed_principal,
+                        &controller,
                         // TODO(NNS1-3199): Populate this field
                         Vec::new(),
                         cf_neuron.nns_neuron_id,
@@ -944,7 +949,7 @@ impl Swap {
                             log!(
                                 ERROR,
                                 "Error creating a neuron basked for identity {}. Reason: {}",
-                                parsed_principal,
+                                controller,
                                 error_message
                             );
                             sweep_result.failure +=
@@ -2287,7 +2292,6 @@ impl Swap {
                 }
             };
 
-            #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
             let dst_subaccount = match &recipe.investor {
                 Some(Investor::Direct(DirectInvestment { buyer_principal })) => {
                     match string_to_principal(buyer_principal) {
@@ -2301,12 +2305,9 @@ impl Swap {
                         }
                     }
                 }
-                Some(Investor::CommunityFund(CfInvestment {
-                    controller: _,
-                    hotkeys: _,
-                    hotkey_principal: _,
-                    nns_neuron_id: _,
-                })) => compute_neuron_staking_subaccount_bytes(nns_governance.into(), neuron_memo),
+                Some(Investor::CommunityFund(_)) => {
+                    compute_neuron_staking_subaccount_bytes(nns_governance.into(), neuron_memo)
+                }
                 // SnsNeuronRecipe.investor should always be present as it is set in `commit`.
                 // In the case of a bug due to programmer error, increment the invalid field.
                 // This will require a manual intervention via an upgrade to correct
