@@ -24,7 +24,6 @@ tokio-util = { workspace = true }
 serde = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-logger = { path = "../monitoring/logger" }
-ic-metrics = { path = "../monitoring/metrics" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
