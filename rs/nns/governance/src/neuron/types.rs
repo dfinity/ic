@@ -951,8 +951,16 @@ impl TryFrom<NeuronProto> for Neuron {
             dissolve_state,
             aging_since_timestamp_seconds,
         })?;
-        let visibility =
-            visibility.and_then(|visibility| Visibility::try_from(visibility).ok());
+        let visibility = match visibility {
+            None => None,
+            Some(visibility) => {
+                Some(Visibility::try_from(visibility)
+                    .map_err(|err| format!(
+                        "Failed to interpret visibility of neuron {:?}: {:?}",
+                        id, err,
+                    ))?)
+            }
+        };
 
         Ok(Neuron {
             id,
