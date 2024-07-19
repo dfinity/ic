@@ -69,7 +69,7 @@ impl RosettaClient {
             };
 
             // Verify that the signature is correct
-            let verification_key = ed25519_consensus::VerificationKey::try_from(
+            let verification_key = ic_crypto_ed25519::PublicKey::deserialize_raw(
                 signer_keypair.get_pb_key().as_slice(),
             )
             .with_context(|| {
@@ -80,10 +80,7 @@ impl RosettaClient {
             })?;
 
             if verification_key
-                .verify(
-                    &ed25519_consensus::Signature::try_from(signed_bytes.as_slice())?,
-                    &signable_bytes,
-                )
+                .verify_signature(&signable_bytes, signed_bytes.as_slice())
                 .is_err()
             {
                 bail!("Signature verification failed")

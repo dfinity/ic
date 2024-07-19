@@ -9,7 +9,7 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript,
@@ -75,7 +75,7 @@ enum ValidationFailure {
     RegistryClientError(RegistryClientError),
     PayloadValidationFailed(PayloadValidationFailure),
     DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
-    IDkgPayloadValidationFailed(ecdsa::IDkgPayloadValidationFailure),
+    IDkgPayloadValidationFailed(idkg::IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -101,7 +101,7 @@ enum InvalidArtifactReason {
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
     InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
-    InvalidIDkgPayload(ecdsa::InvalidIDkgPayloadReason),
+    InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -1150,7 +1150,7 @@ impl Validator {
                 )
             })?;
 
-        ecdsa::validate_payload(
+        idkg::validate_payload(
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
@@ -1766,7 +1766,7 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ecdsa::test_utils::{
+    use crate::idkg::test_utils::{
         add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
         fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };

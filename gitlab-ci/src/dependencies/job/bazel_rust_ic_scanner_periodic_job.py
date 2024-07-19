@@ -11,7 +11,7 @@ from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyMan
 from scanner.scanner_job_type import ScannerJobType
 
 REPOS_TO_SCAN = [
-    Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic", owner_by_path={"rs/crypto": [Team.CRYPTO_TEAM],"rs/validator": [Team.CRYPTO_TEAM],"rs/canonical_state": [Team.CRYPTO_TEAM]})]),
+    Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path="ic", owner_by_path={"rs/crypto": [Team.CRYPTO_TEAM],"rs/validator": [Team.CRYPTO_TEAM],"rs/canonical_state": [Team.CRYPTO_TEAM]})]),
     Repository("nns-dapp", "https://github.com/dfinity/nns-dapp", [Project(name="nns-dapp", path="nns-dapp", owner=Team.NNS_TEAM)]),
     Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project(name="internet-identity", path="internet-identity", owner=Team.GIX_TEAM)]),
     Repository("response-verification", "https://github.com/dfinity/response-verification", [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)]),

@@ -388,9 +388,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
             ),
-            "ed25519-consensus": crate.spec(
-                version = "^2.0.1",
-            ),
             "ed25519-dalek": crate.spec(
                 version = "^2.1.1",
                 features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
@@ -495,6 +492,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "humantime": crate.spec(
                 version = "^2.1.0",
+            ),
+            "humantime-serde": crate.spec(
+                version = "^1.1.1",
             ),
             "hyper_0_14_27": crate.spec(
                 package = "hyper",
@@ -637,7 +637,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "idna": crate.spec(
-                version = "^0.3.0",
+                version = "^1.0.2",
             ),
             "indexmap": crate.spec(
                 version = "^2.2.6",
@@ -1406,13 +1406,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.2",
             ),
             "url": crate.spec(
-                version = "^2.4.1",
+                version = "^2.5.2",
                 features = [
                     "serde",
                 ],
             ),
             "uuid": crate.spec(
-                version = "^1.3.0",
+                version = "^1.10.0",
                 features = [
                     "v4",
                     "serde",

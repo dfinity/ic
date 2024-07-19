@@ -38,6 +38,7 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::process::ExitStatus;
+use std::sync::mpsc::Receiver;
 use std::sync::Weak;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -645,10 +646,15 @@ pub struct SandboxedExecutionController {
     metrics: Arc<SandboxedExecutionMetrics>,
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
 impl Drop for SandboxedExecutionController {
     fn drop(&mut self) {
+        // Ignore the result because even if it fails, there is not much that
+        // can be done.
+        let _ = self.stop_monitoring_thread.send(true);
+
         // Evict all the sandbox processes.
         let mut guard = self.backends.lock().unwrap();
         evict_sandbox_processes(&mut guard, 0, 0, Duration::default());
@@ -1059,6 +1065,7 @@ impl SandboxedExecutionController {
         let backends_copy = Arc::clone(&backends);
         let metrics_copy = Arc::clone(&metrics);
         let logger_copy = logger.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
             SandboxedExecutionController::monitor_and_evict_sandbox_processes(
@@ -1068,6 +1075,7 @@ impl SandboxedExecutionController {
                 min_sandbox_count,
                 max_sandbox_count,
                 max_sandbox_idle_time,
+                rx,
             );
         });
 
@@ -1102,6 +1110,7 @@ impl SandboxedExecutionController {
             metrics,
             launcher_service,
             fd_factory: Arc::clone(&fd_factory),
+            stop_monitoring_thread: tx,
         })
     }
 
@@ -1116,6 +1125,7 @@ impl SandboxedExecutionController {
         min_sandbox_count: usize,
         max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
+        stop_request: Receiver<bool>,
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
@@ -1220,7 +1230,9 @@ impl SandboxedExecutionController {
             // based on the time measured to perform the collection and e.g.
             // ensure that we are 99% idle instead of using a static duration
             // here.
-            std::thread::sleep(SANDBOX_PROCESS_UPDATE_INTERVAL);
+            if let Ok(true) = stop_request.recv_timeout(SANDBOX_PROCESS_UPDATE_INTERVAL) {
+                break;
+            }
         }
     }
 

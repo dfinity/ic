@@ -20,7 +20,6 @@ fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), Cani
         threshold,
         threshold,
         seed,
-        true,
     )?;
 
     for i in 0..=255 {
@@ -365,7 +364,6 @@ fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), CanisterThresh
         threshold,
         threshold,
         seed,
-        true,
     )?;
 
     let master_key = setup.public_key(&DerivationPath::new(vec![]))?;
@@ -428,7 +426,6 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Canister
         threshold,
         threshold,
         random_seed,
-        true,
     )?;
 
     // zeros the high bit to avoid requesting hardened derivation, which we do not support

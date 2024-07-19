@@ -7,9 +7,9 @@
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, DashboardRequest, ExecuteIngressMessage,
-    GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query,
-    QueryRequest, ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
-    Tick,
+    GetCanisterHttp, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
+    MockCanisterHttp, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory, SetTime,
+    StatusRequest, SubmitIngressMessage, Tick,
 };
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
@@ -36,9 +36,9 @@ use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
     self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
-    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
-    RawWasmResult, Topology,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawMessageId, RawMockCanisterHttpResponse, RawSetStableMemory,
+    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -70,6 +70,7 @@ where
         .directory_route("/query", post(handler_json_query))
         .directory_route("/topology", get(handler_topology))
         .directory_route("/get_time", get(handler_get_time))
+        .directory_route("/get_canister_http", get(handler_get_canister_http))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
         .directory_route("/get_subnet", post(handler_get_subnet))
@@ -98,6 +99,7 @@ where
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
+        .directory_route("/mock_canister_http", post(handler_mock_canister_http))
 }
 
 pub fn instance_api_v2_routes<S>() -> ApiRouter<S>
@@ -430,6 +432,19 @@ impl TryFrom<OpOut> for RawSubmitIngressResult {
     }
 }
 
+impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::CanisterHttp(canister_http_requests) => Ok(canister_http_requests
+                .into_iter()
+                .map(|r| r.into())
+                .collect()),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
     fn from(value: OpOut) -> Self {
         match value {
@@ -496,6 +511,35 @@ pub async fn handler_get_time(
     let timeout = timeout_or_default(headers);
     let time_op = GetTime {};
     let (code, response) = run_operation(api_state, instance_id, timeout, time_op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_get_canister_http(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<Vec<RawCanisterHttpRequest>>>) {
+    let timeout = timeout_or_default(headers);
+    let op = GetCanisterHttp {};
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_mock_canister_http(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_mock_canister_http_response): axum::extract::Json<
+        RawMockCanisterHttpResponse,
+    >,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let mock_canister_http_response: MockCanisterHttpResponse =
+        raw_mock_canister_http_response.into();
+    let op = MockCanisterHttp {
+        mock_canister_http_response,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))
 }
 
@@ -581,67 +625,54 @@ pub async fn handler_pub_key(
 }
 
 pub async fn handler_dashboard(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = DashboardRequest { runtime };
+    let op = DashboardRequest {};
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_status(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = StatusRequest { bytes, runtime };
+    let op = StatusRequest { bytes };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_call(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_query(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = QueryRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_read_state(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = ReadStateRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
     handle_raw(api_state, instance_id, op).await
 }
@@ -744,6 +775,13 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             Json(ApiResponse::<()>::Error {
                 message: format!("{:?}", PocketIcError::try_from(opout).unwrap()),
             }),
+        )
+            .into_response(),
+        opout @ OpOut::CanisterHttp(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                Vec::<RawCanisterHttpRequest>::try_from(opout).unwrap(),
+            )),
         )
             .into_response(),
         OpOut::RawResponse((status, headers, bytes)) => {

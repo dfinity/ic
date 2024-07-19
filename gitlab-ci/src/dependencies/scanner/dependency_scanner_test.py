@@ -77,7 +77,7 @@ def test_on_periodic_job_no_findings(jira_lib_mock):
     sub1 = Mock()
     sub2 = Mock()
     scanner_job = DependencyScanner(FakeBazel(1), jira_lib_mock, [sub1, sub2])
-    repos = [Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])]
+    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -92,7 +92,7 @@ def test_on_periodic_job_no_findings(jira_lib_mock):
 
 def test_on_periodic_job_delete_finding(jira_lib_mock):
     # no findings, 1 present in JIRA
-    repos = [Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])]
+    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])]
     jira_finding = Finding(
         repository=repos[0].name,
         scanner="BAZEL_RUST",
@@ -128,7 +128,7 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic", owner=Team.EXECUTION_TEAM)])
+    repository = Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path="ic", owner=Team.EXECUTION_TEAM)])
     finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     finding.risk_assessor = [User("mickey", "Mickey Mouse")]
     finding.owning_teams = [Team.EXECUTION_TEAM]
@@ -152,7 +152,7 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
 def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     # one finding, present in JIRA
     scanner = "BAZEL_RUST"
-    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])
     jira_finding = Finding(
         repository=repository.name,
         scanner=scanner,
@@ -173,7 +173,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     sub2 = Mock()
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    repos = [Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic", owner_by_path={'bear': [Team.NODE_TEAM]})])]
+    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path="ic", owner_by_path={'bear': [Team.NODE_TEAM]})])]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -202,7 +202,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
 
 def test_on_periodic_job_one_finding_in_jira_clear_risk_and_keep_risk_note(jira_lib_mock):
     # one finding, present in JIRA
-    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])
     fake_bazel = FakeBazel(2)
     jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     jira_finding.risk = SecurityRisk.HIGH
@@ -223,7 +223,7 @@ def test_on_periodic_job_one_finding_in_jira_clear_risk_and_keep_risk_note(jira_
 
 def test_on_periodic_job_one_finding_in_jira_leave_risk(jira_lib_mock):
     # one finding, present in JIRA
-    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])
     fake_bazel = FakeBazel(2)
     jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     jira_finding.risk = SecurityRisk.HIGH
@@ -240,7 +240,7 @@ def test_on_periodic_job_one_finding_in_jira_leave_risk(jira_lib_mock):
 
 def test_on_periodic_job_set_risk_for_related_finding(jira_lib_mock):
     # one finding, present in JIRA
-    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])
     fake_bazel = FakeBazel(2)
     jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     # different version means the finding is related
@@ -277,7 +277,7 @@ def test_on_periodic_job_failure(jira_lib_mock):
     fake_bazel.get_findings.side_effect = OSError("Call failed")
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    repos = [Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])]
+    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])]
 
     scanner_job.do_periodic_scan(repos)
     sub1.on_scan_job_succeeded.assert_not_called()
@@ -290,7 +290,7 @@ def test_on_periodic_job_failure(jira_lib_mock):
 @patch("shutil.rmtree")
 def test_get_findings_ic_dir(shutil, clone_repo, jira_lib_mock):
     project = Project("ic", "ic")
-    repo = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [project])
+    repo = Repository("ic", "https://github.com/dfinity/ic", [project])
     fake_bazel = Mock()
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])
 
@@ -421,8 +421,8 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
     sub2.on_scan_job_failed.assert_not_called()
 
 
-@patch("integration.gitlab.gitlab_api.GitlabApi.comment_on_gitlab")
-def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(gitlab_comment_mock, jira_lib_mock):
+@patch("integration.github.github_api.GithubApi.comment_on_github")
+def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(github_comment_mock, jira_lib_mock):
     scanner = "BAZEL_RUST"
     repository = "ic"
     sub1 = Mock()
@@ -453,15 +453,15 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
-    gitlab_comment_mock.assert_not_called()
+    github_comment_mock.assert_not_called()
     sub1.on_scan_job_succeeded.assert_called_once()
     sub2.on_scan_job_succeeded.assert_called_once()
     sub1.on_scan_job_failed.assert_not_called()
     sub2.on_scan_job_failed.assert_not_called()
 
 
-@patch("integration.gitlab.gitlab_api.GitlabApi.comment_on_gitlab")
-def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gitlab_comment_mock, jira_lib_mock):
+@patch("integration.github.github_api.GithubApi.comment_on_github")
+def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(github_comment_mock, jira_lib_mock):
     scanner = "BAZEL_RUST"
     repository = "ic"
     sub1 = Mock()
@@ -512,7 +512,7 @@ def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gitl
             score=100,
         )
     ]
-    gitlab_comment_mock.assert_called_once_with(info=finding_to_flag)
+    github_comment_mock.assert_called_once_with(info=finding_to_flag)
     sub1.on_merge_request_blocked.assert_called_once()
     sub2.on_merge_request_blocked.assert_called_once()
     sub1.on_scan_job_succeeded.assert_called_once()

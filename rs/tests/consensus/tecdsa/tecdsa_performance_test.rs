@@ -40,6 +40,9 @@
 
 use anyhow::Result;
 use futures::future::join_all;
+use ic_consensus_system_test_utils::{
+    limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
@@ -64,8 +67,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
-use ic_tests::nns_dapp::set_authorized_subnets;
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_tests::orchestrator::utils::subnet_recovery::{
     enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
 };
@@ -88,10 +89,8 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 // Network parameters
-const DEVICE_NAME: &str = "enp1s0"; // network interface name
 const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
-const LATENCY_JITTER: Duration = Duration::from_millis(20);
 
 // Signature parameters
 const PRE_SIGNATURES_TO_CREATE: u32 = 30;
@@ -157,7 +156,6 @@ pub fn setup(env: TestEnv) {
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
-    set_authorized_subnets(&env);
     env.sync_with_prometheus();
 }
 
@@ -231,8 +229,11 @@ pub fn tecdsa_performance_test(
             let session = node
                 .block_on_ssh_session()
                 .expect("Failed to ssh into node");
-            node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command())
-                .expect("Failed to execute bash script from session");
+            node.block_on_bash_script_from_session(
+                &session,
+                &limit_tc_ssh_command(BANDWIDTH_MBITS, LATENCY),
+            )
+            .expect("Failed to execute bash script from session");
         });
     }
 
@@ -360,34 +361,6 @@ pub fn tecdsa_performance_test(
             assert!(metrics.success_calls() >= min_expected_success_calls);
         }
     });
-}
-
-/**
- * 1. Delete existing tc rules (if present).
- * 2. Add a root qdisc (queueing discipline) for an htb (hierarchical token bucket).
- * 3. Add a class with bandwidth limit.
- * 4. Add a qdisc to introduce latency with jitter.
- * 5. Add a filter to associate IPv6 traffic with the class and specific port.
- * 6. Read the active tc rules.
- */
-fn limit_tc_ssh_command() -> String {
-    let cfg = ic_system_test_driver::util::get_config();
-    let p2p_listen_port = cfg.transport.unwrap().listening_port;
-    format!(
-        r#"set -euo pipefail
-sudo tc qdisc del dev {device} root 2> /dev/null || true
-sudo tc qdisc add dev {device} root handle 1: htb default 10
-sudo tc class add dev {device} parent 1: classid 1:10 htb rate {bandwidth_mbit}mbit ceil {bandwidth_mbit}mbit
-sudo tc qdisc add dev {device} parent 1:10 handle 10: netem delay {latency_ms}ms {jitter_ms}ms
-sudo tc filter add dev {device} parent 1: protocol ipv6 prio 1 u32 match ip6 dport {p2p_listen_port} 0xFFFF flowid 1:10
-sudo tc qdisc show dev {device}
-"#,
-        device = DEVICE_NAME,
-        bandwidth_mbit = BANDWIDTH_MBITS,
-        latency_ms = LATENCY.as_millis(),
-        jitter_ms = LATENCY_JITTER.as_millis(),
-        p2p_listen_port = p2p_listen_port
-    )
 }
 
 fn main() -> Result<()> {

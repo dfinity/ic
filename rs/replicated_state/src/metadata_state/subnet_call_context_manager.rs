@@ -780,14 +780,14 @@ impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SchnorrArguments {
     pub key_id: SchnorrKeyId,
-    pub message: Vec<u8>,
+    pub message: Arc<Vec<u8>>,
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
     fn from(args: &SchnorrArguments) -> Self {
         Self {
             key_id: Some((&args.key_id).into()),
-            message: args.message.clone(),
+            message: args.message.to_vec(),
         }
     }
 }
@@ -797,7 +797,7 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
     fn try_from(context: pb_metadata::SchnorrArguments) -> Result<Self, Self::Error> {
         Ok(SchnorrArguments {
             key_id: try_from_option_field(context.key_id, "SchnorrArguments::key_id")?,
-            message: context.message,
+            message: Arc::new(context.message),
         })
     }
 }

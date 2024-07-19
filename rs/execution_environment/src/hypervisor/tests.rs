@@ -6852,10 +6852,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         .canister_update_reserved_cycles_limit(canister_id, Cycles::from(reserved_cycles.get() - 1))
         .unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
-    );
+    assert_eq!(err.code(), ErrorCode::ReservedCyclesLimitIsTooLow);
 }
 
 #[test]

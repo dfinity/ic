@@ -16,7 +16,7 @@ use ic_interfaces::p2p::consensus::{
     ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_interfaces::{
-    ecdsa::{
+    idkg::{
         IDkgChangeAction, IDkgChangeSet, IDkgPool, IDkgPoolSection, IDkgPoolSectionOp,
         IDkgPoolSectionOps, MutableIDkgPoolSection,
     },

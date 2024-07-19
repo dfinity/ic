@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use super::id::MemoryId;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Round(pub u64);
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SandboxExecInput {
     pub func_ref: FuncRef,
     pub api_type: ApiType,
@@ -32,7 +32,7 @@ pub struct SandboxExecInput {
     pub wasm_reserved_pages: NumWasmPages,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct SandboxExecOutput {
     pub slice: SliceExecutionOutput,
     pub wasm: WasmExecutionOutput,
@@ -48,13 +48,13 @@ impl SandboxExecOutput {
 }
 
 /// Describes the memory changes performed by execution.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct MemoryModifications {
     pub page_delta: PageDeltaSerialization,
     pub size: NumWasmPages,
 }
 
-#[derive(Serialize, Default, Deserialize, Clone)]
+#[derive(Serialize, Default, Deserialize, Clone, PartialEq)]
 pub struct StateModifications {
     /// Modifications in the execution state of the canister.
     ///
