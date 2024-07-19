@@ -56,6 +56,7 @@ jobs:
   ci-main:
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
 
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
