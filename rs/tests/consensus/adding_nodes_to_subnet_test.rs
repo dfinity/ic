@@ -16,11 +16,11 @@ Success::
 end::catalog[] */
 
 use anyhow::Result;
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
     install_nns_and_check_progress, store_message,
 };
+use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
