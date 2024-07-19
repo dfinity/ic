@@ -2,13 +2,14 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId, Status,
+    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
+use ic_ledger_test_utils::state_machine_helpers::index::status;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, Transaction,
@@ -175,14 +176,6 @@ fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response");
     assert_eq!(account_balance, accountidentifier_balance);
     accountidentifier_balance
-}
-
-fn status(env: &StateMachine, index_id: CanisterId) -> Status {
-    let res = env
-        .query(index_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to send status")
-        .bytes();
-    Decode!(&res, Status).expect("Failed to decode status response")
 }
 
 fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {

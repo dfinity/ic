@@ -14,6 +14,7 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-icp-index = { path = "../index" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-nns-constants = { path = "../../../nns/constants" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
 icp-ledger = { path = ".." }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
