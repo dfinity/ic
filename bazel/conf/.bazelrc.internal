@@ -37,3 +37,5 @@ build:ci --verbose_failures
 build:local --remote_cache=
 build:local --bes_backend=
 
+build:systest --s3_endpoint=https://s3-upload.idx.dfinity.network
+build:testnet --s3_endpoint=https://s3-upload.idx.dfinity.network
