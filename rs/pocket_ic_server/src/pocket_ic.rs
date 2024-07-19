@@ -20,24 +20,32 @@ use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
     CallServiceV2, CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
 };
+use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
+use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
+use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
+use ic_https_outcalls_service::CanisterHttpSendRequest;
+use ic_https_outcalls_service::CanisterHttpSendResponse;
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
+use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
     Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
 };
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    finalize_registry, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
+    finalize_registry, IngressState, IngressStatus, RejectCode, StateMachine, StateMachineBuilder,
     StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
+    canister_http::{CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponseContent},
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
@@ -49,7 +57,8 @@ use ic_types::{
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, DtsFlag, ExtendedSubnetConfigSet, RawAddCycles,
+    self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
+    CanisterHttpResponse, DtsFlag, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
 };
@@ -71,6 +80,9 @@ use std::{
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
+use tonic::transport::{Channel, Server};
+use tonic::transport::{Endpoint, Uri};
+use tonic::{Code, Request, Response, Status};
 use tower::{
     service_fn,
     util::{BoxCloneService, ServiceExt},
@@ -834,6 +846,229 @@ impl Operation for GetTime {
 
     fn id(&self) -> OpId {
         OpId("get_time".into())
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GetCanisterHttp;
+
+fn http_method_from(
+    http_method: &ic_types::canister_http::CanisterHttpMethod,
+) -> CanisterHttpMethod {
+    match http_method {
+        ic_types::canister_http::CanisterHttpMethod::GET => CanisterHttpMethod::GET,
+        ic_types::canister_http::CanisterHttpMethod::POST => CanisterHttpMethod::POST,
+        ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
+    }
+}
+
+fn http_header_from(
+    http_header: &ic_types::canister_http::CanisterHttpHeader,
+) -> CanisterHttpHeader {
+    CanisterHttpHeader {
+        name: http_header.name.clone(),
+        value: http_header.value.clone(),
+    }
+}
+
+fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
+    let mut canister_http = vec![];
+    for subnet in pic.subnets.read().unwrap().values() {
+        let mut cur: Vec<_> = subnet
+            .canister_http_request_contexts()
+            .into_iter()
+            .map(|(id, c)| CanisterHttpRequest {
+                subnet_id: subnet.get_subnet_id().get().0,
+                request_id: id.get(),
+                http_method: http_method_from(&c.http_method),
+                url: c.url,
+                headers: c.headers.iter().map(http_header_from).collect(),
+                body: c.body.unwrap_or_default(),
+                max_response_bytes: c.max_response_bytes.map(|b| b.get()),
+            })
+            .collect();
+        canister_http.append(&mut cur);
+    }
+    canister_http
+}
+
+impl Operation for GetCanisterHttp {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let canister_http_requests = get_canister_http_requests(pic);
+        OpOut::CanisterHttp(canister_http_requests)
+    }
+
+    fn id(&self) -> OpId {
+        OpId("get_canister_http".into())
+    }
+}
+
+// START COPY from rs/https_outcalls/client/src/client.rs
+
+#[derive(Clone)]
+pub struct SingleResponseAdapter {
+    response: Result<CanisterHttpSendResponse, (Code, String)>,
+}
+
+impl SingleResponseAdapter {
+    fn new(response: Result<CanisterHttpSendResponse, (Code, String)>) -> Self {
+        Self { response }
+    }
+}
+
+#[tonic::async_trait]
+impl CanisterHttpService for SingleResponseAdapter {
+    async fn canister_http_send(
+        &self,
+        _request: Request<CanisterHttpSendRequest>,
+    ) -> Result<Response<CanisterHttpSendResponse>, Status> {
+        match self.response.clone() {
+            Ok(resp) => Ok(Response::new(resp)),
+            Err((code, msg)) => Err(Status::new(code, msg)),
+        }
+    }
+}
+
+async fn setup_adapter_mock(
+    adapter_response: Result<CanisterHttpSendResponse, (Code, String)>,
+) -> Channel {
+    let (client, server) = tokio::io::duplex(1024);
+    let mock_adapter = SingleResponseAdapter::new(adapter_response);
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(CanisterHttpServiceServer::new(mock_adapter))
+            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .await
+    });
+
+    let mut client = Some(client);
+    Endpoint::try_from("http://[::]:50051")
+        .unwrap()
+        .connect_with_connector(service_fn(move |_: Uri| {
+            let client = client.take();
+
+            async move {
+                if let Some(client) = client {
+                    Ok(client)
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Client already taken",
+                    ))
+                }
+            }
+        }))
+        .await
+        .unwrap()
+}
+
+// END COPY
+
+fn process_mock_canister_https_response(
+    pic: &PocketIc,
+    mock_canister_http_response: &MockCanisterHttpResponse,
+) -> OpOut {
+    let subnet_id =
+        ic_types::SubnetId::new(ic_types::PrincipalId(mock_canister_http_response.subnet_id));
+    let Some(subnet) = pic.get_subnet_with_id(subnet_id) else {
+        return OpOut::Error(PocketIcError::SubnetNotFound(
+            mock_canister_http_response.subnet_id,
+        ));
+    };
+    let canister_http_request_id =
+        CanisterHttpRequestId::from(mock_canister_http_response.request_id);
+    let contexts = subnet.canister_http_request_contexts();
+    let Some(context) = contexts.get(&canister_http_request_id) else {
+        return OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
+            subnet_id,
+            canister_http_request_id,
+        )));
+    };
+    let timeout = context.time + Duration::from_secs(5 * 60);
+    let canister_id = context.request.sender;
+    let content = match &mock_canister_http_response.response {
+        CanisterHttpResponse::CanisterHttpReply(reply) => {
+            let grpc_channel =
+                pic.runtime
+                    .block_on(setup_adapter_mock(Ok(CanisterHttpSendResponse {
+                        status: reply.status.into(),
+                        headers: reply
+                            .headers
+                            .iter()
+                            .map(|h| ic_https_outcalls_service::HttpHeader {
+                                name: h.name.clone(),
+                                value: h.value.clone(),
+                            })
+                            .collect(),
+                        content: reply.body.clone(),
+                    })));
+            let query_handler = subnet.query_handler.clone();
+            let query_handler = BoxCloneService::new(service_fn(move |arg| {
+                let query_handler = query_handler.clone();
+                async {
+                    let r = query_handler
+                        .oneshot(arg)
+                        .await
+                        .expect("Inner service should be alive. I hope.");
+                    Ok(r)
+                }
+            }));
+            let mut client = CanisterHttpAdapterClientImpl::new(
+                pic.runtime.handle().clone(),
+                grpc_channel,
+                query_handler.clone(),
+                1,
+                MetricsRegistry::new(),
+                subnet.get_subnet_type(),
+            );
+            client
+                .send(ic_types::canister_http::CanisterHttpRequest {
+                    timeout,
+                    id: canister_http_request_id,
+                    context: context.clone(),
+                })
+                .unwrap();
+            let response = loop {
+                match client.try_receive() {
+                    Err(_) => std::thread::sleep(Duration::from_millis(10)),
+                    Ok(r) => {
+                        break r;
+                    }
+                }
+            };
+            response.content
+        }
+        CanisterHttpResponse::CanisterHttpReject(reject) => {
+            CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                reject_code: RejectCode::try_from(reject.reject_code).unwrap(),
+                message: reject.message.clone(),
+            })
+        }
+    };
+    subnet.mock_canister_http_response(
+        mock_canister_http_response.request_id,
+        timeout,
+        canister_id,
+        content,
+    );
+    OpOut::NoOutput
+}
+
+#[derive(Clone, Debug)]
+pub struct MockCanisterHttp {
+    pub mock_canister_http_response: MockCanisterHttpResponse,
+}
+
+impl Operation for MockCanisterHttp {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        process_mock_canister_https_response(pic, &self.mock_canister_http_response)
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "mock_canister_http({:?})",
+            self.mock_canister_http_response
+        ))
     }
 }
 
