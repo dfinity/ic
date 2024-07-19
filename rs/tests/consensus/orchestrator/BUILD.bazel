@@ -67,7 +67,15 @@ system_test(
     runtime_deps = MAINNET_REVISION_RUNTIME_DEPS + [
         "//rs/tests:cup_compatibility/binaries",
     ],
-    deps = [],
+    deps = [
+        "//rs/recovery",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
 )
 
 system_test(
