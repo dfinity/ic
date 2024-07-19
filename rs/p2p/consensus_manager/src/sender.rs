@@ -59,11 +59,7 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
     }
 }
 
-pub(crate) struct ConsensusManagerSender<
-    Artifact: IdentifiableArtifact,
-    WireArtifact: PbArtifact,
-    Downloader: ArtifactAssembler<Artifact, WireArtifact>,
-> {
+pub(crate) struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, Assembler> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
@@ -73,15 +69,15 @@ pub(crate) struct ConsensusManagerSender<
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
     join_set: JoinSet<()>,
-    downloader: Downloader,
+    assembler: Assembler,
     marker: PhantomData<WireArtifact>,
 }
 
 impl<
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
-        Downloader: ArtifactAssembler<Artifact, WireArtifact>,
-    > ConsensusManagerSender<Artifact, WireArtifact, Downloader>
+        Assembler: ArtifactAssembler<Artifact, WireArtifact>,
+    > ConsensusManagerSender<Artifact, WireArtifact, Assembler>
 {
     pub(crate) fn run(
         log: ReplicaLogger,
@@ -89,7 +85,7 @@ impl<
         rt_handle: Handle,
         transport: Arc<dyn Transport>,
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
-        downloader: Downloader,
+        assembler: Assembler,
     ) -> Shutdown {
         let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), WireArtifact::NAME);
 
@@ -103,7 +99,7 @@ impl<
             current_commit_id: CommitId::from(0),
             active_adverts: HashMap::new(),
             join_set: JoinSet::new(),
-            downloader,
+            assembler,
             marker: PhantomData,
         };
 
@@ -183,7 +179,7 @@ impl<
         cancellation_token: CancellationToken,
     ) {
         let id = new_artifact.artifact.id();
-        let wire_artifact = self.downloader.disassemble_message(new_artifact.artifact);
+        let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
         let wire_artifact_id = wire_artifact.id();
         let wire_artifact_attribute = wire_artifact.attribute();
         let entry = self.active_adverts.entry(id.clone());
@@ -425,9 +421,9 @@ mod tests {
     use super::*;
 
     #[derive(Clone)]
-    struct IdentityDownloader;
+    struct IdentityAssembler;
 
-    impl ArtifactAssembler<U64Artifact, U64Artifact> for IdentityDownloader {
+    impl ArtifactAssembler<U64Artifact, U64Artifact> for IdentityAssembler {
         fn disassemble_message(&self, msg: U64Artifact) -> U64Artifact {
             msg
         }
@@ -467,7 +463,7 @@ mod tests {
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                IdentityDownloader,
+                IdentityAssembler,
             );
 
             tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
@@ -529,7 +525,7 @@ mod tests {
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                IdentityDownloader,
+                IdentityAssembler,
             );
 
             tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
@@ -588,7 +584,7 @@ mod tests {
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                IdentityDownloader,
+                IdentityAssembler,
             );
 
             tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
@@ -634,7 +630,7 @@ mod tests {
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                IdentityDownloader,
+                IdentityAssembler,
             );
             // Send advert and verify commit it.
             tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
@@ -697,7 +693,7 @@ mod tests {
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                IdentityDownloader,
+                IdentityAssembler,
             );
 
             // Send advert and verify commit id.
@@ -764,7 +760,7 @@ mod tests {
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
-                IdentityDownloader,
+                IdentityAssembler,
             );
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {

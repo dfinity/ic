@@ -158,7 +158,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             build_axum_router(pool_clone),
         )
     }
-    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `DownloadStopped` is returned.
+    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `Aborted` is returned.
     #[instrument(skip_all)]
     async fn wait_fetch(
         id: &Artifact::Id,

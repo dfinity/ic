@@ -146,8 +146,8 @@ impl PeerCounter {
 #[allow(unused)]
 pub(crate) struct ConsensusManagerReceiver<
     Artifact: IdentifiableArtifact,
-    WireArtifact: PbArtifact,
-    Downloader: ArtifactAssembler<Artifact, WireArtifact>,
+    WireArtifact: IdentifiableArtifact,
+    Assembler,
     ReceivedAdvert,
 > {
     log: ReplicaLogger,
@@ -157,7 +157,7 @@ pub(crate) struct ConsensusManagerReceiver<
     // Receive side:
     adverts_received: Receiver<ReceivedAdvert>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    artifact_assembler: Downloader,
+    artifact_assembler: Assembler,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<WireArtifact::Id>>>,
     active_downloads: HashMap<WireArtifact::Id, watch::Sender<PeerCounter>>,
@@ -173,24 +173,24 @@ pub(crate) struct ConsensusManagerReceiver<
 }
 
 #[allow(unused)]
-impl<Artifact, WireArtifact, Downloader>
+impl<Artifact, WireArtifact, Assembler>
     ConsensusManagerReceiver<
         Artifact,
         WireArtifact,
-        Downloader,
+        Assembler,
         (SlotUpdate<WireArtifact>, NodeId, ConnId),
     >
 where
     Artifact: IdentifiableArtifact,
     WireArtifact: PbArtifact,
-    Downloader: ArtifactAssembler<Artifact, WireArtifact>,
+    Assembler: ArtifactAssembler<Artifact, WireArtifact>,
 {
     pub(crate) fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
         adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
-        artifact_assembler: Downloader,
+        artifact_assembler: Assembler,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) {
@@ -413,7 +413,7 @@ where
         mut artifact: Option<(WireArtifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-        mut artifact_assembler: Downloader,
+        mut artifact_assembler: Assembler,
         metrics: ConsensusManagerMetrics,
     ) -> (
         watch::Receiver<PeerCounter>,

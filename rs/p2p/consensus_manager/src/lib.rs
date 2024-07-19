@@ -56,7 +56,7 @@ impl ConsensusManagerBuilder {
         &mut self,
         outbound_artifacts_rx: Receiver<ArtifactProcessorEvent<Artifact>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-        (downloader, downloader_router): (F, Router),
+        (assembler, assembler_router): (F, Router),
     ) {
         assert!(uri_prefix::<WireArtifact>()
             .chars()
@@ -75,7 +75,7 @@ impl ConsensusManagerBuilder {
                 outbound_artifacts_rx,
                 adverts_from_peers_rx,
                 inbound_artifacts_tx,
-                downloader(transport.clone()),
+                assembler(transport.clone()),
                 transport,
                 topology_watcher,
             )
@@ -86,7 +86,7 @@ impl ConsensusManagerBuilder {
                 .take()
                 .unwrap_or_default()
                 .merge(router)
-                .merge(downloader_router),
+                .merge(assembler_router),
         );
 
         self.clients.push(Box::new(builder));
@@ -109,7 +109,7 @@ impl ConsensusManagerBuilder {
     }
 }
 
-fn start_consensus_manager<Artifact, WireArtifact, Downloader>(
+fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
@@ -118,14 +118,14 @@ fn start_consensus_manager<Artifact, WireArtifact, Downloader>(
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    downloader: Downloader,
+    assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
 ) -> Shutdown
 where
     Artifact: IdentifiableArtifact,
     WireArtifact: PbArtifact,
-    Downloader: ArtifactAssembler<Artifact, WireArtifact>,
+    Assembler: ArtifactAssembler<Artifact, WireArtifact>,
 {
     let metrics = ConsensusManagerMetrics::new::<WireArtifact>(metrics_registry);
 
@@ -135,7 +135,7 @@ where
         rt_handle.clone(),
         transport.clone(),
         adverts_to_send,
-        downloader.clone(),
+        assembler.clone(),
     );
 
     ConsensusManagerReceiver::run(
@@ -143,7 +143,7 @@ where
         metrics,
         rt_handle,
         adverts_received,
-        downloader,
+        assembler,
         sender,
         topology_watcher,
     );
