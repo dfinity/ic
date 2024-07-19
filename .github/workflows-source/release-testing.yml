@@ -5,6 +5,7 @@ on:
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
+      # TODO: remove me
       - 'marko-update-release-testing'
   workflow_dispatch:
 
@@ -61,7 +62,6 @@ jobs:
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     <<: *dind-large-setup
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -79,7 +79,6 @@ jobs:
     name: Bazel System Test Staging
     continue-on-error: True
     <<: *dind-large-setup
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -97,7 +96,6 @@ jobs:
     name: Bazel System Test Hotfix
     <<: *dind-large-setup
     timeout-minutes: 90
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - <<: *checkout
       - <<: *before-script
