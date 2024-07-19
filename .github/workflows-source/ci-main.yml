@@ -7,11 +7,10 @@ on:
   schedule: # Todo: switch to push on master and remove schedule once we have more macos runners
     - cron: "0 * * * *"
   pull_request:
+  # Used as reusable workflow within release-testing workflow
   workflow_call:
   push:
     branches:
-      - 'hotfix-*-rc--*'
-      - 'rc--*'
       - 'dev-gh-*'
 
 # runs for the same workflow are cancelled on PRs but not on master
@@ -77,9 +76,6 @@ jobs:
     runs-on:
       group: zh1
       labels: dind-large
-    env:
-      DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
     steps:
       - <<: *checkout
       - <<: *before-script
