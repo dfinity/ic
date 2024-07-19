@@ -669,10 +669,7 @@ fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<
         return Ok(None);
     }
 
-    if domain_to_ascii_strict(domain)
-        .ok()
-        .filter(|s| s == domain)
-        .is_none()
+    if !domain_to_ascii_strict(domain).is_ok_and(|s| s == domain)
     {
         return Err(OrchestratorError::invalid_configuration_error(format!(
             "Provided domain name {domain} is invalid",
