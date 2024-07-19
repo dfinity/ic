@@ -21,7 +21,10 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    borrow::Cow,
+    collections::{BTreeSet, HashMap},
+};
 
 /// A neuron type internal to the governance crate. Currently, this type is identical to the
 /// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
@@ -113,6 +116,26 @@ pub struct Neuron {
     /// How much unprivileged principals (i.e. is neither controller, nor
     /// hotkey) can see about this neuron.
     pub visibility: Option<Visibility>,
+}
+
+#[must_use]
+pub fn normalized<'a>(mut neuron: Cow<'a, Neuron>) -> Cow<'a, Neuron> {
+    if neuron.known_neuron_data.is_some() {
+        // Log if there is an inconsistency, but otherwise, do not interrupt the flow.
+        if neuron.visibility == Some(Visibility::Private) {
+            println!(
+                "{}WARNING: Neuron {:?} is a known neuron, but its visibility field is \
+                 set to private. This in-memory neuron will now quietly be set to public. \
+                 However, the underlying source of this inconsistent neuron is not \
+                 being updated.",
+                LOG_PREFIX, neuron.id,
+            );
+        }
+
+        neuron.to_mut().visibility = Some(Visibility::Public);
+    }
+
+    neuron
 }
 
 impl Neuron {
