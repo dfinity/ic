@@ -5,7 +5,7 @@ use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    approvals::Approvals,
+    approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
@@ -48,6 +48,7 @@ pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 pub const MEMO_SIZE_BYTES: usize = 32;
 
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
+pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
 
 #[derive(
     Serialize,
@@ -326,21 +327,6 @@ impl Transaction {
             icrc1_memo: None,
             created_at_time: Some(created_at_time),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ApprovalKey(AccountIdentifier, AccountIdentifier);
-
-impl From<(&AccountIdentifier, &AccountIdentifier)> for ApprovalKey {
-    fn from((account, spender): (&AccountIdentifier, &AccountIdentifier)) -> Self {
-        Self(*account, *spender)
-    }
-}
-
-impl From<ApprovalKey> for (AccountIdentifier, AccountIdentifier) {
-    fn from(key: ApprovalKey) -> Self {
-        (key.0, key.1)
     }
 }
 

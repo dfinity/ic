@@ -1156,12 +1156,6 @@ message SettleNeuronsFundParticipationRequest {
   message Aborted {}
 }
 
-// A list of principals.
-// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
-message Principals {
-  repeated ic_base_types.pb.v1.PrincipalId principals = 7;
-}
-
 // Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 // thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 // a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -1184,7 +1178,7 @@ message SettleNeuronsFundParticipationResponse {
     // The principal that can manage this neuron.
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
     // The principals that can vote, propose, and follow on behalf of this neuron.
-    optional Principals hotkeys = 7;
+    optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
 
     // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
     // has been capped to reflect the maximum participation amount for this SNS swap.

@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+backoff = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 exec = "0.3.1"
@@ -51,7 +52,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }

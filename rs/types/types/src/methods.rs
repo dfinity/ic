@@ -374,7 +374,7 @@ impl TryFrom<pb::Callback> for Callback {
 }
 
 /// A reference to a callable function/method in a Wasm module, which can be:
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum FuncRef {
     /// A method that a canister can export.
     Method(WasmMethod),

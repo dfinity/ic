@@ -1,12 +1,12 @@
 //! The malicious pre signature process manager
 
-use crate::ecdsa::metrics::IDkgPreSignerMetrics;
-use crate::ecdsa::{
+use crate::idkg::metrics::IDkgPreSignerMetrics;
+use crate::idkg::{
     pre_signer::IDkgPreSignerImpl, utils::transcript_op_summary, IDkgBlockReaderImpl,
 };
 use ic_interfaces::{
     crypto::BasicSigner,
-    ecdsa::{IDkgChangeAction, IDkgChangeSet},
+    idkg::{IDkgChangeAction, IDkgChangeSet},
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::node::RegistryVersion;

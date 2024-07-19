@@ -584,7 +584,7 @@ pub fn get_oldest_ecdsa_state_registry_version(
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Arc};
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
@@ -872,7 +872,7 @@ mod tests {
                 }),
                 MasterPublicKeyId::Schnorr(key_id) => {
                     ThresholdArguments::Schnorr(SchnorrArguments {
-                        message: vec![1; 64],
+                        message: Arc::new(vec![1; 64]),
                         key_id: key_id.clone(),
                     })
                 }

@@ -71,10 +71,10 @@ impl CanisterSnapshots {
             Some(snapshot) => {
                 self.unflushed_changes
                     .push(SnapshotOperation::Delete(snapshot_id));
+                let canister_id = snapshot.canister_id();
 
                 // The snapshot ID if present in the `self.snapshots`,
                 // must also be present in the `self.snapshot_ids`.
-                let canister_id = snapshot.canister_id();
                 debug_assert!(self.snapshot_ids.contains_key(&canister_id));
                 let snapshot_ids = self.snapshot_ids.get_mut(&canister_id).unwrap();
                 debug_assert!(snapshot_ids.contains(&snapshot_id));
@@ -145,6 +145,40 @@ impl CanisterSnapshots {
     /// Returns true if unflushed changes list is empty.
     pub fn is_unflushed_changes_empty(&self) -> bool {
         self.unflushed_changes.is_empty()
+    }
+
+    /// Splits the `CanisterSnapshots` as part of subnet splitting phase 1.
+    ///
+    /// A subnet split starts with a subnet A and results in two subnets, A' and B.
+    /// For the sake of clarity, comments refer to the two resulting subnets as
+    /// *subnet A'* and *subnet B*. And to the original subnet as *subnet A*.
+    ///
+    /// Splitting the canister snapshot is decided based on the new canister list
+    /// hosted by the *subnet A'* or *subnet B*.
+    /// A snapshot associated with a canister not hosted by the local subnet
+    /// will be discarded. A delete `SnapshotOperation` will also be triggered to
+    /// apply the changes during checkpoint time.
+    pub(crate) fn split<F>(&mut self, is_local_canister: F)
+    where
+        F: Fn(CanisterId) -> bool,
+    {
+        let old_snapshot_ids = self.snapshots.keys().cloned().collect::<Vec<_>>();
+        for snapshot_id in old_snapshot_ids {
+            // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
+            let snapshot = self.snapshots.get(&snapshot_id).unwrap();
+            let canister_id = snapshot.canister_id;
+            if !is_local_canister(canister_id) {
+                self.remove(snapshot_id);
+            }
+        }
+
+        // Destructure `self` and put it back together, in order for the compiler to
+        // enforce an explicit decision whenever new fields are added.
+        let CanisterSnapshots {
+            snapshots: _,
+            unflushed_changes: _,
+            snapshot_ids: _,
+        } = self;
     }
 }
 
@@ -377,6 +411,7 @@ mod tests {
         assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
         assert_eq!(unflushed_changes.len(), 1);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
+        assert_eq!(snapshot_manager.snapshot_ids.get(&canister_id), None);
     }
 
     #[test]
