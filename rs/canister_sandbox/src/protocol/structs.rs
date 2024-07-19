@@ -70,7 +70,7 @@ pub struct StateModifications {
     pub system_state_changes: SystemStateChanges,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct ExecutionStateModifications {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,
