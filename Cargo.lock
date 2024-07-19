@@ -2276,6 +2276,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-orchestrator-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "canister_http",
+ "ic-agent",
+ "ic-recovery",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "slog",
+ "tempfile",
+ "tests",
+ "url",
+]
+
+[[package]]
+name = "consensus-tecdsa-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "futures",
+ "ic-management-canister-types",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-sys",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "reqwest 0.12.5",
+ "serde_json",
+ "slog",
+ "tests",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "console"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4041,9 +4082,9 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a62bc1cf6f830c2ec14a513a9fb124d0a213a629668a4186f329db21fe045652"
+checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
 dependencies = [
  "percent-encoding",
 ]
@@ -8320,16 +8361,23 @@ name = "ic-icrc1"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "canister-test",
  "ciborium",
  "hex",
  "ic-base-types",
  "ic-crypto-sha2",
+ "ic-icrc1-ledger",
+ "ic-icrc1-ledger-sm-tests",
  "ic-icrc1-test-utils",
  "ic-icrc1-tokens-u256",
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-nns-test-utils",
+ "ic-nns-test-utils-golden-nns-state",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
  "leb128",
  "num-bigint 0.4.6",
@@ -12774,6 +12822,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_consensus_system_tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "futures",
+ "ic-base-types",
+ "ic-nns-constants",
+ "ic-nns-governance",
+ "ic-recovery",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13026,9 +13095,9 @@ dependencies = [
 
 [[package]]
 name = "idna"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c"
+checksum = "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
 dependencies = [
  "unicode-bidi",
  "unicode-normalization",
@@ -15464,9 +15533,9 @@ dependencies = [
 
 [[package]]
 name = "percent-encoding"
-version = "2.3.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
+checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "pest"
@@ -19073,6 +19142,7 @@ dependencies = [
  "anyhow",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "slog",
  "spec-compliance",
  "tests",
 ]
@@ -20232,12 +20302,12 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.4.1"
+version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
+checksum = "22784dbdf76fdde8af1aeda5622b546b422b6fc585325248a2bf9f5e41e94d6c"
 dependencies = [
  "form_urlencoded",
- "idna 0.4.0",
+ "idna 0.5.0",
  "percent-encoding",
  "serde",
 ]
@@ -20280,9 +20350,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.6.1"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e395fcf16a7a3d8127ec99782007af141946b4795001f876d54fb0d55978560"
+checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 dependencies = [
  "getrandom 0.2.12",
  "serde",

@@ -341,6 +341,10 @@ members = [
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
     "rs/tests",
+    "rs/tests/consensus",
+    "rs/tests/consensus/orchestrator",
+    "rs/tests/consensus/tecdsa",
+    "rs/tests/consensus/utils",
     "rs/tests/driver",
     "rs/tests/httpbin-rs",
     "rs/tests/networking/canister_http",
@@ -648,12 +652,13 @@ tracing-subscriber = { version = "0.3.18", features = [
     "json",
 ] }
 turmoil = "0.6.2"
+url = { version = "2.5.2", features = ["serde"] }
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.1"
-url = "2.1.1"
 
 [workspace.dependencies.ic-wasm]
 version = "^0.7.1"
