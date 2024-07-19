@@ -21,10 +21,6 @@ lint:
     - DEFAULT
 breaking:
   ignore:
-    # Adding to allow us to work around the buf checker for an unreleased proto, remove ASAP
-    - ic_nns_governance/pb/v1/governance.proto
-    # Adding to allow us to work around the buf checker for an unreleased proto, remove ASAP
-    - ic_sns_swap/pb/v1/swap.proto
   use:
     - WIRE
   except:
