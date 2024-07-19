@@ -1309,11 +1309,11 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
