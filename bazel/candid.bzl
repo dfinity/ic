@@ -14,10 +14,10 @@ if [[ $mr_title == *"[override-didc-check]"* ]]; then
     exit 0
 fi
 
-# https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
-# The HEAD SHA of the target branch of the merge request. The variable is empty in merge request pipelines. 
-# The SHA is present only in merged results pipelines.
-readonly merge_base=${{CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-HEAD}}
+# https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables
+# The name of the base ref or target branch of the pull request in a workflow run.
+# This is only set when the event that triggers a workflow run is either pull_request or pull_request_target
+readonly merge_base=${{GITHUB_BASE_REF:-HEAD}}
 
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
@@ -39,7 +39,7 @@ echo DID_PATH={did_path}
 echo "{did_path} passed candid checks"
 
 # In addition to the usual `didc check after.did before.did` it can be helpful to check the reverse as well.
-# This is This is useful when it is expected that clients will "jump the gun", i.e. upgrade before servers. 
+# This is This is useful when it is expected that clients will "jump the gun", i.e. upgrade before servers.
 # This is an unusual (but not unheard of) use case.
 if [ {enable_also_reverse} = True ]; then
     echo "running also-reverse check"
