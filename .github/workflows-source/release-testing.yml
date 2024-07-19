@@ -8,7 +8,7 @@ on:
       - 'marko-update-release-testing'
   workflow_dispatch:
 
-env:
+env: &env
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_JOB_NAME: ${{ github.job }}
@@ -56,6 +56,7 @@ jobs:
   ci-main:
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
+    environment: *env
 
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
