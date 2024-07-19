@@ -416,7 +416,7 @@ async fn setup_certificate_orchestartor(
         move || {
             env.get_first_healthy_application_node_snapshot()
                 .create_and_install_canister_with_arg(
-                    &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
+                    &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
                     Encode!(&InitArg {
                         id_seed: 0,
                         root_principals,

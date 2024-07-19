@@ -338,7 +338,7 @@ pub(crate) async fn install_kyt(
 
     install_rust_canister_from_path(
         kyt_canister,
-        env.get_dependency_path(&env::var("IC_CKBTC_KYT_WASM_PATH").unwrap()),
+        env.get_dependency_path(&env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set")),
         Some(Encode!(&kyt_init_args).unwrap()),
     )
     .await;

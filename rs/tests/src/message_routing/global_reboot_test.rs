@@ -79,7 +79,7 @@ pub fn test(env: TestEnv) {
         .collect();
     // Step 1: Install Xnet canisters on each subnet.
     let wasm =
-        Wasm::from_file(env.get_dependency_path(env::var("XNET_TEST_CANISTER_WASM_PATH").unwrap()));
+        Wasm::from_file(env.get_dependency_path(env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set")));
     info!(log, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(&runtimes, SUBNETS_COUNT, CANISTERS_PER_SUBNET, wasm);
     let canisters_count = canisters.iter().map(Vec::len).sum::<usize>();

@@ -25,8 +25,8 @@ use ic_system_test_driver::{
     util::agent_observes_canister_module,
 };
 
-use std::env;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::env;
 
 use anyhow::{anyhow, bail, Error};
 use candid::{Decode, Encode, Principal};
@@ -97,10 +97,8 @@ pub fn access_control_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
-        Some(args),
-    );
+    let cid =
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -255,10 +253,8 @@ pub fn registration_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
-        Some(args),
-    );
+    let cid =
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -617,10 +613,8 @@ pub fn expiration_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
-        Some(args),
-    );
+    let cid =
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -873,10 +867,8 @@ pub fn renewal_expiration_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
-        Some(args),
-    );
+    let cid =
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -1099,10 +1091,8 @@ pub fn task_queue_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
-        Some(args),
-    );
+    let cid =
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -1482,10 +1472,8 @@ pub fn retry_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
-        Some(args),
-    );
+    let cid =
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();
@@ -1659,10 +1647,8 @@ pub fn certificate_export_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").unwrap(),
-        Some(args),
-    );
+    let cid =
+        app_node.create_and_install_canister_with_arg(&env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH").expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"), Some(args));
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent();

@@ -235,7 +235,7 @@ pub fn create_proxy_canister<'a>(
     let proxy_canister_id = rt.block_on(create_and_install(
         &node.build_default_agent(),
         node.effective_canister_id(),
-        &env.load_wasm(env::var("PROXY_WASM_PATH").unwrap()),
+        &env.load_wasm(env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set")),
     ));
     info!(
         &env.logger(),
