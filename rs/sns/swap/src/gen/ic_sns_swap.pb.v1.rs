@@ -152,8 +152,8 @@ pub struct Swap {
     /// Specified on creation. That is, always specified and immutable.
     #[prost(message, optional, tag = "1")]
     pub init: ::core::option::Option<Init>,
-    /// Specified in the transition from PENDING to OPEN and immutable
-    /// thereafter.
+    /// Derived from `init`, always specified and immutable. In most cases `init`
+    /// should be used instead.
     #[prost(message, optional, tag = "4")]
     pub params: ::core::option::Option<Params>,
     /// Neurons' Fund participation.  Specified in the transition from
@@ -173,8 +173,9 @@ pub struct Swap {
     /// to the outcome of the swap.
     #[prost(message, repeated, tag = "7")]
     pub neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
-    /// Gets set to whatever value is in the corresponding field of OpenRequest
-    /// (that field is required at the application level).
+    /// The proposal ID that was used to create the SNS that opened this swap.
+    /// Note: the name is a historical artifact because the swap used to be opened
+    /// with an OpenSnsTokenSwap request.
     #[prost(uint64, optional, tag = "9")]
     pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
     /// A lock stored in Swap state. If set to true, then a finalize_swap
@@ -812,24 +813,6 @@ pub mod sns_neuron_recipe {
         CommunityFund(super::CfInvestment),
     }
 }
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenRequest {
-    /// The parameters of the swap.
-    #[prost(message, optional, tag = "1")]
-    pub params: ::core::option::Option<Params>,
-    /// Neurons' Fund participation.
-    #[prost(message, repeated, tag = "2")]
-    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
-    /// The ID of the proposal whose execution consists of calling this method.
-    #[prost(uint64, optional, tag = "3")]
-    pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
-}
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenResponse {}
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

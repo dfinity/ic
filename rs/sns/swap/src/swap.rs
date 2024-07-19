@@ -20,12 +20,11 @@ use crate::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
-        Participant, RefreshBuyerTokensResponse, SetDappControllersCallResult,
-        SetDappControllersRequest, SetDappControllersResponse, SetModeCallResult,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-        SettleNeuronsFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
-        TransferableAmount,
+        NewSaleTicketResponse, NotifyPaymentFailureResponse, Participant,
+        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
+        SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
+        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
@@ -720,22 +719,6 @@ impl Swap {
         self.auto_finalize_swap_response = Some(auto_finalize_swap_response.clone());
 
         Ok(auto_finalize_swap_response)
-    }
-
-    /// This function is obsolete.
-    pub async fn open(
-        &self,
-        _this_canister: CanisterId,
-        _sns_ledger: &dyn ICRC1Ledger,
-        _now_seconds: u64,
-        _req: OpenRequest,
-    ) -> Result<OpenResponse, String> {
-        Err(
-            "Swap.open is obsolete. An SNS instance should be created via \
-            a `CreateServiceNervousSystem` proposal, the execution of which automatically leads to \
-            the swap being in the open state."
-                .to_string(),
-        )
     }
 
     /// Computes `amount_icp_e8s` scaled by (`total_sns_e8s` divided by

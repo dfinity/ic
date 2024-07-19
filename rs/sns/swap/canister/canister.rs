@@ -29,8 +29,7 @@ use ic_sns_swap::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
-        RefreshBuyerTokensResponse, Swap,
+        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -124,33 +123,6 @@ fn list_community_fund_participants_(
 ) -> ListCommunityFundParticipantsResponse {
     log!(INFO, "list_community_fund_participants");
     swap().list_community_fund_participants(&request)
-}
-
-/// Try to open the swap.
-///
-/// See Swap.open.
-#[export_name = "canister_update open"]
-fn open() {
-    over_async(candid_one, open_)
-}
-
-/// See `open`.
-#[candid_method(update, rename = "open")]
-async fn open_(req: OpenRequest) -> OpenResponse {
-    log!(INFO, "open");
-    // Require authorization.
-    let allowed_canister = swap().init_or_panic().nns_governance_or_panic();
-    if caller() != PrincipalId::from(allowed_canister) {
-        panic!(
-            "This method can only be called by canister {}",
-            allowed_canister
-        );
-    }
-    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
-    match swap_mut().open(id(), &sns_ledger, now_seconds(), req).await {
-        Ok(res) => res,
-        Err(msg) => panic!("{}", msg),
-    }
 }
 
 /// See `Swap.refresh_buyer_token_e8`.
@@ -390,6 +362,7 @@ fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::I
 /// Returns a real ledger stub that communicates with the specified
 /// canister, which is assumed to be a canister that implements the
 /// ICRC1 interface.
+#[allow(unused)]
 fn create_real_icrc1_ledger(id: CanisterId) -> LedgerCanister {
     LedgerCanister::new(id)
 }

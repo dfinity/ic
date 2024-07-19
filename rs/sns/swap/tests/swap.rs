@@ -242,35 +242,6 @@ fn test_init() {
     assert!(swap.validate().is_ok());
 }
 
-#[test]
-fn test_open_is_obsolete() {
-    let swap = SwapBuilder::new().build();
-    let account = Account {
-        owner: SWAP_CANISTER_ID.get().into(),
-        subaccount: None,
-    };
-    let params = params();
-    let open_request = OpenRequest {
-        params: Some(params.clone()),
-        cf_participants: vec![],
-        open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
-    };
-    let response = swap
-        .open(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                account,
-                Ok(Tokens::ZERO),
-            )]),
-            START_TIMESTAMP_SECONDS,
-            open_request.clone(),
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
-    assert!(response.starts_with("Swap.open is obsolete"));
-}
-
 fn now_fn(is_after: bool) -> u64 {
     if is_after {
         END_TIMESTAMP_SECONDS + 10

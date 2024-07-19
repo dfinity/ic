@@ -10702,15 +10702,6 @@ fn assert_calls_eq(
                 observed.method_name,
             );
         }
-        "open" => {
-            assert_eq!(
-                Decode!(&observed.request, sns_swap_pb::OpenRequest).unwrap(),
-                Decode!(&expected.request, sns_swap_pb::OpenRequest).unwrap(),
-                "unexpected call request to {}.{}",
-                observed.target,
-                observed.method_name,
-            );
-        }
         _ => {
             assert_eq!(
                 observed.request, expected.request,
