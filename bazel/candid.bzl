@@ -14,10 +14,8 @@ if [[ $mr_title == *"[override-didc-check]"* ]]; then
     exit 0
 fi
 
-# https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables
-# The name of the base ref or target branch of the pull request in a workflow run.
-# This is only set when the event that triggers a workflow run is either pull_request or pull_request_target
-readonly merge_base=${{GITHUB_BASE_REF:-HEAD}}
+readonly target_branch_name=${{CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-HEAD}}
+readonly merge_base="$(git merge-base $target_branch_name HEAD)"
 
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
@@ -54,7 +52,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["GITHUB_BASE_REF", "CI_MERGE_REQUEST_TITLE"]),
+        RunEnvironmentInfo(inherited_environment = ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "CI_MERGE_REQUEST_TITLE"]),
     ]
 
 CHECK_DID = attr.label(
