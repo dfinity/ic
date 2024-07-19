@@ -13,6 +13,7 @@ use crate::{
     ssh_access_manager::SshAccessManager,
     upgrade::Upgrade,
 };
+use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::CryptoComponent;
@@ -400,14 +401,27 @@ impl Orchestrator {
             // registry some time to catch up, after starting.
             tokio::time::sleep(Duration::from_secs(60)).await;
 
-            // Run the HostOS upgrade loop with a 15 minute timeout, waiting 1
-            // minute between checks. This timeout is a last resort trying to
-            // revive the upgrade monitoring in case it gets stuck in an
-            // unexpected situation.
-            let interval = Duration::from_secs(60);
-            let timeout = Duration::from_secs(60 * 15);
+            // Run the HostOS upgrade loop with an exponential backoff. A 15
+            // minute liveness timeout will restart the loop if no progress is
+            // made, to ensure the upgrade loop does not get stuck.
+            //
+            // The exponential backoff between retries starts at 1 minute, and
+            // increases by a factor of 1.75, maxing out at two hours.
+            // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
+            //
+            // Additionally, there's a random +=50% range added to each delay, for jitter.
+            let backoff = ExponentialBackoffBuilder::new()
+                .with_initial_interval(Duration::from_secs(60))
+                .with_randomization_factor(0.5)
+                .with_multiplier(1.75)
+                .with_max_interval(Duration::from_secs(2 * 60 * 60))
+                .with_max_elapsed_time(None)
+                .build();
+            let liveness_timeout = Duration::from_secs(15 * 60);
 
-            upgrade.upgrade_loop(exit_signal, interval, timeout).await;
+            upgrade
+                .upgrade_loop(exit_signal, backoff, liveness_timeout)
+                .await;
             info!(log, "Shut down the HostOS upgrade loop");
         }
 

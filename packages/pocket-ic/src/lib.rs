@@ -34,8 +34,9 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    BlobCompression, BlobId, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig, InstanceId,
-    RawEffectivePrincipal, RawMessageId, SubnetId, SubnetSpec, Topology,
+    BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
+    InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
+    SubnetSpec, Topology,
 };
 use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
@@ -52,6 +53,7 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::thread::JoinHandle;
 use std::{
+    fs::File,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -867,6 +869,37 @@ impl PocketIc {
                 .await
         })
     }
+
+    /// Get the pending canister HTTP outcalls.
+    /// Note that an additional `PocketIc::tick` is necessary after a canister
+    /// executes a message making a canister HTTP outcall for the HTTP outcall
+    /// to be retrievable here.
+    /// Note that, unless a PocketIC instance is in auto progress mode,
+    /// a response to the pending canister HTTP outcalls
+    /// must be produced by the test driver and passed on to the PocketIC instace
+    /// using `PocketIc::mock_canister_http_response`.
+    /// In auto progress mode, the PocketIC server produces a response for every
+    /// pending canister HTTP outcall by actually making an HTTP request
+    /// to the specified URL.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn get_canister_http(&self) -> Vec<CanisterHttpRequest> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_canister_http().await })
+    }
+
+    /// Mock a response to a pending canister HTTP outcall.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn mock_canister_http_response(
+        &self,
+        mock_canister_http_response: MockCanisterHttpResponse,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .mock_canister_http_response(mock_canister_http_response)
+                .await
+        })
+    }
 }
 
 impl Default for PocketIc {
@@ -1254,16 +1287,19 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
 
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let parent_pid = std::os::unix::process::parent_id();
-    let mut cmd = Command::new(PathBuf::from(bin_path));
-    cmd.arg("--pid").arg(parent_pid.to_string());
-    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-        cmd.stdout(std::process::Stdio::null());
-        cmd.stderr(std::process::Stdio::null());
-    }
-    cmd.spawn().expect("Failed to start PocketIC binary");
-
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
+    let started_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.started", parent_pid));
+    if create_file_atomically(started_file_path).is_ok() {
+        let mut cmd = Command::new(PathBuf::from(bin_path));
+        cmd.arg("--pid").arg(parent_pid.to_string());
+        if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
+        cmd.spawn().expect("Failed to start PocketIC binary");
+    }
+
     let start = Instant::now();
     loop {
         match ready_file_path.try_exists() {
@@ -1275,8 +1311,17 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             }
             _ => std::thread::sleep(Duration::from_millis(20)),
         }
-        if start.elapsed() > Duration::from_secs(5) {
+        if start.elapsed() > Duration::from_secs(10) {
             panic!("Failed to start PocketIC service in time");
         }
     }
+}
+
+// Ensures atomically that this file was created freshly, and gives an error otherwise.
+fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
+    File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&file_path)
 }

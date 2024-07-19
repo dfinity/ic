@@ -1,12 +1,6 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg};
-use crate::orchestrator::utils::rw_message::{
-    can_store_msg, cert_state_makes_progress_with_retries,
-};
-use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::tecdsa::{
     add_chain_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
@@ -18,6 +12,12 @@ use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::SubnetId;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg, can_store_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
+    },
+    ssh_access::execute_bash_command,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_recovery::steps::Step;
@@ -33,12 +33,6 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
-
-pub fn set_sandbox_env_vars(dir: PathBuf) {
-    set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
-    set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
-    set_var_to_path("COMPILER_BINARY", dir.join("compiler_sandbox"));
-}
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
