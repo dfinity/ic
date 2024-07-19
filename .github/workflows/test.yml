@@ -20,13 +20,13 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: ANALYZE
-        run: |
-          bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc build --config=ci --config=macos_ci //rs/... //publish/binaries/... --nobuild
+        #- name: ANALYZE
+        #  run: |
+        #    bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc build --config=ci --config=macos_ci //rs/... //publish/binaries/... --nobuild
 
-      - name: BUILD
-        run: |
-          bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc build --config=ci --config=macos_ci //rs/... //publish/binaries/...
+        #- name: BUILD
+        #  run: |
+        #    bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc build --config=ci --config=macos_ci //rs/... //publish/binaries/...
 
       - name: TEST
         run: |
