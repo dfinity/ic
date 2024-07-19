@@ -2276,6 +2276,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-orchestrator-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "canister_http",
+ "ic-agent",
+ "ic-recovery",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "slog",
+ "tempfile",
+ "tests",
+ "url",
+]
+
+[[package]]
+name = "consensus-tecdsa-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "futures",
+ "ic-management-canister-types",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-sys",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "reqwest 0.12.5",
+ "serde_json",
+ "slog",
+ "tests",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "console"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12778,6 +12819,27 @@ dependencies = [
  "slog",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "ic_consensus_system_tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "futures",
+ "ic-base-types",
+ "ic-nns-constants",
+ "ic-nns-governance",
+ "ic-recovery",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "slog",
+ "tokio",
 ]
 
 [[package]]

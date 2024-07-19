@@ -1,5 +1,4 @@
 pub mod node_assign_test;
-pub mod node_reassignment_test;
 pub mod node_registration_test;
 pub mod rotate_ecdsa_idkg_key;
 pub mod ssh_access_to_nodes;
