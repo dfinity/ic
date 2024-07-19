@@ -29,7 +29,7 @@ jobs:
           WORKFLOW_RUNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $GITHUB_API_URL)
           # Check for queued workflows
           CURRENT_TIME=$(date +%s)
-          WORKFLOWS_IN_QUEUE=$(echo $WORKFLOW_RUNS | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, run_started_at: .run_started_at}')
+          WORKFLOWS_IN_QUEUE=$(echo $WORKFLOW_RUNS | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, name: .name, run_started_at: .run_started_at}')
 
           set -x
           MESSAGE=""
