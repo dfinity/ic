@@ -20,7 +20,6 @@ Success::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
 use crate::orchestrator::utils::{
     ssh_access::{
         generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
@@ -30,6 +29,7 @@ use crate::orchestrator::utils::{
 };
 use anyhow::bail;
 use ic_canister_client::Sender;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;

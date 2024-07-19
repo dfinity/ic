@@ -45,7 +45,9 @@
 //
 // Happy testing!
 
-use ic_consensus_system_test_utils::limit_tc_ssh_command;
+use ic_consensus_system_test_utils::{
+    limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
@@ -70,8 +72,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
 };
-use ic_tests::nns_dapp::set_authorized_subnets;
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_types::Height;
 
 use anyhow::Result;
@@ -132,7 +132,6 @@ fn setup(env: TestEnv) {
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
-    set_authorized_subnets(&env);
     env.sync_with_prometheus();
 
     let topology_snapshot = env.topology_snapshot();

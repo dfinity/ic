@@ -1,3 +1,4 @@
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
@@ -10,7 +11,6 @@ use ic_system_test_driver::driver::{
         HasDependencies, HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
     },
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use serde::Deserialize;
 use slog::info;
 use url::Url;
