@@ -146,7 +146,7 @@ rust_ic_test(
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
     deps = [
