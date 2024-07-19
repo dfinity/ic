@@ -30,7 +30,7 @@ use std::env;
 
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
+    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
 };
 use ic_system_test_driver::util::{
     assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
