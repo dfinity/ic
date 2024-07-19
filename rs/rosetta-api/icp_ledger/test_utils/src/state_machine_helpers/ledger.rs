@@ -2,7 +2,7 @@ use ic_base_types::CanisterId;
 use ic_state_machine_tests::StateMachine;
 use on_wire::FromWire;
 
-pub fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
+pub(crate) fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
     let res = env
         .query(ledger_id, "tip_of_chain_pb", vec![])
         .expect("Failed to send tip_of_chain_pb request")
