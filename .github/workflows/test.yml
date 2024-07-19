@@ -1,0 +1,30 @@
+name: build-and-test
+on: [push]
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ namespace-profile-darwin-small ]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - name: Install latest nsc
+        run: |
+          # The latest nsc version is required for `nsc bazel cache setup`
+          curl -fsSL https://get.namespace.so/cloud/install.sh | sh -s -- --version 0.0.386
+
+      - name: Set up Bazel cache
+        run: |
+          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
+          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+
+      - uses: actions/checkout@v4
+
+
+      - name: BUILD
+        run: |
+          bazel --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc build //rs/... //publish/binaries/...
+
+      - name: TEST
+        run: |
+          bazel --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc test --test_tag_filters=test_macos //rs/... //publish/binaries/...
