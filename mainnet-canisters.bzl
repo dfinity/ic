@@ -22,6 +22,8 @@ CANISTER_NAME_TO_WASM_METADATA = {
     "sns_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
     "sns_ledger": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "26de3e745b0e98cc83850ebf0f8fd1a574905bf7c73d52fcf61ee3f35e4875e1"),
     "sns_archive": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "ea2df4e0e3f4e5e91d43baf281728b2443ab3236ba473d78913cfbe2b5763d3c"),
+    "ck_btc_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "4264ce2952c4e9ff802d81a11519d5e3ffdaed4215d5831a6634e59efd72f7d8"),
+    "ck_eth_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "e5c8a297d1c0c6d2ab2253c0280aaefd6e23fe3a8a994fc64706a1f3c3116062"),
 }
 
 def canister_url(git_commit_id, filename):
@@ -115,6 +117,27 @@ def mainnet_core_nns_canisters():
         downloaded_file_path = "sns-wasm-canister.wasm.gz",
         sha256 = sha256,
         url = canister_url(git_commit_id, "sns-wasm-canister.wasm.gz"),
+    )
+
+def mainnet_ck_canisters():
+    """
+    Provides Bazel targets for the latest ckBTC and ckETH canisters published to the mainnet fiduciary subnet.
+    """
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_btc_ledger"]
+    http_file(
+        name = "mainnet_ckbtc_ic-icrc1-ledger",
+        downloaded_file_path = "ic-icrc1-ledger.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-ledger.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_eth_ledger"]
+    http_file(
+        name = "mainnet_cketh_ic-icrc1-ledger-u256",
+        downloaded_file_path = "ic-icrc1-ledger-u256.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-ledger-u256.wasm.gz"),
     )
 
 def mainnet_sns_canisters():
