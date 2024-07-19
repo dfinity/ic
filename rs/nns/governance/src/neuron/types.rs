@@ -953,13 +953,12 @@ impl TryFrom<NeuronProto> for Neuron {
         })?;
         let visibility = match visibility {
             None => None,
-            Some(visibility) => {
-                Some(Visibility::try_from(visibility)
-                    .map_err(|err| format!(
-                        "Failed to interpret visibility of neuron {:?}: {:?}",
-                        id, err,
-                    ))?)
-            }
+            Some(visibility) => Some(Visibility::try_from(visibility).map_err(|err| {
+                format!(
+                    "Failed to interpret visibility of neuron {:?}: {:?}",
+                    id, err,
+                )
+            })?),
         };
 
         Ok(Neuron {
@@ -1163,8 +1162,7 @@ impl From<DecomposedNeuron> for Neuron {
             aging_since_timestamp_seconds,
         })
         .expect("Neuron dissolve state and age is invalid");
-        let visibility =
-            visibility.and_then(|visibility| Visibility::try_from(visibility).ok());
+        let visibility = visibility.and_then(|visibility| Visibility::try_from(visibility).ok());
 
         Neuron {
             id,
