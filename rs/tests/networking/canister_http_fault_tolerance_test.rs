@@ -113,7 +113,7 @@ pub fn test(env: TestEnv) {
             .0;
         mgr.install_code(
             &cid,
-            &env.load_wasm("rs/rust_canisters/proxy_canister/proxy_canister.wasm"), // TODO: do me
+            &env.load_wasm(env::var("PROXY_WASM_PATH").unwrap()),
         )
         .call_and_wait()
         .await
