@@ -1314,7 +1314,7 @@ impl Operation for CallRequest {
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
                 #[allow(clippy::disallowed_methods)]
-                let (s, mut r) =
+                let (ingress_tx, mut ingress_rx) =
                     mpsc::unbounded_channel::<UnvalidatedArtifactMutation<SignedIngress>>();
                 let ingress_filter = subnet.ingress_filter.clone();
 
@@ -1334,7 +1334,7 @@ impl Operation for CallRequest {
                         }
                     })))),
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
-                    s,
+                    ingress_tx,
                 )
                 .build();
 
@@ -1346,7 +1346,7 @@ impl Operation for CallRequest {
                 // `StateMachine`, or if the call service is dropped (in which case `r.recv().await` returns `None`).
                 pic.runtime.spawn(async move {
                     if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
-                        r.recv().await
+                        ingress_rx.recv().await
                     {
                         subnet_clone.push_signed_ingress(msg);
                     }

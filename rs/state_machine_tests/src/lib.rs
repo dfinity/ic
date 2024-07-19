@@ -3,7 +3,8 @@ use core::sync::atomic::Ordering;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
-    state_manager::LsmtConfig, subnet_config::SubnetConfig,
+    http_handler::Config as HttpHandlerConfig, state_manager::LsmtConfig,
+    subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
@@ -19,7 +20,13 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
+use ic_http_endpoints_public::{
+    call::{
+        call_v3::{CallServiceV3, CallServiceV3Handler},
+        IngressValidatorBuilder,
+    },
+    metrics::HttpHandlerMetrics,
+};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
@@ -30,7 +37,8 @@ use ic_interfaces::{
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
-        IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+        IngressPool, IngressPoolThrottler, PoolSection, UnvalidatedIngressArtifact,
+        ValidatedIngressArtifact,
     },
     p2p::consensus::MutablePool,
     validation::ValidationResult,
@@ -100,7 +108,7 @@ use ic_test_utilities_registry::{
 };
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{
-    artifact::IngressMessageId,
+    artifact::{IngressMessageId, UnvalidatedArtifactMutation},
     batch::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
         QueryStatsPayload, TotalQueryStats, ValidationContext, XNetPayload,
@@ -140,6 +148,7 @@ pub use ic_types::{
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
+use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use ic_xnet_payload_builder::{
     certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError},
     ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
@@ -167,9 +176,15 @@ use std::{
 use tempfile::TempDir;
 use tokio::{
     runtime::Runtime,
+    select,
     sync::{mpsc, watch},
 };
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tokio_util::sync::CancellationToken;
+use tower::{
+    buffer::Buffer as TowerBuffer,
+    service_fn,
+    util::{BoxCloneService, ServiceExt},
+};
 
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
@@ -641,7 +656,8 @@ pub struct StateMachine {
     time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, PrivateKey>,
-    replica_logger: ReplicaLogger,
+    pub replica_logger: ReplicaLogger,
+    pub call_v3_service: Arc<Mutex<CallServiceV3Handler>>,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
     time_source: Arc<FastForwardTimeSource>,
@@ -649,7 +665,6 @@ pub struct StateMachine {
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
     certified_height_tx: watch::Sender<Height>,
-    pub ingress_watcher_handle: IngressWatcherHandle,
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     // This field must be the last one so that the temporary directory is deleted at the very end.
@@ -1380,18 +1395,6 @@ impl StateMachine {
             mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
         let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
 
-        let cancellation_token = tokio_util::sync::CancellationToken::new();
-        let cancellation_token_clone = cancellation_token.clone();
-        let ingress_watcher_drop_guard = cancellation_token.drop_guard();
-        let (ingress_watcher_handle, _join_handle) = IngressWatcher::start(
-            runtime.handle().clone(),
-            replica_logger.clone(),
-            HttpHandlerMetrics::new(&metrics_registry),
-            certified_height_rx,
-            completed_execution_messages_rx,
-            cancellation_token_clone,
-        );
-
         // NOTE: constructing execution services requires tokio context.
         //
         // We could have required the client to use [tokio::test] for state
@@ -1507,6 +1510,95 @@ impl StateMachine {
             RandomStateKind::Deterministic,
         ));
 
+        let ingress_filter =
+            runtime.block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) });
+
+        #[derive(Clone)]
+        struct DummyIngressPoolThrottler;
+
+        impl IngressPoolThrottler for DummyIngressPoolThrottler {
+            fn exceeds_threshold(&self) -> bool {
+                false
+            }
+        }
+
+        #[allow(clippy::disallowed_methods)]
+        let (ingress_pool_sender, ingress_pool_receiver) = mpsc::unbounded_channel();
+
+        let ingress_filter_clone = ingress_filter.clone();
+
+        let ingress_validator = IngressValidatorBuilder::builder(
+            nodes[0].node_id,
+            subnet_id,
+            registry_client.clone(),
+            Arc::new(StandaloneIngressSigVerifier),
+            Arc::new(Mutex::new(BoxCloneService::new(service_fn(move |arg| {
+                let ingress_filter = ingress_filter_clone.clone();
+                async {
+                    let ingress_filter_response = ingress_filter
+                        .oneshot(arg)
+                        .await
+                        .expect("Inner service should be alive. I hope.");
+                    Ok(ingress_filter_response)
+                }
+            })))),
+            Arc::new(RwLock::new(DummyIngressPoolThrottler)),
+            ingress_pool_sender,
+        )
+        .build();
+
+        let certificate_timeout_seconds =
+            HttpHandlerConfig::default().ingress_message_certificate_timeout_seconds;
+
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
+
+        let call_v3_service = CallServiceV3::new_service(
+            ingress_validator,
+            certificate_timeout_seconds,
+            Arc::new(RwLock::new(None)),
+            state_manager.clone(),
+            runtime.handle().clone(),
+            replica_logger.clone(),
+            HttpHandlerMetrics::new(&metrics_registry),
+            certified_height_rx,
+            completed_execution_messages_rx,
+            cancellation_token_clone,
+        );
+
+        let time = AtomicU64::new(time.as_nanos_since_unix_epoch());
+
+        // Task that waits for call service to submit the ingress message, and
+        // forwards it to the state machine. The task will automatically terminate
+        // once it submits an ingress message received from the call service to the
+        // `StateMachine`, or if the call service is dropped (in which case `r.recv().await` returns `None`).
+        let cancellation_token_clone = cancellation_token.clone();
+        let ingress_pool_clone = ingress_pool.clone();
+        let drop_guard = cancellation_token.drop_guard();
+        let time_clone = time.clone();
+
+        runtime.spawn(async move {
+            loop {
+                let time = Time::from_nanos_since_unix_epoch(
+                    (SystemTime::UNIX_EPOCH
+                        + Duration::from_nanos(time_clone.load(Ordering::Relaxed)))
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos() as u64,
+                );
+
+                select! {
+                    _ = cancellation_token_clone.cancelled() => break,
+                    Some(ingress) = ingress_pool_receiver.recv() => {
+                        if let UnvalidatedArtifactMutation::Insert((message, _node_id)) = ingress {
+                            ingress_pool_clone.write().unwrap().push(message, time);
+                        }
+                    }
+
+                }
+            }
+        });
+
         Self {
             subnet_id,
             subnet_type,
@@ -1521,8 +1613,7 @@ impl StateMachine {
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
-            ingress_filter: runtime
-                .block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) }),
+            ingress_filter,
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
@@ -1530,8 +1621,8 @@ impl StateMachine {
             query_handler: runtime.block_on(async {
                 TowerBuffer::new(execution_services.query_execution_service, 1)
             }),
-            ingress_watcher_handle,
-            _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
+            call_v3_service: Arc::new(Mutex::new(call_v3_service)),
+            _ingress_watcher_drop_guard: drop_guard,
             certified_height_tx,
             runtime,
             state_dir,
@@ -1539,7 +1630,7 @@ impl StateMachine {
             // canisters, such tests usually don't rely on any persistence.
             checkpoint_interval_length: checkpoint_interval_length.into(),
             nonce: AtomicU64::new(nonce),
-            time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
+            time,
             idkg_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
