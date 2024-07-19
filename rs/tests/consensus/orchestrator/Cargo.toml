@@ -12,7 +12,6 @@ canister_http = { path = "../../networking/canister_http" }
 ic-agent = { workspace = true }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic-recovery = { path = "../../../recovery" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
