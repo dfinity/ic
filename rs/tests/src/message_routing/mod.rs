@@ -59,9 +59,9 @@ mod common {
         canisters_per_subnet: usize,
     ) -> Vec<Vec<Canister>> {
         let logger = env.logger();
-        let wasm = Wasm::from_file(
-            env.get_dependency_path(env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set")),
-        );
+        let wasm = Wasm::from_file(env.get_dependency_path(
+            env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),
+        ));
         let mut futures: Vec<Vec<_>> = Vec::new();
         for subnet_idx in 0..subnets {
             futures.push(vec![]);

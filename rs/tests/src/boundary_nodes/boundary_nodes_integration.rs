@@ -638,7 +638,8 @@ pub fn http_canister_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
+        let kv_store_canister =
+            env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -819,7 +820,8 @@ pub fn prefix_canister_id_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
+        let kv_store_canister =
+            env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -992,7 +994,8 @@ pub fn proxy_http_canister_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
+        let kv_store_canister =
+            env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
