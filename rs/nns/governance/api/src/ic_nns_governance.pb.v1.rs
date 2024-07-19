@@ -3766,6 +3766,9 @@ impl NeuronState {
 /// unprivileged principal.
 ///
 /// <https://forum.dfinity.org/t/request-for-comments-api-changes-for-public-private-neurons/33360>
+///
+/// As of Jul 19, this is not yet enforced, but will be once the plan described
+/// above is fully executed.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
