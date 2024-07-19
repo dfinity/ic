@@ -4,7 +4,7 @@ This directory contains some bazelrc fragments that are used in different scenar
 can be used like this:
 
 ```
-bazel build --bazelrc <fragment> --bazelrc <fragment>
+bazel build --noworkspace_rc --bazelrc <fragment> --bazelrc <fragment>
 ```
 
 The default `.bazelrc` loads all fragments. See the individual fragments for more information.
