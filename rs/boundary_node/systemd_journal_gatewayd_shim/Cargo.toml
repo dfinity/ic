@@ -17,4 +17,4 @@ itertools = { workspace = true }
 reqwest = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-url = "2.4.0"
+url = { workspace = true }

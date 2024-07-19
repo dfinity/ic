@@ -990,6 +990,8 @@ impl ReplicatedState {
     /// This first phase only consists of:
     ///  * Splitting the canisters hosted by A among A' and B, as determined by the
     ///    provided routing table.
+    ///  * Splitting the canister snapshots stored by A among A' and B,
+    ///    as determined by the canister splitting.
     ///  * Producing a new, empty `MetadataState` for subnet B, but preserving
     ///    the ingress history unchanged.
     ///
@@ -1014,7 +1016,7 @@ impl ReplicatedState {
             mut subnet_queues,
             consensus_queue,
             epoch_query_stats: _,
-            canister_snapshots,
+            mut canister_snapshots,
         } = self;
 
         // Consensus queue is always empty at the end of the round.
@@ -1025,6 +1027,9 @@ impl ReplicatedState {
         // TODO: Validate that canisters are split across no more than 2 subnets.
         canister_states
             .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
+
+        // Retain only the canister snapshots belonging to the local canisters.
+        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //

@@ -1,5 +1,4 @@
 pub mod api_test;
-pub mod basic_health_test;
 pub mod boundary_nodes;
 pub mod btc_integration;
 pub mod canister_sig_verification_cache_test;

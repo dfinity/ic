@@ -19,5 +19,6 @@
     "pocket-ic": "pocket-ic",
     "Product Security": "eng-prodsec",
     "runtime": "runtime-code-reviews",
+    "sdk": "sdk",
     "utopia": "eng-utopia"
 }

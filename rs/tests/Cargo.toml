@@ -175,7 +175,7 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
-url = "2.1.1"
+url = { workspace = true }
 wat = "1.0.52"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
@@ -189,10 +189,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "ic-colocate"
 path = "testing_verification/colocate_test.rs"
-
-[[bin]]
-name = "ic-systest-basic-health"
-path = "testing_verification/basic_health_test.rs"
 
 [[bin]]
 name = "ic-ii-delegation-test"
