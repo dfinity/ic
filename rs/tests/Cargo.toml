@@ -323,10 +323,6 @@ name = "ic-systest-node-assign-test"
 path = "consensus/orchestrator/node_assign_test.rs"
 
 [[bin]]
-name = "ic-systest-node-reassignment-test"
-path = "consensus/orchestrator/node_reassignment_test.rs"
-
-[[bin]]
 name = "ic-systest-ssh-access-to-nodes-test"
 path = "consensus/orchestrator/ssh_access_to_nodes_test.rs"
 
@@ -455,10 +451,6 @@ name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
 
 [[bin]]
-name = "ic-systest-cup-compatibility"
-path = "consensus/orchestrator/cup_compatibility_test.rs"
-
-[[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
 path = "consensus/orchestrator/sr_app_same_nodes_test.rs"
 
@@ -585,18 +577,6 @@ path = "testing_verification/testnets/medium.rs"
 [[bin]]
 name = "ic-systest-large"
 path = "testing_verification/testnets/large.rs"
-
-[[bin]]
-name = "ic-systest-consensus-performance"
-path = "consensus/consensus_performance.rs"
-
-[[bin]]
-name = "ic-systest-adding-nodes-to-subnet-test"
-path = "consensus/adding_nodes_to_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-performance-test"
-path = "consensus/tecdsa/tecdsa_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-performance"
