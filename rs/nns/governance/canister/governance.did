@@ -2,6 +2,7 @@ type AccountIdentifier = record { hash : blob };
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   ManageNeuron : ManageNeuron;
+  UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
   StopOrStartCanister : StopOrStartCanister;
   CreateServiceNervousSystem : CreateServiceNervousSystem;
@@ -28,6 +29,14 @@ type By = variant {
   Memo : nat64;
 };
 type Canister = record { id : opt principal };
+type CanisterSettings = record {
+  freezing_threshold : opt nat64;
+  controllers : opt Controllers;
+  log_visibility : opt int32;
+  wasm_memory_limit : opt nat64;
+  memory_allocation : opt nat64;
+  compute_allocation : opt nat64;
+};
 type CanisterStatusResultV2 = record {
   status : opt int32;
   freezing_threshold : opt nat64;
@@ -114,6 +123,7 @@ type Committed_1 = record {
   sns_governance_canister_id : opt principal;
 };
 type Configure = record { operation : opt Operation };
+type Controllers = record { controllers : vec principal };
 type Countries = record { iso_codes : vec text };
 type CreateServiceNervousSystem = record {
   url : opt text;
@@ -689,6 +699,10 @@ type TimeWindow = record {
   end_timestamp_seconds : nat64;
 };
 type Tokens = record { e8s : opt nat64 };
+type UpdateCanisterSettings = record {
+  canister_id : opt principal;
+  settings : opt CanisterSettings;
+};
 type UpdateNodeProvider = record { reward_account : opt AccountIdentifier };
 type VotingRewardParameters = record {
   reward_rate_transition_duration : opt Duration;

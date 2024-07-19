@@ -877,6 +877,8 @@ message Proposal {
     InstallCode install_code = 25;
     // Stops or starts a canister controlled by Root.
     StopOrStartCanister stop_or_start_canister = 26;
+    // Updates canister settings for those controlled by NNS Root.
+    UpdateCanisterSettings update_canister_settings = 27;
   }
 }
 
@@ -2084,6 +2086,41 @@ message StopOrStartCanister {
     CANISTER_ACTION_START = 2;
   }
   optional CanisterAction action = 2;
+}
+
+message UpdateCanisterSettings {
+  // The target canister ID to call update_settings on. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // Log visibility of a canister.
+  enum LogVisibility {
+    LOG_VISIBILITY_UNSPECIFIED = 0;
+    // The log is visible to the controllers of the dapp canister.
+    LOG_VISIBILITY_CONTROLLERS = 1;
+    // The log is visible to the public.
+    LOG_VISIBILITY_PUBLIC = 2;
+  }
+
+  // The controllers of the canister. We use a message to wrap the repeated field because prost does
+  // not generate `Option<Vec<T>>` for repeated fields.
+  message Controllers {
+    // The controllers of the canister.
+    repeated ic_base_types.pb.v1.PrincipalId controllers = 1;
+  }
+
+  // The CanisterSettings struct as defined in the ic-interface-spec
+  // https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
+  message CanisterSettings {
+    optional Controllers controllers = 1;
+    optional uint64 compute_allocation = 2;
+    optional uint64 memory_allocation = 3;
+    optional uint64 freezing_threshold = 4;
+    optional LogVisibility log_visibility = 5;
+    optional uint64 wasm_memory_limit = 6;
+  }
+
+  // The settings to update. Required.
+  optional CanisterSettings settings = 2;
 }
 
 // This represents the whole NNS governance system. It contains all
