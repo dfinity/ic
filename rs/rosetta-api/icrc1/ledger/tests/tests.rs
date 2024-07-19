@@ -1651,8 +1651,8 @@ mod incompatible_token_type_upgrade {
         transfer(&env, ledger_id, MINTER, account(2), u64::MAX - 100);
         let balance_1 = balance_of(&env, ledger_id, account(1));
         let balance_2 = balance_of(&env, ledger_id, account(2));
-        assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
-        assert_eq!(balance_2, balance_of(&env, ledger_id, account(2)));
+        assert_eq!(balance_1, u64::MAX - 100);
+        assert_eq!(balance_2, u64::MAX - 100);
 
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
         assert_matches!(
