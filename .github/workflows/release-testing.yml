@@ -7,6 +7,10 @@ on:
       # TODO: remove me
       - 'marko-update-release-testing'
   workflow_dispatch:
+# new commits interrupt any running workflow on the same branch
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
