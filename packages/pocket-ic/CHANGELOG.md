@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 4.0.0 - 2024-07-19
+
 ### Added
 - Module `nonblocking` with asynchronous PocketIc library. The asynchronous function `drop` must be called
   (e.g., `pic.drop().await`) to drop the PocketIc instance. It must be called manually

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 5.0.0 - 2024-07-19
+
 ### Added
 - A new subnet is created on an existing PocketIC instance if a new canister is created with a specified mainnet canister ID that does not belong to any existing subnet's canister range.
 - The argument of the endpoint `/http_gateway` takes an additional optional field `domains` specifying the domains at which the HTTP gateway is listening (default to `localhost`).
@@ -34,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.
 
+
+
 ## 4.0.0 - 2024-04-30
 
 ### Added
@@ -54,12 +60,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Potentially breaking: The time of every subnet advances by 1ns before every round execution to make sure the subnet time is strictly increasing in every round.
 
 
+
 ## 3.0.1 - 2024-02-14
 
 ### Fixed
 - Traps in tECDSA calls due to malformed tECDSA public key.
 - Server rejects jsons containing unimplemented variants of `SubnetStateConfig`.
 - The `inspect_message` method no longer panics when call is rejected.
+
+
 
 ## 3.0.0 - 2024-02-06
 
@@ -73,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Canister inspect message errors when executing ingress messages are returned as canister execution results rather than request errors.
 - Subnets agree on which subnet id is the NNS subnet id. Fixes the problem where a canister installation via CMC directly would fail. 
+
 
 
 ## 2.0.1 - 2023-11-23
