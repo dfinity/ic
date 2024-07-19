@@ -30,6 +30,7 @@ ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der"
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment/" }
+ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
@@ -69,6 +70,7 @@ slog = { workspace = true }
 slog-term = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 wat = "1.0.52"
 maplit = "1.0.2"
 tower = { workspace = true }
