@@ -54,6 +54,8 @@ use slog::{info, Logger};
 
 use std::{thread, time::Duration};
 
+use crate::orchestrator::utils::subnet_recovery::assert_subnet_is_healthy;
+
 const DKG_INTERVAL: u64 = 9;
 const APP_NODES: usize = 1;
 

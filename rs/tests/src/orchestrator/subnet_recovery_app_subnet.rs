@@ -27,6 +27,7 @@ Success::
 
 end::catalog[] */
 
+use crate::orchestrator::utils::subnet_recovery::*;
 use crate::tecdsa::make_key_ids_for_all_schemes;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
