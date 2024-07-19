@@ -39,6 +39,7 @@ use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
+use std::env;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
