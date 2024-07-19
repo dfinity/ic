@@ -33,7 +33,7 @@ build:ci --noremote_local_fallback
 build:ci --build_tag_filters="-system_test,-fuzz_test"
 build:ci --verbose_failures
 
-# Run `bazel build ... --config=local` if you don't have access to the buildfarm infrastructure.
+# Run `bazel build ... --config=local` to build targets without cache (and without build event upload).
 build:local --remote_cache=
 build:local --bes_backend=
 
