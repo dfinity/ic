@@ -4,8 +4,6 @@ on:
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
-      # TODO: remove me
-      - 'marko-update-release-testing'
   workflow_dispatch:
 # new commits interrupt any running workflow on the same branch
 concurrency:
