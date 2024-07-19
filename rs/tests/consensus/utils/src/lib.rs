@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 pub mod rw_message;
+pub mod ssh_access;
 
 /**
  * 1. Delete existing tc rules (if present).
