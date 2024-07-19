@@ -1,4 +1,3 @@
-// TODO(kpop): inline this test as it doesn't realy on anything in /rs/tests/src/
 /* tag::catalog[]
 Title:: Node reassignment test
 
