@@ -805,12 +805,14 @@ fn icrc21_canister_call_consent_message(
     let caller_principal = ic_cdk::api::caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
+    let decimals = icrc1_decimals();
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         consent_msg_request,
         caller_principal,
         ledger_fee,
         token_symbol,
+        decimals,
     )
 }
 

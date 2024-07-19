@@ -493,6 +493,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
+            "humantime-serde": crate.spec(
+                version = "^1.1.1",
+            ),
             "hyper_0_14_27": crate.spec(
                 package = "hyper",
                 version = "^0.14.27",
@@ -634,7 +637,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "idna": crate.spec(
-                version = "^0.3.0",
+                version = "^1.0.2",
             ),
             "indexmap": crate.spec(
                 version = "^2.2.6",
@@ -1403,13 +1406,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.2",
             ),
             "url": crate.spec(
-                version = "^2.4.1",
+                version = "^2.5.2",
                 features = [
                     "serde",
                 ],
             ),
             "uuid": crate.spec(
-                version = "^1.3.0",
+                version = "^1.10.0",
                 features = [
                     "v4",
                     "serde",

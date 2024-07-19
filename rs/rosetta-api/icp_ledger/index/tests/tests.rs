@@ -199,35 +199,47 @@ fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
 fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
         start: 0u64,
-        length: MAX_BLOCKS_PER_REQUEST,
+        length: u32::MAX as usize,
     };
-    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
     let res = env
         .query(ledger_id, "query_encoded_blocks", req)
         .expect("Failed to send get_blocks request")
         .bytes();
     let res =
         Decode!(&res, QueryEncodedBlocksResponse).expect("Failed to decode GetBlocksResponse");
+    // Assume that all blocks in the ledger can be retrieved in a single call. This should hold for
+    // most tests.
+    let blocks_in_ledger = res.chain_length.saturating_sub(res.first_block_index);
+    assert!(
+        blocks_in_ledger <= MAX_BLOCKS_PER_REQUEST as u64,
+        "Chain length: {}, first block index: {}, max blocks per request: {}",
+        res.chain_length,
+        res.first_block_index,
+        MAX_BLOCKS_PER_REQUEST
+    );
     let mut blocks = vec![];
     for archived in res.archived_blocks {
-        let req = GetBlocksArgs {
-            start: archived.start,
-            length: archived.length as usize,
-        };
-        let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
-        let canister_id = archived.callback.canister_id;
-        let res = env
-            .query(
-                CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
-                archived.callback.method,
-                req,
-            )
-            .expect("Failed to send get_blocks request to archive")
-            .bytes();
-        let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
-            .unwrap()
-            .unwrap();
-        blocks.extend(res);
+        for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
+            let req = GetBlocksArgs {
+                start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
+                length: MAX_BLOCKS_PER_REQUEST,
+            };
+            let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
+            let canister_id = archived.callback.canister_id;
+            let res = env
+                .query(
+                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                    archived.callback.method.clone(),
+                    req,
+                )
+                .expect("Failed to send get_blocks request to archive")
+                .bytes();
+            let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
+                .unwrap()
+                .unwrap();
+            blocks.extend(res);
+        }
     }
     blocks.extend(res.blocks);
     blocks
@@ -240,7 +252,7 @@ fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::
 fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
         start: 0u64,
-        length: MAX_BLOCKS_PER_REQUEST,
+        length: u32::MAX as usize,
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
     let res = env
@@ -250,29 +262,30 @@ fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger
     let res = Decode!(&res, QueryBlocksResponse).expect("Failed to decode QueryBlocksResponse");
     let mut blocks = vec![];
     for archived in res.archived_blocks {
-        let req = GetBlocksArgs {
-            start: archived.start,
-            length: archived.length as usize,
-        };
-        let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
-        let canister_id = archived.callback.canister_id;
-        let res = env
-            .query(
-                CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
-                archived.callback.method,
-                req,
-            )
-            .expect("Failed to send get_blocks request to archive")
-            .bytes();
-        let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
-            .unwrap()
-            .unwrap();
-        blocks.extend(
-            res.into_iter()
-                .map(icp_ledger::Block::decode)
-                .collect::<Result<Vec<icp_ledger::Block>, String>>()
-                .unwrap(),
-        );
+        for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
+            let req = GetBlocksArgs {
+                start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
+                length: MAX_BLOCKS_PER_REQUEST,
+            };
+            let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
+            let canister_id = archived.callback.canister_id;
+            let res = env
+                .query(
+                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                    archived.callback.method.clone(),
+                    req,
+                )
+                .expect("Failed to send get_blocks request to archive")
+                .bytes();
+            let res = Decode!(&res, icp_ledger::GetBlocksResult).unwrap().unwrap();
+            blocks.extend(
+                res.blocks
+                    .into_iter()
+                    .map(icp_ledger::Block::try_from)
+                    .collect::<Result<Vec<icp_ledger::Block>, String>>()
+                    .unwrap(),
+            );
+        }
     }
     blocks.extend(
         res.blocks
@@ -604,10 +617,15 @@ fn assert_txs_with_id_eq(txs1: Vec<SettledTransactionWithId>, txs2: Vec<SettledT
 }
 
 // Assert that the index canister contains the same blocks as the ledger
-fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
+fn assert_ledger_index_parity(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+) -> usize {
     let ledger_blocks = icp_get_blocks(env, ledger_id);
     let index_blocks = index_get_blocks(env, index_id);
     assert_eq!(ledger_blocks, index_blocks);
+    ledger_blocks.len()
 }
 
 /// Assert that the index canister contains the same blocks as the ledger, by querying both the
@@ -1057,21 +1075,36 @@ fn assert_ledger_index_block_transaction_parity(
 #[test]
 fn test_archive_indexing() {
     // test that the index canister can fetch the blocks from archive correctly.
-    // To avoid having a slow test, we create the blocks as mints at ledger init time.
     // We need a number of blocks equal to threshold + 2 * max num blocks in archive response.
+    const MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE: u64 = 10;
     let mut initial_balances = HashMap::new();
-    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD + 4000) {
-        initial_balances.insert(
-            AccountIdentifier::from(account(i, 0)),
-            Tokens::from_e8s(1_000_000_000_000),
-        );
-    }
+    initial_balances.insert(
+        AccountIdentifier::from(account(0, 0)),
+        Tokens::from_e8s(1_000_000_000_000),
+    );
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        ArchiveOptions {
+            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+            max_transactions_per_response: Some(MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE),
+            ..default_archive_options()
+        },
+    );
     let index_id = install_index(env, ledger_id);
+    // To trigger archiving, we need transactions and not only initial balances
+    for i in 1..(ARCHIVE_TRIGGER_THRESHOLD + 2 * MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE) {
+        transfer(env, ledger_id, account(0, 0), account(i, 0), 1);
+    }
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
+    let num_blocks = assert_ledger_index_parity(env, ledger_id, index_id);
+    assert_eq!(
+        (ARCHIVE_TRIGGER_THRESHOLD + 2 * MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE) as usize,
+        num_blocks
+    );
 }
 
 fn expected_block_timestamp(rounds: u32, phase: u32, start_time: SystemTime) -> Option<TimeStamp> {
