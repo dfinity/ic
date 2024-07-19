@@ -27,10 +27,14 @@ pub struct CanisterSnapshots {
 }
 
 impl CanisterSnapshots {
-    pub fn new(
-        snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
-        snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
-    ) -> Self {
+    pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
+        let mut snapshot_ids = BTreeMap::default();
+        for snapshot_id in snapshots.keys() {
+            let canister_id = snapshot_id.get_canister_id();
+            let canister_snapshot_ids: &mut BTreeSet<SnapshotId> =
+                snapshot_ids.entry(canister_id).or_default();
+            canister_snapshot_ids.insert(*snapshot_id);
+        }
         Self {
             snapshots,
             unflushed_changes: vec![],
@@ -75,8 +79,6 @@ impl CanisterSnapshots {
                 let snapshot_ids = self.snapshot_ids.get_mut(&canister_id).unwrap();
                 debug_assert!(snapshot_ids.contains(&snapshot_id));
                 snapshot_ids.remove(&snapshot_id);
-
-                // Remove the snapshot ID set associated with the specified `canister_id` if it's empty.
                 if snapshot_ids.is_empty() {
                     self.snapshot_ids.remove(&canister_id);
                 }
@@ -341,8 +343,12 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
-    #[test]
-    fn test_push_and_remove_snapshot() {
+    use maplit::{btreemap, btreeset};
+
+    fn fake_canister_snapshot(
+        canister_id: CanisterId,
+        local_id: u64,
+    ) -> (SnapshotId, CanisterSnapshot) {
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: CanisterModule::new(vec![1, 2, 3]),
             stable_memory: PageMemory {
@@ -354,7 +360,6 @@ mod tests {
                 size: NumWasmPages::new(10),
             },
         };
-        let canister_id = canister_test_id(0);
         let snapshot = CanisterSnapshot::new(
             canister_id,
             UNIX_EPOCH,
@@ -364,13 +369,22 @@ mod tests {
             Some(execution_snapshot),
             NumBytes::from(0),
         );
+
+        let snapshot_id = SnapshotId::from((canister_id, local_id));
+
+        (snapshot_id, snapshot)
+    }
+
+    #[test]
+    fn test_push_and_remove_snapshot() {
+        let canister_id = canister_test_id(0);
+        let (snapshot_id, snapshot) = fake_canister_snapshot(canister_id, 1);
         let mut snapshot_manager = CanisterSnapshots::default();
         assert_eq!(snapshot_manager.snapshots.len(), 0);
         assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
 
         // Pushing new snapshot updates the `unflushed_changes` collection.
-        let snapshot_id = SnapshotId::from((canister_test_id(0), 1));
         snapshot_manager.push(snapshot_id, Arc::<CanisterSnapshot>::new(snapshot));
         assert_eq!(snapshot_manager.snapshots.len(), 1);
         assert_eq!(snapshot_manager.unflushed_changes.len(), 1);
@@ -398,5 +412,29 @@ mod tests {
         assert_eq!(unflushed_changes.len(), 1);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
         assert_eq!(snapshot_manager.snapshot_ids.get(&canister_id), None);
+    }
+
+    #[test]
+    fn test_construct_canister_snapshot_ids() {
+        let snapshots: BTreeMap<_, _> = [
+            fake_canister_snapshot(canister_test_id(0), 1),
+            fake_canister_snapshot(canister_test_id(0), 2),
+            fake_canister_snapshot(canister_test_id(1), 0),
+        ]
+        .into_iter()
+        .map(|(i, s)| (i, Arc::new(s)))
+        .collect();
+        let snapshot_manager = CanisterSnapshots::new(snapshots);
+
+        let expected_snapshot_ids = btreemap! {
+            canister_test_id(0) => btreeset!{
+                SnapshotId::from((canister_test_id(0), 1)), SnapshotId::from((canister_test_id(0), 2))
+            },
+            canister_test_id(1) =>  btreeset!{
+                SnapshotId::from((canister_test_id(1), 0))
+            },
+        };
+
+        assert_eq!(snapshot_manager.snapshot_ids, expected_snapshot_ids);
     }
 }
