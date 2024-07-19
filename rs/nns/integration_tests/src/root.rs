@@ -1,28 +1,11 @@
-use candid::{Encode, Nat};
+use candid::Nat;
 use canister_test::Runtime;
-use dfn_candid::candid_one;
-use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
-};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
-    TEST_USER1_KEYPAIR,
 };
-use ic_nervous_system_root::change_canister::{
-    AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
-};
-use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
-    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal, ProposalStatus,
-    Vote,
-};
+use ic_nervous_system_root::change_canister::AddCanisterRequest;
+use ic_nns_governance::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{
@@ -31,15 +14,8 @@ use ic_nns_test_utils::{
     },
     itest_helpers::{NnsCanisters, UpgradeTestingScenario},
 };
-
-use ic_nns_test_utils::itest_helpers::state_machine_test_on_nns_subnet;
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
-    LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
-};
-use std::collections::HashMap;
 
 #[parameterized_upgrades]
 async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
