@@ -112,13 +112,10 @@ pub fn test(env: TestEnv) {
             .await
             .expect("failed to create a canister")
             .0;
-        mgr.install_code(
-            &cid,
-            &env.load_wasm(env::var("PROXY_WASM_PATH").unwrap()),
-        )
-        .call_and_wait()
-        .await
-        .expect("failed to install canister");
+        mgr.install_code(&cid, &env.load_wasm(env::var("PROXY_WASM_PATH").unwrap()))
+            .call_and_wait()
+            .await
+            .expect("failed to install canister");
         cid
     });
 
