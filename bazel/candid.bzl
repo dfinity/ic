@@ -21,7 +21,7 @@ readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
 
 if ! git show $merge_base:{did_path} > $tmpfile 2> $errlog; then
-    if grep -sq -- "exists on disk, but not in \\|does not exist in 'HEAD'" $errlog; then
+    if grep -sq -- "does not exist in" $errlog; then
         echo "{did_path} is a new file, skipping backwards compatibility check"
         exit 0
     else
