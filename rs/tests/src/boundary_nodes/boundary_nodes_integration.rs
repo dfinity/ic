@@ -2005,7 +2005,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         .block_on(install_canister(
             env.clone(),
             logger.clone(),
-            env::var("HTTP_COUNTER_WASM_PATH").unwrap(),
+            &env::var("HTTP_COUNTER_WASM_PATH").unwrap(),
         ))
         .unwrap();
 
