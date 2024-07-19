@@ -14,7 +14,11 @@ if [[ $mr_title == *"[override-didc-check]"* ]]; then
     exit 0
 fi
 
-readonly target_branch_name=${{CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-HEAD}}
+if [ -z "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ]; then
+  readonly target_branch_name="HEAD"
+else
+  readonly target_branch_name="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+fi
 readonly merge_base="$(git merge-base "$target_branch_name" HEAD)"
 
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
