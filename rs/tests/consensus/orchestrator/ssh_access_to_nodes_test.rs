@@ -1,4 +1,3 @@
-// TODO(kpop): inline this test as there is no dependency on //rs/tests anymore
 /* tag::catalog[]
 Title:: SSH Key Management Test
 
