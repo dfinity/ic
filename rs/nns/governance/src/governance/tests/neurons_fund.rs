@@ -1,10 +1,12 @@
 use super::*;
-use crate::init::GovernanceCanisterInitPayloadBuilder;
-use crate::pb::v1::create_service_nervous_system::SwapParameters;
-use crate::test_utils::{MockEnvironment, StubCMC, StubIcpLedger};
+use crate::{
+    pb::v1::create_service_nervous_system::SwapParameters,
+    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+};
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use maplit::btreemap;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 

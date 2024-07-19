@@ -20,6 +20,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/governance/init",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/lifeline/interface",

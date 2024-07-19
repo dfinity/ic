@@ -1,0 +1,13 @@
+[package]
+name = "ic-nns-governance-init"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+path = "src/lib.rs"
+
+[dependencies]

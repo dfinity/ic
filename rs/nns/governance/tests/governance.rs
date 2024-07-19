@@ -55,7 +55,6 @@ use ic_nns_governance::{
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     governance_proto_builder::GovernanceProtoBuilder,
-    init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
         governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
@@ -94,6 +93,7 @@ use ic_nns_governance::{
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{

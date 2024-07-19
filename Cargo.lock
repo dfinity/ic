@@ -9695,6 +9695,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nns-governance-init"
+version = "0.9.0"
+
+[[package]]
 name = "ic-nns-governance-protobuf-generator"
 version = "0.9.0"
 dependencies = [
@@ -9914,6 +9918,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
@@ -9989,6 +9994,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-gtc-accounts",
  "ic-nns-handler-lifeline-interface",
