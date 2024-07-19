@@ -975,8 +975,15 @@ pub trait HasIcDependencies {
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
     fn get_canister_http_test_ca_cert(&self) -> Result<String>;
     fn get_canister_http_test_ca_key(&self) -> Result<String>;
+    fn get_hostos_update_img_url(&self) -> Result<Url>;
+    fn get_hostos_update_img_sha256(&self) -> Result<String>;
     fn get_hostos_update_img_test_url(&self) -> Result<Url>;
     fn get_hostos_update_img_test_sha256(&self) -> Result<String>;
+    fn get_mainnet_hostos_update_img_url(&self) -> Result<Url>;
+    fn get_mainnet_hostos_update_img_sha256(&self) -> Result<String>;
+    fn get_mainnet_setupos_img_url(&self) -> Result<Url>;
+    fn get_branch_version(&self) -> Result<String>;
+    fn get_mainnet_version(&self) -> Result<String>;
 }
 
 impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
@@ -1117,6 +1124,20 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         self.read_dependency_to_string(dep_rel_path)
     }
 
+    fn get_hostos_update_img_url(&self) -> Result<Url> {
+        let url = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TAR_ZST_CAS_URL",
+        )?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_hostos_update_img_sha256(&self) -> Result<String> {
+        let sha256 = self
+            .read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TAR_ZST_SHA256")?;
+        bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
+        Ok(sha256)
+    }
+
     fn get_hostos_update_img_test_url(&self) -> Result<Url> {
         let url = self.read_dependency_from_env_to_string(
             "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL",
@@ -1130,6 +1151,32 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         )?;
         bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
         Ok(sha256)
+    }
+
+    fn get_mainnet_hostos_update_img_url(&self) -> Result<Url> {
+        let mainnet_version = self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_mainnet_hostos_update_img_sha256(&self) -> Result<String> {
+        let mainnet_version: String =
+            self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
+    }
+
+    fn get_mainnet_setupos_img_url(&self) -> Result<Url> {
+        let mainnet_version = self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/setup-os/disk-img/disk-img.tar.zst");
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_branch_version(&self) -> Result<String> {
+        self.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+    }
+
+    fn get_mainnet_version(&self) -> Result<String> {
+        self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")
     }
 }
 

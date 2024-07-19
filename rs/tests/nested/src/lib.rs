@@ -1,25 +1,26 @@
-use canister_test::PrincipalId;
-use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::bootstrap::setup_and_start_nested_vms;
-use ic_system_test_driver::driver::farm::Farm;
-use ic_system_test_driver::driver::ic::InternetComputer;
-use ic_system_test_driver::driver::nested::{NestedNode, NestedVms};
-use ic_system_test_driver::driver::resource::{
-    allocate_resources, get_resource_request_for_nested_nodes,
-};
-use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
-use ic_system_test_driver::driver::test_env_api::*;
-use ic_system_test_driver::driver::test_setup::GroupSetup;
-use ic_system_test_driver::nns::add_nodes_to_subnet;
-use ic_system_test_driver::util::{block_on, get_nns_node};
-use ic_tests::orchestrator::utils::rw_message::install_nns_and_check_progress;
-use ic_types::hostos_version::HostosVersion;
-use slog::info;
 use std::str::FromStr;
 use std::time::Duration;
 
+use canister_test::PrincipalId;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        bootstrap::NestedVersionTarget, ic::InternetComputer, nested::NestedVms, test_env::TestEnv,
+        test_env_api::*,
+    },
+    nns::add_nodes_to_subnet,
+    util::block_on,
+};
+use ic_tests::orchestrator::utils::rw_message::install_nns_and_check_progress;
+use ic_types::hostos_version::HostosVersion;
+
+use slog::{info, warn};
+
 mod util;
-use util::{check_hostos_version, elect_hostos_version, update_nodes_hostos_version};
+use util::{
+    check_hostos_version, elect_hostos_version, setup_nested_vm_for_test,
+    start_nested_vm, update_nodes_hostos_version,
+};
 
 const HOST_VM_NAME: &str = "host-1";
 
@@ -28,50 +29,43 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv) {
+pub fn config(env: TestEnv, from: &NestedVersionTarget) {
+    let logger = env.logger();
+
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
 
     // Setup "testnet"
-    InternetComputer::new()
+    let mut ic = InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_node_provider(principal)
-        .with_node_operator(principal)
-        .setup_and_start(&env)
+        .with_node_operator(principal);
+
+    // Handle the initial version for GuestOS. Currently only supports starting from mainnet, malicious, or branch.
+    match from {
+        NestedVersionTarget::Mainnet => ic = ic.with_mainnet_config(),
+        NestedVersionTarget::Branch(false) => (),
+        NestedVersionTarget::Branch(true) => {
+            warn!(
+                logger,
+                "Starting GuestOS VMs from '-test' versions is unsupported. Ignoring."
+            );
+        }
+        NestedVersionTarget::Published { .. } => {
+            warn!(
+                logger,
+                "Starting GuestOS VMs from published versions is unsupported. Ignoring."
+            );
+        }
+    }
+
+    ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
-}
 
-fn setup_nested_vms(env: TestEnv) {
-    let logger = env.logger();
-    info!(logger, "Setup nested VMs ...");
-
-    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
-    let farm = Farm::new(farm_url, logger.clone());
-    let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.infra_group_name;
-
-    let nodes = vec![NestedNode::new(HOST_VM_NAME.to_string())];
-
-    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name, &farm)
-        .expect("Failed to build resource request for nested test.");
-    let res_group = allocate_resources(&farm, &res_request, &env)
-        .expect("Failed to allocate resources for nested test.");
-
-    for (name, vm) in res_group.vms.iter() {
-        env.write_nested_vm(name, vm)
-            .expect("Unable to write nested VM.");
-    }
-
-    let nns_node = get_nns_node(&env.topology_snapshot());
-    let nns_url = nns_node.get_public_url();
-    let nns_public_key =
-        std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
-
-    setup_and_start_nested_vms(&nodes, &env, &farm, &group_name, &nns_url, &nns_public_key)
-        .expect("Unable to start nested VMs.");
+    setup_nested_vm_for_test(env, from, HOST_VM_NAME);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -89,7 +83,7 @@ pub fn registration(env: TestEnv) {
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
 
-    setup_nested_vms(env);
+    start_nested_vm(env);
 
     // If the node is able to join successfully, the registry will be updated,
     // and the new node ID will enter the unassigned pool.
@@ -107,19 +101,35 @@ pub fn registration(env: TestEnv) {
 
 /// Upgrade each HostOS VM to the test version, and verify that each is
 /// healthy before and after the upgrade.
-pub fn upgrade(env: TestEnv) {
+pub fn upgrade(env: TestEnv, to: &NestedVersionTarget) {
     let logger = env.logger();
 
-    let original_version = env
-        .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
-
-    let target_version = HostosVersion::try_from(format!("{original_version}-test")).unwrap();
-    let url = env.get_hostos_update_img_test_url().unwrap();
-    let sha256 = env.get_hostos_update_img_test_sha256().unwrap();
+    let (target_version, url, sha256) = match to {
+        NestedVersionTarget::Mainnet => (
+            env.get_mainnet_version().unwrap(),
+            env.get_mainnet_hostos_update_img_url().unwrap(),
+            env.get_mainnet_hostos_update_img_sha256().unwrap(),
+        ),
+        NestedVersionTarget::Branch(false) => (
+            env.get_branch_version().unwrap(),
+            env.get_hostos_update_img_url().unwrap(),
+            env.get_hostos_update_img_sha256().unwrap(),
+        ),
+        NestedVersionTarget::Branch(true) => (
+            format!("{}-test", env.get_branch_version().unwrap()),
+            env.get_hostos_update_img_test_url().unwrap(),
+            env.get_hostos_update_img_test_sha256().unwrap(),
+        ),
+        NestedVersionTarget::Published {
+            version,
+            url,
+            sha256,
+        } => (version.to_owned(), url.to_owned(), sha256.to_owned()),
+    };
+    let target_version = HostosVersion::try_from(target_version).unwrap();
 
     let initial_topology = env.topology_snapshot();
-    setup_nested_vms(env.clone());
+    start_nested_vm(env.clone());
     info!(logger, "Waiting for node to join ...");
     let new_topology = block_on(
         initial_topology.block_for_newer_registry_version_within_duration(
