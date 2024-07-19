@@ -7,7 +7,6 @@ use dfn_core::{
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_nervous_system_clients::ledger_client::LedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
@@ -357,14 +356,6 @@ fn now_seconds() -> u64 {
 /// canister that implements that same interface.
 fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::IcpLedgerCanister {
     ic_nervous_system_common::ledger::IcpLedgerCanister::new(id)
-}
-
-/// Returns a real ledger stub that communicates with the specified
-/// canister, which is assumed to be a canister that implements the
-/// ICRC1 interface.
-#[allow(unused)]
-fn create_real_icrc1_ledger(id: CanisterId) -> LedgerCanister {
-    LedgerCanister::new(id)
 }
 
 #[export_name = "canister_init"]

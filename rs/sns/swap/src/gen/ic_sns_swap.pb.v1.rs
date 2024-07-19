@@ -154,6 +154,7 @@ pub struct Swap {
     pub init: ::core::option::Option<Init>,
     /// Derived from `init`, always specified and immutable. In most cases `init`
     /// should be used instead.
+    /// TODO(NNS1-3213): Deprecate this field
     #[prost(message, optional, tag = "4")]
     pub params: ::core::option::Option<Params>,
     /// Neurons' Fund participation.  Specified in the transition from
@@ -176,6 +177,8 @@ pub struct Swap {
     /// The proposal ID that was used to create the SNS that opened this swap.
     /// Note: the name is a historical artifact because the swap used to be opened
     /// with an OpenSnsTokenSwap request.
+    /// This is set at installation from `init.nns_proposal_id`, and that field should be used instead.
+    /// TODO(NNS1-3213): Deprecate this field
     #[prost(uint64, optional, tag = "9")]
     pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
     /// A lock stored in Swap state. If set to true, then a finalize_swap
