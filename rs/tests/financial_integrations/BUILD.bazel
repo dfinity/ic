@@ -32,6 +32,9 @@ system_test(
 
 system_test(
     name = "icrc1_agent_test",
+    env = {
+        "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -40,9 +43,6 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
-    env = {
-        "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-    },
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
