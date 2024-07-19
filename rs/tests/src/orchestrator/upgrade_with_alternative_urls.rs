@@ -22,11 +22,11 @@ replica version package.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
 use crate::orchestrator::utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version_with_urls,
     deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
 };
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{

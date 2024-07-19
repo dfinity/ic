@@ -1,3 +1,4 @@
+// TODO(kpop): inline this test as it doesn't realy on anything in /rs/tests/src/
 /* tag::catalog[]
 Title:: Node reassignment test
 
@@ -30,7 +31,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
 
-use crate::orchestrator::utils::rw_message::{
+use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, can_read_msg_with_retries, install_nns_and_check_progress, store_message,
 };
 use ic_system_test_driver::{
