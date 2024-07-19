@@ -12,7 +12,6 @@ Coverage::
 end::catalog[] */
 
 use anyhow::Result;
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_consensus_system_test_utils::ssh_access::{
     assert_authentication_fails, assert_authentication_works, fail_to_update_subnet_record,
     fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
@@ -20,6 +19,9 @@ use ic_consensus_system_test_utils::ssh_access::{
     update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
     wait_until_authentication_fails, wait_until_authentication_is_granted, AuthMean,
 };
+use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
@@ -31,8 +33,6 @@ use ic_system_test_driver::{
     },
     util::{block_on, get_app_subnet_and_node, get_nns_node},
 };
-use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
-use ic_registry_subnet_type::SubnetType;
 use std::net::IpAddr;
 
 pub fn config(env: TestEnv) {
