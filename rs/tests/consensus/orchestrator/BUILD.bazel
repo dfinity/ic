@@ -303,9 +303,10 @@ system_test(
     tags = [
         "system_test_hourly",
         "system_test_nightly",
+        "dynamic_testnet",
+        "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

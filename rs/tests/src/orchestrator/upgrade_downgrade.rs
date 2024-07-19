@@ -11,10 +11,12 @@ Runbook::
 Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
+use url::Url;
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::generic_workload_engine::metrics::LoadTestMetricsProvider;
 use crate::generic_workload_engine::metrics::RequestOutcome;
+use crate::orchestrator::utils::subnet_recovery::enable_ecdsa_on_new_subnet;
 use crate::{
     canister_agent::HasCanisterAgentCapability,
     canister_requests,
@@ -36,11 +38,13 @@ use crate::{
     tecdsa::{make_key, KEY_ID1},
     util::{block_on, get_app_subnet_and_node, MessageCanister},
 };
+use anyhow::Result;
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::ReplicaVersion;
 use ic_types::{Height, SubnetId};
 use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
@@ -70,16 +74,18 @@ pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
     // Activate ecdsa if we are testing the app subnet
     if subnet_type == SubnetType::Application {
         ic = ic.add_subnet(Subnet::fast_single_node(SubnetType::System));
-        subnet_under_test = subnet_under_test.with_ecdsa_config(EcdsaConfig {
-            quadruples_to_create_in_advance: 5,
-            key_ids: vec![make_key(KEY_ID1)],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
     }
 
+    subnet_under_test = subnet_under_test.with_ecdsa_config(EcdsaConfig {
+        quadruples_to_create_in_advance: 5,
+        key_ids: vec![make_key(KEY_ID1)],
+        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    });
+
     ic.add_subnet(subnet_under_test)
+        .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
@@ -89,13 +95,34 @@ pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
 // Tests an upgrade of the NNS subnet to the branch version and a downgrade back to the mainnet version
 pub fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let branch_version = bless_branch_version(&env, &nns_node);
-    let (faulty_node, can_id, msg) =
-        upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
+
     let mainnet_version = env
         .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .unwrap();
-    upgrade(&env, &nns_node, &mainnet_version, SubnetType::System, None);
+    let intermediate1 = bless_version(&env, &nns_node, "80e0363393ea26a36b77e8c75f7f183cb521f67f");
+    let intermediate2 = bless_version(&env, &nns_node, "bb76748d1d225c08d88037e99ca9a066f97de496");
+    let branch_version = bless_branch_version(&env, &nns_node);
+
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let nns_canister = block_on(MessageCanister::new(
+        &agent,
+        nns_node.effective_canister_id(),
+    ));
+
+    enable_ecdsa_on_new_subnet(
+        &env,
+        &nns_node,
+        &nns_canister,
+        1,
+        ReplicaVersion::try_from(mainnet_version.clone()).unwrap(),
+        &env.logger(),
+    );
+
+    let (faulty_node, can_id, msg) =
+        upgrade(&env, &nns_node, &intermediate1, SubnetType::System, None);
+    upgrade(&env, &nns_node, &intermediate2, SubnetType::System, None);
+    upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
+
     // Make sure we can still read the message stored before the first upgrade
     assert!(can_read_msg_with_retries(
         &env.logger(),
@@ -244,6 +271,21 @@ fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     branch_version
 }
 
+fn get_version_ic_os_update_img_url(version: &str) -> Result<Url> {
+    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{version}/guest-os/update-img/update-img.tar.zst");
+    Ok(Url::parse(&url)?)
+}
+
+fn get_version_ic_os_update_img_sha256(env: &TestEnv, version: &str) -> Result<String> {
+    fetch_sha256(
+        format!(
+            "http://download.proxy-global.dfinity.network:8080/ic/{version}/guest-os/update-img"
+        ),
+        "update-img.tar.zst",
+        env.test_env().logger(),
+    )
+}
+
 fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
@@ -264,6 +306,24 @@ fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     ));
     info!(&logger, "Blessed mainnet version");
     mainnet_version
+}
+
+fn bless_version(env: &TestEnv, nns_node: &IcNodeSnapshot, version: &str) -> String {
+    let logger = env.logger();
+
+    // Bless mainnet version
+    let sha256 = get_version_ic_os_update_img_sha256(&env, version).unwrap();
+    let upgrade_url = get_version_ic_os_update_img_url(version).unwrap();
+    block_on(bless_replica_version(
+        nns_node,
+        version,
+        UpdateImageType::Image,
+        &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
+    info!(&logger, "Blessed mainnet version");
+    version.into()
 }
 
 // Enable ECDSA signing on the first subnet of the given type, and
