@@ -14,7 +14,7 @@ if [[ $mr_title == *"[override-didc-check]"* ]]; then
     exit 0
 fi
 
-if [ -z "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ]; then
+if [ -z "${{CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}}" ]; then
   readonly target_branch_name="HEAD"
 else
   readonly target_branch_name="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
