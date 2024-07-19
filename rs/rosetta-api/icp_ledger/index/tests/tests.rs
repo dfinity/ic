@@ -10,6 +10,7 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::state_machine_helpers::index::status;
+use ic_ledger_test_utils::state_machine_helpers::ledger::icp_ledger_tip;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, Transaction,
@@ -22,7 +23,6 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
-use on_wire::FromWire;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -176,17 +176,6 @@ fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response");
     assert_eq!(account_balance, accountidentifier_balance);
     accountidentifier_balance
-}
-
-fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
-    let res = env
-        .query(ledger_id, "tip_of_chain_pb", vec![])
-        .expect("Failed to send tip_of_chain_pb request")
-        .bytes();
-    let tip: icp_ledger::TipOfChainRes = dfn_protobuf::ProtoBuf::from_bytes(res)
-        .map(|c| c.0)
-        .expect("failed to decode tip_of_chain_pb result");
-    tip.tip_index
 }
 
 fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
