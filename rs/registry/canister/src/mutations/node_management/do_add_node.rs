@@ -89,11 +89,7 @@ impl Registry {
             .domain
             .as_ref()
             .map(|domain| {
-                if domain_to_ascii_strict(domain)
-                    .ok()
-                    .filter(|s| s == domain)
-                    .is_none()
-                {
+                if !domain_to_ascii_strict(domain).is_ok_and(|s| s == *domain) {
                     return Err(format!(
                         "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format"
                     ));
