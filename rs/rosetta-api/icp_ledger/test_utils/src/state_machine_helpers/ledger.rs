@@ -2,7 +2,9 @@ use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::StateMachine;
-use icp_ledger::{GetBlocksArgs, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST};
+use icp_ledger::{
+    GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+};
 use on_wire::FromWire;
 
 pub fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
@@ -56,6 +58,54 @@ pub fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledg
         .map(icp_ledger::Block::decode)
         .collect::<Result<Vec<icp_ledger::Block>, String>>()
         .unwrap()
+}
+
+pub fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let req = GetBlocksArgs {
+        start: 0u64,
+        length: u32::MAX as usize,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
+    let res = env
+        .query(ledger_id, "query_blocks", req)
+        .expect("Failed to send get_blocks request")
+        .bytes();
+    let res = Decode!(&res, QueryBlocksResponse).expect("Failed to decode QueryBlocksResponse");
+    let mut blocks = vec![];
+    for archived in res.archived_blocks {
+        for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
+            let req = GetBlocksArgs {
+                start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
+                length: MAX_BLOCKS_PER_REQUEST,
+            };
+            let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
+            let canister_id = archived.callback.canister_id;
+            let res = env
+                .query(
+                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                    archived.callback.method.clone(),
+                    req,
+                )
+                .expect("Failed to send get_blocks request to archive")
+                .bytes();
+            let res = Decode!(&res, icp_ledger::GetBlocksResult).unwrap().unwrap();
+            blocks.extend(
+                res.blocks
+                    .into_iter()
+                    .map(icp_ledger::Block::try_from)
+                    .collect::<Result<Vec<icp_ledger::Block>, String>>()
+                    .unwrap(),
+            );
+        }
+    }
+    blocks.extend(
+        res.blocks
+            .into_iter()
+            .map(icp_ledger::Block::try_from)
+            .collect::<Result<Vec<icp_ledger::Block>, String>>()
+            .unwrap(),
+    );
+    blocks
 }
 
 pub(crate) fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
