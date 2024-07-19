@@ -12,7 +12,7 @@ use crate::{
         neuron::{DissolveState as NeuronDissolveState, Followees},
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
         Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Vote,
+        Visibility, Vote,
     },
 };
 #[cfg(target_arch = "wasm32")]
@@ -112,7 +112,7 @@ pub struct Neuron {
     pub neuron_type: Option<i32>,
     /// How much unprivileged principals (i.e. is neither controller, nor
     /// hotkey) can see about this neuron.
-    pub visibility: Option<crate::pb::v1::Visibility>,
+    pub visibility: Option<Visibility>,
 }
 
 impl Neuron {
@@ -952,7 +952,7 @@ impl TryFrom<NeuronProto> for Neuron {
             aging_since_timestamp_seconds,
         })?;
         let visibility =
-            visibility.and_then(|visibility| crate::pb::v1::Visibility::try_from(visibility).ok());
+            visibility.and_then(|visibility| Visibility::try_from(visibility).ok());
 
         Ok(Neuron {
             id,
@@ -1156,7 +1156,7 @@ impl From<DecomposedNeuron> for Neuron {
         })
         .expect("Neuron dissolve state and age is invalid");
         let visibility =
-            visibility.and_then(|visibility| crate::pb::v1::Visibility::try_from(visibility).ok());
+            visibility.and_then(|visibility| Visibility::try_from(visibility).ok());
 
         Neuron {
             id,
