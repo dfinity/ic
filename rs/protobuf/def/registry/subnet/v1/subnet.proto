@@ -65,7 +65,7 @@ message SubnetRecord {
   reserved "max_instructions_per_round";
 
   reserved 22;
-  reserved "max_instructions_per_install_code";  
+  reserved "max_instructions_per_install_code";
 
   // Information on whether a feature is supported by this subnet.
   SubnetFeatures features = 23;
