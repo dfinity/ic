@@ -6,7 +6,6 @@ on:
   schedule: # Todo: switch to push on master and remove schedule once we have more macos runners
     - cron: "0 * * * *"
   pull_request:
-  workflow_call:
   push:
     branches:
       - 'hotfix-*-rc--*'

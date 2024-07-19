@@ -1,12 +1,10 @@
 name: Release Testing
 on:
-  workflow_run:
-    workflows: ["CI Main"]
-    types:
-      - completed
+  push:
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
+      - 'marko-update-release-testing'
   workflow_dispatch:
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
@@ -27,15 +25,9 @@ env:
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
-  ci-main-failure:
-    name: Check CI Main Failure
-    runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
-    steps:
-      - run: |
-          echo 'CI Main workflow failed'
-          echo "CI Main URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
-          exit 1
+  ci-main:
+    name: CI Main
+    uses: ./.github/workflows/ci-main.yml
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     runs-on:
