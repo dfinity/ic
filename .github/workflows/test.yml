@@ -30,4 +30,10 @@ jobs:
 
       - name: TEST
         run: |
-          bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc test --config=ci --config=macos_ci --test_tag_filters=test_macos //rs/... //publish/binaries/...
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            test \
+            --config=ci --config=macos_ci \
+            --test_tag_filters=test_macos \
+            //rs/... //publish/binaries/...
