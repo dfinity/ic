@@ -54,7 +54,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["CI_MERGE_REQUEST_TARGET_BRANCH_SHA", "CI_MERGE_REQUEST_TITLE"]),
+        RunEnvironmentInfo(inherited_environment = ["GITHUB_BASE_REF", "CI_MERGE_REQUEST_TITLE"]),
     ]
 
 CHECK_DID = attr.label(
