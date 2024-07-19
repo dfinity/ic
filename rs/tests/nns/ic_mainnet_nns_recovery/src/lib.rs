@@ -15,6 +15,7 @@ use dfn_candid::candid_one;
 use flate2::read::GzDecoder;
 use ic_canister_client::Sender;
 use ic_canister_client_sender::{Ed25519KeyPair, SigKeys};
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::NnsFunction;
@@ -44,10 +45,7 @@ use ic_system_test_driver::{
     },
     util::{block_on, runtime_from_url},
 };
-use ic_tests::orchestrator::utils::{
-    rw_message::install_nns_with_customizations_and_check_progress,
-    subnet_recovery::set_sandbox_env_vars,
-};
+use ic_tests::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
 use ic_types::{CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};

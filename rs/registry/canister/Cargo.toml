@@ -38,6 +38,7 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
+idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"
 ipnet = "2.5.0"

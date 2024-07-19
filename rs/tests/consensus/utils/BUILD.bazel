@@ -9,6 +9,21 @@ rust_library(
     crate_name = "ic_consensus_system_test_utils",
     deps = [
         # Keep sorted.
+        "//rs/nns/cmc",
+        "//rs/nns/constants",
+        "//rs/nns/governance",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:leb128",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )

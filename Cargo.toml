@@ -341,6 +341,10 @@ members = [
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
     "rs/tests",
+    "rs/tests/consensus",
+    "rs/tests/consensus/orchestrator",
+    "rs/tests/consensus/tecdsa",
+    "rs/tests/consensus/utils",
     "rs/tests/driver",
     "rs/tests/httpbin-rs",
     "rs/tests/networking/canister_http",
@@ -526,6 +530,7 @@ ic_bls12_381 = { version = "=0.9.2", default-features = false, features = [
     "experimental",
     "zeroize",
 ] }
+idna = "1.0.2"
 itertools = "0.12.0"
 k256 = { version = "0.13.3", default-features = false, features = [
     "arithmetic",
