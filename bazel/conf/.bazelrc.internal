@@ -30,8 +30,6 @@ build    --remote_upload_local_results=false
 build:ci --remote_upload_local_results=true
 
 build:ci --noremote_local_fallback
-build:ci --build_tag_filters="-system_test,-fuzz_test"
-build:ci --verbose_failures
 
 # Run `bazel build ... --config=local` to build targets without cache (and without build event upload).
 build:local --remote_cache=
