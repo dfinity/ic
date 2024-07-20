@@ -53,9 +53,11 @@ Of course, other instances on the same PocketIC server remain unchanged - neithe
 
 **Attention**: Enabling auto-progress makes instances non-deterministic! There is no way to guarantee message order when agents dispatch async requests, which may interleave with each other and with the `tick`s from the auto-progress thread. If you need determinism, use the old, manually-`tick`ed API. 
 
+**Attention**: It is strongly discouraged to use the PocketIC library for interacting with a live instance.
 Live instances can be made non-live again by disabling auto-progress and disabling the gateway.
 This is done by calling `stop_live()` on the instance.
-Once this call returns, the instance will only continue to make progress when you call `tick` - but the state in which the instance halts is not deterministic.
+Once this call returns, you can use the PocketIC library for testing again.
+The instance will only make progress when you call `tick()` - but the state in which the instance halts is not deterministic.
 So be extra careful with tests which are setup with a live phase and which then transition to non-live for the test section. 
 
 Here is a sketch on how to use the live mode: 
@@ -361,7 +363,3 @@ async fn test_canister_http_live() {
     assert_eq!(http_response.body, b"...");
 }
 ```
-
-Note that it is strongly discouraged to use the live mode for testing canister HTTP outcalls
-when making update calls using the PocketIC library, e.g.,
-using `pic.update_call` or `pic.submit_call` and `pic.await_call`.
