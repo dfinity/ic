@@ -19,6 +19,7 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
+use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
@@ -164,8 +165,15 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::TempDir;
-use tokio::{runtime::Runtime, sync::mpsc};
+use tokio::{
+    runtime::Runtime,
+    sync::{mpsc, watch},
+};
 use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+
+/// The size of the channel used to communicate between the [`IngressWatcher`] and
+/// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
+const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 #[cfg(test)]
 mod tests;
@@ -640,6 +648,10 @@ pub struct StateMachine {
     consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
+    certified_height_tx: watch::Sender<Height>,
+    pub ingress_watcher_handle: IngressWatcherHandle,
+    /// A drop guard to gracefully cancel the ingress watcher task.
+    _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -1092,6 +1104,11 @@ impl StateMachine {
         // Make sure the latest state is certified and fetch it from `StateManager`.
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
+
+        self.certified_height_tx
+            .send(certified_height)
+            .expect("Ingress watcher is running");
+
         let state = self
             .state_manager
             .get_state_at(certified_height)
@@ -1358,6 +1375,23 @@ impl StateMachine {
             replica_logger.clone(),
         ));
 
+        // Setup ingress watcher for synchronous call endpoint.
+        let (completed_execution_messages_tx, completed_execution_messages_rx) =
+            mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+        let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
+
+        let cancellation_token = tokio_util::sync::CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
+        let ingress_watcher_drop_guard = cancellation_token.drop_guard();
+        let (ingress_watcher_handle, _join_handle) = IngressWatcher::start(
+            runtime.handle().clone(),
+            replica_logger.clone(),
+            HttpHandlerMetrics::new(&metrics_registry),
+            certified_height_rx,
+            completed_execution_messages_rx,
+            cancellation_token_clone,
+        );
+
         // NOTE: constructing execution services requires tokio context.
         //
         // We could have required the client to use [tokio::test] for state
@@ -1366,8 +1400,6 @@ impl StateMachine {
         //
         // The API state machine provides is blocking anyway.
         let execution_services = runtime.block_on(async {
-            #[allow(clippy::disallowed_methods)]
-            let (completed_execution_messages_tx, _) = mpsc::channel(1);
             ExecutionServices::setup_execution(
                 replica_logger.clone(),
                 &metrics_registry,
@@ -1498,6 +1530,9 @@ impl StateMachine {
             query_handler: runtime.block_on(async {
                 TowerBuffer::new(execution_services.query_execution_service, 1)
             }),
+            ingress_watcher_handle,
+            _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
+            certified_height_tx,
             runtime,
             state_dir,
             // Note: state machine tests are commonly used for testing

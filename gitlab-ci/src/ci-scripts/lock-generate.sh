@@ -28,8 +28,8 @@ fi
 git add Cargo.lock Cargo.Bazel.*.lock
 git status
 if ! git diff --cached --quiet; then
-    # If a merge request and not on a merge train then update the Cargo.lock file in the MR automatically.
-    if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ] && [ "$CI_MERGE_REQUEST_EVENT_TYPE" != "merge_train" ]; then
+    # If a pull request then update the Cargo.lock file in the MR automatically.
+    if [ "$CI_PIPELINE_SOURCE" = "pull_request" ]; then
         # There are some changes staged
         if [ -z ${GITHUB_ACTION+x} ]; then
             # On GitLab we have to point the origin to GitLab

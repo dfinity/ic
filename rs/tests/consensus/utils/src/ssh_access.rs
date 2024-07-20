@@ -52,17 +52,19 @@ pub enum AuthMean {
     None,
 }
 
-pub(crate) struct SshSession {
+pub struct SshSession {
     pub session: Session,
 }
 
-impl SshSession {
-    pub fn new() -> Self {
+impl Default for SshSession {
+    fn default() -> Self {
         Self {
             session: Session::new().unwrap(),
         }
     }
+}
 
+impl SshSession {
     pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
         let ip_str = format!("[{}]:22", ip);
         let tcp = TcpStream::connect(ip_str).map_err(|err| err.to_string())?;
@@ -80,12 +82,12 @@ impl SshSession {
     }
 }
 
-pub(crate) fn assert_authentication_works(ip: &IpAddr, username: &str, mean: &AuthMean) {
-    SshSession::new().login(ip, username, mean).unwrap();
+pub fn assert_authentication_works(ip: &IpAddr, username: &str, mean: &AuthMean) {
+    SshSession::default().login(ip, username, mean).unwrap();
 }
 
-pub(crate) fn assert_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthMean) {
-    assert!(SshSession::new().login(ip, username, mean).is_err());
+pub fn assert_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthMean) {
+    assert!(SshSession::default().login(ip, username, mean).is_err());
 }
 
 pub fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &AuthMean) {
@@ -94,7 +96,7 @@ pub fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &
     // succeeding after 10 secs.
     let deadline = current_time() + Duration::from_secs(30);
     loop {
-        match SshSession::new().login(ip, username, mean) {
+        match SshSession::default().login(ip, username, mean) {
             Ok(_) => return,
             Err(e) if current_time() > deadline => panic!("Authentication failed: {}", e),
             _ => {}
@@ -102,13 +104,13 @@ pub fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &
     }
 }
 
-pub(crate) fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthMean) {
+pub fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthMean) {
     // The orchestrator updates the access keys every 10 seconds. If we are lucky,
     // this call succeeds at the first trial. If we are unlucky, it starts
     // succeeding after 10 secs.
     let deadline = current_time() + Duration::from_secs(30);
     loop {
-        match SshSession::new().login(ip, username, mean) {
+        match SshSession::default().login(ip, username, mean) {
             Err(_) => return,
             Ok(_) if current_time() > deadline => panic!("Authentication still succeeds"),
             _ => {}
@@ -168,7 +170,7 @@ pub async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
     vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
 }
 
-pub(crate) async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
+pub async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
     let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
@@ -179,7 +181,7 @@ pub(crate) async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSu
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-pub(crate) fn get_updatesshreadonlyaccesskeyspayload(
+pub fn get_updatesshreadonlyaccesskeyspayload(
     readonly_keys: Vec<String>,
 ) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
@@ -187,7 +189,7 @@ pub(crate) fn get_updatesshreadonlyaccesskeyspayload(
     }
 }
 
-pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
+pub async fn update_ssh_keys_for_all_unassigned_nodes(
     nns_url: Url,
     payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
 ) {
@@ -204,7 +206,7 @@ pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
     vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
 }
 
-pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
+pub async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     nns_url: Url,
     payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
 ) {
@@ -221,7 +223,7 @@ pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-pub(crate) fn execute_bash_command(sess: &Session, command: String) -> Result<String, String> {
+pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, String> {
     let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
     channel.exec("bash").map_err(|e| e.to_string())?;
     channel

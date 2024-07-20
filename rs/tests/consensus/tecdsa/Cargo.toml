@@ -1,5 +1,5 @@
 [package]
-name = "consensus-orchestrator-system-tests"
+name = "consensus-tecdsa-system-tests"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,28 +8,23 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-canister_http = { path = "../../networking/canister_http" }
-ic-agent = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
 ic_consensus_system_test_utils = { path = "../utils" }
-ic-recovery = { path = "../../../recovery" }
+ic-management-canister-types = { path = "../../..//types/management_canister_types" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-sys = { path = "../../../sys" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
-tempfile = { workspace = true }
 tests = { path = "../.." }
+tokio = { workspace = true }
 url = { workspace = true }
 
 [[bin]]
-name = "ic-systest-sr-nns-failover-nodes-test"
-path = "sr_nns_failover_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-cup-compatibility"
-path = "cup_compatibility_test.rs"
-
-[[bin]]
-name = "ic-systest-node-reassignment-test"
-path = "node_reassignment_test.rs"
+name = "ic-systest-tecdsa-performance-test"
+path = "tecdsa_performance_test.rs"
 

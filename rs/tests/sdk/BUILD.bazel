@@ -43,6 +43,7 @@ system_test(
         "sdk-system-tests",
         "//rs/registry/subnet_type",
         "//rs/tests",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
