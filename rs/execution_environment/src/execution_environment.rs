@@ -756,11 +756,6 @@ impl ExecutionEnvironment {
                         let canister_id = args.get_canister_id();
                         let sender_canister_version = args.get_sender_canister_version();
 
-                        // Track whether the deprecated `controller` field was used.
-                        if args.settings.get_controller().is_some() {
-                            self.metrics.controller_in_update_settings_total.inc();
-                        }
-
                         let result = match CanisterSettings::try_from(args.settings) {
                             Err(err) => Err(err.into()),
                             Ok(settings) => self.update_settings(
