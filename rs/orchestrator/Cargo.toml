@@ -38,6 +38,7 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+idna = { workspace = true }
 indoc = "1.0.9"
 nix = { workspace = true }
 prometheus = { workspace = true }
@@ -52,7 +53,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }

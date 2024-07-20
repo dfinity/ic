@@ -34,12 +34,13 @@ use ic_types::{
     },
     Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
 };
+use serde::Deserialize;
 use thiserror::Error;
 
 pub type SubnetIndex = u64;
 pub mod constants;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize)]
 pub enum SubnetRunningState {
     #[default]
     Active,

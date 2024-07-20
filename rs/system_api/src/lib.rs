@@ -225,7 +225,7 @@ pub enum ModificationTracking {
 /// deserializing will result in duplication of the data, but no issues in
 /// correctness.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum ApiType {
     /// For executing the `canister_start` method
     Start {
@@ -616,7 +616,14 @@ impl ApiType {
             ApiType::SystemTask { system_task, .. } => match system_task {
                 SystemMethod::CanisterHeartbeat => "heartbeat",
                 SystemMethod::CanisterGlobalTimer => "global timer",
-                _ => panic!("Only `canister_heartbeat` and `canister_global_timer` are allowed."),
+                SystemMethod::CanisterOnLowWasmMemory => "on low Wasm memory",
+                SystemMethod::CanisterStart
+                | SystemMethod::CanisterInit
+                | SystemMethod::CanisterPreUpgrade
+                | SystemMethod::CanisterPostUpgrade
+                | SystemMethod::CanisterInspectMessage => {
+                    panic!("Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.")
+                }
             },
             ApiType::Update { .. } => "update",
             ApiType::ReplicatedQuery { .. } => "replicated query",
