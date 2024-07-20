@@ -9114,6 +9114,7 @@ dependencies = [
  "ic-btc-replica-types",
  "ic-error-types",
  "ic-protobuf",
+ "ic-utils 0.9.0",
  "num-traits",
  "serde",
  "serde_bytes",
