@@ -9,6 +9,7 @@ use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
+use futures::future::{BoxFuture, Shared};
 use hyper::header::{HeaderValue, HOST};
 use hyper::Version;
 use hyper_legacy::{client::connect::HttpConnector, Client};
@@ -175,7 +176,8 @@ impl PocketIcApiStateBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[allow(clippy::type_complexity)]
+#[derive(Clone)]
 pub enum OpOut {
     NoOutput,
     Time(u64),
@@ -187,6 +189,7 @@ pub enum OpOut {
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
     RawResponse((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
+    RawResponseV3(Shared<BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>>),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
@@ -281,6 +284,18 @@ impl std::fmt::Debug for OpOut {
                     base64::encode(bytes)
                 )
             }
+            OpOut::RawResponseV3(fut) => {
+                write!(
+                    f,
+                    "ApiV3Resp({:?})",
+                    fut.peek().map(|(status, headers, bytes)| format!(
+                        "{}:{:?}:{}",
+                        status,
+                        headers,
+                        base64::encode(bytes)
+                    ))
+                )
+            }
             OpOut::Pruned => write!(f, "Pruned"),
             OpOut::MessageId((effective_principal, message_id)) => {
                 write!(
@@ -327,7 +342,7 @@ pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
 /// returned directly.
 /// If the computation can be run and takes longer, a Started variant is returned, containing the
 /// requested op and the initial state.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum UpdateReply {
     /// The requested instance is busy executing another update.
     Busy {

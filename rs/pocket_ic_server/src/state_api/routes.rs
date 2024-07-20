@@ -11,8 +11,7 @@ use crate::pocket_ic::{
     GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory,
     SetTime, StatusRequest, SubmitIngressMessage, Tick,
 };
-use crate::OpId;
-use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
+use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
 use aide::{
     axum::routing::{delete, get, post, ApiMethodRouter},
     axum::ApiRouter,
@@ -206,15 +205,12 @@ where
         .api_route("/:id/stop", post(stop_http_gateway))
 }
 
-async fn run_operation<T: Serialize>(
+async fn run_operation<T: Serialize + FromOpOut>(
     api_state: Arc<ApiState>,
     instance_id: InstanceId,
     timeout: Option<Duration>,
     op: impl Operation + Send + Sync + 'static,
-) -> (StatusCode, ApiResponse<T>)
-where
-    (StatusCode, ApiResponse<T>): From<OpOut>,
-{
+) -> (StatusCode, ApiResponse<T>) {
     let retry_if_busy = op.retry_if_busy();
     let op = Arc::new(op);
     let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
@@ -277,7 +273,7 @@ where
                             );
                         }
                     }
-                    UpdateReply::Output(op_out) => break op_out.into(),
+                    UpdateReply::Output(op_out) => break FromOpOut::from(op_out).await,
                 }
             }
         }
@@ -287,8 +283,14 @@ where
 #[derive(Debug, Copy, Clone)]
 pub struct OpConversionError;
 
-impl<T: TryFrom<OpOut>> From<OpOut> for (StatusCode, ApiResponse<T>) {
-    fn from(value: OpOut) -> Self {
+#[async_trait]
+trait FromOpOut: Sized {
+    async fn from(value: OpOut) -> (StatusCode, ApiResponse<Self>);
+}
+
+#[async_trait]
+impl<T: TryFrom<OpOut>> FromOpOut for T {
+    async fn from(value: OpOut) -> (StatusCode, ApiResponse<T>) {
         // match errors explicitly to make sure they have a 4xx status code
         match value {
             OpOut::Error(e) => (
@@ -463,8 +465,9 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
-    fn from(value: OpOut) -> Self {
+#[async_trait]
+impl FromOpOut for PocketHttpResponse {
+    async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
         match value {
             OpOut::RawResponse((status, headers, bytes)) => (
                 StatusCode::from_u16(status).unwrap(),
@@ -472,6 +475,13 @@ impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
             ),
             OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
                 (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
+            }
+            OpOut::RawResponseV3(fut) => {
+                let (status, headers, bytes) = fut.await;
+                (
+                    StatusCode::from_u16(status).unwrap(),
+                    ApiResponse::Success((headers, bytes)),
+                )
             }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -736,7 +746,7 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
 /// When polling, the type (and therefore the variant) is no longer known. Therefore we need
 /// to try every variant and immediately convert to an axum::Response so that axum understands
 /// the return type.
-fn op_out_to_response(op_out: OpOut) -> Response {
+async fn op_out_to_response(op_out: OpOut) -> Response {
     match op_out {
         OpOut::Pruned => (
             StatusCode::GONE,
@@ -824,6 +834,15 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             }
             resp.body(Body::from(bytes)).unwrap()
         }
+        OpOut::RawResponseV3(fut) => {
+            let (status, headers, bytes) = fut.await;
+            let code = StatusCode::from_u16(status).unwrap();
+            let mut resp = Response::builder().status(code);
+            for (name, value) in headers {
+                resp = resp.header(name, value);
+            }
+            resp.body(Body::from(bytes)).unwrap()
+        }
     }
 }
 
@@ -842,7 +861,7 @@ pub async fn handler_read_graph(
         if let Some((_new_state_label, op_out)) =
             ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
         {
-            op_out_to_response(op_out)
+            op_out_to_response(op_out).await
         } else {
             (
                 StatusCode::NOT_FOUND,

@@ -9,6 +9,8 @@ use axum::{
     response::{Html, IntoResponse},
 };
 use candid::Decode;
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
@@ -80,7 +82,6 @@ use std::{
 };
 use tempfile::TempDir;
 use tokio::{runtime::Runtime, sync::mpsc};
-use tokio_util::sync::CancellationToken;
 use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
@@ -95,10 +96,6 @@ include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
-
-/// The interval that pocket-ic should try to execute rounds on all subnets,
-/// when running synchronous update calls for the [`CallRequest`] operation.
-const EXECUTE_ROUND_INTERVAL: Duration = Duration::from_millis(50);
 
 fn compute_subnet_seed(
     ranges: Vec<CanisterIdRange>,
@@ -1578,7 +1575,7 @@ impl Operation for CallRequest {
                 // forwards it to the state machine. The task will automatically terminate
                 // once it submits an ingress message received from the call service to the
                 // `StateMachine`, or if the call service is dropped (in which case `r.recv().await` returns `None`).
-                pic.runtime.spawn(async move {
+                let ingress_proxy_task = pic.runtime.spawn(async move {
                     if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
                         r.recv().await
                     {
@@ -1621,43 +1618,38 @@ impl Operation for CallRequest {
                     .body(self.bytes.clone().into())
                     .unwrap();
 
-                let cancellation_token = CancellationToken::new();
-                let cancellation_token_clone = cancellation_token.clone();
-
-                // TODO: Allow parallel execution of V3 ingress messages.
-                //
-                // We are blocking the pic here, when in the CallRequest operation.
-                // This won't let us execute V3 ingress messages concurrently.
-                let resp = std::thread::scope(|s| {
-                    // We have to execute rounds for V3 calls, since the endpoint
-                    // waits for message to be executed and certified.
-                    if let CallRequestVersion::V3 = self.version {
-                        s.spawn(|| {
-                            while !cancellation_token_clone.is_cancelled() {
-                                for subnet in pic.subnets.read().unwrap().values() {
-                                    subnet.execute_round();
-                                }
-                                std::thread::sleep(EXECUTE_ROUND_INTERVAL);
-                            }
-                        });
-                    }
-
-                    let response = pic.runtime.block_on(svc.oneshot(request)).unwrap();
-                    cancellation_token.cancel();
-                    response
+                #[allow(clippy::type_complexity)]
+                let fut: BoxFuture<
+                    'static,
+                    (u16, BTreeMap<String, Vec<u8>>, Vec<u8>),
+                > = Box::pin(async {
+                    let resp = svc.oneshot(request).await.unwrap();
+                    (
+                        resp.status().into(),
+                        resp.headers()
+                            .iter()
+                            .map(|(name, value)| {
+                                (name.as_str().to_string(), value.as_bytes().to_vec())
+                            })
+                            .collect(),
+                        axum::body::to_bytes(resp.into_body(), usize::MAX)
+                            .await
+                            .unwrap()
+                            .to_vec(),
+                    )
                 });
+                let shared = fut.shared();
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                let service_task = pic.runtime.spawn(shared.clone());
+
+                loop {
+                    if service_task.is_finished() {
+                        let resp = pic.runtime.block_on(shared);
+                        break OpOut::RawResponse(resp);
+                    } else if ingress_proxy_task.is_finished() {
+                        break OpOut::RawResponseV3(shared);
+                    }
+                }
             }
         }
     }
@@ -2404,10 +2396,12 @@ mod tests {
         let unix_time_ns = 1640995200000000000; // 1st Jan 2022
         let time = Time::from_nanos_since_unix_epoch(unix_time_ns);
         compute_assert_state_change(&mut pic, SetTime { time });
-        let expected_time = OpOut::Time(unix_time_ns);
         let actual_time = compute_assert_state_immutable(&mut pic, GetTime {});
 
-        assert_eq!(expected_time, actual_time);
+        match actual_time {
+            OpOut::Time(actual_time_ns) => assert_eq!(unix_time_ns, actual_time_ns),
+            _ => panic!("Unexpected OpOut: {:?}", actual_time),
+        };
     }
 
     #[test]

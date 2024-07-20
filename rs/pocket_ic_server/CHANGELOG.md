@@ -30,8 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for canister HTTP outcalls: endpoint `/instances/<instance_id>/get_canister_http` to retrieve pending canister HTTP outcalls
   and endpoint `/instances/<instance_id>/mock_canister_http_response` to mock a response for a pending canister HTTP outcall,
   the server produces responses for pending canister HTTP outcalls automatically in the auto-progress mode (started by calling the endpoint `/instances/<instance_id>/auto_progress`).
-- Added new endpoint `/instance/<instance_id>/api/v3/canister/<effective_canister_id>/call` to support update calls to the new
-  synchronous ingress message endpoint.
+- New endpoint `/instance/<instance_id>/api/v3/canister/<effective_canister_id>/call` supporting a synchronous HTTP interface of the IC for update calls.
+  Note that this endpoint might non-deterministically return a response with status code 202 and empty body.
   
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.
