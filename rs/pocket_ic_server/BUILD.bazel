@@ -69,6 +69,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tonic",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
@@ -83,6 +84,7 @@ TEST_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:hex",
@@ -155,6 +157,9 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
+    aliases = {
+        "@crate_index//:ic_agent_call_v3": "ic_agent_call_v3",
+    },
     data = [
         ":pocket-ic-server",
         "@ii_dev_canister//file",
@@ -164,7 +169,7 @@ rust_test(
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     tags = ["cpu:8"],
-    deps = TEST_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES + ["@crate_index//:ic_agent_call_v3"],
 )
 
 rust_test(
