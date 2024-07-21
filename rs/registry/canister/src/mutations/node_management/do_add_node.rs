@@ -14,15 +14,12 @@ use ic_protobuf::registry::{
 };
 use idna::domain_to_ascii_strict;
 
-use crate::mutations::{
-    common::check_ipv4_config,
-    node_management::{
-        common::{
-            get_node_operator_record, make_add_node_registry_mutations,
-            make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
-        },
-        do_remove_node_directly::RemoveNodeDirectlyPayload,
+use crate::mutations::node_management::{
+    common::{
+        get_node_operator_record, make_add_node_registry_mutations,
+        make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
     },
+    do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
 use ic_registry_canister_types::{AddNodePayload, IPv4Config};
 use ic_types::crypto::CurrentNodePublicKeys;
@@ -253,13 +250,6 @@ fn now() -> Result<Time, String> {
 }
 
 fn make_valid_node_ivp4_config_or_panic(ipv4_config: IPv4Config) -> IPv4InterfaceConfig {
-    check_ipv4_config(
-        ipv4_config.ip_addr().to_string(),
-        vec![ipv4_config.gateway_ip_addr().to_string()],
-        ipv4_config.prefix_length(),
-    )
-    .expect("Invalid IPv4 config");
-
     IPv4InterfaceConfig {
         ip_addr: ipv4_config.ip_addr().to_string(),
         gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
@@ -468,37 +458,6 @@ mod tests {
                 port: 80u32,
             }
         );
-    }
-
-    #[test]
-    fn should_succeed_if_ipv4_config_is_valid() {
-        let ipv4_config_raw = IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.51.1".to_string(),
-            prefix_length: 24,
-        };
-
-        let ipv4_config = IPv4InterfaceConfig {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: vec!["204.153.51.1".to_string()],
-            prefix_length: 24,
-        };
-
-        assert_eq!(
-            make_valid_node_ivp4_config_or_panic(ipv4_config_raw),
-            ipv4_config
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn should_panic_if_ipv4_config_is_invalid() {
-        let ipv4_config_raw = IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.49.1".to_string(),
-            prefix_length: 24,
-        };
-        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
     }
 
     #[test]
@@ -727,11 +686,9 @@ mod tests {
         )]);
 
         // create an IPv4 config
-        let ipv4_config = Some(IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.51.1".to_string(),
-            prefix_length: 24,
-        });
+        let ipv4_config = Some(
+            IPv4Config::new("204.153.51.58".to_string(), "204.153.51.1".to_string(), 24).unwrap(),
+        );
 
         // create two node payloads with the same IPv4 config
         let (mut payload_1, _) = prepare_add_node_payload(1);

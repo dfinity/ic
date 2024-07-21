@@ -9,9 +9,7 @@ use ic_registry_keys::{
     make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
-use std::{
-    cmp::Eq, collections::HashSet, convert::TryFrom, fmt, hash::Hash, net::Ipv4Addr, str::FromStr,
-};
+use std::{cmp::Eq, collections::HashSet, convert::TryFrom, hash::Hash};
 
 pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<SubnetId> {
     subnet_list
@@ -115,9 +113,6 @@ pub fn get_unassigned_nodes_record(
         )
 }
 
-
-
-
 /// Returns whether a list has duplicate elements.
 pub fn has_duplicates<T>(v: &Vec<T>) -> bool
 where
@@ -129,75 +124,5 @@ where
 
 #[cfg(test)]
 pub(crate) mod test {
-    use crate::mutations::common::{
-        are_in_the_same_subnet, check_ipv6_format, is_global_ipv4_address, is_valid_ipv4_address,
-    };
-
     pub(crate) const TEST_NODE_ID: &str = "2vxsx-fae";
-
-    #[test]
-    fn test_check_ipv6_format() {
-        // Invalid IPv6
-        assert!(!check_ipv6_format("0:0:0:0:0:0"));
-        assert!(!check_ipv6_format("0-0-0-0-0-0-0"));
-        assert!(!check_ipv6_format("This ipv6"));
-        assert!(!check_ipv6_format("0:0:0:0:0:1234567:0:0"));
-        assert!(!check_ipv6_format("0"));
-        assert!(!check_ipv6_format(""));
-
-        // Valid IPv6
-        assert!(check_ipv6_format("0:0:0:0:0:0:0:0"));
-        assert!(check_ipv6_format("123:221:4567:323:4123:2111:7:7"));
-    }
-
-    
-    #[test]
-    fn test_are_in_the_same_subnet() {
-        // Test case 1: All IPv4 addresses are in the same subnet
-        let ip_addresses1 = vec![
-            "192.168.1.1".to_string(),
-            "192.168.1.2".to_string(),
-            "192.168.1.3".to_string(),
-        ];
-        assert!(are_in_the_same_subnet(ip_addresses1, 24));
-
-        // Test case 2: All IPv4 addresses are in different subnets
-        let ip_addresses2 = vec![
-            "192.168.1.1".to_string(),
-            "10.0.0.1".to_string(),
-            "172.16.0.1".to_string(),
-        ];
-        assert!(!are_in_the_same_subnet(ip_addresses2, 24));
-
-        // Test case 3: One IP address is in a different subnet
-        let ip_addresses3 = vec![
-            "192.168.1.1".to_string(),
-            "192.168.1.2".to_string(),
-            "10.0.0.1".to_string(),
-        ];
-        assert!(!are_in_the_same_subnet(ip_addresses3, 24));
-    }
-
-    #[test]
-    fn test_is_global_ipv4_address() {
-        // Valid IPv4 addresses
-        assert!(is_global_ipv4_address("8.8.1.1"));
-        assert!(is_global_ipv4_address("212.71.124.187"));
-        assert!(is_global_ipv4_address("193.118.59.140"));
-
-        // Invalid IPv4 addresses
-        assert!(!is_global_ipv4_address("198.19.32.89")); // benchmarking
-        assert!(!is_global_ipv4_address("255.255.255.255")); // broadcast
-        assert!(!is_global_ipv4_address("192.0.2.55")); // documentation
-        assert!(!is_global_ipv4_address("198.51.100.0")); // documentation
-        assert!(!is_global_ipv4_address("203.0.113.13")); // documentation
-        assert!(!is_global_ipv4_address("169.254.11.12")); // link local
-        assert!(!is_global_ipv4_address("127.0.0.1")); // loopback
-        assert!(!is_global_ipv4_address("10.0.0.1")); // private
-        assert!(!is_global_ipv4_address("172.16.255.12")); // private
-        assert!(!is_global_ipv4_address("192.168.1.1")); // private
-        assert!(!is_global_ipv4_address("100.96.12.34")); // shared
-        assert!(!is_global_ipv4_address("240.255.249.11")); // reserved
-        assert!(!is_global_ipv4_address("0.0.0.0")); // unspecified
-    }
 }
