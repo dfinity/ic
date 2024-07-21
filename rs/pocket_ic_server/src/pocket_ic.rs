@@ -93,6 +93,9 @@ use tower::{
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
+/// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
+pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
+
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
@@ -1379,8 +1382,7 @@ impl Operation for DashboardRequest {
                 .into_response(),
         };
 
-        #[allow(clippy::type_complexity)]
-        let fut: BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)> = Box::pin(async {
+        let fut: ApiResponse = Box::pin(async {
             (
                 resp.status().into(),
                 resp.headers()
@@ -1482,8 +1484,7 @@ impl Operation for StatusRequest {
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
 
-        #[allow(clippy::type_complexity)]
-        let fut: BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)> = Box::pin(async {
+        let fut: ApiResponse = Box::pin(async {
             (
                 resp.status().into(),
                 resp.headers()
@@ -1625,11 +1626,7 @@ impl Operation for CallRequest {
                     .body(self.bytes.clone().into())
                     .unwrap();
 
-                #[allow(clippy::type_complexity)]
-                let fut: BoxFuture<
-                    'static,
-                    (u16, BTreeMap<String, Vec<u8>>, Vec<u8>),
-                > = Box::pin(async {
+                let fut: ApiResponse = Box::pin(async {
                     let resp = svc.oneshot(request).await.unwrap();
                     (
                         resp.status().into(),
@@ -1736,11 +1733,7 @@ impl Operation for QueryRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                #[allow(clippy::type_complexity)]
-                let fut: BoxFuture<
-                    'static,
-                    (u16, BTreeMap<String, Vec<u8>>, Vec<u8>),
-                > = Box::pin(async {
+                let fut: ApiResponse = Box::pin(async {
                     (
                         resp.status().into(),
                         resp.headers()
@@ -1808,11 +1801,7 @@ impl Operation for ReadStateRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                #[allow(clippy::type_complexity)]
-                let fut: BoxFuture<
-                    'static,
-                    (u16, BTreeMap<String, Vec<u8>>, Vec<u8>),
-                > = Box::pin(async {
+                let fut: ApiResponse = Box::pin(async {
                     (
                         resp.status().into(),
                         resp.headers()

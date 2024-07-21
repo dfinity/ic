@@ -2,14 +2,15 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp, PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
+    PocketIc,
 };
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use futures::future::{BoxFuture, Shared};
+use futures::future::Shared;
 use hyper::header::{HeaderValue, HOST};
 use hyper::Version;
 use hyper_legacy::{client::connect::HttpConnector, Client};
@@ -34,12 +35,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -176,7 +172,6 @@ impl PocketIcApiStateBuilder {
     }
 }
 
-#[allow(clippy::type_complexity)]
 #[derive(Clone)]
 pub enum OpOut {
     NoOutput,
@@ -188,7 +183,7 @@ pub enum OpOut {
     StableMemBytes(Vec<u8>),
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
-    RawResponse(Shared<BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>>),
+    RawResponse(Shared<ApiResponse>),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
