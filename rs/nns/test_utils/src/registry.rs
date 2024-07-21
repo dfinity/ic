@@ -24,6 +24,7 @@ use ic_protobuf::registry::{
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
+use ic_registry_canister_types::AddNodePayload;
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
@@ -51,10 +52,8 @@ use on_wire::bytes;
 use prost::Message;
 use rand::RngCore;
 use registry_canister::mutations::node_management::{
-    common::make_add_node_registry_mutations,
-    do_add_node::connection_endpoint_from_string,
+    common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
 };
-use ic_registry_canister_types::AddNodePayload;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 

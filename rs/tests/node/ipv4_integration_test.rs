@@ -226,11 +226,11 @@ EOT
             CONFIG_CHECK_TIMEOUT,
             CONFIG_CHECK_SLEEP,
             || {
-                wait_for_expected_node_ipv4_config(app_node.clone(), Some(IPv4Config {
-                    ip_addr: "193.118.59.140".into(),
-                    gateway_ip_addr: "193.118.59.137".into(),
-                    prefix_length: 29,
-                }))
+                wait_for_expected_node_ipv4_config(app_node.clone(), Some(IPv4Config::new(
+                    "193.118.59.140".into(),
+                    "193.118.59.137".into(),
+                    29).unwrap()
+                ))
             }
         ).expect("Failed to check the applied IPv4 configuration on the app node");
 
@@ -392,11 +392,7 @@ fn wait_for_expected_node_ipv4_config(
             vm.block_on_bash_script(r#"ip route | awk '/default/ {print $3}'"#)?;
         let actual_gateway_address = default_gateway.trim().to_string();
 
-        Some(IPv4Config {
-            ip_addr: actual_address,
-            gateway_ip_addr: actual_gateway_address,
-            prefix_length: actual_prefix_length,
-        })
+        Some(IPv4Config::new(actual_address, actual_gateway_address, actual_prefix_length).unwrap())
     };
 
     // then, compare the expected and actual configuration
