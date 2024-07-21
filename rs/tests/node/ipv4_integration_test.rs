@@ -269,11 +269,11 @@ EOT
             CONFIG_CHECK_TIMEOUT,
             CONFIG_CHECK_SLEEP,
             || {
-                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config {
-                    ip_addr: "196.156.107.201".into(),
-                    gateway_ip_addr: "196.156.107.193".into(),
-                    prefix_length: 28,
-                }))
+                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config::new(
+                    "196.156.107.201".into(),
+                    "196.156.107.193".into(),
+                    28,
+                ).unwrap()))
             }
         ).expect("Failed to check the applied IPv4 configuration on the unassigned node");
 
