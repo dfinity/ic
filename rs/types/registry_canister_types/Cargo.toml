@@ -10,4 +10,6 @@ documentation.workspace = true
 ic-base-types = { path = "../base_types" }
 candid = { workspace = true }
 serde = { workspace = true }
+thiserror = { workspace = true }
+
 

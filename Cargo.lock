@@ -10332,6 +10332,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -15513,7 +15514,6 @@ dependencies = [
  "prometheus",
  "prost",
  "rand 0.8.5",
- "registry-canister",
  "serde",
  "serde_cbor",
  "slog",

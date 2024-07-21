@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:serde",
+    "@crate_index//:thiserror",
 ]
 
 DEV_DEPENDENCIES = [

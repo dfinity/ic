@@ -254,16 +254,16 @@ fn now() -> Result<Time, String> {
 
 fn make_valid_node_ivp4_config_or_panic(ipv4_config: IPv4Config) -> IPv4InterfaceConfig {
     check_ipv4_config(
-        ipv4_config.ip_addr.to_string(),
-        vec![ipv4_config.gateway_ip_addr.to_string()],
-        ipv4_config.prefix_length,
+        ipv4_config.ip_addr().to_string(),
+        vec![ipv4_config.gateway_ip_addr().to_string()],
+        ipv4_config.prefix_length(),
     )
     .expect("Invalid IPv4 config");
 
     IPv4InterfaceConfig {
-        ip_addr: ipv4_config.ip_addr,
-        gateway_ip_addr: vec![ipv4_config.gateway_ip_addr],
-        prefix_length: ipv4_config.prefix_length,
+        ip_addr: ipv4_config.ip_addr().to_string(),
+        gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
+        prefix_length: ipv4_config.prefix_length(),
     }
 }
 

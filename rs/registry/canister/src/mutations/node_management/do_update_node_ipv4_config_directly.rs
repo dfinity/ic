@@ -53,9 +53,9 @@ impl Registry {
 
         node_record.public_ipv4_config =
             payload.ipv4_config.map(|ipv4_config| IPv4InterfaceConfig {
-                ip_addr: ipv4_config.ip_addr,
-                gateway_ip_addr: vec![ipv4_config.gateway_ip_addr],
-                prefix_length: ipv4_config.prefix_length,
+                ip_addr: ipv4_config.ip_addr().to_string(),
+                gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
+                prefix_length: ipv4_config.prefix_length(),
             });
 
         // Create the mutation
@@ -79,14 +79,14 @@ impl Registry {
         // Ensure validity of IPv4 config (if it is present)
         if let Some(ipv4_config) = &payload.ipv4_config {
             check_ipv4_config(
-                ipv4_config.ip_addr.to_string(),
-                vec![ipv4_config.gateway_ip_addr.to_string()],
-                ipv4_config.prefix_length,
+                ipv4_config.ip_addr().to_string(),
+                vec![ipv4_config.gateway_ip_addr().to_string()],
+                ipv4_config.prefix_length(),
             )
             .expect("Invalid IPv4 config");
 
             // Ensure that the IPv4 address is not used by any other node
-            if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
+            if node_exists_with_ipv4(self, ipv4_config.ip_addr()) {
                 panic!("There is already at least one other node with the same IPv4 address",);
             }
         }

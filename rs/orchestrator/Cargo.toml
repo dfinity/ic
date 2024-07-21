@@ -45,7 +45,6 @@ nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 prost = { workspace = true }
-registry-canister = { path = "../registry/canister" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
