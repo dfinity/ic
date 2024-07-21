@@ -469,15 +469,15 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
 impl FromOpOut for PocketHttpResponse {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
         match value {
-            OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
-                (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
-            }
             OpOut::RawResponse(fut) => {
                 let (status, headers, bytes) = fut.await;
                 (
                     StatusCode::from_u16(status).unwrap(),
                     ApiResponse::Success((headers, bytes)),
                 )
+            }
+            OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
+                (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
             }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

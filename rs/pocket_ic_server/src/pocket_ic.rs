@@ -6,7 +6,7 @@ use crate::{copy_dir, BlobStore};
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Response as AxumResponse},
 };
 use candid::Decode;
 use futures::future::BoxFuture;
@@ -99,6 +99,20 @@ pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
+
+async fn into_api_response(resp: AxumResponse) -> (u16, BTreeMap<String, Vec<u8>>, Vec<u8>) {
+    (
+        resp.status().into(),
+        resp.headers()
+            .iter()
+            .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+            .collect(),
+        axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+}
 
 fn compute_subnet_seed(
     ranges: Vec<CanisterIdRange>,
@@ -1382,19 +1396,7 @@ impl Operation for DashboardRequest {
                 .into_response(),
         };
 
-        let fut: ApiResponse = Box::pin(async {
-            (
-                resp.status().into(),
-                resp.headers()
-                    .iter()
-                    .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                    .collect(),
-                axum::body::to_bytes(resp.into_body(), usize::MAX)
-                    .await
-                    .unwrap()
-                    .to_vec(),
-            )
-        });
+        let fut: ApiResponse = Box::pin(into_api_response(resp));
         OpOut::RawResponse(fut.shared())
     }
 
@@ -1484,19 +1486,7 @@ impl Operation for StatusRequest {
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
 
-        let fut: ApiResponse = Box::pin(async {
-            (
-                resp.status().into(),
-                resp.headers()
-                    .iter()
-                    .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                    .collect(),
-                axum::body::to_bytes(resp.into_body(), usize::MAX)
-                    .await
-                    .unwrap()
-                    .to_vec(),
-            )
-        });
+        let fut: ApiResponse = Box::pin(into_api_response(resp));
         OpOut::RawResponse(fut.shared())
     }
 
@@ -1628,22 +1618,10 @@ impl Operation for CallRequest {
 
                 let fut: ApiResponse = Box::pin(async {
                     let resp = svc.oneshot(request).await.unwrap();
-                    (
-                        resp.status().into(),
-                        resp.headers()
-                            .iter()
-                            .map(|(name, value)| {
-                                (name.as_str().to_string(), value.as_bytes().to_vec())
-                            })
-                            .collect(),
-                        axum::body::to_bytes(resp.into_body(), usize::MAX)
-                            .await
-                            .unwrap()
-                            .to_vec(),
-                    )
+                    into_api_response(resp).await
                 });
-                let shared = fut.shared();
-                let service_task = pic.runtime.spawn(shared.clone());
+                let api_resp = fut.shared();
+                let service_task = pic.runtime.spawn(api_resp.clone());
 
                 // For the sake of determinism, we need to wait until one of
                 // `service_task` or `ingress_proxy_task` terminates:
@@ -1651,7 +1629,7 @@ impl Operation for CallRequest {
                 // and we can return from the operation.
                 while !service_task.is_finished() && !ingress_proxy_task.is_finished() {}
 
-                OpOut::RawResponse(shared)
+                OpOut::RawResponse(api_resp)
             }
         }
     }
@@ -1733,21 +1711,7 @@ impl Operation for QueryRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                let fut: ApiResponse = Box::pin(async {
-                    (
-                        resp.status().into(),
-                        resp.headers()
-                            .iter()
-                            .map(|(name, value)| {
-                                (name.as_str().to_string(), value.as_bytes().to_vec())
-                            })
-                            .collect(),
-                        axum::body::to_bytes(resp.into_body(), usize::MAX)
-                            .await
-                            .unwrap()
-                            .to_vec(),
-                    )
-                });
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
                 OpOut::RawResponse(fut.shared())
             }
         }
@@ -1801,21 +1765,7 @@ impl Operation for ReadStateRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                let fut: ApiResponse = Box::pin(async {
-                    (
-                        resp.status().into(),
-                        resp.headers()
-                            .iter()
-                            .map(|(name, value)| {
-                                (name.as_str().to_string(), value.as_bytes().to_vec())
-                            })
-                            .collect(),
-                        axum::body::to_bytes(resp.into_body(), usize::MAX)
-                            .await
-                            .unwrap()
-                            .to_vec(),
-                    )
-                });
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
                 OpOut::RawResponse(fut.shared())
             }
         }
