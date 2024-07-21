@@ -477,9 +477,10 @@ fn create_config_disk_image(
         );
         cmd.arg("--ipv4_address").arg(format!(
             "{}/{:?}",
-            ipv4_config.ip_addr, ipv4_config.prefix_length
+            ipv4_config.ip_addr(),
+            ipv4_config.prefix_length()
         ));
-        cmd.arg("--ipv4_gateway").arg(&ipv4_config.gateway_ip_addr);
+        cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
     }
 
     if let Some(domain) = domain {
