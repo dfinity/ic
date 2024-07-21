@@ -769,7 +769,7 @@ pub fn register_callback(
     respondent: CanisterId,
     callback_id: CallbackId,
     deadline: CoarseTime,
-) {
+) -> CallbackId {
     let call_context_manager = canister_state
         .system_state
         .call_context_manager_mut()
@@ -792,7 +792,7 @@ pub fn register_callback(
         WasmClosure::new(0, 2),
         None,
         deadline,
-    ));
+    ))
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
