@@ -25,7 +25,7 @@ fn is_valid_ipv4_prefix_length(prefix_length: u32) -> bool {
     prefix_length <= 32
 }
 
-pub fn is_global_ipv4_address(ipv4_address: &str) -> bool {
+fn is_global_ipv4_address(ipv4_address: &str) -> bool {
     let ip_address = Ipv4Addr::from_str(ipv4_address).unwrap();
 
     // IETF RFC 2544
@@ -50,7 +50,7 @@ pub fn is_global_ipv4_address(ipv4_address: &str) -> bool {
 }
 
 // Check that the given IPv4 addresses are all in the same subnet with respect to the subnet mask
-pub fn are_in_the_same_subnet(ipv4_addresses: Vec<String>, prefix_length: u32) -> bool {
+fn are_in_the_same_subnet(ipv4_addresses: Vec<String>, prefix_length: u32) -> bool {
     let bitmask: u32 = !0 << (32 - prefix_length);
     let bitmask: [u8; 4] = bitmask.to_be_bytes();
     let subnet_mask = Ipv4Addr::new(bitmask[0], bitmask[1], bitmask[2], bitmask[3]);

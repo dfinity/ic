@@ -38,10 +38,8 @@ use ic_registry_subnet_type::SubnetType;
 
 use ic_base_types::PrincipalId;
 
-use registry_canister::mutations::node_management::{
-    do_remove_node_directly::RemoveNodeDirectlyPayload,
-};
 use ic_registry_canister_types::{IPv4Config, UpdateNodeIPv4ConfigDirectlyPayload};
+use registry_canister::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
 
 use slog::info;
 use std::net::Ipv4Addr;
@@ -132,11 +130,11 @@ pub fn test(env: TestEnv) {
         info!(log, "Configuring node's IPv4 address by directly updating the registry record");
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id: app_node.node_id,
-            ipv4_config: Some(IPv4Config {
-                ip_addr: "193.118.59.140".into(),
-                gateway_ip_addr: "193.118.59.137".into(),
-                prefix_length: 29,
-            }),
+            ipv4_config: Some(IPv4Config::new(
+                "193.118.59.140".into(),
+                "193.118.59.137".into(),
+                29,
+            ).unwrap()),
         };
         let _out = agent_with_identity
             .update(&REGISTRY_CANISTER_ID.into(), "update_node_ipv4_config_directly")
@@ -239,11 +237,11 @@ EOT
         info!(log, "Modifying the IPv4 configuration on the unassigned node ...");
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id: unassigned_node.node_id,
-            ipv4_config: Some(IPv4Config {
-                ip_addr: "196.156.107.201".into(),
-                gateway_ip_addr: "196.156.107.193".into(),
-                prefix_length: 28,
-            }),
+            ipv4_config: Some(IPv4Config::new(
+                "196.156.107.201".into(),
+                "196.156.107.193".into(),
+                28,
+            ).unwrap()),
         };
 
         let _out = agent_with_identity
