@@ -81,7 +81,6 @@ impl CanisterFixture {
             &mut self.canister_state,
             CANISTER_ID,
             OTHER_CANISTER_ID,
-            CallbackId::from(CALLBACK_ID_RAW),
             NO_DEADLINE,
         );
     }
@@ -207,22 +206,18 @@ fn validate_responses_against_callback_details() {
     let canister_c_id = canister_test_id(17);
 
     // Creating the CallContext and registering the callback for a request from this canister -> canister B.
-    let callback_id_1 = CallbackId::from(1);
-    register_callback(
+    let callback_id_1 = register_callback(
         &mut fixture.canister_state,
         CANISTER_ID,
         canister_b_id,
-        callback_id_1,
         NO_DEADLINE,
     );
 
     // Creating the CallContext and registering the callback for a request from this canister -> canister C.
-    let callback_id_2 = CallbackId::from(2);
-    register_callback(
+    let callback_id_2 = register_callback(
         &mut fixture.canister_state,
         CANISTER_ID,
         canister_c_id,
-        callback_id_2,
         NO_DEADLINE,
     );
 
@@ -287,11 +282,10 @@ fn validate_response_fails_with_mismatching_deadline() {
         let mut fixture = CanisterFixture::running();
 
         // Register a callback with the given `callback_deadline`.
-        register_callback(
+        let callback_id = register_callback(
             &mut fixture.canister_state,
             CANISTER_ID,
             OTHER_CANISTER_ID,
-            CALLBACK_ID,
             callback_deadline,
         );
 
@@ -306,7 +300,7 @@ fn validate_response_fails_with_mismatching_deadline() {
         let response = ResponseBuilder::new()
             .originator(CANISTER_ID)
             .respondent(OTHER_CANISTER_ID)
-            .originator_reply_callback(CALLBACK_ID)
+            .originator_reply_callback(callback_id)
             .deadline(response_deadline)
             .build()
             .into();
