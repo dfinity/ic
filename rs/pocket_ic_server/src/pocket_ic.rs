@@ -1379,17 +1379,21 @@ impl Operation for DashboardRequest {
                 .into_response(),
         };
 
-        OpOut::RawResponse((
-            resp.status().into(),
-            resp.headers()
-                .iter()
-                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                .collect(),
-            pic.runtime
-                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                .unwrap()
-                .to_vec(),
-        ))
+        #[allow(clippy::type_complexity)]
+        let fut: BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)> = Box::pin(async {
+            (
+                resp.status().into(),
+                resp.headers()
+                    .iter()
+                    .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                    .collect(),
+                axum::body::to_bytes(resp.into_body(), usize::MAX)
+                    .await
+                    .unwrap()
+                    .to_vec(),
+            )
+        });
+        OpOut::RawResponse(fut.shared())
     }
 
     fn retry_if_busy(&self) -> bool {
@@ -1478,17 +1482,21 @@ impl Operation for StatusRequest {
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
 
-        OpOut::RawResponse((
-            resp.status().into(),
-            resp.headers()
-                .iter()
-                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                .collect(),
-            pic.runtime
-                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                .unwrap()
-                .to_vec(),
-        ))
+        #[allow(clippy::type_complexity)]
+        let fut: BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)> = Box::pin(async {
+            (
+                resp.status().into(),
+                resp.headers()
+                    .iter()
+                    .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                    .collect(),
+                axum::body::to_bytes(resp.into_body(), usize::MAX)
+                    .await
+                    .unwrap()
+                    .to_vec(),
+            )
+        });
+        OpOut::RawResponse(fut.shared())
     }
 
     fn retry_if_busy(&self) -> bool {
@@ -1569,12 +1577,11 @@ impl Operation for CallRequest {
                 )
                 .build();
 
-                let subnet_clone = subnet.clone();
-
                 // Task that waits for call service to submit the ingress message, and
                 // forwards it to the state machine. The task will automatically terminate
                 // once it submits an ingress message received from the call service to the
                 // `StateMachine`, or if the call service is dropped (in which case `r.recv().await` returns `None`).
+                let subnet_clone = subnet.clone();
                 let ingress_proxy_task = pic.runtime.spawn(async move {
                     if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
                         r.recv().await
@@ -1639,17 +1646,15 @@ impl Operation for CallRequest {
                     )
                 });
                 let shared = fut.shared();
-
                 let service_task = pic.runtime.spawn(shared.clone());
 
-                loop {
-                    if service_task.is_finished() {
-                        let resp = pic.runtime.block_on(shared);
-                        break OpOut::RawResponse(resp);
-                    } else if ingress_proxy_task.is_finished() {
-                        break OpOut::RawResponseV3(shared);
-                    }
-                }
+                // For the sake of determinism, we need to wait until one of
+                // `service_task` or `ingress_proxy_task` terminates:
+                // then all the state modifications have been performed
+                // and we can return from the operation.
+                while !service_task.is_finished() && !ingress_proxy_task.is_finished() {}
+
+                OpOut::RawResponse(shared)
             }
         }
     }
@@ -1731,17 +1736,26 @@ impl Operation for QueryRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                #[allow(clippy::type_complexity)]
+                let fut: BoxFuture<
+                    'static,
+                    (u16, BTreeMap<String, Vec<u8>>, Vec<u8>),
+                > = Box::pin(async {
+                    (
+                        resp.status().into(),
+                        resp.headers()
+                            .iter()
+                            .map(|(name, value)| {
+                                (name.as_str().to_string(), value.as_bytes().to_vec())
+                            })
+                            .collect(),
+                        axum::body::to_bytes(resp.into_body(), usize::MAX)
+                            .await
+                            .unwrap()
+                            .to_vec(),
+                    )
+                });
+                OpOut::RawResponse(fut.shared())
             }
         }
     }
@@ -1794,17 +1808,26 @@ impl Operation for ReadStateRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                #[allow(clippy::type_complexity)]
+                let fut: BoxFuture<
+                    'static,
+                    (u16, BTreeMap<String, Vec<u8>>, Vec<u8>),
+                > = Box::pin(async {
+                    (
+                        resp.status().into(),
+                        resp.headers()
+                            .iter()
+                            .map(|(name, value)| {
+                                (name.as_str().to_string(), value.as_bytes().to_vec())
+                            })
+                            .collect(),
+                        axum::body::to_bytes(resp.into_body(), usize::MAX)
+                            .await
+                            .unwrap()
+                            .to_vec(),
+                    )
+                });
+                OpOut::RawResponse(fut.shared())
             }
         }
     }

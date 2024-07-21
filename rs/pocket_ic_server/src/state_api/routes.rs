@@ -469,14 +469,10 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
 impl FromOpOut for PocketHttpResponse {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
         match value {
-            OpOut::RawResponse((status, headers, bytes)) => (
-                StatusCode::from_u16(status).unwrap(),
-                ApiResponse::Success((headers, bytes)),
-            ),
             OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
                 (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
             }
-            OpOut::RawResponseV3(fut) => {
+            OpOut::RawResponse(fut) => {
                 let (status, headers, bytes) = fut.await;
                 (
                     StatusCode::from_u16(status).unwrap(),
@@ -826,15 +822,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             )),
         )
             .into_response(),
-        OpOut::RawResponse((status, headers, bytes)) => {
-            let code = StatusCode::from_u16(status).unwrap();
-            let mut resp = Response::builder().status(code);
-            for (name, value) in headers {
-                resp = resp.header(name, value);
-            }
-            resp.body(Body::from(bytes)).unwrap()
-        }
-        OpOut::RawResponseV3(fut) => {
+        OpOut::RawResponse(fut) => {
             let (status, headers, bytes) = fut.await;
             let code = StatusCode::from_u16(status).unwrap();
             let mut resp = Response::builder().status(code);
