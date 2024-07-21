@@ -9988,6 +9988,7 @@ dependencies = [
  "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-protobuf",
+ "ic-registry-canister-types",
  "ic-registry-keys",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",

@@ -32,13 +32,13 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-canister-types = { path = "../types/registry_canister_types" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-registry-canister-types = { path = "../types/registry_canister_types" }
 idna = { workspace = true }
 indoc = "1.0.9"
 nix = { workspace = true }
