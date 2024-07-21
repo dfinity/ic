@@ -44,7 +44,7 @@ if ! git diff --cached --quiet; then
             git config --global user.name "IDX GitHub Automation"
         fi
         git commit -m "Automatically updated Cargo*.lock"
-        git push origin HEAD:"${CI_COMMIT_REF_NAME}"
+        git push
     fi
     EXIT_STATUS=1
 fi
