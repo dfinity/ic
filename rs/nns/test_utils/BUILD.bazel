@@ -44,6 +44,7 @@ BASE_DEPENDENCIES = [
     "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
+    "//rs/types/registry_canister_types",
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:assert_matches",

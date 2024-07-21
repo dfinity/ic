@@ -7,13 +7,11 @@ use crate::{
     registry::Registry,
 };
 
-use candid::{CandidType, Deserialize};
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
+use ic_registry_canister_types::UpdateNodeIPv4ConfigDirectlyPayload;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
 use prost::Message;
-use serde::Serialize;
-use std::fmt;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -107,30 +105,6 @@ impl Registry {
     }
 }
 
-// The payload of a request to update the IPv4 configuration of an existing node
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateNodeIPv4ConfigDirectlyPayload {
-    pub node_id: NodeId,
-    pub ipv4_config: Option<IPv4Config>,
-}
-
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IPv4Config {
-    pub ip_addr: String,
-    pub gateway_ip_addr: String,
-    pub prefix_length: u32,
-}
-
-impl fmt::Display for IPv4Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "IPv4Config: {:?}/{:?} with gateway {:?}",
-            self.ip_addr, self.prefix_length, self.prefix_length
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,6 +115,7 @@ mod tests {
         mutations::common::test::TEST_NODE_ID,
     };
     use ic_base_types::{NodeId, PrincipalId};
+    use ic_registry_canister_types::IPv4Config;
 
     fn init_ipv4_config() -> IPv4Config {
         IPv4Config {

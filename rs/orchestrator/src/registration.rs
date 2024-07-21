@@ -20,6 +20,8 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_registry_canister_types::UpdateNodeDirectlyPayload;
+use ic_registry_canister_types::{AddNodePayload, IPv4Config};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
@@ -30,13 +32,7 @@ use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion,
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::{
-    common::check_ipv4_config,
-    do_update_node_directly::UpdateNodeDirectlyPayload,
-    node_management::{
-        do_add_node::AddNodePayload, do_update_node_ipv4_config_directly::IPv4Config,
-    },
-};
+use registry_canister::mutations::common::check_ipv4_config;
 use std::{
     net::IpAddr,
     sync::Arc,

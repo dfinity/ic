@@ -2,7 +2,6 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use std::net::SocketAddr;
 
-use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -23,9 +22,9 @@ use crate::mutations::{
             make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
         },
         do_remove_node_directly::RemoveNodeDirectlyPayload,
-        do_update_node_ipv4_config_directly::IPv4Config,
     },
 };
+use ic_registry_canister_types::{AddNodePayload, IPv4Config};
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
 use prost::Message;
@@ -143,31 +142,6 @@ impl Registry {
 
         Ok(node_id)
     }
-}
-
-/// The payload of an update request to add a new node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct AddNodePayload {
-    // Raw bytes of the protobuf, but these should be PublicKey
-    pub node_signing_pk: Vec<u8>,
-    pub committee_signing_pk: Vec<u8>,
-    pub ni_dkg_dealing_encryption_pk: Vec<u8>,
-    // Raw bytes of the protobuf, but these should be X509PublicKeyCert
-    pub transport_tls_cert: Vec<u8>,
-    // Raw bytes of the protobuf, but these should be PublicKey
-    pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
-
-    pub xnet_endpoint: String,
-    pub http_endpoint: String,
-
-    pub chip_id: Option<Vec<u8>>,
-
-    pub public_ipv4_config: Option<IPv4Config>,
-    pub domain: Option<String>,
-
-    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
-    pub p2p_flow_endpoints: Vec<String>,
-    pub prometheus_metrics_endpoint: String,
 }
 
 /// Parses the ConnectionEndpoint string

@@ -40,8 +40,8 @@ use ic_base_types::PrincipalId;
 
 use registry_canister::mutations::node_management::{
     do_remove_node_directly::RemoveNodeDirectlyPayload,
-    do_update_node_ipv4_config_directly::{IPv4Config, UpdateNodeIPv4ConfigDirectlyPayload},
 };
+use ic_registry_canister_types::{IPv4Config, UpdateNodeIPv4ConfigDirectlyPayload};
 
 use slog::info;
 use std::net::Ipv4Addr;
