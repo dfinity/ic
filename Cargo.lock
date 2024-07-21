@@ -17203,7 +17203,6 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
- "ic-registry-canister-types",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
