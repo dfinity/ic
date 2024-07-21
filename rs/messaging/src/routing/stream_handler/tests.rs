@@ -3556,14 +3556,9 @@ where
 /// Makes `count` input queue reservations for responses from `remote`.
 fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, remote: CanisterId) {
     for _ in 0..count {
-        let msg = test_request(*LOCAL_CANISTER, remote);
-        register_callback(
-            canister,
-            msg.sender,
-            msg.receiver,
-            msg.sender_reply_callback,
-            msg.deadline,
-        );
+        let mut msg = test_request(*LOCAL_CANISTER, remote);
+        let callback_id = register_callback(canister, msg.sender, msg.receiver, msg.deadline);
+        msg.sender_reply_callback = callback_id;
         canister
             .push_output_request(msg.into(), UNIX_EPOCH)
             .unwrap();

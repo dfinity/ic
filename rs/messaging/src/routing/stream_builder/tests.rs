@@ -90,20 +90,16 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
-        let msg = generate_message_for_test(
+        let mut msg = generate_message_for_test(
             sender,
             receiver,
             CallbackId::from(1),
             "method".to_string(),
             payment,
         );
-        register_callback(
-            &mut canister_state,
-            msg.sender,
-            msg.receiver,
-            msg.sender_reply_callback,
-            msg.deadline,
-        );
+        let callback_id =
+            register_callback(&mut canister_state, msg.sender, msg.receiver, msg.deadline);
+        msg.sender_reply_callback = callback_id;
 
         canister_state
             .push_output_request(msg.clone().into(), UNIX_EPOCH)
@@ -1057,15 +1053,14 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
         match msg {
             RequestOrResponse::Request(req) => {
                 // Create a matching callback, so that enqueuing any reject response will succeed.
-                register_callback(
-                    canister_state,
-                    req.sender,
-                    req.receiver,
-                    req.sender_reply_callback,
-                    req.deadline,
-                );
+                let callback_id =
+                    register_callback(canister_state, req.sender, req.receiver, req.deadline);
+                let mut req = (*req).clone();
+                req.sender_reply_callback = callback_id;
 
-                canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
+                canister_state
+                    .push_output_request(req.into(), UNIX_EPOCH)
+                    .unwrap();
             }
 
             RequestOrResponse::Response(rep) => {
