@@ -124,5 +124,22 @@ where
 
 #[cfg(test)]
 pub(crate) mod test {
+    use crate::mutations::common::check_ipv6_format;
+
     pub(crate) const TEST_NODE_ID: &str = "2vxsx-fae";
+
+    #[test]
+    fn test_check_ipv6_format() {
+        // Invalid IPv6
+        assert!(!check_ipv6_format("0:0:0:0:0:0"));
+        assert!(!check_ipv6_format("0-0-0-0-0-0-0"));
+        assert!(!check_ipv6_format("This ipv6"));
+        assert!(!check_ipv6_format("0:0:0:0:0:1234567:0:0"));
+        assert!(!check_ipv6_format("0"));
+        assert!(!check_ipv6_format(""));
+
+        // Valid IPv6
+        assert!(check_ipv6_format("0:0:0:0:0:0:0:0"));
+        assert!(check_ipv6_format("123:221:4567:323:4123:2111:7:7"));
+    }
 }
