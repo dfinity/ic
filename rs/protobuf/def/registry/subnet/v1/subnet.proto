@@ -8,16 +8,7 @@ import "types/v1/types.proto";
 message SubnetRecord {
   // The the list of node_ids that represent the set of nodes
   // that are part of this subnet.
-  reserved 1; // this is from membership consisting of uint64
-  reserved 6;
-  reserved "ic_version_id";
   repeated bytes membership = 3;
-
-  reserved 2;
-  reserved "initial_dkg_transcript";
-
-  reserved 4;
-  reserved "ingress_bytes_per_block_soft_cap";
 
   // Maximum amount of bytes per message. This is a hard cap, which means
   // ingress messages greater than the limit will be dropped.
@@ -35,10 +26,6 @@ message SubnetRecord {
 
   // The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
   uint64 dkg_interval_length = 10;
-
-  // Gossip Config
-  reserved 13;
-  reserved "gossip_config";
 
   // If set to yes, the subnet starts as a (new) NNS
   bool start_as_nns = 14;
@@ -106,6 +93,12 @@ message SubnetRecord {
   // to `Some`. To remove a key, the list of `key_configs` can be set to not include a particular
   // key. If the removed key is not held by another subnet, it will be lost.
   optional ChainKeyConfig chain_key_config = 29;
+
+  reserved 1, 2, 4, 6, 13;
+  reserved "ic_version_id";
+  reserved "initial_dkg_transcript";
+  reserved "ingress_bytes_per_block_soft_cap";
+  reserved "gossip_config";
 }
 
 message EcdsaInitialization {
