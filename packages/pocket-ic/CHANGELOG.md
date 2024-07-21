@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 4.0.0 - 2024-07-19
+## 4.0.0 - 2024-07-22
 
 ### Added
 - Module `nonblocking` with asynchronous PocketIc library. The asynchronous function `drop` must be called

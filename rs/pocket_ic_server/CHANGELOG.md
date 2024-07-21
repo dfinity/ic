@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 5.0.0 - 2024-07-19
+## 5.0.0 - 2024-07-22
 
 ### Added
 - A new subnet is created on an existing PocketIC instance if a new canister is created with a specified mainnet canister ID that does not belong to any existing subnet's canister range.
