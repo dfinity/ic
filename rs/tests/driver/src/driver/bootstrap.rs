@@ -26,11 +26,11 @@ use ic_prep_lib::{
     node::{InitializedNode, NodeConfiguration, NodeIndex},
     subnet_configuration::SubnetConfig,
 };
+use ic_registry_canister_types::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
-use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,

@@ -11943,6 +11943,7 @@ dependencies = [
  "ic-prep",
  "ic-protobuf",
  "ic-regedit",
+ "ic-registry-canister-types",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",
