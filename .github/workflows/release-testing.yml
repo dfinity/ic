@@ -2,7 +2,7 @@ name: Release Testing
 on:
   push:
     branches:
-      - 'hotfix-*-rc--*'
+      - 'hotfix-*'
       - 'rc--*'
   workflow_dispatch:
 # new commits interrupt any running workflow on the same branch
