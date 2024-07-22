@@ -1,4 +1,4 @@
-//! ECDSA specific stats.
+//! IDKG specific stats.
 
 use crate::idkg::metrics::{
     IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
