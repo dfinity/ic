@@ -30,6 +30,10 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs/ic-os/launch-single-vm",
+    ],
     deps = [
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
