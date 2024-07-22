@@ -7,18 +7,15 @@ use ic_ledger_canister_core::blockchain::Blockchain;
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
-use ic_ledger_core::tokens::TokensType;
-use ic_ledger_core::tokens::{CheckedSub, Zero};
 use ic_ledger_core::{
-    approvals::Allowance, approvals::AllowanceTable, approvals::AllowancesData,
-    approvals::HeapAllowancesData, balances::Balances, block::EncodedBlock, timestamp::TimeStamp,
+    approvals::Allowance, approvals::AllowanceTable, approvals::AllowancesData, balances::Balances,
+    block::EncodedBlock, timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    storable::Bound,
-    RestrictedMemory, Storable, MAX_PAGES,
+    RestrictedMemory, MAX_PAGES,
 };
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icp_ledger::{
@@ -29,14 +26,11 @@ use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
-use std::{
-    borrow::Cow,
-    io::{Cursor, Read},
-};
 
 mod dfn_runtime;
 

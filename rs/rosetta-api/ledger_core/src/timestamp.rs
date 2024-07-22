@@ -1,12 +1,10 @@
 use candid::CandidType;
+use ic_stable_structures::{storable::Bound, Storable};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::convert::TryInto;
 use std::ops::{Add, Sub};
 use std::time::{Duration, SystemTime};
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::Storable;
-use std::borrow::Cow;
-use std::io::Read;
 
 #[derive(
     Debug, Clone, Copy, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
