@@ -62,7 +62,8 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     The following targets are generated:
         <name>.raw: the raw Wasm module as built by rustc
         <name>.wasm.gz: the Wasm module, shrunk, with metadata, gzipped.
-
+        <name>_did_git_test: a test that checks the backwards-compatibility of the did service file from HEAD with the same file from the merge-base of the PR.
+        
     Args:
       name: the name of the target that produces a Wasm module.
       service_file: the label pointing the canister candid interface file.
