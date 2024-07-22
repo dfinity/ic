@@ -13,7 +13,7 @@ on:
       targets:
         description: 'System Tests / Bazel Targets'
         required: false
-        default: '//...'
+        default: '//rs/tests/testing_verification:basic_health_test'
       jobs:
         description: 'Concurrent Bazel Jobs'
         required: false
