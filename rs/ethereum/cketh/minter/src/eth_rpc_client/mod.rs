@@ -11,7 +11,7 @@ use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
 use evm_rpc_client::types::candid::RpcConfig;
 use evm_rpc_client::{
@@ -608,8 +608,27 @@ impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> 
 }
 
 impl From<EvmMultiRpcResult<Option<EvmFeeHistory>>> for ReducedResult<FeeHistory> {
-    fn from(_value: EvmMultiRpcResult<Option<EvmFeeHistory>>) -> Self {
-        todo!()
+    fn from(value: EvmMultiRpcResult<Option<EvmFeeHistory>>) -> Self {
+        fn map_fee_history(fee_history: Option<EvmFeeHistory>) -> Result<FeeHistory, String> {
+            let fee_history = fee_history.ok_or("No fee history available")?;
+            Ok(FeeHistory {
+                oldest_block: BlockNumber::try_from(fee_history.oldest_block)?,
+                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas)?,
+                reward: fee_history
+                    .reward
+                    .into_iter()
+                    .map(wei_per_gas_iter)
+                    .collect::<Result<_, _>>()?,
+            })
+        }
+
+        fn wei_per_gas_iter(values: Vec<candid::Nat>) -> Result<Vec<WeiPerGas>, String> {
+            values.into_iter().map(WeiPerGas::try_from).collect()
+        }
+
+        ReducedResult::from_internal(value).map_reduce(&map_fee_history, |results| {
+            results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
+        })
     }
 }
 

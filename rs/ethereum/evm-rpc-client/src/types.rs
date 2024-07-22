@@ -123,15 +123,16 @@ pub mod candid {
         pub reward_percentiles: Option<Vec<u8>>,
     }
 
-    #[derive(Debug, Clone, CandidType, Deserialize, PartialEq)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, CandidType)]
     pub struct FeeHistory {
         /// Lowest number block of the returned range.
+        #[serde(rename = "oldestBlock")]
         pub oldest_block: Nat,
         /// An array of block base fees per gas.
         /// This includes the next block after the newest of the returned range,
         /// because this value can be derived from the newest block.
         /// Zeroes are returned for pre-EIP-1559 blocks.
+        #[serde(rename = "baseFeePerGas")]
         pub base_fee_per_gas: Vec<Nat>,
         /// An array of block gas used ratios (gasUsed / gasLimit).
         #[serde(default)]
