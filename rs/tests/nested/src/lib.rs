@@ -18,7 +18,7 @@ use slog::{info, warn};
 
 mod util;
 use util::{
-    check_hostos_version, elect_hostos_version, setup_nested_vm_for_test, start_nested_vm,
+    check_hostos_version, elect_hostos_version, setup_nested_vm, start_nested_vm,
     update_nodes_hostos_version,
 };
 
@@ -65,7 +65,7 @@ pub fn config(env: TestEnv, from: &NestedVersionTarget) {
 
     install_nns_and_check_progress(env.topology_snapshot());
 
-    setup_nested_vm_for_test(env, from, HOST_VM_NAME);
+    setup_nested_vm(env, from, HOST_VM_NAME);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
