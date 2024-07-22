@@ -79,7 +79,7 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-	    # The git merge base has to be fetched such that bazel tests like did_git_test
+      # The git merge base has to be fetched such that bazel tests like did_git_test
       # can compare HEAD against the merge base for compatibility.
       - name: Fetch the git merge base
         if: ${{github.event_name == 'pull_request'}}
