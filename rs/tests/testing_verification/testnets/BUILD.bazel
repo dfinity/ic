@@ -1,7 +1,7 @@
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 # the "_test" postfixes in names are dropped on purpose since this target is meant for interactive use.
 
