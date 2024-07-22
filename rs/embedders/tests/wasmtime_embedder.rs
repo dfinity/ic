@@ -1552,10 +1552,23 @@ fn debug_print_cost(bytes: usize) -> u64 {
 // The maximum allowed size of a canister log buffer.
 pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
-/// Calculate logging instruction cost from the message length.
+/// Calculate logging instruction cost from the allocated and transmitted bytes.
 fn canister_logging_cost(allocated_bytes: usize, transmitted_bytes: usize) -> u64 {
     const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
     debug_print_cost(2 * allocated_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_bytes)
+}
+
+/// Calculate debug_print and canister logging instruction cost from the message length,
+/// allocated bytes, and transmitted bytes.
+fn debug_print_and_canister_logging_cost(
+    debug_print_bytes: usize,
+    allocated_bytes: usize,
+    transmitted_bytes: usize,
+) -> u64 {
+    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let canister_logging_bytes =
+        2 * allocated_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_bytes;
+    debug_print_cost(debug_print_bytes + canister_logging_bytes)
 }
 
 /// Create a WAT that calls debug_print with a message of a given length.
@@ -1603,32 +1616,32 @@ fn wasm_debug_print_instructions_charging() {
         (
             FlagStatus::Disabled,
             SubnetType::System,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Disabled,
             SubnetType::Application,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Disabled,
             SubnetType::VerifiedApplication,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Enabled,
             SubnetType::System,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Enabled,
             SubnetType::Application,
-            debug_print_cost(0),
+            debug_print_and_canister_logging_cost(0, message_len, message_len),
         ),
         (
             FlagStatus::Enabled,
             SubnetType::VerifiedApplication,
-            debug_print_cost(0),
+            debug_print_and_canister_logging_cost(0, message_len, message_len),
         ),
     ];
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
@@ -1645,7 +1658,10 @@ fn wasm_debug_print_instructions_charging() {
             .unwrap();
         let instructions_used = before - instance.instruction_counter();
 
-        assert_eq!(instructions_used, expected_instructions as i64);
+        assert_eq!(
+            instructions_used, expected_instructions as i64,
+            "rate_limiting: {rate_limiting:?}, subnet_type: {subnet_type:?}"
+        );
     }
 
     // same for wasm64
