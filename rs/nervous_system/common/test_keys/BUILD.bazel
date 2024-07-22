@@ -1,6 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//rs:nns-pkg"])
+package(default_visibility = [
+    "//rs:nns-pkg",
+    "//rs:system-tests-pkg",
+])
 
 rust_library(
     name = "test_keys",

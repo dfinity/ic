@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = [
     "//rs:nns-pkg",
     "//rs:rosetta-api-pkg",
+    "//rs:system-tests-pkg",
 ])
 
 rust_library(

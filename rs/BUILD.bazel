@@ -12,6 +12,8 @@ package_group(
     packages = [
         "//rs/nervous_system/...",
         "//rs/nns/...",
+        "//rs/registry/admin-derive/...",
+        "//rs/registry/admin/...",
         "//rs/registry/canister/...",
         "//rs/sns/...",
     ],

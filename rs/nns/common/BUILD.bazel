@@ -4,6 +4,7 @@ load("//bazel:prost.bzl", "generated_files_check")
 package(default_visibility = [
     "//rs:nns-pkg",
     "//rs:rosetta-api-pkg",
+    "//rs:system-tests-pkg",
     "//rs/replay:__subpackages__",
 ])
 

@@ -2,7 +2,10 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
-package(default_visibility = ["//rs:nns-pkg"])
+package(default_visibility = [
+    "//rs:nns-pkg",
+    "//rs:system-tests-pkg",
+])
 
 DEPENDENCIES = [
     # Keep sorted.

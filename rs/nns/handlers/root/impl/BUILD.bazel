@@ -4,7 +4,10 @@ load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
-package(default_visibility = ["//rs:nns-pkg"])
+package(default_visibility = [
+    "//rs:nns-pkg",
+    "//rs:system-tests-pkg",
+])
 
 exports_files(["canister/root.did"])
 

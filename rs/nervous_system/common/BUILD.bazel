@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = [
     "//rs:nns-pkg",
+    "//rs:system-tests-pkg",
     "//rs/replay:__subpackages__",
 ])
 
