@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 use crate::tls::rustls::cert_resolver::KeyIncompatibleWithSigSchemeError;
-use crate::tls::rustls::cert_resolver::StaticCertResolver;
 use assert_matches::assert_matches;
 use rustls::{
     pki_types::CertificateDer,

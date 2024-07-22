@@ -33,22 +33,16 @@ mod tests;
 pub struct NodeServerCertVerifier {
     allowed_nodes: SomeOrAllNodes,
     registry_client: Arc<dyn RegistryClient>,
-    registry_version: RegistryVersion,
 }
 
 impl NodeServerCertVerifier {
     /// Creates a verifier that considers only certificates for the
     /// `allowed_nodes` fetched from the `registry_client` at registry version
     /// `registry_version` as trusted.
-    pub fn new(
-        allowed_nodes: SomeOrAllNodes,
-        registry_client: Arc<dyn RegistryClient>,
-        registry_version: RegistryVersion,
-    ) -> Self {
+    pub fn new(allowed_nodes: SomeOrAllNodes, registry_client: Arc<dyn RegistryClient>) -> Self {
         Self {
             allowed_nodes,
             registry_client,
-            registry_version,
         }
     }
 }
@@ -57,8 +51,8 @@ impl fmt::Debug for NodeServerCertVerifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "NodeServerCertVerifier{{ allowed_nodes: {:?}, registry_version: {} }}",
-            self.allowed_nodes, self.registry_version
+            "NodeServerCertVerifier{{ allowed_nodes: {:?} }}",
+            self.allowed_nodes
         )
     }
 }
@@ -81,15 +75,14 @@ impl fmt::Debug for NodeServerCertVerifier {
 pub struct NodeClientCertVerifier {
     allowed_nodes: SomeOrAllNodes,
     registry_client: Arc<dyn RegistryClient>,
-    registry_version: RegistryVersion,
 }
 
 impl fmt::Debug for NodeClientCertVerifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "NodeClientCertVerifier{{ allowed_nodes: {:?}, registry_version: {} }}",
-            self.allowed_nodes, self.registry_version
+            "NodeClientCertVerifier{{ allowed_nodes: {:?} }}",
+            self.allowed_nodes
         )
     }
 }
@@ -103,12 +96,10 @@ impl NodeClientCertVerifier {
     pub fn new_with_mandatory_client_auth(
         allowed_nodes: SomeOrAllNodes,
         registry_client: Arc<dyn RegistryClient>,
-        registry_version: RegistryVersion,
     ) -> Self {
         Self {
             allowed_nodes,
             registry_client,
-            registry_version,
         }
     }
 }
@@ -127,7 +118,6 @@ impl ServerCertVerifier for NodeServerCertVerifier {
             intermediates,
             &self.allowed_nodes,
             self.registry_client.as_ref(),
-            self.registry_version,
             unix_time_to_ic_time(now)?,
         )
         .map(|_| ServerCertVerified::assertion())
@@ -175,7 +165,6 @@ impl ClientCertVerifier for NodeClientCertVerifier {
             intermediates,
             &self.allowed_nodes,
             self.registry_client.as_ref(),
-            self.registry_version,
             unix_time_to_ic_time(now)?,
         )
         .map(|()| ClientCertVerified::assertion())
@@ -220,7 +209,6 @@ fn verify_node_cert(
     intermediates: &[CertificateDer],
     allowed_nodes: &SomeOrAllNodes,
     registry_client: &dyn RegistryClient,
-    registry_version: RegistryVersion,
     current_time: Time,
 ) -> Result<(), TLSError> {
     ensure_intermediate_certs_empty(intermediates)?;
@@ -235,8 +223,11 @@ fn verify_node_cert(
         })?;
 
     ensure_node_id_in_allowed_nodes(end_entity_node_id, allowed_nodes)?;
-    let node_cert_from_registry =
-        node_cert_from_registry(end_entity_node_id, registry_client, registry_version)?;
+    let node_cert_from_registry = node_cert_from_registry(
+        end_entity_node_id,
+        registry_client,
+        registry_client.get_latest_version(),
+    )?;
     ensure_certificates_equal(
         end_entity_der.as_ref(),
         end_entity_node_id,

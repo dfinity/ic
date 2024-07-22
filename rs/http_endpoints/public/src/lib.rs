@@ -31,6 +31,7 @@ pub use call::{
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+// use rustls::server::ServerSessionMemoryCache;
 
 use crate::{
     catch_up_package::CatchUpPackageService,
@@ -454,6 +455,7 @@ pub fn start_server(
     }
 
     let read_timeout = Duration::from_secs(config.connection_read_timeout_seconds);
+    // let tls_session_cache = Arc::new(ServerSessionMemoryCache::new(512));
     rt_handle.spawn(async move {
         loop {
             let (stream, _remote_addr) = tcp_listener.accept().await.unwrap();
@@ -500,9 +502,7 @@ pub fn start_server(
                         .connection_duration
                         .with_label_values(&[LABEL_SECURE])
                         .start_timer();
-                    let mut config = match tls_config
-                        .server_config_without_client_auth(registry_client.get_latest_version())
-                    {
+                    let mut config = match tls_config.server_config_without_client_auth() {
                         Ok(c) => c,
                         Err(err) => {
                             warn!(log, "Failed to get server config from crypto {err}");
@@ -510,6 +510,7 @@ pub fn start_server(
                         }
                     };
                     config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                    config.session_storage = tls_session_cache.clone();
                     let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
 
                     match tls_acceptor.accept(stream).await {
@@ -555,6 +556,7 @@ async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
     hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+        .http2()
         .serve_connection_with_upgrades(stream, hyper_service)
         .await
 }
