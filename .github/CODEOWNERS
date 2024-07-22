@@ -168,13 +168,11 @@ go_deps.bzl               @dfinity/idx
 /rs/protobuf/def/crypto/                                @dfinity/crypto-team
 /rs/protobuf/def/messaging/                             @dfinity/ic-message-routing-owners
 /rs/protobuf/def/p2p/                                   @dfinity/networking
-/rs/protobuf/def/registry/                              @dfinity/nns-team
 /rs/protobuf/def/state/                                 @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/protobuf/gen/bitcoin/                               @dfinity/execution
 /rs/protobuf/gen/crypto/                                @dfinity/crypto-team
 /rs/protobuf/gen/messaging/                             @dfinity/ic-message-routing-owners
 /rs/protobuf/gen/p2p/                                   @dfinity/networking
-/rs/protobuf/gen/registry/                              @dfinity/nns-team
 /rs/protobuf/gen/state/                                 @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/query_stats/                                        @dfinity/execution @dfinity/consensus
 /rs/recovery/                                           @dfinity/consensus
