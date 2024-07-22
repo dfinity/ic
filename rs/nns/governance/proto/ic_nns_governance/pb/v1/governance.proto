@@ -943,6 +943,9 @@ message ManageNeuron {
   message ChangeAutoStakeMaturity {
     bool requested_setting_for_auto_stake_maturity = 1;
   }
+  message SetVisibility {
+    optional Visibility visibility = 1;
+  }
   // Commands that only configure a given neuron, but do not interact
   // with the outside world. They all require the caller to be the
   // controller of the neuron.
@@ -957,6 +960,7 @@ message ManageNeuron {
       JoinCommunityFund join_community_fund = 7;
       LeaveCommunityFund leave_community_fund = 8;
       ChangeAutoStakeMaturity change_auto_stake_maturity = 9;
+      SetVisibility set_visibility = 10;
     }
   }
   // Disburse this neuron's stake: transfer the staked ICP to the
