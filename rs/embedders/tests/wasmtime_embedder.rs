@@ -1634,7 +1634,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.canister_logging = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1653,7 +1652,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.canister_logging = FlagStatus::Disabled;
         config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
@@ -1674,19 +1672,13 @@ fn wasm_debug_print_instructions_charging() {
 fn wasm_canister_logging_instructions_charging() {
     // Test charging for canister logging is limited by the maximum allowed buffer size.
     let test_cases = vec![
-        // (canister_logging, message_len, expected_instructions)
-        (FlagStatus::Disabled, 0, canister_logging_cost(0, 0)),
-        (FlagStatus::Enabled, 0, canister_logging_cost(0, 0)),
-        (FlagStatus::Enabled, 1, canister_logging_cost(1, 1)),
-        (FlagStatus::Enabled, 10, canister_logging_cost(10, 10)),
-        (FlagStatus::Enabled, 100, canister_logging_cost(100, 100)),
+        // (message_len, expected_instructions)
+        (0, canister_logging_cost(0, 0)),
+        (1, canister_logging_cost(1, 1)),
+        (10, canister_logging_cost(10, 10)),
+        (100, canister_logging_cost(100, 100)),
+        (1_000, canister_logging_cost(1_000, 1_000)),
         (
-            FlagStatus::Enabled,
-            1_000,
-            canister_logging_cost(1_000, 1_000),
-        ),
-        (
-            FlagStatus::Enabled,
             10_000,
             canister_logging_cost(
                 MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
@@ -1694,10 +1686,9 @@ fn wasm_canister_logging_instructions_charging() {
             ),
         ),
     ];
-    for (canister_logging, message_len, expected_instructions) in test_cases.clone() {
+    for (message_len, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.canister_logging = canister_logging;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1713,10 +1704,9 @@ fn wasm_canister_logging_instructions_charging() {
     }
 
     // same for wasm64
-    for (canister_logging, message_len, expected_instructions) in test_cases {
+    for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.canister_logging = canister_logging;
         config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
@@ -1776,7 +1766,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.canister_logging = FlagStatus::Enabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1788,7 +1777,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.canister_logging = FlagStatus::Enabled;
     config.feature_flags.wasm64 = FlagStatus::Enabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)

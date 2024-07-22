@@ -1987,14 +1987,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .canister_logging = status;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
         self.execution_config
             .embedders_config
