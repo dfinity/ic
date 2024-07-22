@@ -460,10 +460,12 @@ impl RosettaRequestHandler {
 
         let transaction = match self.rosetta_blocks_mode().await {
             RosettaBlocksMode::Disabled => block.transactions.remove(0),
-            RosettaBlocksMode::Enabled { .. } => {
-                block.transactions.into_iter().filter(|t| t.transaction_identifier == msg.transaction_identifier).next()
-                    .ok_or_else(|| ApiError::InvalidTransactionId(false, Default::default()))?
-            }
+            RosettaBlocksMode::Enabled { .. } => block
+                .transactions
+                .into_iter()
+                .filter(|t| t.transaction_identifier == msg.transaction_identifier)
+                .next()
+                .ok_or_else(|| ApiError::InvalidTransactionId(false, Default::default()))?,
         };
         Ok(BlockTransactionResponse::new(transaction))
     }
