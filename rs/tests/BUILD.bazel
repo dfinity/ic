@@ -279,7 +279,7 @@ symlink_dirs(
     },
     visibility = [
         "//rs:system-tests-pkg",
-        "//rs/pocket_ic_server:__subpackages__",
+        "//rs/pocket_ic_server:spec_test",
     ],
 )
 
