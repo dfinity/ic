@@ -2,3 +2,8 @@ package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],
 )
+
+package_group(
+    name = "ic-os-pkg",
+    packages = ["//rs/ic_os/..."],
+)

@@ -23,6 +23,6 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:ic-os-pkg"],
     deps = DEPENDENCIES,
 )
