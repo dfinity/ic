@@ -47,6 +47,7 @@
 
 use anyhow::Result;
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
@@ -57,7 +58,6 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

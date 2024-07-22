@@ -51,9 +51,9 @@ use crate::{
         NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
-        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Principals,
-        Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus,
-        RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
+        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse, Tally,
         Topic, UpdateNodeProvider, Vote, WaitForQuietState,
         XdrConversionRate as XdrConversionRatePb,
@@ -78,6 +78,7 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
+use ic_nervous_system_proto::pb::v1::Principals;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -300,7 +301,7 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             controller: Some(neuron.controller),
-            hotkeys: Some(neuron.hotkeys.into()),
+            hotkeys: Some(Principals::from(neuron.hotkeys.clone())),
             is_capped: Some(neuron.is_capped),
             hotkey_principal: Some(neuron.controller.to_string()),
         }
@@ -1256,17 +1257,6 @@ impl ProposalInfo {
     }
 }
 
-impl From<Vec<PrincipalId>> for Principals {
-    fn from(principals: Vec<PrincipalId>) -> Self {
-        Self { principals }
-    }
-}
-
-impl From<Principals> for Vec<PrincipalId> {
-    fn from(principals: Principals) -> Self {
-        principals.principals
-    }
-}
 #[cfg(test)]
 mod test_wait_for_quiet {
     use crate::pb::v1::{ProposalData, Tally, WaitForQuietState};

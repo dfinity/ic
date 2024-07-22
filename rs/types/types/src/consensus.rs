@@ -1291,11 +1291,7 @@ impl From<&Block> for pb::Block {
                 None,
                 vec![],
                 vec![],
-                payload
-                    .as_summary()
-                    .ecdsa
-                    .as_ref()
-                    .map(|ecdsa| ecdsa.into()),
+                payload.as_summary().idkg.as_ref().map(|idkg| idkg.into()),
             )
         } else {
             let batch = &payload.as_data().batch;
@@ -1306,7 +1302,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
-                payload.as_data().ecdsa.as_ref().map(|ecdsa| ecdsa.into()),
+                payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
         Self {
@@ -1362,38 +1358,35 @@ impl TryFrom<pb::Block> for Block {
                     batch.is_empty(),
                     "Error: Summary block has non-empty batch payload."
                 );
-                // Convert the ECDSA summary. Note that the summary may contain
+                // Convert the idkg summary. Note that the summary may contain
                 // transcript references, and here we are NOT checking if these
                 // references are valid. Such checks, if required, should be done
                 // after converting from protobuf to rust internal type.
                 //
                 // If after conversion, the summary block is intend to get a different
                 // height value (e.g. when a new CUP is created), then a call to
-                // ecdsa.update_refs(height) should be manually called.
-                let ecdsa = block
+                // idkg.update_refs(height) should be manually called.
+                let idkg = block
                     .idkg_payload
                     .as_ref()
-                    .map(|ecdsa| ecdsa.try_into())
+                    .map(|idkg| idkg.try_into())
                     .transpose()
                     .map_err(|e: ProxyDecodeError| e.to_string())?;
 
-                BlockPayload::Summary(SummaryPayload {
-                    dkg: summary,
-                    ecdsa,
-                })
+                BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
             dkg::Payload::Dealings(dealings) => {
-                let ecdsa = block
+                let idkg = block
                     .idkg_payload
                     .as_ref()
-                    .map(|ecdsa| ecdsa.try_into())
+                    .map(|idkg| idkg.try_into())
                     .transpose()
                     .map_err(|e: ProxyDecodeError| e.to_string())?;
 
                 BlockPayload::Data(DataPayload {
                     batch,
                     dealings,
-                    ecdsa,
+                    idkg,
                 })
             }
         };

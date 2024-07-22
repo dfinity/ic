@@ -42,10 +42,12 @@ type CanisterSummary = record {
 };
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
+  hotkeys : opt Principals;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
 type CfParticipant = record {
+  controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
@@ -366,6 +368,7 @@ type Neuron = record {
   dissolve_state : opt DissolveState;
   followees : vec record { int32; Followees };
   neuron_fees_e8s : nat64;
+  visibility : opt int32;
   transfer : opt NeuronStakeTransfer;
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
@@ -400,6 +403,7 @@ type NeuronInfo = record {
   stake_e8s : nat64;
   joined_community_fund_timestamp_seconds : opt nat64;
   retrieved_at_timestamp_seconds : nat64;
+  visibility : opt int32;
   known_neuron_data : opt KnownNeuronData;
   voting_power : nat64;
   age_seconds : nat64;

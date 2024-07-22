@@ -25,9 +25,9 @@ Success:: nodes can be added/killed to/within the existing subnet.
 end::catalog[] */
 
 use crate::consensus::catch_up_test::{await_node_certified_height, get_certified_height};
-use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
 use canister_test;
 use ic_base_types::NodeId;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;

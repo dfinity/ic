@@ -12,7 +12,7 @@ if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     s3_upload="True"
 fi
 
-if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.+-rc--.+ ]]; then
+if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
 fi

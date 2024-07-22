@@ -49,9 +49,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(canister_traps_if_32_bit_api_used_on_big_memory))
                 .add_test(systest!(create_canister_via_ingress_fails))
                 .add_test(systest!(create_canister_via_canister_succeeds))
-                .add_test(systest!(
-                    create_canister_with_controller_and_controllers_fails
-                ))
                 .add_test(systest!(create_canister_with_one_controller))
                 .add_test(systest!(create_canister_with_no_controllers))
                 .add_test(systest!(create_canister_with_multiple_controllers))
@@ -74,9 +71,6 @@ fn main() -> Result<()> {
                 ))
                 .add_test(systest!(refunds_after_uninstall_are_refunded))
                 .add_test(systest!(update_settings_of_frozen_canister))
-                .add_test(systest!(
-                    update_settings_with_controller_and_controllers_fails
-                ))
                 .add_test(systest!(update_settings_multiple_controllers))
                 .add_test(systest!(can_transfer_cycles_from_a_canister_to_another))
                 .add_test(systest!(

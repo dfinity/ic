@@ -109,6 +109,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/config/                                             @dfinity-lab/teams/networking-team
 /rs/config/src/embedders.rs                             @dfinity-lab/teams/runtime-owners
 /rs/config/src/execution_environment.rs                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
+/rs/config/src/state_manager.rs                         @dfinity-lab/teams/message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/consensus/                                          @dfinity-lab/teams/consensus-owners
 /rs/constants/                                          @dfinity-lab/teams/interface-owners
@@ -210,7 +211,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/sns/                                                @dfinity-lab/teams/nns-team
 /rs/starter/                                            @dfinity-lab/teams/networking-team
 /rs/state_layout/                                       @dfinity-lab/teams/message-routing-owners
-/rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/utopia
+/rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/pocket-ic
 /rs/state_manager/                                      @dfinity-lab/teams/message-routing-owners
 /rs/state_tool/                                         @dfinity-lab/teams/message-routing-owners
 /rs/sys/                                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners

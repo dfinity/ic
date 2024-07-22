@@ -14,10 +14,11 @@
     "InfraSec": "eng-infrasec",
     "networking": "eng-networking",
     "nns-team": "eng-nns",
-    "node": "eng-node",
+    "node": "eng-node-prs",
     "Platform Operations": "eng-platform-ops",
     "pocket-ic": "pocket-ic",
     "Product Security": "eng-prodsec",
     "runtime": "runtime-code-reviews",
+    "sdk": "sdk",
     "utopia": "eng-utopia"
 }

@@ -27,7 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The topology contains a new field `subnet_seed` which is equal to the directory name of the directory in the `state_dir`
   storing the state of the corresponding subnet.
   The state directory (if specified) also contains a file `registry.proto` containing the current snapshot of the registry.
-
+- Support for canister HTTP outcalls: endpoint `/instances/<instance_id>/get_canister_http` to retrieve pending canister HTTP outcalls
+  and endpoint `/instances/<instance_id>/mock_canister_http_response` to mock a response for a pending canister HTTP outcall,
+  the server produces responses for pending canister HTTP outcalls automatically in the auto-progress mode (started by calling the endpoint `/instances/<instance_id>/auto_progress`).
+- New endpoint `/instance/<instance_id>/api/v3/canister/<effective_canister_id>/call` supporting a synchronous HTTP interface of the IC for update calls.
+  Note that this endpoint might non-deterministically return a response with status code 202 and empty body (in this case, the status of the call
+  must be polled at the endpoint `/instance/<instance_id>/api/v3/canister/<effective_canister_id>/read_state`).
+  
 ### Fixed
 - Executing a query call on a new PocketIC instance crashed the PocketIC server.
 

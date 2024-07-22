@@ -2,6 +2,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use canister_test::PrincipalId;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -11,15 +12,14 @@ use ic_system_test_driver::{
     nns::add_nodes_to_subnet,
     util::block_on,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_and_check_progress;
 use ic_types::hostos_version::HostosVersion;
 
 use slog::{info, warn};
 
 mod util;
 use util::{
-    check_hostos_version, elect_hostos_version, setup_nested_vm_for_test,
-    start_nested_vm, update_nodes_hostos_version,
+    check_hostos_version, elect_hostos_version, setup_nested_vm_for_test, start_nested_vm,
+    update_nodes_hostos_version,
 };
 
 const HOST_VM_NAME: &str = "host-1";

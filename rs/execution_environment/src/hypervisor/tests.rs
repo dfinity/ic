@@ -40,7 +40,9 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::mem::size_of;
@@ -3864,6 +3866,7 @@ impl MemoryAccessor {
         assert_empty_reply(result);
     }
 
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     fn verify_dirty_pages(&self, is_dirty_page: &[bool]) {
         let execution_state = self.test.execution_state(self.canister_id);
         let mut actual_dirty = vec![false; is_dirty_page.len()];
@@ -3922,6 +3925,7 @@ fn write_after_grow() {
 }
 
 #[derive(Debug, Clone)]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 enum Operation {
     Read(i32),
     Write(i32, u8),
@@ -3929,6 +3933,7 @@ enum Operation {
     GrowAndWrite(u8),
 }
 
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn random_operations(
     num_pages: i32,
     num_operations: usize,
