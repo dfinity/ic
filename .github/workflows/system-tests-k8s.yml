@@ -7,6 +7,7 @@ name: Sytem Tests K8s
 #   --field jobs="32"
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       targets:
@@ -19,7 +20,7 @@ on:
         default: '8'
 
 env:
-  TARGETS: "//..."
+  TARGETS: "//rs/tests/testing_verification:basic_health_test"
   JOBS: "8"
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
