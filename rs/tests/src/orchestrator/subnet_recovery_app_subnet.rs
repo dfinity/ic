@@ -27,19 +27,19 @@ Success::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 
-use crate::orchestrator::utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message,
-};
 use crate::orchestrator::utils::subnet_recovery::*;
 use crate::tecdsa::make_key_ids_for_all_schemes;
 use ic_base_types::NodeId;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+    store_message,
+};
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
 use ic_recovery::{file_sync_helper, get_node_metrics};

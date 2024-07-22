@@ -1,3 +1,4 @@
+// TODO(kpop): inline this test as there is no dependency on //rs/tests anymore
 /* tag::catalog[]
 
 Goal:: Test the node registration process by mocking the HSM signing.
@@ -14,9 +15,8 @@ Success:: We end the test again with 1 registered unassigned nodes.
 
 end::catalog[] */
 
-use super::utils::ssh_access::execute_bash_command;
-
 use ic_base_types::PrincipalId;
+use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;

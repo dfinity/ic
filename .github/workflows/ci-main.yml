@@ -25,6 +25,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_MERGE_REQUEST_TARGET_BRANCH_SHA: ${{ github.event.pull_request.base.sha }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -51,6 +52,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      # The git merge base has to be fetched such that bazel tests like did_git_test
+      # can compare HEAD against the merge base for compatibility.
+      - name: Fetch the git merge base
+        if: ${{github.event_name == 'pull_request'}}
+        run: git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_SHA"
       - name: Before script
         id: before-script
         shell: bash

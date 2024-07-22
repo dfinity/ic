@@ -44,7 +44,7 @@ use ic_types::crypto::KeyPurpose;
 use ic_types::Height;
 use slog::{info, warn, Logger};
 
-use super::utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;

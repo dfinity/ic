@@ -21,7 +21,6 @@ use ic_ledger_canister_core::{
     range_utils,
 };
 use ic_ledger_core::{
-    approvals::Approvals,
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},

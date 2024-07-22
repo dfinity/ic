@@ -25,12 +25,10 @@ Success::
 
 end::catalog[] */
 
-use crate::orchestrator::utils::{
-    rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-        store_message,
-    },
-    subnet_recovery::*,
+use crate::orchestrator::utils::subnet_recovery::*;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+    store_message,
 };
 use ic_system_test_driver::{
     driver::{

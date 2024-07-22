@@ -1,0 +1,32 @@
+[package]
+name = "ic_consensus_system_tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+futures = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic_consensus_system_test_utils = { path = "./utils" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance = { path = "../../nns/governance" }
+ic-recovery = { path = "../../recovery" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+ic-types = { path = "../../types/types" }
+registry-canister = { path = "../../registry/canister" }
+slog = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "ic-systest-consensus-performance"
+path = "consensus_performance.rs"
+
+[[bin]]
+name = "ic-systest-adding-nodes-to-subnet-test"
+path = "adding_nodes_to_subnet_test.rs"
