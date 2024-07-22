@@ -100,40 +100,6 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
     });
 }
 
-pub fn create_canister_with_controller_and_controllers_fails(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-
-            assert_reject(
-                canister_a
-                    .update(
-                        wasm().call(
-                            management::create_canister(
-                                Cycles::from(2_000_000_000_000u64).into_parts(),
-                            )
-                            // Setting both of these should result in an error.
-                            .with_controllers(vec![canister_a.canister_id()])
-                            .with_controller(canister_a.canister_id()),
-                        ),
-                    )
-                    .await
-                    .map(|res| {
-                        Decode!(res.as_slice(), CreateCanisterResult)
-                            .unwrap()
-                            .canister_id
-                    }),
-                RejectCode::CanisterReject,
-            );
-        }
-    });
-}
-
 pub fn update_settings_of_frozen_canister(env: TestEnv) {
     use ic_base_types::NumBytes;
     use ic_cdk::api::management_canister::main::{CanisterSettings, UpdateSettingsArgument};
@@ -262,45 +228,6 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                         > cycles_account_manager
                             .ingress_induction_cost_from_bytes(NumBytes::new(bytes.len() as u64), 1)
                             .get()
-            );
-        }
-    });
-}
-
-pub fn update_settings_with_controller_and_controllers_fails(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-
-            let canister_b = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
-                .await
-                .map(|res| {
-                    Decode!(res.as_slice(), CreateCanisterResult)
-                        .unwrap()
-                        .canister_id
-                })
-                .unwrap();
-
-            assert_reject(
-                canister_a
-                    .update(
-                        wasm().call(
-                            management::update_settings(canister_b)
-                                // Setting both of these should result in an error.
-                                .with_controllers(vec![canister_a.canister_id()])
-                                .with_controller(canister_a.canister_id()),
-                        ),
-                    )
-                    .await,
-                RejectCode::CanisterReject,
             );
         }
     });

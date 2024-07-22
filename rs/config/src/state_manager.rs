@@ -42,7 +42,7 @@ impl Config {
 }
 
 fn file_backed_memory_allocator_default() -> FlagStatus {
-    FlagStatus::Enabled
+    FlagStatus::Disabled
 }
 
 pub fn lsmt_config_default() -> LsmtConfig {

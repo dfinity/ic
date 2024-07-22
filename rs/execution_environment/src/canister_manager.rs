@@ -597,11 +597,6 @@ impl CanisterManager {
         canister: &mut CanisterState,
     ) {
         // Note: At this point, the settings are validated.
-        if let Some(controller) = settings.controller() {
-            // Remove all the other controllers and add the new one.
-            canister.system_state.controllers.clear();
-            canister.system_state.controllers.insert(controller);
-        }
         if let Some(controllers) = settings.controllers() {
             canister.system_state.controllers.clear();
             for principal in controllers {
@@ -684,8 +679,7 @@ impl CanisterManager {
             canister.system_state.reserved_balance_limit(),
         )?;
 
-        let is_controllers_change =
-            validated_settings.controller().is_some() || validated_settings.controllers().is_some();
+        let is_controllers_change = validated_settings.controllers().is_some();
 
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);

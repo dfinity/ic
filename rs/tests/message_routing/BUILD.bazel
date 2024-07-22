@@ -5,6 +5,9 @@ package(default_visibility = ["//visibility:public"])
 
 system_test(
     name = "global_reboot_test",
+    env = {
+        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

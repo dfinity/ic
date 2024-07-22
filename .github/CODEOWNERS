@@ -109,6 +109,7 @@ go_deps.bzl               @dfinity/idx
 /rs/config/                                             @dfinity/networking
 /rs/config/src/embedders.rs                             @dfinity/runtime
 /rs/config/src/execution_environment.rs                 @dfinity/execution @dfinity/runtime
+/rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity/execution @dfinity/runtime
 /rs/consensus/                                          @dfinity/consensus
 /rs/constants/                                          @dfinity/ic-interface-owners
@@ -210,7 +211,7 @@ go_deps.bzl               @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
 /rs/starter/                                            @dfinity/networking
 /rs/state_layout/                                       @dfinity/ic-message-routing-owners
-/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/utopia
+/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/pocket-ic
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
 /rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/runtime

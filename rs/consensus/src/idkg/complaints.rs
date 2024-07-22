@@ -27,7 +27,7 @@ use std::sync::Arc;
 use super::utils::update_purge_height;
 
 pub(crate) trait IDkgComplaintHandler: Send {
-    /// The on_state_change() called from the main ECDSA path.
+    /// The on_state_change() called from the main IDKG path.
     fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet;
 
     /// Get a reference to the transcript loader.
@@ -42,11 +42,11 @@ struct ComplaintKey {
 }
 
 impl From<&SignedIDkgComplaint> for ComplaintKey {
-    fn from(ecdsa_complaint: &SignedIDkgComplaint) -> Self {
+    fn from(complaint: &SignedIDkgComplaint) -> Self {
         Self {
-            transcript_id: ecdsa_complaint.content.idkg_complaint.transcript_id,
-            dealer_id: ecdsa_complaint.content.idkg_complaint.dealer_id,
-            complainer_id: ecdsa_complaint.signature.signer,
+            transcript_id: complaint.content.idkg_complaint.transcript_id,
+            dealer_id: complaint.content.idkg_complaint.dealer_id,
+            complainer_id: complaint.signature.signer,
         }
     }
 }
@@ -59,11 +59,11 @@ struct OpeningKey {
 }
 
 impl From<&SignedIDkgOpening> for OpeningKey {
-    fn from(ecdsa_opening: &SignedIDkgOpening) -> Self {
+    fn from(opening: &SignedIDkgOpening) -> Self {
         Self {
-            transcript_id: ecdsa_opening.content.idkg_opening.transcript_id,
-            dealer_id: ecdsa_opening.content.idkg_opening.dealer_id,
-            opener_id: ecdsa_opening.signature.signer,
+            transcript_id: opening.content.idkg_opening.transcript_id,
+            dealer_id: opening.content.idkg_opening.dealer_id,
+            opener_id: opening.signature.signer,
         }
     }
 }
@@ -529,10 +529,10 @@ impl IDkgComplaintHandlerImpl {
             .sign(&content, self.node_id, transcript.registry_version)
         {
             Ok(signature) => {
-                let ecdsa_opening = SignedIDkgOpening { content, signature };
+                let opening = SignedIDkgOpening { content, signature };
                 self.metrics.complaint_metrics_inc("openings_sent");
                 vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
-                    ecdsa_opening,
+                    opening,
                 ))]
             }
             Err(err) => {
@@ -877,10 +877,10 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
         let mut old_complaints = Vec::new();
         for complaint in complaints {
             if !self.has_complainer_issued_complaint(idkg_pool, &complaint, &self.node_id) {
-                if let Some(ecdsa_complaint) =
+                if let Some(idkg_complaint) =
                     self.crypto_create_complaint(complaint, transcript.registry_version)
                 {
-                    new_complaints.push(ecdsa_complaint);
+                    new_complaints.push(idkg_complaint);
                 } else {
                     return TranscriptLoadStatus::Failure;
                 }
@@ -1083,7 +1083,7 @@ mod tests {
             create_transcript_id_with_height(3, Height::from(30)),
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // Complaint from a node ahead of us (deferred)
         let complaint = create_complaint(id_1, NODE_2, NODE_3);
@@ -1179,7 +1179,7 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 let msg_id = complaint.message_id();
@@ -1274,7 +1274,7 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 0);
                 let msg_id_1 = complaint.message_id();
@@ -1441,7 +1441,7 @@ mod tests {
             create_transcript_id_with_height(4, Height::from(40)),
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // Opening from a node ahead of us (deferred)
         let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
@@ -1552,7 +1552,7 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_id();
@@ -1591,7 +1591,7 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 1);
                 let msg_id_1 = opening.message_id();

@@ -22,7 +22,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigner};
+use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{new_logger, replica_logger::no_op_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
@@ -1977,7 +1977,7 @@ mod load_transcript_with_openings {
     // dealings from the openings and successfully `sign_share` with threshold ECDSA.
     #[test]
     fn should_ecdsa_sign_share_when_loaded_with_openings() {
-        use ic_interfaces::crypto::ThresholdEcdsaSigVerifier;
+        use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
@@ -2050,7 +2050,9 @@ mod load_transcript_with_openings {
             complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
             complainer.load_transcript_or_panic(inputs.presig_quadruple().key_times_lambda());
 
-            let sig_result = complainer.sign_share(&inputs).expect("signing failed");
+            let sig_result = complainer
+                .create_sig_share(&inputs)
+                .expect("signing failed");
             let verifier = env
                 .nodes
                 .random_filtered_by_receivers_excluding(complainer, &receivers, rng);

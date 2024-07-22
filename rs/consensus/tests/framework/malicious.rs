@@ -127,7 +127,7 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgWithMaliciousFlags {
     type ChangeSet = IDkgChangeSet;
     fn on_state_change(&self, pool: &T) -> IDkgChangeSet {
         let changeset = IDkgImpl::on_state_change(&self.idkg.borrow(), pool);
-        if self.malicious_flags.is_ecdsa_malicious() {
+        if self.malicious_flags.is_idkg_malicious() {
             malicious_pre_signer::maliciously_alter_changeset(
                 changeset,
                 &self.idkg.borrow().pre_signer,
@@ -150,7 +150,7 @@ pub fn with_malicious_flags(malicious_flags: MaliciousFlags) -> ComponentModifie
             })
         })
     };
-    if malicious_flags.is_ecdsa_malicious() {
+    if malicious_flags.is_idkg_malicious() {
         modifier.idkg = Box::new(move |idkg: IDkgImpl| {
             Box::new(IDkgWithMaliciousFlags {
                 idkg: RefCell::new(idkg),
