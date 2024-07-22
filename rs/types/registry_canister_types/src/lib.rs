@@ -187,27 +187,19 @@ pub struct UpdateNodeIPv4ConfigDirectlyPayload {
 mod tests {
     use super::*;
 
-    #[test]	
-    fn should_succeed_if_ipv4_config_is_valid() {	
-        assert!(IPv4Config::new(
-            "204.153.51.58".to_string(),	
-            "204.153.51.1".to_string(),	
-            24,	
-        ).is_ok());	
-    }	
+    #[test]
+    fn succeeds_if_ipv4_config_is_valid() {
+        assert!(
+            IPv4Config::new("204.153.51.58".to_string(), "204.153.51.1".to_string(), 24,).is_ok()
+        );
+    }
 
-    #[test]	
-    fn should_fails_if_ipv4_config_is_invalid() {	
-        assert!(IPv4Config::new(	
-            "204.153.51.58".to_string(),	
-            "204.153.49.1".to_string(),	
-            24,	
-        ).is_err());	
-
-    }	
-
-
-
+    #[test]
+    fn fails_if_ipv4_config_is_invalid() {
+        assert!(
+            IPv4Config::new("204.153.51.58".to_string(), "204.153.49.1".to_string(), 24,).is_err()
+        );
+    }
 
     #[test]
     fn test_are_in_the_same_subnet() {

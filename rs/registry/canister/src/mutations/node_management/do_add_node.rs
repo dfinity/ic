@@ -21,7 +21,7 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
-use ic_registry_canister_types::{AddNodePayload, IPv4Config};
+use ic_registry_canister_types::AddNodePayload;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
 use prost::Message;
@@ -95,10 +95,15 @@ impl Registry {
             .transpose()?;
 
         // 5. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
-        let ipv4_intf_config = payload
-            .public_ipv4_config
-            .clone()
-            .map(make_valid_node_ivp4_config_or_panic);
+        let ipv4_intf_config =
+            payload
+                .public_ipv4_config
+                .clone()
+                .map(|ipv4_config| IPv4InterfaceConfig {
+                    ip_addr: ipv4_config.ip_addr().to_string(),
+                    gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
+                    prefix_length: ipv4_config.prefix_length(),
+                });
         if let Some(ipv4_config) = ipv4_intf_config.clone() {
             if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
                 return Err(format!(
@@ -249,14 +254,6 @@ fn now() -> Result<Time, String> {
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
 
-fn make_valid_node_ivp4_config_or_panic(ipv4_config: IPv4Config) -> IPv4InterfaceConfig {
-    IPv4InterfaceConfig {
-        ip_addr: ipv4_config.ip_addr().to_string(),
-        gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
-        prefix_length: ipv4_config.prefix_length(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -269,6 +266,7 @@ mod tests {
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+    use ic_registry_canister_types::IPv4Config;
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::insert;
     use lazy_static::lazy_static;
