@@ -3,7 +3,7 @@ name: Release Testing
 on:
   push:
     branches:
-      - 'hotfix-*-rc--*'
+      - 'hotfix-*'
       - 'rc--*'
   workflow_dispatch:
 
