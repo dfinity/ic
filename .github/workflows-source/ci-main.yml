@@ -79,11 +79,9 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-      # The git merge base has to be fetched such that bazel tests like did_git_test
-      # can compare HEAD against the merge base for compatibility.
-      - name: Fetch the git merge base
-        if: ${{github.event_name == 'pull_request'}}
-        run: git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_SHA"
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 256
       - <<: *before-script
       - name: Set BAZEL_EXTRA_ARGS_RULES
         shell: bash
