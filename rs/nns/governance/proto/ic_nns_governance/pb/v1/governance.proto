@@ -1540,7 +1540,7 @@ message NeuronsFundSnapshot {
     // participation constraints.
     optional bool is_capped = 5;
 
-    // The principal that can manage this neuron.
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
 
     // The principals that can vote, propose, and follow on behalf of this neuron.
@@ -2646,7 +2646,7 @@ message SettleNeuronsFundParticipationResponse {
     optional uint64 nns_neuron_id = 1;
     // The amount of Neurons' Fund participation associated with this neuron.
     optional uint64 amount_icp_e8s = 2;
-    // The principal that can manage this neuron.
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
     // The principals that can vote, propose, and follow on behalf of this neuron.
     optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
