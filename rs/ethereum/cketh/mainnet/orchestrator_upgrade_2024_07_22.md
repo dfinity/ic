@@ -15,7 +15,7 @@ Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.
 This upgrades the ledger suite orchestrator and all managed ledger suites to the latest version.
 
 The motivation to upgrade the orchestrator are mainly the following points:
-1. Add logic to upgrade managed canisters.
+1. Add logic to make upgrade of managed canisters possible.
 2. Simplify upgrade arguments to add new ckERC20 tokens.
 
 The motivation to upgrade all ledger suites is as follows:
