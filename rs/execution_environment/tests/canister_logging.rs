@@ -106,7 +106,7 @@ fn setup_with_controller(
         canister_logging,
         CanisterSettingsArgsBuilder::new()
             .with_log_visibility(LogVisibility::Controllers)
-            .with_controller(controller)
+            .with_controllers(vec![controller])
             .build(),
         wasm,
     );
@@ -327,7 +327,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
             FlagStatus::Enabled,
             CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(log_visibility)
-                .with_controller(controller)
+                .with_controllers(vec![controller])
                 .build(),
             wat_canister().build_wasm(),
         );
