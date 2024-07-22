@@ -560,6 +560,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = ICRC_1_REV,
             ),
             "ic-agent": crate.spec(
+                version = "^0.36.0",
+                features = [
+                    "hyper",
+                    "reqwest",
+                    "pem",
+                ],
+            ),
+            "ic_agent_0_35": crate.spec(
+                package = "ic-agent",
                 version = "^0.35.0",
                 features = [
                     "hyper",
@@ -620,6 +629,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
+                version = "^0.36.0",
+                features = ["raw"],
+            ),
+            "ic_utils_0_35": crate.spec(
+                package = "ic-utils",
                 version = "^0.35.0",
                 features = ["raw"],
             ),
