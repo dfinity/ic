@@ -161,7 +161,7 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
 }
 
 #[test]
-fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
+fn test_flapping_connection_does_not_cause_duplicate_artifact_assemble() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))

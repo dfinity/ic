@@ -4,8 +4,8 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
     metrics::{
-        ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
-        DOWNLOAD_TASK_RESULT_COMPLETED, DOWNLOAD_TASK_RESULT_DROP,
+        ConsensusManagerMetrics, ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED,
+        ASSEMBLE_TASK_RESULT_COMPLETED, ASSEMBLE_TASK_RESULT_DROP,
     },
     uri_prefix, Aborted, ArtifactAssembler, CommitId, Peers, SlotNumber, SlotUpdate, Update,
 };
@@ -160,7 +160,7 @@ pub(crate) struct ConsensusManagerReceiver<
     artifact_assembler: Assembler,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<WireArtifact::Id>>>,
-    active_downloads: HashMap<WireArtifact::Id, watch::Sender<PeerCounter>>,
+    active_assembles: HashMap<WireArtifact::Id, watch::Sender<PeerCounter>>,
 
     #[allow(clippy::type_complexity)]
     artifact_processor_tasks: JoinSet<(
@@ -201,7 +201,7 @@ where
             adverts_received,
             artifact_assembler,
             sender,
-            active_downloads: HashMap::new(),
+            active_assembles: HashMap::new(),
             slot_table: HashMap::new(),
             artifact_processor_tasks: JoinSet::new(),
             topology_watcher,
@@ -210,7 +210,7 @@ where
         rt_handle.spawn(receive_manager.start_event_loop());
     }
 
-    /// Event loop that processes advert updates and artifact downloads.
+    /// Event loop that processes advert updates and artifact assembles.
     /// The event loop preserves the invariants checked with `debug_assert`.
     async fn start_event_loop(mut self) {
         loop {
@@ -238,7 +238,7 @@ where
                 }
             }
             debug_assert_eq!(
-                self.active_downloads.len(),
+                self.active_assembles.len(),
                 self.artifact_processor_tasks.len(),
                 "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
             );
@@ -251,7 +251,7 @@ where
                             .map(|(_, s)| s.id.clone())
                     )
                     .len(),
-                "Number of download tasks should always be the same or exceed the number of distinct ids stored."
+                "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
             );
         }
     }
@@ -262,14 +262,14 @@ where
         id: WireArtifact::Id,
         attr: WireArtifact::Attribute,
     ) {
-        self.metrics.download_task_finished_total.inc();
+        self.metrics.assemble_task_finished_total.inc();
         // Invariant: Peer sender should only be dropped in this task..
         debug_assert!(peer_rx.has_changed().is_ok());
 
         // peer advertised after task finished.
         if !peer_rx.borrow().is_empty() {
-            self.metrics.download_task_restart_after_join_total.inc();
-            self.metrics.download_task_started_total.inc();
+            self.metrics.assemble_task_restart_after_join_total.inc();
+            self.metrics.assemble_task_started_total.inc();
             self.artifact_processor_tasks.spawn_on(
                 Self::process_advert(
                     self.log.clone(),
@@ -284,14 +284,14 @@ where
                 &self.rt_handle,
             );
         } else {
-            self.active_downloads.remove(&id);
+            self.active_assembles.remove(&id);
         }
         debug_assert!(
             self.slot_table
                 .iter()
                 .flat_map(|(k, v)| v.iter())
-                .all(|(k, v)| self.active_downloads.contains_key(&v.id)),
-            "Every entry in the slot table should have an active download task."
+                .all(|(k, v)| self.active_assembles.contains_key(&v.id)),
+            "Every entry in the slot table should have an active assemble task."
         );
     }
 
@@ -351,18 +351,18 @@ where
         };
 
         if to_add {
-            match self.active_downloads.get(&id) {
+            match self.active_assembles.get(&id) {
                 Some(sender) => {
                     self.metrics.slot_table_seen_id_total.inc();
                     sender.send_if_modified(|h| h.insert(peer_id));
                 }
                 None => {
-                    self.metrics.download_task_started_total.inc();
+                    self.metrics.assemble_task_started_total.inc();
 
                     let mut peer_counter = PeerCounter::new();
                     let (tx, rx) = watch::channel(peer_counter);
                     tx.send_if_modified(|h| h.insert(peer_id));
-                    self.active_downloads.insert(id.clone(), tx);
+                    self.active_assembles.insert(id.clone(), tx);
 
                     self.artifact_processor_tasks.spawn_on(
                         Self::process_advert(
@@ -382,7 +382,7 @@ where
         }
 
         if let Some(to_remove) = to_remove {
-            match self.active_downloads.get_mut(&to_remove) {
+            match self.active_assembles.get_mut(&to_remove) {
                 Some(sender) => {
                     sender.send_if_modified(|h| h.remove(peer_id));
                     self.metrics.slot_table_removals_total.inc();
@@ -390,7 +390,7 @@ where
                 None => {
                     error!(
                         self.log,
-                        "Slot table contains an artifact ID that is not present in the `active_downloads`. This should never happen."
+                        "Slot table contains an artifact ID that is not present in the `active_assembles`. This should never happen."
                     );
                     if cfg!(debug_assertions) {
                         panic!("Invariant violated");
@@ -400,7 +400,7 @@ where
         }
     }
 
-    /// Tries to download the given artifact, and insert it into the unvalidated pool.
+    /// Tries to assemble the given artifact, and insert it into the unvalidated pool.
     ///
     /// This future waits for all peers that advertise the artifact to delete it.
     /// The artifact is deleted from the unvalidated pool upon completion.
@@ -420,7 +420,7 @@ where
         WireArtifact::Id,
         WireArtifact::Attribute,
     ) {
-        let _timer = metrics.download_task_duration.start_timer();
+        let _timer = metrics.assemble_task_duration.start_timer();
 
         let mut peer_rx_clone = peer_rx.clone();
         let all_peers_deleted_artifact = async move {
@@ -436,15 +436,15 @@ where
         let mut peer_rx_c = peer_rx.clone();
         let id_c = id.clone();
         let attr_c = attr.clone();
-        let download_artifact = async move {
+        let assemble_artifact = async move {
             artifact_assembler
                 .assemble_message(id, attr, artifact, PeerWatcher::new(peer_rx_c))
                 .await
         };
 
         select! {
-            download_result = download_artifact => {
-                match download_result {
+            assemble_result = assemble_artifact => {
+                match assemble_result {
                     Ok((artifact, peer_id)) => {
                         let id = artifact.id();
                         // Send artifact to pool
@@ -456,16 +456,16 @@ where
                         // Purge from the unvalidated pool
                         sender.send(UnvalidatedArtifactMutation::Remove(id));
                         metrics
-                            .download_task_result_total
-                            .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
+                            .assemble_task_result_total
+                            .with_label_values(&[ASSEMBLE_TASK_RESULT_COMPLETED])
                             .inc();
                     }
                     Err(Aborted) => {
                         // wait for deletion from peers
                         peer_rx.wait_for(|p| p.is_empty()).await;
                         metrics
-                            .download_task_result_total
-                            .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
+                            .assemble_task_result_total
+                            .with_label_values(&[ASSEMBLE_TASK_RESULT_DROP])
                             .inc();
 
                     },
@@ -473,8 +473,8 @@ where
             }
             _ = all_peers_deleted_artifact => {
                 metrics
-                    .download_task_result_total
-                    .with_label_values(&[DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED])
+                    .assemble_task_result_total
+                    .with_label_values(&[ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED])
                     .inc();
             },
         };
@@ -500,7 +500,7 @@ where
             }
         });
 
-        for peers_sender in self.active_downloads.values() {
+        for peers_sender in self.active_assembles.values() {
             peers_sender.send_if_modified(|set| {
                 nodes_leaving_topology
                     .iter()
@@ -644,7 +644,7 @@ mod tests {
                     sender: self.sender,
                     artifact_assembler: self.artifact_assembler,
                     topology_watcher: self.topology_watcher,
-                    active_downloads: HashMap::new(),
+                    active_assembles: HashMap::new(),
                     slot_table: HashMap::new(),
                     artifact_processor_tasks: JoinSet::new(),
                 });
@@ -689,7 +689,7 @@ mod tests {
         );
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
         // Send stale advert with lower commit id.
         mgr.handle_advert_receive(
@@ -785,7 +785,7 @@ mod tests {
         );
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
     }
 
@@ -837,7 +837,7 @@ mod tests {
         );
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
         // Send advert with higher conn id.
         mgr.handle_advert_receive(
@@ -871,7 +871,7 @@ mod tests {
             .expect("Joining artifact processor task failed")
             .expect("Artifact processor task panicked");
 
-        // Check that download task for first advert closes.
+        // Check that assemble task for first advert closes.
         assert_eq!(result.1, 0);
     }
 
@@ -923,7 +923,7 @@ mod tests {
         );
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
         assert_eq!(
             channels.unvalidated_artifact_receiver.recv().await.unwrap(),
@@ -974,11 +974,11 @@ mod tests {
                     && receiver_unvalidated_1 == UnvalidatedArtifactMutation::Remove(0))
         );
 
-        // Check that download task for first advert closes.
+        // Check that assemble task for first advert closes.
         assert_eq!(result.1, 0);
     }
 
-    /// Verify that if two peers advertise the same advert it will get added to the same download task.
+    /// Verify that if two peers advertise the same advert it will get added to the same assemble task.
     #[tokio::test]
     async fn two_peers_advertise_same_advert() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -1010,16 +1010,16 @@ mod tests {
             NODE_2,
             ConnId::from(1),
         );
-        // Verify that we only have one download task.
+        // Verify that we only have one assemble task.
         assert_eq!(mgr.slot_table.len(), 2);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_2).unwrap().len(), 1);
-        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.active_assembles.len(), 1);
     }
 
-    /// Verify that a new download task is started if we receive a new update for an already finished download.
+    /// Verify that a new assemble task is started if we receive a new update for an already finished assemble.
     #[tokio::test]
-    async fn new_advert_while_download_finished() {
+    async fn new_advert_while_assemble_finished() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1050,7 +1050,7 @@ mod tests {
             NODE_1,
             ConnId::from(1),
         );
-        // Overwrite advert to close the download task.
+        // Overwrite advert to close the assemble task.
         mgr.handle_advert_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
@@ -1060,7 +1060,7 @@ mod tests {
             NODE_1,
             ConnId::from(1),
         );
-        // Check that the download task is closed.
+        // Check that the assemble task is closed.
         let (peer_rx, id, attr) = mgr
             .artifact_processor_tasks
             .join_next()
@@ -1077,10 +1077,10 @@ mod tests {
             NODE_2,
             ConnId::from(1),
         );
-        assert_eq!(mgr.active_downloads.len(), 2);
-        // Verify that we reopened the download task for advert 0.
+        assert_eq!(mgr.active_assembles.len(), 2);
+        // Verify that we reopened the assemble task for advert 0.
         mgr.handle_artifact_processor_joined(peer_rx, id, attr);
-        assert_eq!(mgr.active_downloads.len(), 2);
+        assert_eq!(mgr.active_assembles.len(), 2);
     }
 
     /// Verify that slot table is pruned if node leaves subnet.
@@ -1156,9 +1156,9 @@ mod tests {
         assert!(!mgr.slot_table.contains_key(&NODE_2));
     }
 
-    /// Verify that if node leaves subnet all download tasks are informed.
+    /// Verify that if node leaves subnet all assemble tasks are informed.
     #[tokio::test]
-    async fn topology_update_finish_download() {
+    async fn topology_update_finish_assemble() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1192,9 +1192,9 @@ mod tests {
             NODE_1,
             ConnId::from(1),
         );
-        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        // Remove node with active download from topology.
+        // Remove node with active assemble from topology.
         pfn_tx
             .send(SubnetTopology::new(
                 vec![],
@@ -1269,7 +1269,7 @@ mod tests {
             ConnId::from(1),
         );
 
-        // Make sure no download task closes since we still have slot entries for 0 and 1.
+        // Make sure no assemble task closes since we still have slot entries for 0 and 1.
         tokio::time::timeout(
             PROCESS_ARTIFACT_TIMEOUT,
             mgr.artifact_processor_tasks.join_next(),
@@ -1289,7 +1289,7 @@ mod tests {
             ConnId::from(1),
         );
 
-        // Make sure the download task for 0 closes since both entries got overwritten.
+        // Make sure the assemble task for 0 closes since both entries got overwritten.
         let joined_artifact_processor = mgr.artifact_processor_tasks.join_next().await;
 
         let result = joined_artifact_processor
@@ -1347,7 +1347,7 @@ mod tests {
         );
         assert_eq!(mgr.artifact_processor_tasks.len(), 2);
 
-        // Make sure no download task closes since we still have slot entries for 0 and 1.
+        // Make sure no assemble task closes since we still have slot entries for 0 and 1.
         tokio::time::timeout(
             Duration::from_millis(100),
             mgr.artifact_processor_tasks.join_next(),
@@ -1365,7 +1365,7 @@ mod tests {
             NODE_1,
             ConnId::from(1),
         );
-        // Only download task 1 closes because it got overwritten.
+        // Only assemble task 1 closes because it got overwritten.
         tokio::time::timeout(Duration::from_millis(100), async {
             while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
                 assert_eq!(id.unwrap().1, 1);
@@ -1433,7 +1433,7 @@ mod tests {
             ConnId::from(1),
         );
 
-        // Make sure no download task closes since we still have entry for 0.
+        // Make sure no assemble task closes since we still have entry for 0.
         let joined_artifact_processor = timeout(
             PROCESS_ARTIFACT_TIMEOUT,
             mgr.artifact_processor_tasks.join_next(),
@@ -1471,7 +1471,7 @@ mod tests {
             ConnId::from(1),
         );
 
-        // Make sure the download task for 0 closes.
+        // Make sure the assemble task for 0 closes.
         let joined_artifact_processor = timeout(
             PROCESS_ARTIFACT_TIMEOUT,
             mgr.artifact_processor_tasks.join_next(),
