@@ -24,6 +24,9 @@ CANISTER_HTTP_BASE_DEPS = [
 
 system_test(
     name = "canister_http_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["k8s"],
@@ -38,6 +41,9 @@ system_test(
 
 system_test(
     name = "canister_http_socks_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -61,6 +67,9 @@ system_test(
 
 system_test(
     name = "canister_http_correctness_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["k8s"],
@@ -81,6 +90,9 @@ system_test(
 
 system_test(
     name = "canister_http_fault_tolerance_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -105,6 +117,9 @@ system_test(
 
 system_test(
     name = "canister_http_time_out_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
