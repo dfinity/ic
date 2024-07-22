@@ -5,15 +5,8 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/nervous_system/clients",
     "//rs/nervous_system/proto",
-    "//rs/nns/common",
     "//rs/protobuf",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/sns/root",
-    "//rs/types/base_types",
-    "//rs/types/types",
-    "//rs/utils",
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",
@@ -27,11 +20,9 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/swap:swap--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
