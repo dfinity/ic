@@ -243,7 +243,7 @@ impl ThresholdSchnorrSigInputsRef {
         }
     }
 
-    /// Resolves the refs to get the ThresholdEcdsaSigInputs.
+    /// Resolves the refs to get the ThresholdSchnorrSigInputs.
     pub fn translate(
         &self,
         resolver: &dyn IDkgBlockReader,
