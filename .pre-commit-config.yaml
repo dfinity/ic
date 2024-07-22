@@ -66,15 +66,10 @@ repos:
     stages: [manual]
     pass_filenames: false
 
-- repo: https://github.com/willthames/ansible-lint.git
-  rev: v4.2.0
+- repo: https://github.com/ansible/ansible-lint.git
+  rev: v24.5.0
   hooks:
     - id: ansible-lint
       always_run: false
-      files: (^|/)testnet/.+\.(yaml|yml)$
-      exclude: |
-          (?x)^(
-              testnet/tests/.*|.*/docker-compose.yml|testnet/env/shared-config\.yml
-          )$
-      # To be uncommented upon moving to new ansible-lint
-      # args: ['-i', 'testnet/ansible/.ansible-lint-ignore', 'testnet/ansible']
+      files: (^|/)testnet/ansible/.+\.(yaml|yml)$
+      args: ['-i', 'testnet/ansible/.ansible-lint-ignore', 'testnet/ansible']
