@@ -413,7 +413,7 @@ mod tests {
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: dkg::Dealings::new(Height::from(0), messages.clone()),
-                    ecdsa: idkg::Payload::default(),
+                    idkg: idkg::Payload::default(),
                 }),
             );
             let mut parent = Block::from(pool.make_next_block());
