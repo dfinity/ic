@@ -9,7 +9,13 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_root::change_canister::{
     CanisterAction as RootCanisterAction, StopOrStartCanisterRequest,
 };
-use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+
+const CANISTERS_NOT_ALLOWED_TO_STOP: [&CanisterId; 3] = [
+    &ROOT_CANISTER_ID,
+    &GOVERNANCE_CANISTER_ID,
+    &LIFELINE_CANISTER_ID,
+];
 
 impl StopOrStartCanister {
     pub fn validate(&self) -> Result<(), GovernanceError> {
@@ -19,9 +25,20 @@ impl StopOrStartCanister {
             ));
         }
 
-        let _ = self.valid_canister_id()?;
+        let canister_id = self.valid_canister_id()?;
+        let canister_action = self.valid_canister_action()?;
         let _ = self.valid_topic()?;
-        let _ = self.valid_canister_action()?;
+
+        // Note that any proposals trying to start governance/root does not make sense since if they
+        // are stopped/stopping, they can't be started as they need to be running in order to
+        // execute the proposal. However, we don't disallow them as they are harmless.
+        if CANISTERS_NOT_ALLOWED_TO_STOP.contains(&&canister_id)
+            && canister_action == RootCanisterAction::Stop
+        {
+            return Err(invalid_proposal_error(
+                "Canister is not allowed to be stopped",
+            ));
+        }
 
         Ok(())
     }
@@ -37,6 +54,7 @@ impl StopOrStartCanister {
             .ok_or(invalid_proposal_error("Canister ID is required"))?;
         let canister_id = CanisterId::try_from(canister_principal_id)
             .map_err(|_| invalid_proposal_error("Invalid canister ID"))?;
+
         Ok(canister_id)
     }
 
@@ -166,6 +184,30 @@ mod tests {
             },
             vec!["canister id", "not a protocol canister"],
         );
+
+        is_invalid_proposal_with_keywords(
+            StopOrStartCanister {
+                canister_id: Some(ROOT_CANISTER_ID.get()),
+                action: Some(CanisterAction::Stop as i32),
+            },
+            vec!["not allowed to be stopped"],
+        );
+
+        is_invalid_proposal_with_keywords(
+            StopOrStartCanister {
+                canister_id: Some(LIFELINE_CANISTER_ID.get()),
+                action: Some(CanisterAction::Stop as i32),
+            },
+            vec!["not allowed to be stopped"],
+        );
+
+        is_invalid_proposal_with_keywords(
+            StopOrStartCanister {
+                canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+                action: Some(CanisterAction::Stop as i32),
+            },
+            vec!["not allowed to be stopped"],
+        );
     }
 
     #[cfg(feature = "test")]
@@ -202,5 +244,36 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn test_start_lifeline_canister() {
+        let stop_or_start_canister = StopOrStartCanister {
+            canister_id: Some(LIFELINE_CANISTER_ID.get()),
+            action: Some(CanisterAction::Start as i32),
+        };
+
+        assert_eq!(stop_or_start_canister.validate(), Ok(()));
+        assert_eq!(
+            stop_or_start_canister.valid_topic(),
+            Ok(Topic::ProtocolCanisterManagement)
+        );
+        assert_eq!(
+            stop_or_start_canister.canister_and_function(),
+            Ok((ROOT_CANISTER_ID, "stop_or_start_nns_canister"))
+        );
+        let decoded_payload = Decode!(
+            &stop_or_start_canister.payload().unwrap(),
+            StopOrStartCanisterRequest
+        )
+        .unwrap();
+        assert_eq!(
+            decoded_payload,
+            StopOrStartCanisterRequest {
+                canister_id: LIFELINE_CANISTER_ID,
+                action: RootCanisterAction::Start,
+            }
+        );
     }
 }
