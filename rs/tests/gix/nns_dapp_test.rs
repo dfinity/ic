@@ -16,6 +16,7 @@ end::catalog[] */
 use anyhow::{bail, Result};
 
 use candid::Principal;
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
@@ -29,7 +30,6 @@ use ic_system_test_driver::util::block_on;
 use ic_tests::nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use libflate::gzip::Decoder;
 use std::io::Read;
 

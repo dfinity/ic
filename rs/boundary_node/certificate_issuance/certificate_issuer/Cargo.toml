@@ -23,7 +23,7 @@ ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }
-idna = "0.3.0"
+idna = { workspace = true }
 instant-acme = "0.3.2"
 leb128 = "0.2.5"
 mockall = { workspace = true }

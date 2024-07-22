@@ -6,14 +6,14 @@ use crate::{
         ConsensusCrypto,
     },
     dkg::payload_builder::create_payload as create_dkg_payload,
-    ecdsa::{self, metrics::IDkgPayloadMetrics},
+    idkg::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
     find_lowest_ranked_proposals, get_block_hash_string, get_notarization_delay_settings,
     get_subnet_record, is_time_to_make_block, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, ecdsa::IDkgPool, time_source::TimeSource,
+    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -321,7 +321,7 @@ impl BlockMaker {
                 dkg::Payload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
-                    let idkg_summary = ecdsa::create_summary_payload(
+                    let idkg_summary = idkg::create_summary_payload(
                         self.replica_config.subnet_id,
                         &*self.registry_client,
                         pool,
@@ -367,7 +367,7 @@ impl BlockMaker {
                                 subnet_records,
                             );
 
-                            let ecdsa_data = ecdsa::create_data_payload(
+                            let ecdsa_data = idkg::create_data_payload(
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
                                 &*self.crypto,
@@ -515,7 +515,7 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 
 #[cfg(test)]
 mod tests {
-    use crate::ecdsa::test_utils::create_idkg_pool;
+    use crate::idkg::test_utils::create_idkg_pool;
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};

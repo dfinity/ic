@@ -9,7 +9,7 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript,
@@ -75,7 +75,7 @@ enum ValidationFailure {
     RegistryClientError(RegistryClientError),
     PayloadValidationFailed(PayloadValidationFailure),
     DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
-    IDkgPayloadValidationFailed(ecdsa::IDkgPayloadValidationFailure),
+    IDkgPayloadValidationFailed(idkg::IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -101,7 +101,7 @@ enum InvalidArtifactReason {
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
     InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
-    InvalidIDkgPayload(ecdsa::InvalidIDkgPayloadReason),
+    InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -1150,7 +1150,7 @@ impl Validator {
                 )
             })?;
 
-        ecdsa::validate_payload(
+        idkg::validate_payload(
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
@@ -1766,7 +1766,7 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ecdsa::test_utils::{
+    use crate::idkg::test_utils::{
         add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
         fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };
@@ -2414,7 +2414,6 @@ pub mod test {
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 test_block.height(),
-                &committee,
                 rank,
             );
 
@@ -2520,7 +2519,6 @@ pub mod test {
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 test_block.height(),
-                &committee,
                 rank,
             );
 
@@ -2599,7 +2597,6 @@ pub mod test {
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 test_block.height(),
-                &committee,
                 Rank(0),
             );
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
@@ -2621,7 +2618,6 @@ pub mod test {
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 next_block.height(),
-                &committee,
                 rank,
             );
             next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
@@ -2682,7 +2678,7 @@ pub mod test {
 
             registry_client.update_to_latest_version();
 
-            let mut parent_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut parent_block = make_next_block(&pool, membership.as_ref());
             parent_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
             parent_block.content.as_mut().context.certified_height = Height::from(1);
             parent_block.update_content();
@@ -2690,7 +2686,7 @@ pub mod test {
 
             // Construct a block with a higher registry version but lower certified height
             // (which will be considered invalid)
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.as_ref());
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
             test_block.content.as_mut().context.certified_height = Height::from(0);
             test_block.update_content();
@@ -2702,7 +2698,7 @@ pub mod test {
 
             // Construct a block with a registry version that is higher than any we
             // currently recognize. This should yield an empty change set
-            let mut test_block = make_next_block(&pool, membership.borrow(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.borrow());
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(2000);
             test_block.update_content();
             pool.insert_unvalidated(test_block);
@@ -2716,10 +2712,11 @@ pub mod test {
         membership: &Membership,
         pool_reader: &PoolReader,
         height: Height,
-        subnet_members: &[NodeId],
         rank: Rank,
     ) -> NodeId {
-        *subnet_members
+        *membership
+            .get_nodes(height)
+            .unwrap()
             .iter()
             .find(|node| {
                 let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
@@ -2728,17 +2725,12 @@ pub mod test {
             .unwrap()
     }
 
-    fn make_next_block(
-        pool: &TestConsensusPool,
-        membership: &Membership,
-        subnet_members: &[NodeId],
-    ) -> BlockProposal {
+    fn make_next_block(pool: &TestConsensusPool, membership: &Membership) -> BlockProposal {
         let mut next_block = pool.make_next_block();
         next_block.signature.signer = get_block_maker_by_rank(
             membership,
             &PoolReader::new(pool),
             next_block.height(),
-            subnet_members,
             Rank(0),
         );
         next_block.content.as_mut().rank = Rank(0);
@@ -2787,7 +2779,7 @@ pub mod test {
             // because state_manager will return certified height 0 the first time,
             // indicating that the replicated state at height 1 is not certified
             // yet).
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.as_ref());
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
@@ -2841,7 +2833,7 @@ pub mod test {
 
             // We construct a block with a time greater than the current consensus time.
             // It should not be validated yet.
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.as_ref());
             let block_time = test_block.content.as_mut().context.time;
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
@@ -2865,7 +2857,7 @@ pub mod test {
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
 
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.as_ref());
             test_block.content.as_mut().context.time =
                 block_time.checked_sub(Duration::from_nanos(1)).unwrap();
             test_block.update_content();
@@ -3201,7 +3193,7 @@ pub mod test {
             // The current time is the time at which we inserted, notarized and finalized
             // the current tip of the chain (i.e. the parent of test_block).
             let parent_time = time_source.get_relative_time();
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.as_ref());
             let rank = Rank(1);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
@@ -3219,7 +3211,6 @@ pub mod test {
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 test_block.height(),
-                &subnet_members,
                 rank,
             );
             test_block.update_content();
@@ -3258,7 +3249,7 @@ pub mod test {
             pool.insert_validated(pool.make_next_beacon());
 
             // Continue stalling the clock, and validate a rank > 0 block.
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.as_ref());
             let rank = Rank(1);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
@@ -3276,7 +3267,6 @@ pub mod test {
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 test_block.height(),
-                &subnet_members,
                 rank,
             );
             test_block.update_content();
@@ -3337,7 +3327,6 @@ pub mod test {
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 block.height(),
-                &subnet_members,
                 rank,
             );
 
@@ -3395,7 +3384,6 @@ pub mod test {
             membership.borrow(),
             &PoolReader::new(&pool),
             block.height(),
-            &subnet_members,
             Rank(0),
         );
 

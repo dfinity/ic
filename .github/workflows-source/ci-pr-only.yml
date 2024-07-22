@@ -16,6 +16,7 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
   DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
 anchors:
@@ -129,6 +130,8 @@ jobs:
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
     steps:
       - <<: *checkout
+        with:
+          fetch-depth: 256
       - <<: *before-script
       - name: Setup python deps
         id: setup-python-deps

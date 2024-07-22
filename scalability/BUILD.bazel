@@ -159,8 +159,8 @@ py_library(
         ":delegation",
         ":misc",
         requirement("ic-py"),
-        requirement("python-gflags"),
         requirement("matplotlib"),
+        requirement("python-gflags"),
         requirement("termcolor"),
     ],
 )
@@ -244,9 +244,9 @@ py_binary(
         ":workload",
         ":workload_experiment",
         ":workload_xrc_hooks",
+        requirement("ic-py"),
         requirement("python-gflags"),
         requirement("six"),
-        requirement("ic-py"),
         requirement("toml"),
     ],
 )

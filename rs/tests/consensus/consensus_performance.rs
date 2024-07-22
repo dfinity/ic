@@ -45,6 +45,9 @@
 //
 // Happy testing!
 
+use ic_consensus_system_test_utils::{
+    limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
@@ -69,8 +72,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
 };
-use ic_tests::nns_dapp::set_authorized_subnets;
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_types::Height;
 
 use anyhow::Result;
@@ -95,7 +96,6 @@ const INGRESS_BYTES_SUM_METRIC: &str = "consensus_ingress_message_bytes_delivere
 const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_sum";
 
 // Network parameters
-const DEVICE_NAME: &str = "enp1s0"; // network interface name
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
 
@@ -132,7 +132,6 @@ fn setup(env: TestEnv) {
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
-    set_authorized_subnets(&env);
     env.sync_with_prometheus();
 
     let topology_snapshot = env.topology_snapshot();
@@ -141,8 +140,11 @@ fn setup(env: TestEnv) {
         let session = node
             .block_on_ssh_session()
             .expect("Failed to ssh into node");
-        node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command())
-            .expect("Failed to execute bash script from session");
+        node.block_on_bash_script_from_session(
+            &session,
+            &limit_tc_ssh_command(BANDWIDTH_MBITS, LATENCY),
+        )
+        .expect("Failed to execute bash script from session");
     }
 }
 
@@ -373,33 +375,6 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
         delivered_ingress_messages: avg_ingress_messages,
         delivered_ingress_messages_bytes: avg_ingress_bytes,
     }
-}
-
-/**
- * 1. Delete existing tc rules (if present).
- * 2. Add a root qdisc (queueing discipline) for an htb (hierarchical token bucket).
- * 3. Add a class with bandwidth limit.
- * 4. Add a qdisc to introduce latency with jitter.
- * 5. Add a filter to associate IPv6 traffic with the class and specific port.
- * 6. Read the active tc rules.
- */
-fn limit_tc_ssh_command() -> String {
-    let cfg = ic_system_test_driver::util::get_config();
-    let p2p_listen_port = cfg.transport.unwrap().listening_port;
-    format!(
-        r#"set -euo pipefail
-sudo tc qdisc del dev {device} root 2> /dev/null || true
-sudo tc qdisc add dev {device} root handle 1: htb default 10
-sudo tc class add dev {device} parent 1: classid 1:10 htb rate {bandwidth_mbit}mbit ceil {bandwidth_mbit}mbit
-sudo tc qdisc add dev {device} parent 1:10 handle 10: netem delay {latency_ms}ms
-sudo tc filter add dev {device} parent 1: protocol ipv6 prio 1 u32 match ip6 dport {p2p_listen_port} 0xFFFF flowid 1:10
-sudo tc qdisc show dev {device}
-"#,
-        device = DEVICE_NAME,
-        bandwidth_mbit = BANDWIDTH_MBITS,
-        latency_ms = LATENCY.as_millis(),
-        p2p_listen_port = p2p_listen_port
-    )
 }
 
 fn average(nums: &[u64]) -> u64 {

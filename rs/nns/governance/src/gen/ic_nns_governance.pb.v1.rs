@@ -552,7 +552,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -637,6 +637,9 @@ pub mod proposal {
         /// Create a new SNS.
         #[prost(message, tag = "24")]
         CreateServiceNervousSystem(super::CreateServiceNervousSystem),
+        /// Calls install_code for a canister (install, reinstall, or upgrade).
+        #[prost(message, tag = "25")]
+        InstallCode(super::InstallCode),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -2285,6 +2288,77 @@ pub mod create_service_nervous_system {
         }
     }
 }
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCode {
+    /// The target canister ID to call install_code on. Required.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The install mode. Either install, reinstall, or upgrade. Required.
+    #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
+    pub install_mode: ::core::option::Option<i32>,
+    /// The wasm module to install. required.
+    #[prost(bytes = "vec", optional, tag = "3")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The arg to pass to the canister. Optional.
+    #[prost(bytes = "vec", optional, tag = "4")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Whether to skip stopping the canister before installing. Optional. Default is false.
+    #[prost(bool, optional, tag = "5")]
+    pub skip_stopping_before_installing: ::core::option::Option<bool>,
+}
+/// Nested message and enum types in `InstallCode`.
+pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum CanisterInstallMode {
+        Unspecified = 0,
+        Install = 1,
+        Reinstall = 2,
+        Upgrade = 3,
+    }
+    impl CanisterInstallMode {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                CanisterInstallMode::Unspecified => "CANISTER_INSTALL_MODE_UNSPECIFIED",
+                CanisterInstallMode::Install => "CANISTER_INSTALL_MODE_INSTALL",
+                CanisterInstallMode::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
+                CanisterInstallMode::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "CANISTER_INSTALL_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+                "CANISTER_INSTALL_MODE_INSTALL" => Some(Self::Install),
+                "CANISTER_INSTALL_MODE_REINSTALL" => Some(Self::Reinstall),
+                "CANISTER_INSTALL_MODE_UPGRADE" => Some(Self::Upgrade),
+                _ => None,
+            }
+        }
+    }
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -3097,15 +3171,6 @@ pub mod settle_neurons_fund_participation_request {
         Aborted(Aborted),
     }
 }
-/// A list of principals.
-/// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Principals {
-    #[prost(message, repeated, tag = "7")]
-    pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-}
 /// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 /// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 /// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -3146,7 +3211,7 @@ pub mod settle_neurons_fund_participation_response {
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
         #[prost(message, optional, tag = "7")]
-        pub hotkeys: ::core::option::Option<super::Principals>,
+        pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
         /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]

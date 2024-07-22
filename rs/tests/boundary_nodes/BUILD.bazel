@@ -14,6 +14,10 @@ TEST_CANISTERS_RUNTIME_DEPS = [
 
 system_test(
     name = "boundary_node_integration_test",
+    env = {
+        "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
+        "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -26,6 +30,10 @@ system_test(
 
 system_test(
     name = "boundary_node_integration_on_playnet_test",
+    env = {
+        "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
+        "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -52,6 +60,9 @@ system_test(
 
 system_test(
     name = "certificate_orchestrator_test",
+    env = {
+        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -123,6 +134,9 @@ system_test(
 
 system_test(
     name = "custom_domains_integration_test",
+    env = {
+        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
