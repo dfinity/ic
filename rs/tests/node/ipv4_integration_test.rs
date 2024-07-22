@@ -75,11 +75,12 @@ fn main() -> Result<()> {
 
 pub fn config(env: TestEnv) {
     let domain = "api-example.com".to_string();
-    let ipv4_config = IPv4Config {
-        ip_addr: "193.118.59.142".to_string(),
-        gateway_ip_addr: "193.118.59.137".to_string(),
-        prefix_length: 29,
-    };
+    let ipv4_config = IPv4Config::new(
+        "193.118.59.142".to_string(),
+        "193.118.59.137".to_string(),
+        29,
+    )
+    .unwrap();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -212,11 +213,11 @@ EOT
             CONFIG_CHECK_TIMEOUT,
             CONFIG_CHECK_SLEEP,
             || {
-                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config {
-                    ip_addr: "193.118.59.142".into(),
-                    gateway_ip_addr: "193.118.59.137".into(),
-                    prefix_length: 29,
-                }))
+                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config::new(
+                    "193.118.59.142".into(),
+                    "193.118.59.137".into(),
+                    29,
+                ).unwrap()))
             }
         ).expect("Failed to check the applied IPv4 configuration on the unassigned node");
 

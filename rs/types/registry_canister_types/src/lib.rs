@@ -182,3 +182,80 @@ pub struct UpdateNodeIPv4ConfigDirectlyPayload {
     pub node_id: NodeId,
     pub ipv4_config: Option<IPv4Config>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]	
+    fn should_succeed_if_ipv4_config_is_valid() {	
+        assert!(IPv4Config::new(
+            "204.153.51.58".to_string(),	
+            "204.153.51.1".to_string(),	
+            24,	
+        ).is_ok());	
+    }	
+
+    #[test]	
+    fn should_fails_if_ipv4_config_is_invalid() {	
+        assert!(IPv4Config::new(	
+            "204.153.51.58".to_string(),	
+            "204.153.49.1".to_string(),	
+            24,	
+        ).is_err());	
+
+    }	
+
+
+
+
+    #[test]
+    fn test_are_in_the_same_subnet() {
+        // Test case 1: All IPv4 addresses are in the same subnet
+        let ip_addresses1 = vec![
+            "192.168.1.1".to_string(),
+            "192.168.1.2".to_string(),
+            "192.168.1.3".to_string(),
+        ];
+        assert!(are_in_the_same_subnet(ip_addresses1, 24));
+
+        // Test case 2: All IPv4 addresses are in different subnets
+        let ip_addresses2 = vec![
+            "192.168.1.1".to_string(),
+            "10.0.0.1".to_string(),
+            "172.16.0.1".to_string(),
+        ];
+        assert!(!are_in_the_same_subnet(ip_addresses2, 24));
+
+        // Test case 3: One IP address is in a different subnet
+        let ip_addresses3 = vec![
+            "192.168.1.1".to_string(),
+            "192.168.1.2".to_string(),
+            "10.0.0.1".to_string(),
+        ];
+        assert!(!are_in_the_same_subnet(ip_addresses3, 24));
+    }
+
+    #[test]
+    fn test_is_global_ipv4_address() {
+        // Valid IPv4 addresses
+        assert!(is_global_ipv4_address("8.8.1.1"));
+        assert!(is_global_ipv4_address("212.71.124.187"));
+        assert!(is_global_ipv4_address("193.118.59.140"));
+
+        // Invalid IPv4 addresses
+        assert!(!is_global_ipv4_address("198.19.32.89")); // benchmarking
+        assert!(!is_global_ipv4_address("255.255.255.255")); // broadcast
+        assert!(!is_global_ipv4_address("192.0.2.55")); // documentation
+        assert!(!is_global_ipv4_address("198.51.100.0")); // documentation
+        assert!(!is_global_ipv4_address("203.0.113.13")); // documentation
+        assert!(!is_global_ipv4_address("169.254.11.12")); // link local
+        assert!(!is_global_ipv4_address("127.0.0.1")); // loopback
+        assert!(!is_global_ipv4_address("10.0.0.1")); // private
+        assert!(!is_global_ipv4_address("172.16.255.12")); // private
+        assert!(!is_global_ipv4_address("192.168.1.1")); // private
+        assert!(!is_global_ipv4_address("100.96.12.34")); // shared
+        assert!(!is_global_ipv4_address("240.255.249.11")); // reserved
+        assert!(!is_global_ipv4_address("0.0.0.0")); // unspecified
+    }
+}
