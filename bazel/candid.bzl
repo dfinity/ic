@@ -14,18 +14,16 @@ if [[ $mr_title == *"[override-didc-check]"* ]]; then
     exit 0
 fi
 
-if [ -z "${{CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}}" ]; then
-  readonly target_branch_name="HEAD"
-else
-  readonly target_branch_name="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-fi
-readonly merge_base="$(git merge-base "$target_branch_name" HEAD)"
+# Note that CI_MERGE_REQUEST_TARGET_BRANCH_SHA is only set on Pull Requests.
+# On other events we set the merge_base to HEAD which means we compare the
+# did interface file against itself.
+readonly merge_base=${{CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-HEAD}}
 
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
 
 if ! git show $merge_base:{did_path} > $tmpfile 2> $errlog; then
-    if grep -sq -- "does not exist in" $errlog; then
+    if grep -sq -- "exists on disk, but not in \\|does not exist in 'HEAD'" $errlog; then
         echo "{did_path} is a new file, skipping backwards compatibility check"
         exit 0
     else
