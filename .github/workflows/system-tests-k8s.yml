@@ -17,11 +17,12 @@ on:
       jobs:
         description: 'Concurrent Bazel Jobs'
         required: false
-        default: '8'
+        default: '32'
 
 env:
   TARGETS: "//rs/tests/testing_verification:basic_health_test"
-  JOBS: "8"
+  JOBS: "32"
+  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
