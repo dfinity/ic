@@ -1,4 +1,3 @@
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
