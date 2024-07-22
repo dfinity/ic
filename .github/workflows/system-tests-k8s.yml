@@ -1,5 +1,11 @@
 name: Sytem Tests K8s
 
+# Run specific system test:
+# gh workflow run system-tests-k8s.yml \
+#   --ref marko-system-tests-k8s \
+#   --field targets="//rs/tests/testing_verification:basic_health_test" \
+#   --field jobs="32"
+
 on:
   workflow_dispatch:
     inputs:
