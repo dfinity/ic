@@ -15,6 +15,7 @@ use mmap::{PageAllocatorId, PageAllocatorInner, PageInner};
 
 pub use self::page_allocator_registry::PageAllocatorRegistry;
 use super::{FileDescriptor, FileOffset, PageAllocatorFileDescriptor};
+use ic_sys::PAGE_SIZE;
 
 static ALLOCATED_PAGES: PageCounter = PageCounter::new();
 
@@ -84,6 +85,12 @@ impl PageAllocator {
     /// iterator. Knowing the page count beforehand allows the page allocator
     /// to optimize allocation.
     pub fn allocate(&self, pages: &[(PageIndex, &PageBytes)]) -> Vec<(PageIndex, Page)> {
+        // If the pages that need to be allocated and copied are more than 100 MB,
+        // then we can call the fastpath allocator, which does parallel copying.
+        const MB: usize = 1024 * 1024;
+        if pages.len() * PAGE_SIZE > 100 * MB {
+            return PageAllocatorInner::allocate_fastpath(&self.0, pages);
+        }
         PageAllocatorInner::allocate(&self.0, pages)
     }
 
