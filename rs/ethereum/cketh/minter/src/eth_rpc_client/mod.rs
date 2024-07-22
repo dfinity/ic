@@ -16,7 +16,8 @@ use crate::state::State;
 use evm_rpc_client::types::candid::RpcConfig;
 use evm_rpc_client::{
     types::candid::{
-        Block as EvmBlock, BlockTag as EvmBlockTag, GetLogsArgs as EvmGetLogsArgs,
+        Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
+        FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
         LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, RpcError as EvmRpcError,
         RpcResult as EvmRpcResult,
     },
@@ -242,6 +243,16 @@ impl EthRpcClient {
         &self,
         params: FeeHistoryParams,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
+        if let Some(evm_rpc_client) = &self.evm_rpc_client {
+            let result = evm_rpc_client
+                .eth_fee_history(EvmFeeHistoryArgs {
+                    block_count: params.block_count.as_u128(),
+                    newest_block: into_evm_block_tag(params.highest_block),
+                    reward_percentiles: Some(params.reward_percentiles),
+                })
+                .await;
+            return ReducedResult::from(result).into();
+        }
         // A typical response is slightly above 300 bytes.
         let results: MultiCallResults<FeeHistory> = self
             .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
@@ -593,6 +604,12 @@ impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> 
 
         ReducedResult::from_internal(value)
             .map_reduce(&map_logs, MultiCallResults::reduce_with_equality)
+    }
+}
+
+impl From<EvmMultiRpcResult<Option<EvmFeeHistory>>> for ReducedResult<FeeHistory> {
+    fn from(_value: EvmMultiRpcResult<Option<EvmFeeHistory>>) -> Self {
+        todo!()
     }
 }
 
