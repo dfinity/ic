@@ -210,7 +210,7 @@ go_deps.bzl               @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
 /rs/starter/                                            @dfinity/networking
 /rs/state_layout/                                       @dfinity/ic-message-routing-owners
-/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/utopia
+/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/pocket-ic
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
 /rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/runtime
