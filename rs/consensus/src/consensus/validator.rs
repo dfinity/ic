@@ -1809,10 +1809,7 @@ pub mod test {
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
-    use std::{
-        borrow::Borrow,
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
         match results.first() {
@@ -2623,7 +2620,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2700,7 +2696,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 time_source,
@@ -2762,7 +2757,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 time_source,
@@ -3109,7 +3103,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 registry_client,
                 mut pool,
@@ -3240,7 +3233,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 ..
@@ -3308,7 +3300,6 @@ pub mod test {
         let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
         let ValidatorAndDependencies {
             validator,
-            membership,
             mut pool,
             replica_config,
             ..

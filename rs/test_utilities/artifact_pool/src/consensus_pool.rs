@@ -210,7 +210,7 @@ impl TestConsensusPool {
 
     // Utility function to determine the identity of the block maker with the
     // specified rank at a given height. Panics if this rank does not exist.
-    pub fn get_block_maker_by_rank(&mut self, height: Height, rank: Rank) -> NodeId {
+    pub fn get_block_maker_by_rank(&self, height: Height, rank: Rank) -> NodeId {
         let pool_reader = PoolReader::new(&self.pool);
         *self
             .membership
