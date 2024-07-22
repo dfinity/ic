@@ -100,19 +100,6 @@ fn reject_local_request() {
             NO_DEADLINE,
         );
 
-        /*
-                let mut msg = generate_message_for_test(
-                    sender,
-                    receiver,
-                    CallbackId::from(1),
-                    "method".to_string(),
-                    payment,
-                );
-                let callback_id =
-                    register_callback(&mut canister_state, msg.sender, msg.receiver, msg.deadline);
-                msg.sender_reply_callback = callback_id;
-        */
-
         canister_state
             .push_output_request(msg.clone().into(), UNIX_EPOCH)
             .unwrap();
@@ -1072,12 +1059,9 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                 // Create a matching callback, so that enqueuing any reject response will succeed.
                 let callback_id =
                     register_callback(canister_state, req.sender, req.receiver, req.deadline);
-                let mut req = (*req).clone();
-                req.sender_reply_callback = callback_id;
+                assert_eq!(req.sender_reply_callback, callback_id);
 
-                canister_state
-                    .push_output_request(req.into(), UNIX_EPOCH)
-                    .unwrap();
+                canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
             }
 
             RequestOrResponse::Response(rep) => {
