@@ -22,7 +22,6 @@ import time
 from pprint import pformat
 
 import git
-import gitlab_config
 
 
 def target_branch() -> str:
