@@ -119,7 +119,7 @@ pub struct Neuron {
 }
 
 #[must_use]
-pub fn normalized<'a>(mut neuron: Cow<'a, Neuron>) -> Cow<'a, Neuron> {
+pub fn normalized(mut neuron: Cow<Neuron>) -> Cow<Neuron> {
     if neuron.known_neuron_data.is_some() {
         // Log if there is an inconsistency, but otherwise, do not interrupt the flow.
         if neuron.visibility == Some(Visibility::Private) {
