@@ -1,5 +1,5 @@
 {
-  "checksum": "295dee6fe8cf0487e324a176e0ff545059ef9caab88533db17591d32cc2a24fb",
+  "checksum": "b88528cf58a8cc5e67e75820dc107032c23d1ec220acbdeef1b570eec530a894",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1936,6 +1936,55 @@
       "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "ansi_term 0.12.1": {
+      "name": "ansi_term",
+      "version": "0.12.1",
+      "package_url": "https://github.com/ogham/rust-ansi-term",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ansi_term/0.12.1/download",
+          "sha256": "d52a9bb7ec0cf484c551830a7ce27bd20d67eac647e1befb56b0be4ee39a55d2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ansi_term",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ansi_term",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(target_os = \"windows\")": [
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2015",
+        "version": "0.12.1"
+      },
+      "license": "MIT",
+      "license_ids": [
         "MIT"
       ],
       "license_file": null
@@ -17430,7 +17479,7 @@
             {
               "id": "ic-agent 0.36.0",
               "target": "ic_agent",
-              "alias": "ic_agent_call_v3"
+              "alias": "ic_agent_discovery"
             },
             {
               "id": "ic-btc-interface 0.2.0",
@@ -26977,7 +27026,104 @@
             "rustls-native-certs",
             "tls12"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "webpki-roots"
+            ],
+            "aarch64-apple-ios": [
+              "webpki-roots"
+            ],
+            "aarch64-apple-ios-sim": [
+              "webpki-roots"
+            ],
+            "aarch64-fuchsia": [
+              "webpki-roots"
+            ],
+            "aarch64-linux-android": [
+              "webpki-roots"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "webpki-roots"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "webpki-roots"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "webpki-roots"
+            ],
+            "aarch64-unknown-nto-qnx710": [
+              "webpki-roots"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "webpki-roots"
+            ],
+            "armv7-linux-androideabi": [
+              "webpki-roots"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "webpki-roots"
+            ],
+            "i686-apple-darwin": [
+              "webpki-roots"
+            ],
+            "i686-linux-android": [
+              "webpki-roots"
+            ],
+            "i686-pc-windows-msvc": [
+              "webpki-roots"
+            ],
+            "i686-unknown-freebsd": [
+              "webpki-roots"
+            ],
+            "i686-unknown-linux-gnu": [
+              "webpki-roots"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "webpki-roots"
+            ],
+            "riscv32imc-unknown-none-elf": [
+              "webpki-roots"
+            ],
+            "riscv64gc-unknown-none-elf": [
+              "webpki-roots"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "webpki-roots"
+            ],
+            "thumbv7em-none-eabi": [
+              "webpki-roots"
+            ],
+            "thumbv8m.main-none-eabi": [
+              "webpki-roots"
+            ],
+            "x86_64-apple-darwin": [
+              "webpki-roots"
+            ],
+            "x86_64-apple-ios": [
+              "webpki-roots"
+            ],
+            "x86_64-fuchsia": [
+              "webpki-roots"
+            ],
+            "x86_64-linux-android": [
+              "webpki-roots"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "webpki-roots"
+            ],
+            "x86_64-unknown-freebsd": [
+              "webpki-roots"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "webpki-roots"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "webpki-roots"
+            ],
+            "x86_64-unknown-none": [
+              "webpki-roots"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -27021,6 +27167,10 @@
             {
               "id": "tower-service 0.3.2",
               "target": "tower_service"
+            },
+            {
+              "id": "webpki-roots 0.26.1",
+              "target": "webpki_roots"
             }
           ],
           "selects": {}
@@ -27756,7 +27906,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/agent-rs",
           "commitish": {
-            "Rev": "9e45b314fc7496d48065590fac90790e0bdc6eed"
+            "Rev": "1c93d1c683b2207af9b62b4f517c036b563f3af0"
           },
           "strip_prefix": "ic-agent"
         }
@@ -27783,9 +27933,9 @@
         "crate_features": {
           "common": [
             "default",
+            "hyper",
             "pem",
-            "reqwest",
-            "sync_call"
+            "reqwest"
           ],
           "selects": {}
         },
@@ -27828,6 +27978,10 @@
               "target": "http_body"
             },
             {
+              "id": "hyper 1.4.1",
+              "target": "hyper"
+            },
+            {
               "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
@@ -27836,7 +27990,7 @@
               "target": "ic_transport_types"
             },
             {
-              "id": "ic-verify-bls-signature 0.5.0",
+              "id": "ic-verify-bls-signature 0.1.0",
               "target": "ic_verify_bls_signature"
             },
             {
@@ -27915,12 +28069,52 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
+                "id": "arc-swap 1.6.0",
+                "target": "arc_swap"
+              },
+              {
+                "id": "http-body-to-bytes 0.2.0",
+                "target": "http_body_to_bytes"
+              },
+              {
+                "id": "http-body-util 0.1.0",
+                "target": "http_body_util"
+              },
+              {
+                "id": "hyper-rustls 0.27.2",
+                "target": "hyper_rustls"
+              },
+              {
+                "id": "hyper-util 0.1.6",
+                "target": "hyper_util"
+              },
+              {
                 "id": "rustls-webpki 0.102.5",
                 "target": "webpki"
               },
               {
+                "id": "simple_moving_average 1.0.2",
+                "target": "simple_moving_average"
+              },
+              {
                 "id": "tokio 1.38.0",
                 "target": "tokio"
+              },
+              {
+                "id": "tokio-util 0.7.11",
+                "target": "tokio_util"
+              },
+              {
+                "id": "tower 0.4.13",
+                "target": "tower"
+              },
+              {
+                "id": "tracing 0.1.40",
+                "target": "tracing"
+              },
+              {
+                "id": "tracing-subscriber 0.2.25",
+                "target": "tracing_subscriber"
               }
             ]
           }
@@ -27933,7 +28127,14 @@
               "target": "serde_repr"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(not(target_family = \"wasm\"))": [
+              {
+                "id": "async-trait 0.1.74",
+                "target": "async_trait"
+              }
+            ]
+          }
         },
         "version": "0.36.0"
       },
@@ -29524,7 +29725,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/agent-rs",
           "commitish": {
-            "Rev": "9e45b314fc7496d48065590fac90790e0bdc6eed"
+            "Rev": "1c93d1c683b2207af9b62b4f517c036b563f3af0"
           },
           "strip_prefix": "ic-transport-types"
         }
@@ -29573,10 +29774,6 @@
             {
               "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
-            },
-            {
-              "id": "serde_with 3.8.1",
-              "target": "serde_with"
             },
             {
               "id": "sha2 0.10.8",
@@ -29836,83 +30033,6 @@
         },
         "edition": "2021",
         "version": "0.2.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "ic-verify-bls-signature 0.5.0": {
-      "name": "ic-verify-bls-signature",
-      "version": "0.5.0",
-      "package_url": null,
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-verify-bls-signature/0.5.0/download",
-          "sha256": "d420b25c0091059f6c3c23a21427a81915e6e0aca3b79e0d403ed767f286a3b9"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_verify_bls_signature",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_verify_bls_signature",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "hex",
-            "lazy_static"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "ic_bls12_381 0.10.0",
-              "target": "ic_bls12_381",
-              "alias": "bls12_381"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "pairing 0.23.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "sha2 0.10.8",
-              "target": "sha2"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.5.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -30269,93 +30389,6 @@
           "selects": {}
         },
         "version": "0.9.2"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "ic_bls12_381 0.10.0": {
-      "name": "ic_bls12_381",
-      "version": "0.10.0",
-      "package_url": "https://github.com/dfinity/bls12_381",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.0/download",
-          "sha256": "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_bls12_381",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_bls12_381",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "digest",
-            "experimental",
-            "group",
-            "groups",
-            "pairing",
-            "pairings"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "digest 0.10.7",
-              "target": "digest"
-            },
-            {
-              "id": "ff 0.13.0",
-              "target": "ff"
-            },
-            {
-              "id": "group 0.13.0",
-              "target": "group"
-            },
-            {
-              "id": "pairing 0.23.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "rustc_flags": {
-          "common": [
-            "-C",
-            "opt-level=3"
-          ],
-          "selects": {}
-        },
-        "version": "0.10.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -37301,6 +37334,53 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "matchers 0.0.1": {
+      "name": "matchers",
+      "version": "0.0.1",
+      "package_url": "https://github.com/hawkw/matchers",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/matchers/0.0.1/download",
+          "sha256": "f099785f7595cc4b4553a174ce30dd7589ef93391ff414dbb67f62392b9e0ce1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "matchers",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "matchers",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "regex-automata 0.1.10",
+              "target": "regex_automata"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.0.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "matchers 0.1.0": {
       "name": "matchers",
@@ -58689,76 +58769,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_with 3.8.1": {
-      "name": "serde_with",
-      "version": "3.8.1",
-      "package_url": "https://github.com/jonasbb/serde_with/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with/3.8.1/download",
-          "sha256": "0ad483d2ab0149d5a5ebcd9972a3852711e0153d863bf5a5d0391d28883c4a20"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_with",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "macros",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serde_derive 1.0.203",
-              "target": "serde_derive"
-            },
-            {
-              "id": "serde_with_macros 3.8.1",
-              "target": "serde_with_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "3.8.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "serde_with_macros 1.5.2": {
       "name": "serde_with_macros",
       "version": "1.5.2",
@@ -58871,66 +58881,6 @@
         },
         "edition": "2021",
         "version": "2.3.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "serde_with_macros 3.8.1": {
-      "name": "serde_with_macros",
-      "version": "3.8.1",
-      "package_url": "https://github.com/jonasbb/serde_with/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with_macros/3.8.1/download",
-          "sha256": "65569b702f41443e8bc8bbb1c5779bd0450bbe723b56198980e80ec45780bce2"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "serde_with_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling 0.20.3",
-              "target": "darling"
-            },
-            {
-              "id": "proc-macro2 1.0.85",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.35",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.66",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "3.8.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -66077,7 +66027,232 @@
             "slab",
             "time"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-apple-ios": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-apple-ios-sim": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-fuchsia": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-linux-android": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "aarch64-unknown-nto-qnx710": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "armv7-linux-androideabi": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "i686-apple-darwin": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "i686-linux-android": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "i686-pc-windows-msvc": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "i686-unknown-freebsd": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "i686-unknown-linux-gnu": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "riscv32imc-unknown-none-elf": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "riscv64gc-unknown-none-elf": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "thumbv7em-none-eabi": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "thumbv8m.main-none-eabi": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-apple-darwin": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-apple-ios": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-fuchsia": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-linux-android": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-unknown-freebsd": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ],
+            "x86_64-unknown-none": [
+              "compat",
+              "full",
+              "futures-io",
+              "io-util",
+              "net"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -66088,6 +66263,10 @@
             {
               "id": "futures-core 0.3.30",
               "target": "futures_core"
+            },
+            {
+              "id": "futures-io 0.3.30",
+              "target": "futures_io"
             },
             {
               "id": "futures-sink 0.3.30",
@@ -67493,6 +67672,68 @@
       ],
       "license_file": "LICENSE"
     },
+    "tracing-log 0.1.4": {
+      "name": "tracing-log",
+      "version": "0.1.4",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tracing-log/0.1.4/download",
+          "sha256": "f751112709b4e791d8ce53e32c4ed2d353565a795ce84da2285393f41557bdf2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_log",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tracing_log",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "log-tracer",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "tracing-core 0.1.32",
+              "target": "tracing_core"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.4"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "tracing-log 0.2.0": {
       "name": "tracing-log",
       "version": "0.2.0",
@@ -67819,6 +68060,129 @@
         },
         "edition": "2021",
         "version": "0.2.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tracing-subscriber 0.2.25": {
+      "name": "tracing-subscriber",
+      "version": "0.2.25",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tracing-subscriber/0.2.25/download",
+          "sha256": "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_subscriber",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tracing_subscriber",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ansi",
+            "ansi_term",
+            "chrono",
+            "default",
+            "env-filter",
+            "fmt",
+            "json",
+            "lazy_static",
+            "matchers",
+            "regex",
+            "registry",
+            "serde",
+            "serde_json",
+            "sharded-slab",
+            "smallvec",
+            "thread_local",
+            "tracing",
+            "tracing-log",
+            "tracing-serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ansi_term 0.12.1",
+              "target": "ansi_term"
+            },
+            {
+              "id": "chrono 0.4.38",
+              "target": "chrono"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "matchers 0.0.1",
+              "target": "matchers"
+            },
+            {
+              "id": "regex 1.10.5",
+              "target": "regex"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.108",
+              "target": "serde_json"
+            },
+            {
+              "id": "sharded-slab 0.1.7",
+              "target": "sharded_slab"
+            },
+            {
+              "id": "smallvec 1.13.2",
+              "target": "smallvec"
+            },
+            {
+              "id": "thread_local 1.1.7",
+              "target": "thread_local"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            },
+            {
+              "id": "tracing-core 0.1.32",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-log 0.1.4",
+              "target": "tracing_log"
+            },
+            {
+              "id": "tracing-serde 0.1.3",
+              "target": "tracing_serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.25"
       },
       "license": "MIT",
       "license_ids": [

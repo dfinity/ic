@@ -89,6 +89,7 @@ pub fn decentralization_test(env: TestEnv) {
 }
 
 async fn test(env: TestEnv) {
+    use ic_agent_discovery;
     let log = env.logger();
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let unassigned_nodes: Vec<_> = env.topology_snapshot().unassigned_nodes().collect();

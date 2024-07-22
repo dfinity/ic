@@ -19,6 +19,7 @@ def sanitize_external_crates(sanitizers_enabled):
     }
 
 IC_AGENT_CALL_V3_REV = "9e45b314fc7496d48065590fac90790e0bdc6eed"
+IC_AGENT_DISCOVERY_REV = "1c93d1c683b2207af9b62b4f517c036b563f3af0"
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
@@ -569,12 +570,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "pem",
                 ],
             ),
-            # TODO: [NET-1734] Delete this once the feature is merged to master.
-            "ic-agent-call-v3": crate.spec(
+            "ic-agent-discovery": crate.spec(
                 package = "ic-agent",
                 git = "https://github.com/dfinity/agent-rs",
-                rev = IC_AGENT_CALL_V3_REV,
-                features = ["sync_call"],
+                rev = IC_AGENT_DISCOVERY_REV,
+                features = [
+                    "hyper",
+                    "reqwest",
+                    "pem",
+                ],
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.0",
