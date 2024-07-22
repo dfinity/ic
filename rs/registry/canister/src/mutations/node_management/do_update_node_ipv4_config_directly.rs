@@ -181,8 +181,7 @@ mod tests {
                 .expect("failed to get the node operator id");
 
         // create IPv4 config with invalid IP address
-        let ipv4_config = init_ipv4_config();
-        IPv4Config::new("193.118.256.140".into(), "193.118.59.137".into(), 29).unwrap();
+        let ipv4_config = IPv4Config::new("193.118.256.140".into(), "193.118.59.137".into(), 29).unwrap();
 
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
