@@ -278,7 +278,6 @@ impl PocketIc {
             .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
-            .with_use_cost_scaling_flag(true)
     }
 
     pub(crate) fn new(
