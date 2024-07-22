@@ -6,7 +6,7 @@ New compressed Wasm hash: `81f426bcc52140fdcf045d02d00b04bfb4965445b8aed7090d174
 
 Target canister: `vxkom-oyaaa-aaaar-qafda-cai`
 
-Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.org/proposal/TODO
+Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.org/proposal/131373
 
 ---
 
@@ -29,7 +29,7 @@ didc encode -d ledger_suite_orchestrator.did -t '(OrchestratorArg)' '(variant { 
 
 ## Release Notes
 
-No changes to the ckERC20 ledger suite orchestrator canister codebase, since this proposal uses the same version `de29a1a55b589428d173b31cdb8cec0923245657` as the previous proposal ([TODO](https://dashboard.internetcomputer.org/proposal/TODO)).
+No changes to the ckERC20 ledger suite orchestrator canister codebase, since this proposal uses the same version `de29a1a55b589428d173b31cdb8cec0923245657` as the previous proposal ([131373](https://dashboard.internetcomputer.org/proposal/131373)).
 
 ## Wasm Verification
 
