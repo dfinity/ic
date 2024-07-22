@@ -279,7 +279,7 @@ mod tests {
         }
     }
 
-    fn exec_input_for_query(
+    fn exec_input_for_replicated_query(
         method_name: &str,
         incoming_payload: &[u8],
         globals: Vec<Global>,
@@ -288,6 +288,7 @@ mod tests {
             Time::from_nanos_since_unix_epoch(0),
             incoming_payload.to_vec(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
+            CallContextId::from(0),
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();
@@ -625,7 +626,12 @@ mod tests {
                 < NumInstructions::from(INSTRUCTION_LIMIT)
         );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let globals = result.exec_output.state.unwrap().globals;
+        let globals = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap()
+            .globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
 
         // Second time around, issue a query to read the counter. We
@@ -637,7 +643,7 @@ mod tests {
                 wasm_id,
                 wasm_memory_id,
                 stable_memory_id,
-                exec_input: exec_input_for_query("read", &[], globals),
+                exec_input: exec_input_for_replicated_query("read", &[], globals),
             })
             .sync()
             .unwrap();
@@ -702,10 +708,14 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state.unwrap();
+        let execution_state_modifications = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
+        wasm_memory.deserialize_delta(execution_state_modifications.wasm_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
             wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
@@ -772,7 +782,7 @@ mod tests {
                 wasm_id,
                 wasm_memory_id: next_wasm_memory_id,
                 stable_memory_id: next_stable_memory_id,
-                exec_input: exec_input_for_query(
+                exec_input: exec_input_for_replicated_query(
                     "read",
                     &[16, 0, 0, 0, 4, 0, 0, 0],
                     vec![Global::I64(0)],
@@ -855,7 +865,12 @@ mod tests {
                 < NumInstructions::from(INSTRUCTION_LIMIT)
         );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let globals = result.exec_output.state.unwrap().globals;
+        let globals = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap()
+            .globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
         assert_eq!(Global::I32(1), globals[0]);
 
@@ -895,7 +910,12 @@ mod tests {
                 < NumInstructions::from(INSTRUCTION_LIMIT)
         );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let globals = result.exec_output.state.unwrap().globals;
+        let globals = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap()
+            .globals;
         assert_eq!(WasmResult::Reply([2, 0, 0, 0].to_vec()), wasm_result);
 
         // Second time around, issue a query to read the counter. We
@@ -907,7 +927,7 @@ mod tests {
                 wasm_id,
                 wasm_memory_id,
                 stable_memory_id,
-                exec_input: exec_input_for_query("read", &[], globals),
+                exec_input: exec_input_for_replicated_query("read", &[], globals),
             })
             .sync()
             .unwrap();
@@ -971,10 +991,14 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state.unwrap();
+        let execution_state_modifications = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
+        stable_memory.deserialize_delta(execution_state_modifications.stable_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
             stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
@@ -1041,7 +1065,7 @@ mod tests {
                 wasm_id,
                 wasm_memory_id: next_wasm_memory_id,
                 stable_memory_id: next_stable_memory_id,
-                exec_input: exec_input_for_query(
+                exec_input: exec_input_for_replicated_query(
                     "read_stable",
                     &[16, 0, 0, 0, 4, 0, 0, 0],
                     vec![Global::I64(0)],
@@ -1107,10 +1131,14 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state.unwrap();
+        let execution_state_modifications = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
+        wasm_memory.deserialize_delta(execution_state_modifications.wasm_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
             wasm_memory.get_page(PageIndex::new(0))[16..20].to_vec()
@@ -1138,10 +1166,14 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state.unwrap();
+        let execution_state_modifications = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        wasm_memory.deserialize_delta(state_modifications.wasm_memory.page_delta);
+        wasm_memory.deserialize_delta(execution_state_modifications.wasm_memory.page_delta);
         assert_eq!(
             vec![5, 6, 7, 8],
             wasm_memory.get_page(PageIndex::new(0))[32..36].to_vec()
@@ -1208,10 +1240,14 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state.unwrap();
+        let execution_state_modifications = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
+        stable_memory.deserialize_delta(execution_state_modifications.stable_memory.page_delta);
         assert_eq!(
             vec![1, 2, 3, 4],
             stable_memory.get_page(PageIndex::new(0))[16..20].to_vec()
@@ -1239,10 +1275,14 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        let state_modifications = result.exec_output.state.unwrap();
+        let execution_state_modifications = result
+            .exec_output
+            .state
+            .execution_state_modifications
+            .unwrap();
         assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
 
-        stable_memory.deserialize_delta(state_modifications.stable_memory.page_delta);
+        stable_memory.deserialize_delta(execution_state_modifications.stable_memory.page_delta);
         assert_eq!(
             vec![5, 6, 7, 8],
             stable_memory.get_page(PageIndex::new(0))[32..36].to_vec()
