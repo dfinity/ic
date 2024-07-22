@@ -7,4 +7,21 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-governance = { path = "../../../nns/governance" }
 ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+leb128 = "0.2.5"
+openssh-keys = "0.5.0"
+rand = { workspace = true }
+registry-canister = { path = "../../../registry/canister" }
+reqwest = { workspace = true }
+rsa = { version = "0.9.2", features = ["sha2"] }
+slog = { workspace = true }
+ssh2 = "0.9.4"
+tokio = { workspace = true }
+url = "2.1.1"

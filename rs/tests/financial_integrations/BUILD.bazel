@@ -32,6 +32,9 @@ system_test(
 
 system_test(
     name = "icrc1_agent_test",
+    env = {
+        "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

@@ -1,7 +1,9 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-use crate::pocket_ic::{AdvanceTimeAndTick, EffectivePrincipal, PocketIc};
+use crate::pocket_ic::{
+    AdvanceTimeAndTick, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp, PocketIc,
+};
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
@@ -9,9 +11,26 @@ use axum_server::Handle;
 use base64;
 use hyper::header::{HeaderValue, HOST};
 use hyper::Version;
+use hyper_legacy::{client::connect::HttpConnector, Client};
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_socks2::SocksConnector;
 use ic_http_endpoints_public::cors_layer;
-use ic_types::{CanisterId, SubnetId};
-use pocket_ic::common::rest::{HttpGatewayBackend, HttpGatewayConfig, Topology};
+use ic_https_outcalls_adapter::CanisterHttp;
+use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
+use ic_https_outcalls_service::{
+    canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
+    CanisterHttpSendResponse, HttpHeader, HttpMethod,
+};
+use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
+use ic_state_machine_tests::RejectCode;
+use ic_types::canister_http::CanisterHttpRequestId;
+use ic_types::{canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES, CanisterId, SubnetId};
+use pocket_ic::common::rest::{
+    CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
+    CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
+    MockCanisterHttpResponse, Topology,
+};
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -27,6 +46,7 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle},
     time::{self, sleep, Instant},
 };
+use tonic::Request;
 use tracing::{error, info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
@@ -170,6 +190,7 @@ pub enum OpOut {
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
+    CanisterHttp(Vec<CanisterHttpRequest>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -178,6 +199,7 @@ pub enum PocketIcError {
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
     RequestRoutingError(String),
+    InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -236,6 +258,16 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
                 write!(f, "RequestRoutingError({:?})", msg)
             }
+            OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
+                subnet_id,
+                canister_http_request_id,
+            ))) => {
+                write!(
+                    f,
+                    "InvalidCanisterHttpRequestId({},{:?})",
+                    subnet_id, canister_http_request_id
+                )
+            }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
@@ -257,6 +289,9 @@ impl std::fmt::Debug for OpOut {
                     effective_principal,
                     hex::encode(message_id)
                 )
+            }
+            OpOut::CanisterHttp(canister_http_reqeusts) => {
+                write!(f, "CanisterHttp({:?})", canister_http_reqeusts)
             }
         }
     }
@@ -322,6 +357,20 @@ impl UpdateReply {
 /// This trait lets us put a mock of the pocket_ic into the PocketIcApiState.
 pub trait HasStateLabel {
     fn get_state_label(&self) -> StateLabel;
+}
+
+enum ApiVersion {
+    V2,
+    V3,
+}
+
+impl std::fmt::Display for ApiVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiVersion::V2 => write!(f, "v2"),
+            ApiVersion::V3 => write!(f, "v3"),
+        }
+    }
 }
 
 fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
@@ -454,7 +503,8 @@ impl ApiState {
             (resp.status(), resp)
         }
 
-        async fn handler_api_v2_canister(
+        async fn handler_api_canister(
+            api_version: ApiVersion,
             replica_url: String,
             effective_canister_id: CanisterId,
             endpoint: &str,
@@ -463,8 +513,8 @@ impl ApiState {
             let client =
                 Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
             let url = format!(
-                "{}/api/v2/canister/{}/{}",
-                replica_url, effective_canister_id, endpoint
+                "{}/api/{}/canister/{}/{}",
+                replica_url, api_version, effective_canister_id, endpoint
             );
             let req = Request::builder()
                 .method(Method::POST)
@@ -477,12 +527,34 @@ impl ApiState {
             (resp.status(), resp)
         }
 
-        async fn handler_call(
+        async fn handler_call_v2(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "call", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "call",
+                bytes,
+            )
+            .await
+        }
+
+        async fn handler_call_v3(
+            State(replica_url): State<String>,
+            Path(effective_canister_id): Path<CanisterId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_canister(
+                ApiVersion::V3,
+                replica_url,
+                effective_canister_id,
+                "call",
+                bytes,
+            )
+            .await
         }
 
         async fn handler_query(
@@ -490,7 +562,14 @@ impl ApiState {
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "query", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "query",
+                bytes,
+            )
+            .await
         }
 
         async fn handler_read_state(
@@ -498,7 +577,14 @@ impl ApiState {
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "read_state", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "read_state",
+                bytes,
+            )
+            .await
         }
 
         // converts an HTTP request to an HTTP/1.1 request required by icx-proxy
@@ -570,7 +656,13 @@ impl ApiState {
                 .route("/api/v2/status", get(handler_status))
                 .route(
                     "/api/v2/canister/:ecid/call",
-                    post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    post(handler_call_v2)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route(
+                    "/api/v3/canister/:ecid/call",
+                    post(handler_call_v3)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
                     "/api/v2/canister/:ecid/query",
@@ -644,6 +736,147 @@ impl ApiState {
         }
     }
 
+    async fn make_http_request(
+        canister_http_request: CanisterHttpRequest,
+    ) -> Result<CanisterHttpReply, (RejectCode, String)> {
+        // Socks client setup
+        // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
+        // but we still have to provide one when constructing the production `CanisterHttp` object
+        // and thus we use a reserved (and invalid) proxy IP address.
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false);
+        http_connector.set_connect_timeout(Some(Duration::from_secs(2)));
+        let proxy_connector = SocksConnector {
+            proxy_addr: "http://240.0.0.0:8080"
+                .parse::<tonic::transport::Uri>()
+                .expect("Failed to parse socks url."),
+            auth: None,
+            connector: http_connector.clone(),
+        };
+        let https_connector = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .wrap_connector(proxy_connector);
+        let socks_client = Client::builder().build::<_, hyper_legacy::Body>(https_connector);
+
+        // Https client setup.
+        let builder = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_or_http()
+            .enable_http1();
+        let https_client = Client::builder()
+            .build::<_, hyper_legacy::Body>(builder.wrap_connector(http_connector));
+
+        let canister_http = CanisterHttp::new(
+            https_client,
+            socks_client,
+            no_op_logger(),
+            &MetricsRegistry::default(),
+        );
+        let canister_http_request = CanisterHttpSendRequest {
+            url: canister_http_request.url,
+            method: match canister_http_request.http_method {
+                CanisterHttpMethod::GET => HttpMethod::Get.into(),
+                CanisterHttpMethod::POST => HttpMethod::Post.into(),
+                CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
+            },
+            max_response_size_bytes: canister_http_request
+                .max_response_bytes
+                .unwrap_or(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+            headers: canister_http_request
+                .headers
+                .into_iter()
+                .map(|h| HttpHeader {
+                    name: h.name,
+                    value: h.value,
+                })
+                .collect(),
+            body: canister_http_request.body,
+            socks_proxy_allowed: false,
+        };
+        let request = Request::new(canister_http_request);
+        canister_http
+            .canister_http_send(request)
+            .await
+            .map(|adapter_response| {
+                let CanisterHttpSendResponse {
+                    status,
+                    headers,
+                    content: body,
+                } = adapter_response.into_inner();
+                CanisterHttpReply {
+                    status: status.try_into().unwrap(),
+                    headers: headers
+                        .into_iter()
+                        .map(|HttpHeader { name, value }| CanisterHttpHeader { name, value })
+                        .collect(),
+                    body,
+                }
+            })
+            .map_err(|grpc_status| {
+                (
+                    grpc_status_code_to_reject(grpc_status.code()),
+                    grpc_status.message().to_string(),
+                )
+            })
+    }
+
+    async fn process_canister_http_requests(
+        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+        instance_id: InstanceId,
+        rx: &mut Receiver<()>,
+    ) -> Option<()> {
+        let get_canister_http_op = GetCanisterHttp;
+        let canister_http_requests = match Self::execute_operation(
+            instances.clone(),
+            graph.clone(),
+            instance_id,
+            get_canister_http_op,
+            rx,
+        )
+        .await?
+        {
+            OpOut::CanisterHttp(canister_http) => canister_http,
+            out => panic!("Unexpected OpOut: {:?}", out),
+        };
+        let mut mock_canister_http_responses = vec![];
+        for canister_http_request in canister_http_requests {
+            let subnet_id = canister_http_request.subnet_id;
+            let request_id = canister_http_request.request_id;
+            let response = match Self::make_http_request(canister_http_request).await {
+                Ok(reply) => CanisterHttpResponse::CanisterHttpReply(reply),
+                Err((reject_code, e)) => {
+                    CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
+                        reject_code: reject_code as u64,
+                        message: e,
+                    })
+                }
+            };
+            let mock_canister_http_response = MockCanisterHttpResponse {
+                subnet_id,
+                request_id,
+                response,
+            };
+            mock_canister_http_responses.push(mock_canister_http_response);
+        }
+        for mock_canister_http_response in mock_canister_http_responses {
+            let mock_canister_http_op = MockCanisterHttp {
+                mock_canister_http_response,
+            };
+            Self::execute_operation(
+                instances.clone(),
+                graph.clone(),
+                instance_id,
+                mock_canister_http_op,
+                rx,
+            )
+            .await?;
+        }
+        Some(())
+    }
+
     pub async fn auto_progress(&self, instance_id: InstanceId) {
         let progress_threads = self.progress_threads.read().await;
         let mut progress_thread = progress_threads[instance_id].lock().await;
@@ -662,6 +895,17 @@ impl ApiState {
                         graph.clone(),
                         instance_id,
                         op,
+                        &mut rx,
+                    )
+                    .await
+                    .is_none()
+                    {
+                        return;
+                    }
+                    if Self::process_canister_http_requests(
+                        instances.clone(),
+                        graph.clone(),
+                        instance_id,
                         &mut rx,
                     )
                     .await

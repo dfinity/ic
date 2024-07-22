@@ -22,12 +22,12 @@ Success::
 end::catalog[] */
 
 use super::DKG_INTERVAL;
-use crate::orchestrator::utils::rw_message::cert_state_makes_progress_with_retries;
 use crate::tecdsa::{
     enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
     make_key_ids_for_all_schemes,
 };
 use canister_test::Canister;
+use ic_consensus_system_test_utils::rw_message::cert_state_makes_progress_with_retries;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
