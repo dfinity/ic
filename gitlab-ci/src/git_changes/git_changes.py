@@ -9,9 +9,6 @@ Example usage:
 
 Find changed files in the `rs` directory:
   python git_changes.py --changed-files-in-dirs rs
-
-Find the CI config changes in this branch:
-  python git_changes.py --ci_config_changes
 """
 import argparse
 import functools
