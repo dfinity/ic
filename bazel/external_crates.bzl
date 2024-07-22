@@ -19,7 +19,7 @@ def sanitize_external_crates(sanitizers_enabled):
     }
 
 IC_AGENT_CALL_V3_REV = "9e45b314fc7496d48065590fac90790e0bdc6eed"
-IC_AGENT_DISCOVERY_REV = "1c93d1c683b2207af9b62b4f517c036b563f3af0"
+IC_AGENT_DISCOVERY_REV = "05a7baa2514c9d1e6adcc35a45a9236228ad606e"
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
@@ -570,8 +570,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "pem",
                 ],
             ),
-            "ic-agent-discovery": crate.spec(
-                package = "ic-agent",
+            "ic-agent-with-discovery": crate.spec(
+                package = "ic-agent-with-discovery",
                 git = "https://github.com/dfinity/agent-rs",
                 rev = IC_AGENT_DISCOVERY_REV,
                 features = [

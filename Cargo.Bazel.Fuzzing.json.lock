@@ -1,5 +1,5 @@
 {
-  "checksum": "b88528cf58a8cc5e67e75820dc107032c23d1ec220acbdeef1b570eec530a894",
+  "checksum": "12c572ec2d0d27cc1208080e614691626f7517d2d7e8b27db6ab9eba3889e0be",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17477,9 +17477,8 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-agent 0.36.0",
-              "target": "ic_agent",
-              "alias": "ic_agent_discovery"
+              "id": "ic-agent-with-discovery 0.36.0",
+              "target": "ic_agent_with_discovery"
             },
             {
               "id": "ic-btc-interface 0.2.0",
@@ -27898,15 +27897,15 @@
       ],
       "license_file": null
     },
-    "ic-agent 0.36.0": {
-      "name": "ic-agent",
+    "ic-agent-with-discovery 0.36.0": {
+      "name": "ic-agent-with-discovery",
       "version": "0.36.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity/agent-rs",
           "commitish": {
-            "Rev": "1c93d1c683b2207af9b62b4f517c036b563f3af0"
+            "Rev": "05a7baa2514c9d1e6adcc35a45a9236228ad606e"
           },
           "strip_prefix": "ic-agent"
         }
@@ -27914,7 +27913,7 @@
       "targets": [
         {
           "Library": {
-            "crate_name": "ic_agent",
+            "crate_name": "ic_agent_with_discovery",
             "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": false,
@@ -27925,7 +27924,7 @@
           }
         }
       ],
-      "library_target_name": "ic_agent",
+      "library_target_name": "ic_agent_with_discovery",
       "common_attrs": {
         "compile_data_glob": [
           "**"
@@ -29725,7 +29724,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/agent-rs",
           "commitish": {
-            "Rev": "1c93d1c683b2207af9b62b4f517c036b563f3af0"
+            "Rev": "05a7baa2514c9d1e6adcc35a45a9236228ad606e"
           },
           "strip_prefix": "ic-transport-types"
         }
@@ -79436,7 +79435,7 @@
     "hyper-util 0.1.6",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.35.0",
-    "ic-agent 0.36.0",
+    "ic-agent-with-discovery 0.36.0",
     "ic-btc-interface 0.2.0",
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",

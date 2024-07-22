@@ -2995,8 +2995,8 @@ dependencies = [
  "hyper-socks2",
  "hyper-util",
  "hyperlocal-next",
- "ic-agent 0.35.0",
- "ic-agent 0.36.0",
+ "ic-agent",
+ "ic-agent-with-discovery",
  "ic-btc-interface",
  "ic-btc-test-utils",
  "ic-btc-validation",
@@ -4832,9 +4832,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-agent"
+name = "ic-agent-with-discovery"
 version = "0.36.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=1c93d1c683b2207af9b62b4f517c036b563f3af0#1c93d1c683b2207af9b62b4f517c036b563f3af0"
+source = "git+https://github.com/dfinity/agent-rs?rev=05a7baa2514c9d1e6adcc35a45a9236228ad606e#05a7baa2514c9d1e6adcc35a45a9236228ad606e"
 dependencies = [
  "arc-swap",
  "async-lock 3.3.0",
@@ -5200,7 +5200,7 @@ dependencies = [
 [[package]]
 name = "ic-transport-types"
 version = "0.36.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=1c93d1c683b2207af9b62b4f517c036b563f3af0#1c93d1c683b2207af9b62b4f517c036b563f3af0"
+source = "git+https://github.com/dfinity/agent-rs?rev=05a7baa2514c9d1e6adcc35a45a9236228ad606e#05a7baa2514c9d1e6adcc35a45a9236228ad606e"
 dependencies = [
  "candid",
  "hex",
@@ -5222,7 +5222,7 @@ dependencies = [
  "async-trait",
  "candid",
  "futures-util",
- "ic-agent 0.35.0",
+ "ic-agent",
  "once_cell",
  "semver",
  "serde",
