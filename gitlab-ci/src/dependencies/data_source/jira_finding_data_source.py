@@ -622,7 +622,7 @@ class JiraFindingDataSource(FindingDataSource):
             if len(fields_to_update) > 0:
                 if self.__does_exceed_character_limit(finding, fields_to_update):
                     # in this case we print the whole finding, so we have the updated finding at least in the log
-                    logging.warning(f"skipping update of the following finding because some fields exceed character limit: {finding} ")
+                    logging.warning(f"skipping update of the following finding because some fields exceed character limit: {finding.id()} ")
                 else:
                     logging.debug(f"updating finding fields {fields_to_update}")
                     jira_issue.update(fields_to_update)
@@ -637,7 +637,7 @@ class JiraFindingDataSource(FindingDataSource):
             fields_to_update = self.__finding_diff_to_jira(None, finding)
             if self.__does_exceed_character_limit(finding, fields_to_update):
                 # in this case we print the whole finding, so we have the new finding at least in the log
-                logging.warning(f"skipping creation of the following finding because some fields exceed character limit: {finding}")
+                logging.warning(f"skipping creation of the following finding because some fields exceed character limit: {finding.id()}")
             else:
                 logging.debug(f"creating finding fields {fields_to_update}")
                 jira_issue = self.jira.create_issue(fields_to_update)

@@ -2,23 +2,21 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
     ManagedCanisters, OrchestratorArg, OrchestratorInfo, UpdateCyclesManagement, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
+use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
 use ic_ledger_suite_orchestrator_test_utils::{
     assert_reply, default_init_arg, ledger_suite_orchestrator_wasm, new_state_machine,
     supported_erc20_tokens, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
-    GIT_COMMIT_HASH_UPGRADE, NNS_ROOT_PRINCIPAL,
+    GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use proptest::prelude::ProptestConfig;
 use proptest::proptest;
-use std::str::FromStr;
 use std::sync::Arc;
 
 const MAX_TICKS: usize = 10;
@@ -32,13 +30,14 @@ proptest! {
             .. ProptestConfig::default()
         })]
     #[test]
-    fn should_install_orchestrator_and_add_supported_erc20_tokens(init_arg in arb_init_arg()) {
+    fn should_install_orchestrator_and_add_supported_erc20_tokens(mut init_arg in arb_init_arg(), minter_id in arb_principal()) {
+        init_arg.minter_id = Some(minter_id);
         let more_controllers = init_arg.more_controller_ids.clone();
         let mut orchestrator = LedgerSuiteOrchestrator::new(Arc::new(new_state_machine()), init_arg).register_embedded_wasms();
         let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id.get().into();
         let controllers: Vec<_> = std::iter::once(orchestrator_principal).chain(more_controllers.into_iter()).collect();
 
-        for token in supported_erc20_tokens(Principal::anonymous()) {
+        for token in supported_erc20_tokens() {
             orchestrator = orchestrator
                 .add_erc20_token(token)
                 .expect_new_ledger_and_index_canisters()
@@ -56,27 +55,11 @@ fn should_spawn_ledger_with_correct_init_args() {
 
     // Adapted from ckETH ledger init args https://dashboard.internetcomputer.org/proposal/126309
     let realistic_usdc_ledger_init_arg = LedgerInitArg {
-        minting_account: LedgerAccount {
-            owner: Principal::from_str("sv3dd-oaaaa-aaaar-qacoa-cai").unwrap(),
-            subaccount: None,
-        },
-        fee_collector_account: Some(LedgerAccount {
-            owner: Principal::from_str("sv3dd-oaaaa-aaaar-qacoa-cai").unwrap(),
-            subaccount: Some([
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0xf, 0xe, 0xe,
-            ]),
-        }),
-        initial_balances: vec![],
         transfer_fee: 2_000_000_000_000_u64.into(),
-        decimals: Some(6),
+        decimals: 6,
         token_name: "USD Coin".to_string(),
         token_symbol: "USDC".to_string(),
         token_logo: CKETH_TOKEN_LOGO.to_string(),
-        max_memo_length: Some(80),
-        feature_flags: Some(LedgerFeatureFlags { icrc2: true }),
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     };
 
     let orchestrator = LedgerSuiteOrchestrator::default();
@@ -92,7 +75,7 @@ fn should_spawn_ledger_with_correct_init_args() {
         .assert_ledger_icrc1_symbol("USDC")
         .assert_ledger_icrc1_total_supply(0_u8)
         .assert_ledger_icrc1_minting_account(LedgerAccount {
-            owner: Principal::from_str("sv3dd-oaaaa-aaaar-qacoa-cai").unwrap(),
+            owner: MINTER_PRINCIPAL,
             subaccount: None,
         })
         .assert_ledger_icrc1_metadata(vec![
@@ -128,7 +111,7 @@ fn should_change_cycles_for_canister_creation() {
     let orchestrator = LedgerSuiteOrchestrator::default();
 
     let orchestrator = orchestrator
-        .add_erc20_token(usdc(Principal::anonymous()))
+        .add_erc20_token(usdc())
         .expect_new_ledger_and_index_canisters()
         .assert_ledger_has_cycles(200_000_000_000_000_u128)
         .assert_index_has_cycles(100_000_000_000_000_u128)
@@ -151,7 +134,7 @@ fn should_change_cycles_for_canister_creation() {
         .unwrap();
 
     orchestrator
-        .add_erc20_token(usdt(Principal::anonymous()))
+        .add_erc20_token(usdt())
         .expect_new_ledger_and_index_canisters()
         .assert_ledger_has_cycles(300_000_000_000_000_u128)
         .assert_index_has_cycles(50_000_000_000_000_u128);
@@ -166,7 +149,7 @@ fn should_spawn_archive_from_ledger_with_correct_controllers() {
     ];
 
     orchestrator
-        .add_erc20_token(usdc(Principal::anonymous()))
+        .add_erc20_token(usdc())
         .expect_new_ledger_and_index_canisters()
         .trigger_creation_of_archive()
         .assert_all_controlled_by(&expected_controllers);
@@ -177,7 +160,7 @@ fn should_discover_new_archive_and_top_up() {
     let orchestrator = LedgerSuiteOrchestrator::default().register_embedded_wasms();
 
     let managed_canisters = orchestrator
-        .add_erc20_token(usdc(Principal::anonymous()).clone())
+        .add_erc20_token(usdc())
         .expect_new_ledger_and_index_canisters()
         .assert_ledger_has_cycles(200_000_000_000_000_u128)
         .check_metrics()
@@ -206,13 +189,12 @@ fn should_discover_new_archive_and_top_up() {
 fn should_reject_adding_an_already_managed_erc20_token() {
     let orchestrator = LedgerSuiteOrchestrator::default().register_embedded_wasms();
     let orchestrator = orchestrator
-        .add_erc20_token(usdc(Principal::anonymous()))
+        .add_erc20_token(usdc())
         .expect_new_ledger_and_index_canisters()
         .setup;
 
-    let result = orchestrator.upgrade_ledger_suite_orchestrator_with_same_wasm(
-        &OrchestratorArg::AddErc20Arg(usdc(Principal::anonymous())),
-    );
+    let result = orchestrator
+        .upgrade_ledger_suite_orchestrator_with_same_wasm(&OrchestratorArg::AddErc20Arg(usdc()));
 
     assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("Erc20ContractAlreadyManaged"));
 }
@@ -225,7 +207,7 @@ fn should_top_up_spawned_canisters() {
     })
     .register_embedded_wasms();
     let orchestrator = orchestrator
-        .add_erc20_token(usdc(Principal::anonymous()))
+        .add_erc20_token(usdc())
         .expect_new_ledger_and_index_canisters()
         .setup;
 
@@ -353,8 +335,8 @@ fn should_retrieve_orchestrator_info() {
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
     let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
-    let usdc = usdc(Principal::anonymous());
-    let usdt = usdt(Principal::anonymous());
+    let usdc = usdc();
+    let usdt = usdt();
 
     let canisters = orchestrator
         .add_erc20_token(usdc.clone())
@@ -408,7 +390,7 @@ fn should_retrieve_orchestrator_info() {
                 cycles_top_up_increment: Nat::from(10000000000000_u64),
             },
             more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
-            minter_id: None,
+            minter_id: Some(MINTER_PRINCIPAL),
             ledger_suite_version: Some(LedgerSuiteVersion {
                 ledger_compressed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
                 index_compressed_wasm_hash: embedded_index_wasm_hash.to_string(),
@@ -467,7 +449,7 @@ fn should_require_to_register_embedded_wasms_before_adding_ckerc20() {
         None
     );
 
-    let usdc = usdc(Principal::anonymous());
+    let usdc = usdc();
     assert_matches!(orchestrator
     .upgrade_ledger_suite_orchestrator_with_same_wasm(&OrchestratorArg::AddErc20Arg(usdc.clone())),
      Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: ")
@@ -569,13 +551,13 @@ mod upgrade {
 
         orchestrator_v1
             .register_embedded_wasms()
-            .add_erc20_token(usdc(Principal::anonymous()))
+            .add_erc20_token(usdc())
             .expect_new_ledger_and_index_canisters()
             .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash_v1);
 
         orchestrator_v2
             .register_embedded_wasms()
-            .add_erc20_token(usdc(Principal::anonymous()))
+            .add_erc20_token(usdc())
             .expect_new_ledger_and_index_canisters()
             .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash_v2);
     }
@@ -593,11 +575,11 @@ mod upgrade {
 
         let orchestrator_v1 = orchestrator_v1
             .register_embedded_wasms()
-            .add_erc20_token(usdc(Principal::anonymous()))
+            .add_erc20_token(usdc())
             .expect_new_ledger_and_index_canisters()
             .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash_v1)
             .setup
-            .add_erc20_token(usdt(Principal::anonymous()))
+            .add_erc20_token(usdt())
             .expect_new_ledger_and_index_canisters()
             .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash_v1)
             .setup;
@@ -691,14 +673,14 @@ mod upgrade {
             };
 
         let orchestrator = orchestrator
-            .add_erc20_token(usdc(Principal::anonymous()))
+            .add_erc20_token(usdc())
             .expect_new_ledger_and_index_canisters()
             .trigger_creation_of_archive()
             .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash)
             .ledger_out_of_band_upgrade(NNS_ROOT_PRINCIPAL, tweak_ledger_wasm)
             .assert_ledger_has_wasm_hash(&tweak_ledger_wasm_hash)
             .setup
-            .add_erc20_token(usdt(Principal::anonymous()))
+            .add_erc20_token(usdt())
             .expect_new_ledger_and_index_canisters()
             .trigger_creation_of_archive()
             .assert_index_has_wasm_hash(&embedded_index_wasm_hash)
@@ -783,7 +765,7 @@ mod upgrade {
         };
 
         let mut orchestrator = orchestrator;
-        for add_erc20 in [usdc(Principal::anonymous()), usdt(Principal::anonymous())] {
+        for add_erc20 in [usdc(), usdt()] {
             orchestrator = orchestrator
                 .add_erc20_token(add_erc20)
                 .expect_new_ledger_and_index_canisters()
@@ -842,12 +824,12 @@ mod upgrade {
 
         let orchestrator_v1 = orchestrator_v1
             .register_embedded_wasms()
-            .add_erc20_token(usdc(Principal::anonymous()))
+            .add_erc20_token(usdc())
             .expect_new_ledger_and_index_canisters()
             .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash_v1);
         let mint_index = orchestrator_v1
             .call_ledger_icrc1_transfer(
-                Principal::anonymous(),
+                MINTER_PRINCIPAL,
                 &TransferArg {
                     from_subaccount: None,
                     to: Principal::management_canister().into(),
@@ -913,7 +895,7 @@ mod upgrade {
             assert_ne!(tweak_index_wasm_hash, embedded_index_wasm_hash);
 
             let orchestrator = orchestrator
-                .add_erc20_token(usdc(Principal::anonymous()))
+                .add_erc20_token(usdc())
                 .expect_new_ledger_and_index_canisters()
                 .trigger_creation_of_archive()
                 .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash)
@@ -983,7 +965,7 @@ mod upgrade {
         };
 
         let managed_canisters = orchestrator
-            .add_erc20_token(usdc(Principal::anonymous()))
+            .add_erc20_token(usdc())
             .expect_new_ledger_and_index_canisters()
             .assert_ledger_has_wasm_hash(embedded_ledger_wasm_hash.clone())
             .assert_index_has_wasm_hash(embedded_index_wasm_hash.clone())

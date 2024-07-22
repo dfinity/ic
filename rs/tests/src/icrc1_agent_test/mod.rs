@@ -18,6 +18,7 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
 };
 use on_wire::IntoWire;
+use std::env;
 
 use ic_system_test_driver::{
     driver::{
@@ -404,7 +405,7 @@ pub async fn install_icrc1_ledger<'a>(
 ) {
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path("rs/rosetta-api/icrc1/ledger/ledger_canister.wasm"),
+        env.get_dependency_path(&env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),
         Some(Encode!(&args).unwrap()),
     )
     .await
