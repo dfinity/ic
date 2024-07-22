@@ -19,7 +19,7 @@ env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_JOB_NAME: ${{ github.job }}
-  CI_JOB_ID: ${{ github.job }} # github does not expose this variable https://github.com/orgs/community/discussions/8945
+  CI_JOB_ID: ${{ github.job }}
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -50,6 +50,12 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+
+      - name: Set KUBECONFIG
+        shell: bash
+        run: |
+          echo "$TNET_KUBECONFIG" > /tmp/config
+          echo "KUBECONFIG=/tmp/config" >> $GITHUB_ENV
 
       - name: Run System Tests on K8s
         id: bazel-test-all
