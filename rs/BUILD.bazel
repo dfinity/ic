@@ -3,7 +3,3 @@ package_group(
     packages = ["//rs/tests/..."],
 )
 
-package_group(
-    name = "ic-os-pkg",
-    packages = ["//rs/ic_os/..."],
-)
