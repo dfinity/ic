@@ -1,8 +1,7 @@
-use candid::{decode_one, encode_args, CandidType, Decode};
+use candid::{decode_one, encode_args, CandidType};
 use ic_management_canister_types::{EmptyBlob, Payload};
 use ic_state_machine_tests::{StateMachine, WasmResult};
-use ic_types::Cycles;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 // https://github.com/dfinity/motoko/blob/master/test/perf/qr.mo
 const QR: &[u8] = include_bytes!("test-data/qr.wasm");
