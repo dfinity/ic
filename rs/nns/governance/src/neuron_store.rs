@@ -2,7 +2,10 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::{neuron_id_range_to_u64_range, types::Neuron},
+    neuron::{
+        neuron_id_range_to_u64_range,
+        types::{normalized, Neuron},
+    },
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
@@ -569,19 +572,22 @@ impl NeuronStore {
                 .ok()
                 .map(Cow::Owned)
         });
-        match (stable_neuron, heap_neuron) {
+        let (neuron, storage_location) = match (stable_neuron, heap_neuron) {
             (Some(stable), Some(_)) => {
                 println!(
                     "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
                         we are at risk of having stale copies",
                     LOG_PREFIX, neuron_id
                 );
-                Ok((stable, StorageLocation::Stable))
+                (stable, StorageLocation::Stable)
             }
-            (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
-            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
-            (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
-        }
+            (Some(stable), None) => (stable, StorageLocation::Stable),
+            (None, Some(heap)) => (heap, StorageLocation::Heap),
+            (None, None) => return Err(NeuronStoreError::not_found(neuron_id)),
+        };
+
+        let neuron = normalized(neuron);
+        Ok((neuron, storage_location))
     }
 
     // Loads the entire neuron from either heap or stable storage and returns its primary storage.
