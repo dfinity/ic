@@ -35,7 +35,7 @@ use ic_system_test_driver::{
 };
 use std::net::IpAddr;
 
-pub fn config(env: TestEnv) {
+fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
@@ -75,7 +75,7 @@ fn fetch_nodes_ips(topo_snapshot: TopologySnapshot) -> (IpAddr, IpAddr, IpAddr) 
     (nns_node_ip, app_node_ip, unassigned_node_ip)
 }
 
-pub fn root_cannot_authenticate(env: TestEnv) {
+fn root_cannot_authenticate(env: TestEnv) {
     let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
     let mean = AuthMean::Password("root".to_string());
@@ -84,7 +84,7 @@ pub fn root_cannot_authenticate(env: TestEnv) {
     assert_authentication_fails(&unassigned_node_ip, "root", &mean);
 }
 
-pub fn readonly_cannot_authenticate_without_a_key(env: TestEnv) {
+fn readonly_cannot_authenticate_without_a_key(env: TestEnv) {
     let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
     let mean = AuthMean::None;
@@ -93,7 +93,7 @@ pub fn readonly_cannot_authenticate_without_a_key(env: TestEnv) {
     assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
 }
 
-pub fn readonly_cannot_authenticate_with_random_key(env: TestEnv) {
+fn readonly_cannot_authenticate_with_random_key(env: TestEnv) {
     let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
     let (private_key, _public_key) = generate_key_strings();
@@ -103,7 +103,7 @@ pub fn readonly_cannot_authenticate_with_random_key(env: TestEnv) {
     assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
 }
 
-pub fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
+fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     let (nns_node, app_node, _unassigned_node, app_subnet) =
         topology_entities(env.topology_snapshot());
 
@@ -146,7 +146,7 @@ pub fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
-pub fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
+fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
@@ -173,7 +173,7 @@ pub fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     wait_until_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
-pub fn multiple_keys_can_access_one_account(env: TestEnv) {
+fn multiple_keys_can_access_one_account(env: TestEnv) {
     let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
@@ -219,7 +219,7 @@ pub fn multiple_keys_can_access_one_account(env: TestEnv) {
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
 
-pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
+fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
 
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
@@ -250,7 +250,7 @@ pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
 
-pub fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
+fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
@@ -288,7 +288,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
-pub fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
+fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
     let (nns_node, _, _, app_subnet) = topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
@@ -313,7 +313,7 @@ pub fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
     ));
 }
 
-pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
+fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
     let (nns_node, _, _, app_subnet) = topology_entities(env.topology_snapshot());
     let app_subnet_id = app_subnet.subnet_id;
 
@@ -352,7 +352,7 @@ pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) 
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(root_cannot_authenticate))
         .add_test(systest!(readonly_cannot_authenticate_without_a_key))
         .add_test(systest!(readonly_cannot_authenticate_with_random_key))

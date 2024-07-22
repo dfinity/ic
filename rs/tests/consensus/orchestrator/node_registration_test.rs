@@ -31,7 +31,7 @@ use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesP
 use slog::info;
 use std::str::FromStr;
 
-fn config(env: TestEnv) {
+fn setup(env: TestEnv) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -136,7 +136,7 @@ EOT
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
 
