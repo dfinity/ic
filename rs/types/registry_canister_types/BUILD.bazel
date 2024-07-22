@@ -10,10 +10,6 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
 ]
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 rust_library(
     name = "registry_canister_types",
     srcs = glob(["src/**"]),
