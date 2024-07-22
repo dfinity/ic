@@ -1,3 +1,10 @@
+# The system tests package group contains all code related to system testing.
+# Packages from this package group can depend on any other packages from the repository.
+# Packages outside from this package group cannot depend on any packages part of the group.
+# Expections:
+#   //rs/ic_os/launch-single-vm:__pkg__ can depend on rs/tests/driver:ic-system-test-driver
+#   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/httpbin-rs:httpbin
+#   //rs/pocket_ic_server:__pkg__ can depend on rs/tests:ic-hs
 package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],
