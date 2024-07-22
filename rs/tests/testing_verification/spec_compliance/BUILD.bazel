@@ -2,7 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
     "//rs:system-tests-pkg",
-    "//rs/pocket_ic_server:spec_test",
+    "//rs/pocket_ic_server:__pkg__",
 ])
 
 rust_library(
