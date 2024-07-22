@@ -1,6 +1,6 @@
 ---
 # Prompt for USB key press. ASCII art is hard to escape, so base64 it is
-- debug:
+- ansible.builtin.debug:
     msg:
       - "{{ '8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo'
         | b64decode }}"
@@ -15,7 +15,7 @@
   tags: [ic_guest]
 
 - name: Shutdown guest
-  shell: |
+  ansible.builtin.shell: |
     set -Exu
     virsh shutdown "{{ item }}"
     # virsh shutdown command is asynchronous, so the next command waits upto 70sec for the VM to shutdown
