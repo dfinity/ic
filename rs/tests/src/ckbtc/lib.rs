@@ -47,7 +47,7 @@ use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
-use std::{str::FromStr, time::Duration};
+use std::{env, str::FromStr, time::Duration};
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
@@ -313,7 +313,9 @@ pub(crate) async fn install_minter(
 
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path("rs/bitcoin/ckbtc/minter/ckbtc_minter_debug.wasm"),
+        env.get_dependency_path(
+            &env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
+        ),
         Some(Encode!(&minter_arg).unwrap()),
     )
     .await;
@@ -336,7 +338,9 @@ pub(crate) async fn install_kyt(
 
     install_rust_canister_from_path(
         kyt_canister,
-        env.get_dependency_path("rs/bitcoin/ckbtc/kyt/kyt_canister.wasm"),
+        env.get_dependency_path(
+            &env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
+        ),
         Some(Encode!(&kyt_init_args).unwrap()),
     )
     .await;

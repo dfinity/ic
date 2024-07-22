@@ -64,6 +64,7 @@ impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
+            visibility: item.visibility,
         }
     }
 }
@@ -81,6 +82,7 @@ impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
+            visibility: item.visibility,
         }
     }
 }
@@ -140,6 +142,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -171,6 +174,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -215,6 +219,26 @@ impl From<pb_api::neuron::DissolveState> for pb::neuron::DissolveState {
     }
 }
 
+impl From<pb::Visibility> for pb_api::Visibility {
+    fn from(item: pb::Visibility) -> Self {
+        match item {
+            pb::Visibility::Unspecified => pb_api::Visibility::Unspecified,
+            pb::Visibility::Private => pb_api::Visibility::Private,
+            pb::Visibility::Public => pb_api::Visibility::Public,
+        }
+    }
+}
+
+impl From<pb_api::Visibility> for pb::Visibility {
+    fn from(item: pb_api::Visibility) -> Self {
+        match item {
+            pb_api::Visibility::Unspecified => pb::Visibility::Unspecified,
+            pb_api::Visibility::Private => pb::Visibility::Private,
+            pb_api::Visibility::Public => pb::Visibility::Public,
+        }
+    }
+}
+
 impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
     fn from(item: pb::AbridgedNeuron) -> Self {
         Self {
@@ -233,6 +257,7 @@ impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -254,6 +279,7 @@ impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }

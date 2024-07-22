@@ -235,7 +235,7 @@ const LOOK_AHEAD: u64 = 10;
 pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 
 /// `IDkgImpl` is the consensus component responsible for processing threshold
-/// ECDSA payloads.
+/// IDKG payloads.
 pub struct IDkgImpl {
     /// The Pre-Signer subcomponent
     pub pre_signer: Box<IDkgPreSignerImpl>,
@@ -252,7 +252,7 @@ pub struct IDkgImpl {
 }
 
 impl IDkgImpl {
-    /// Builds a new threshold ECDSA component
+    /// Builds a new IDKG component
     pub fn new(
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -384,7 +384,7 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
                 &metrics.on_state_change_duration,
             );
             #[cfg(any(feature = "malicious_code", test))]
-            if self.malicious_flags.is_ecdsa_malicious() {
+            if self.malicious_flags.is_idkg_malicious() {
                 return super::idkg::malicious_pre_signer::maliciously_alter_changeset(
                     changeset,
                     &self.pre_signer,

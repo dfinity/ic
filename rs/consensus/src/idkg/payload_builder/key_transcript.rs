@@ -28,7 +28,7 @@ pub(super) fn get_created_key_transcript(
     }
 }
 
-/// Update configuration and data about the next ECDSA key transcript.
+/// Update configuration and data about the next master key transcript.
 /// Returns the newly created transcript, if any.
 ///
 /// Note that when creating next key transcript we must use the registry version
