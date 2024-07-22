@@ -140,7 +140,7 @@ impl fmt::Display for IPv4Config {
         write!(
             f,
             "IPv4Config: {:?}/{:?} with gateway {:?}",
-            self.ip_addr, self.prefix_length, self.prefix_length
+            self.ip_addr, self.prefix_length, self.gateway_ip_addr
         )
     }
 }
