@@ -12,7 +12,7 @@ use crate::{
         neuron::{DissolveState as NeuronDissolveState, Followees},
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
         Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Vote,
+        Visibility, Vote,
     },
 };
 #[cfg(target_arch = "wasm32")]
@@ -110,6 +110,9 @@ pub struct Neuron {
     /// The type of the Neuron. See \[NeuronType\] for a description
     /// of the different states.
     pub neuron_type: Option<i32>,
+    /// How much unprivileged principals (i.e. is neither controller, nor
+    /// hotkey) can see about this neuron.
+    pub visibility: Option<Visibility>,
 }
 
 impl Neuron {
@@ -644,6 +647,7 @@ impl Neuron {
 
     /// Get the 'public' information associated with this neuron.
     pub fn get_neuron_info(&self, now_seconds: u64) -> NeuronInfo {
+        // TODO(NNS1-3076): Enforce visibility.
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
@@ -656,6 +660,7 @@ impl Neuron {
             joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
             known_neuron_data: self.known_neuron_data.clone(),
             neuron_type: self.neuron_type,
+            visibility: self.visibility.map(|visibility| visibility as i32),
         }
     }
 
@@ -870,6 +875,7 @@ impl From<Neuron> for NeuronProto {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
+            visibility,
         } = neuron;
 
         let id = Some(id);
@@ -879,6 +885,7 @@ impl From<Neuron> for NeuronProto {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
+        let visibility = visibility.map(|visibility| visibility as i32);
 
         NeuronProto {
             id,
@@ -902,6 +909,7 @@ impl From<Neuron> for NeuronProto {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
+            visibility,
         }
     }
 }
@@ -932,6 +940,7 @@ impl TryFrom<NeuronProto> for Neuron {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
+            visibility,
         } = proto;
 
         let id = id.ok_or("Neuron ID is missing")?;
@@ -942,6 +951,15 @@ impl TryFrom<NeuronProto> for Neuron {
             dissolve_state,
             aging_since_timestamp_seconds,
         })?;
+        let visibility = match visibility {
+            None => None,
+            Some(visibility) => Some(Visibility::try_from(visibility).map_err(|err| {
+                format!(
+                    "Failed to interpret visibility of neuron {:?}: {:?}",
+                    id, err,
+                )
+            })?),
+        };
 
         Ok(Neuron {
             id,
@@ -964,6 +982,7 @@ impl TryFrom<NeuronProto> for Neuron {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
+            visibility,
         })
     }
 }
@@ -1055,6 +1074,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
+            visibility,
         } = source;
 
         let account = subaccount.to_vec();
@@ -1064,6 +1084,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
         let dissolve_state = dissolve_state.map(AbridgedNeuronDissolveState::from);
+        let visibility = visibility.map(|visibility| visibility as i32);
 
         let main = AbridgedNeuron {
             account,
@@ -1081,6 +1102,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             joined_community_fund_timestamp_seconds,
             neuron_type,
             dissolve_state,
+            visibility,
         };
 
         Ok(Self {
@@ -1129,6 +1151,7 @@ impl From<DecomposedNeuron> for Neuron {
             joined_community_fund_timestamp_seconds,
             neuron_type,
             dissolve_state,
+            visibility,
         } = main;
 
         let subaccount =
@@ -1139,6 +1162,7 @@ impl From<DecomposedNeuron> for Neuron {
             aging_since_timestamp_seconds,
         })
         .expect("Neuron dissolve state and age is invalid");
+        let visibility = visibility.and_then(|visibility| Visibility::try_from(visibility).ok());
 
         Neuron {
             id,
@@ -1161,6 +1185,7 @@ impl From<DecomposedNeuron> for Neuron {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
+            visibility,
         }
     }
 }
@@ -1394,6 +1419,7 @@ impl NeuronBuilder {
         let staked_maturity_e8s_equivalent = None;
         #[cfg(not(test))]
         let known_neuron_data = None;
+        let visibility = None; // Behave like before we added visibility.
 
         Neuron {
             id,
@@ -1416,6 +1442,7 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
+            visibility,
         }
     }
 }
@@ -1617,6 +1644,7 @@ mod tests {
             dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
                 u64::MAX,
             )),
+            visibility: None,
         };
 
         assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());

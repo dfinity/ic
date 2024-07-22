@@ -26,7 +26,7 @@ use ic_types::consensus::idkg::{
 use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifySigShareError,
     ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
     ThresholdSchnorrVerifySigShareError,
 };
@@ -41,7 +41,7 @@ use super::utils::{build_signature_inputs, get_context_request_id, update_purge_
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 enum CreateSigShareError {
-    Ecdsa(ThresholdEcdsaSignShareError),
+    Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
 }
 
@@ -389,7 +389,7 @@ impl ThresholdSignerImpl {
     ) -> Result<IDkgMessage, CreateSigShareError> {
         match sig_inputs {
             ThresholdSigInputs::Ecdsa(inputs) => {
-                ThresholdEcdsaSigner::sign_share(&*self.crypto, inputs).map_or_else(
+                ThresholdEcdsaSigner::create_sig_share(&*self.crypto, inputs).map_or_else(
                     |err| Err(CreateSigShareError::Ecdsa(err)),
                     |share| {
                         let sig_share = EcdsaSigShare {
@@ -2009,8 +2009,7 @@ mod tests {
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
                         receiver.load_tecdsa_sig_transcripts(&sig_inputs);
-                        let share = receiver
-                            .sign_share(&sig_inputs)
+                        let share = ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs)
                             .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
@@ -2147,8 +2146,7 @@ mod tests {
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
                         receiver.load_tschnorr_sig_transcripts(&sig_inputs);
-                        let share = receiver
-                            .create_sig_share(&sig_inputs)
+                        let share = ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
                             .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),
