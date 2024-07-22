@@ -5,7 +5,12 @@ load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    "//rs:rosetta-api-pkg",
+    "//rs:nns-pkg",
+    # TODO: break this dependency
+    "//rs/replay:__subpackages__",
+])
 
 exports_files([
     "ledger.did",

@@ -1,0 +1,14 @@
+package_group(
+    name = "rosetta-api-pkg",
+    packages = ["//rs/rosetta-api/..."],
+)
+
+package_group(
+    name = "nns-pkg",
+    packages = [
+        "//rs/nervous_system/...",
+        "//rs/nns/...",
+        "//rs/registry/canister/...",
+        "//rs/sns/...",
+    ],
+)
