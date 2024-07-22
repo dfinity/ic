@@ -2,42 +2,43 @@
 //! payloads relevant to canister threshold signatures.
 //!
 //! # Goal
-//! We want canisters to be able to hold tokens of other chains, i.e. BTC, ETH, SOL, and for them to create
-//! transactions for these networks, i.e. bitcoin, ethereum, solana. Since those networks use specific signature schemes such as ECDSA or Schnorr, a
-//! canister must be able to create signatures according to these schemes. Since a canister cannot
-//! hold the secret key itself, the secret key will be shared among the replicas
-//! of the subnet, and they must be able to collaboratively create threshold signatures
+//! We want canisters to be able to hold tokens of other chains, i.e. BTC, ETH, SOL,
+//! and for them to create transactions for these networks, i.e. bitcoin, ethereum,
+//! solana. Since those networks use specific signature schemes such as ECDSA or Schnorr,
+//! a canister must be able to create signatures according to these schemes. Since a
+//! canister cannot hold the secret key itself, the secret key will be shared among the
+//! replicas of the subnet, and they must be able to collaboratively create threshold
 //! signatures.
 //!
 //! # High level implementation design
-//! Each subnet will have a single threshold key for each scheme deployed to the subnet. Currently, only threshold ECDSA and threshold Schnorr are supported. 
-//! From this key, we will
-//! derive per-canister keys. A canister can via a system API request a
-//! signature, and this request is stored in the replicated state. Consensus
-//! will observe these requests and begin working on them by assembling required artifacts in blocks.
+//! Each subnet will have a single threshold key for each scheme deployed to the subnet.
+//! Currently, only threshold ECDSA and threshold Schnorr are supported. From this key,
+//! we will derive per-canister keys. A canister can via a system API request a signature,
+//! and this request is stored in the replicated state. Consensus will observe these
+//! requests and begin working on them by assembling required artifacts in blocks.
 //!
 //! ## Interactive Distributed Key Generation & Transcripts
 //! To create canister threshold signatures we need a `Transcript` that gives all
 //! replicas shares of a secret key. However, this is not sufficient: we
 //! need additional transcripts to share the ephemeral values used in a
-//! signature. 
-//! 
+//! signature.
+//!
 //! The creation of one ECDSA signature requires a transcript that
 //! shares the ECDSA signing key `x`, and additionally four IDKG transcripts,
 //! with a special structure: we need transcripts `t1`, `t2`, `t3`, `t4`, such
 //! that `t1` and `t2` share random values `r1` and `r2` respectively, `t3`
 //! shares the product `r1 * r2`, and `t4` shares `r2 * x`.
-//! 
+//!
 //! Similarly, the creation of one Schnorr signature requires a transcript that
 //! shares the Schnorr signing key `x`, and one additional IDKG transcript (blinder) `t`,
 //! such that `t` shares a random value `r`.
 //!
 //! Such transcripts are created via an interactive distributed key generation (IDKG)
-//! protocol. Especially for the ECDSA case, the DKG for these transcripts must be computationally efficient,
-//! because we need four transcripts per signature, and we want to be able to
-//! create many signatures. This means that we need interactive DKG for canister threshold signatures,
-//! instead of non-interactive DKG like we do for our threshold
-//! BLS signatures.
+//! protocol. Especially for the ECDSA case, the DKG for these transcripts must be
+//! computationally efficient, because we need four transcripts per signature, and we
+//! want to be able to create many signatures. This means that we need interactive DKG
+//! for canister threshold signatures, instead of non-interactive DKG like we do for
+//! our threshold BLS signatures.
 //!
 //! Consensus orchestrates the creation of these transcripts. Blocks contain
 //! configs (also called params) indicating which transcripts should be created.
@@ -91,9 +92,9 @@
 //! ## validate signature shares
 //! for every unvalidated signature share `s`, do the following: if `s.request_id`
 //! is an element of `certified_state.signature_requests`, and there is no signature
-//! share by `s.signer` for `s.request_id` in the validated pool yet, then load the dependencies and
-//! cryptographically validate the signature share. If valid, move `s` to
-//! validated, and if invalid, remove `s` from unvalidated.
+//! share by `s.signer` for `s.request_id` in the validated pool yet, then load the
+//! dependencies and cryptographically validate the signature share. If valid, move
+//! `s` to validated, and if invalid, remove `s` from unvalidated.
 //!
 //! ## aggregate signature shares
 //! Signature shares are aggregated into full signatures and included into a block
@@ -161,7 +162,7 @@
 //!     - when kappa_unmasked, lambda_masked, key_times_lambda,
 //!       kappa_times_lambda are set, the tuple should no longer be in "in
 //!       creation", but instead be moved to the complete 4-tuples.
-//! 
+//!
 //! //! The Schnorr "pre-signatures in creation" contain the following information
 //! - blinder_config: config for unmasked random transcript
 //! - optionally, blinder_unmasked: transcript resulting from blinder_config
@@ -176,7 +177,7 @@
 //!   "pre-signature being created"
 //!     - when blinder_unmasked is set, the pre-signature should no longer be in "in
 //!       creation", but instead be moved to the complete pre-signatures.
-//! 
+//!
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
