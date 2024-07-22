@@ -34,7 +34,7 @@ pub struct NodeRecord {
     /// The endpoint where this node receives xnet messages.
     #[prost(message, optional, tag = "5")]
     pub xnet: ::core::option::Option<ConnectionEndpoint>,
-    /// The endpoint where this node receives http requests.
+    /// The endpoint where this node receives https requests.
     #[prost(message, optional, tag = "6")]
     pub http: ::core::option::Option<ConnectionEndpoint>,
     /// The id of the node operator that added this node.
