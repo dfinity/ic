@@ -39,6 +39,7 @@ use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
+use std::env;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -113,7 +114,7 @@ pub fn test(env: TestEnv) {
             .0;
         mgr.install_code(
             &cid,
-            &env.load_wasm("rs/rust_canisters/proxy_canister/proxy_canister.wasm"),
+            &env.load_wasm(env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set")),
         )
         .call_and_wait()
         .await

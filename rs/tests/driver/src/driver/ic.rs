@@ -399,7 +399,7 @@ impl InternetComputer {
 }
 
 /// A builder for the initial configuration of a subnetwork.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Subnet {
     pub default_vm_resources: VmResources,
     pub vm_allocation: Option<VmAllocationStrategy>,
@@ -408,7 +408,9 @@ pub struct Subnet {
     pub max_ingress_bytes_per_message: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
+    #[serde(with = "humantime_serde")]
     pub unit_delay: Option<Duration>,
+    #[serde(with = "humantime_serde")]
     pub initial_notary_delay: Option<Duration>,
     pub dkg_interval_length: Option<Height>,
     pub dkg_dealings_per_block: Option<usize>,
@@ -719,7 +721,7 @@ impl VmResources {
 }
 
 /// A builder for the initial configuration of a node.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct Node {
     pub vm_resources: VmResources,
     pub vm_allocation: Option<VmAllocationStrategy>,

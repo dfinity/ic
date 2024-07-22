@@ -42,7 +42,7 @@ slog-term = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

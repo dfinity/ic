@@ -14,6 +14,7 @@ ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
 ic-error-types = { path = "../error_types" }
 ic-protobuf = { path = "../../protobuf" }
+ic-utils = { path = "../../utils" }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

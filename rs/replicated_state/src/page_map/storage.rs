@@ -1632,19 +1632,19 @@ fn write_overlay(
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum BaseFileSerialization {
     Base(CheckpointSerialization),
     Overlay(Vec<OverlayFileSerialization>),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct StorageSerialization {
     pub base: BaseFileSerialization,
     pub overlays: Vec<OverlayFileSerialization>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct OverlayFileSerialization {
     pub mapping: MappingSerialization,
 }

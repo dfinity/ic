@@ -2210,7 +2210,7 @@ fn set_controller_with_incorrect_controller() {
                 Time::from_nanos_since_unix_epoch(777),
                 canister_change_origin_from_principal(&wrong_controller),
                 CanisterSettingsBuilder::new()
-                    .with_controller(new_controller)
+                    .with_controllers(vec![new_controller])
                     .build(),
                 &mut canister,
                 &mut round_limits,
@@ -2252,7 +2252,7 @@ fn set_controller_with_correct_controller() {
                 Time::from_nanos_since_unix_epoch(777),
                 canister_change_origin_from_principal(&controller),
                 CanisterSettingsBuilder::new()
-                    .with_controller(new_controller)
+                    .with_controllers(vec![new_controller])
                     .build(),
                 &mut canister,
                 &mut round_limits,
