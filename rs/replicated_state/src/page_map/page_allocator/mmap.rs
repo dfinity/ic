@@ -563,6 +563,29 @@ impl MmapBasedPageAllocatorCore {
                 mmap_size, self.file_descriptor, mmap_file_offset, err,
             )
         }) as *mut u8;
+
+        // Do madvise THP performance optimization only on Linux.
+        #[cfg(target_os = "linux")]
+        {
+            // Since huge pages are 2MiB on x86_64, we only use huge pages for
+            // chunks that are at least 2MiB.
+            const MB: usize = 1024 * 1024;
+            if mmap_size >= 2 * MB {
+                unsafe {
+                    madvise(
+                        mmap_ptr as *mut c_void,
+                        mmap_size,
+                        MmapAdvise::MADV_HUGEPAGE,
+                    )
+                }.unwrap_or_else(|err| {
+                    println!(
+                    "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",
+                    mmap_size, mmap_ptr, self.file_descriptor, err
+                    )
+                });
+            }
+        }
+
         self.chunks.push(Chunk {
             ptr: mmap_ptr,
             size: mmap_size,
