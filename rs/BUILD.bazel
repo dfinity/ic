@@ -1,6 +1,10 @@
 package_group(
     name = "rosetta-api-pkg",
-    packages = ["//rs/rosetta-api/..."],
+    packages = [
+        "//rs/bitcoin/ckbtc/...",
+        "//rs/ethereum/...",
+        "//rs/rosetta-api/...",
+    ],
 )
 
 package_group(
@@ -10,5 +14,12 @@ package_group(
         "//rs/nns/...",
         "//rs/registry/canister/...",
         "//rs/sns/...",
+    ],
+)
+
+package_group(
+    name = "system-tests-pkg",
+    packages = [
+        "//rs/tests/...",
     ],
 )

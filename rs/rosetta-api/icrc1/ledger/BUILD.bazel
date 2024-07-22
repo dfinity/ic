@@ -6,6 +6,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = [
     "//rs:nns-pkg",
     "//rs:rosetta-api-pkg",
+    "//rs:system-tests-pkg",
 ])
 
 [

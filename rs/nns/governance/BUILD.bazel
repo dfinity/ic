@@ -5,7 +5,10 @@ load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
-package(default_visibility = ["//rs:nns-pkg"])
+package(default_visibility = [
+    "//rs:nns-pkg",
+    "//rs:rosetta-api-pkg",
+])
 
 exports_files(["canister/governance.did"])
 
