@@ -2928,7 +2928,7 @@ impl From<pb::update_canister_settings::Controllers>
 {
     fn from(item: pb::update_canister_settings::Controllers) -> Self {
         Self {
-            controllers: item.controllers.into_iter().map(|x| x.into()).collect(),
+            controllers: item.controllers,
         }
     }
 }
@@ -2938,7 +2938,7 @@ impl From<pb_api::update_canister_settings::Controllers>
 {
     fn from(item: pb_api::update_canister_settings::Controllers) -> Self {
         Self {
-            controllers: item.controllers.into_iter().map(|x| x.into()).collect(),
+            controllers: item.controllers,
         }
     }
 }
