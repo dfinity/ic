@@ -1,6 +1,6 @@
 ---
 - name: Download disk images
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     CDN_URL="https://download.dfinity.systems"
@@ -36,7 +36,7 @@
   tags: [ic_guest]
 
 - name: Unarchive file disk-img.tar.zst
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     # unarchive the disk

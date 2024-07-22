@@ -5,7 +5,7 @@
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes) | difference(aux_nodes) | difference(boundary_nodes) }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}"
@@ -26,7 +26,7 @@
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes) | difference(aux_nodes) | difference(boundary_nodes) }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     # Deploy replica images
@@ -48,7 +48,7 @@
 - name: Copy file media.img for boundary node VMs
   vars:
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
@@ -66,7 +66,7 @@
 - name: Copy file media.img for api node VMs
   vars:
     api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/api"
@@ -85,7 +85,7 @@
   vars:
     api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     # Deploy replica images
@@ -109,7 +109,7 @@
     api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     # Deploy replica images
@@ -132,7 +132,7 @@
   vars:
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
@@ -159,7 +159,7 @@
     ic_memory_kib: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
     mac_address: "{{ hostvars[item].mac_address }}"
     ipv6_interface: "{{ hostvars[item].ipv6_interface | default('vlan66') }}"
-  template:
+  ansible.builtin.template:
     src: ../ic_guest/templates/guest.xml
     dest: /var/local/ic/disk/{{ ic_deployment_name }}/{{ item }}.xml
     owner: root
@@ -179,7 +179,7 @@
     mac_address: "{{ hostvars[item].mac_address }}"
     ipv4_interface: "{{ hostvars[item].ipv4_interface | default('vlan66') }}"
     ipv6_interface: "{{ hostvars[item].ipv6_interface | default('vlan66') }}"
-  template:
+  ansible.builtin.template:
     src: ../ic_guest/templates/generic.xml
     dest: /var/local/ic/disk/{{ ic_deployment_name }}/{{ item }}.xml
     owner: root
@@ -191,7 +191,7 @@
   tags: [ic_guest]
 
 - name: Define (create) a guest
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
     virsh define "/var/local/ic/disk/{{ ic_deployment_name }}/{{ item }}.xml"
     virsh dominfo "{{ item }}"
@@ -203,19 +203,19 @@
   tags: [ic_guest]
 
 - name: Check if dfinity-hsm-agent service exist
-  command: service dfinity-hsm-agent status
+  ansible.builtin.command: service dfinity-hsm-agent status
   register: dfinity_hsm_agent_status
   failed_when: not(dfinity_hsm_agent_status.rc == 4 or dfinity_hsm_agent_status.rc == 3 or dfinity_hsm_agent_status.rc == 0)
 
 - name: Stop the dfinity-hsm-agent.service
-  systemd:
+  ansible.builtin.systemd:
     state: stopped
     name: dfinity-hsm-agent
   when: dfinity_hsm_agent_status.rc == 0
   tags: [ic_guest]
 
 - name: Ensure potentially conflicting kernel modules are not loaded
-  shell: |
+  ansible.builtin.shell: |
     if lsmod | grep -q vhost_vsock; then exit 0; fi  # the required kernel module is already loaded
     get_depends() { lsmod | awk -vmod="$1" '($1==mod){gsub(",", "\n", $4); print $4}' ; }
     recursive_get_depends() { while read line ; do echo $line; get_depends $line ; done | grep . ; }
@@ -228,12 +228,12 @@
   tags: [ic_guest]
 
 - name: Load the vhost_vsock kernel module
-  command: modprobe vhost_vsock
+  ansible.builtin.command: modprobe vhost_vsock
   ignore_errors: true
   tags: [ic_guest]
 
 - name: Start the dfinity-hsm-agent.service
-  systemd:
+  ansible.builtin.systemd:
     state: started
     name: dfinity-hsm-agent
   when: dfinity_hsm_agent_status.rc == 0
