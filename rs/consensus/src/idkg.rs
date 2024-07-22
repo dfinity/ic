@@ -19,9 +19,8 @@
 //!
 //! ## Interactive Distributed Key Generation & Transcripts
 //! To create canister threshold signatures we need a `Transcript` that gives all
-//! replicas shares of a secret key. However, this is not sufficient: we
-//! need additional transcripts to share the ephemeral values used in a
-//! signature.
+//! replicas shares of a secret key. However, this is not sufficient: we need additional
+//! transcripts to share the ephemeral values used in a signature.
 //!
 //! The creation of one ECDSA signature requires a transcript that
 //! shares the ECDSA signing key `x`, and additionally four IDKG transcripts,
