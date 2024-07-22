@@ -2,4 +2,3 @@ package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],
 )
-
