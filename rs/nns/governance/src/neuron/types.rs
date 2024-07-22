@@ -647,7 +647,7 @@ impl Neuron {
 
     /// Get the 'public' information associated with this neuron.
     pub fn get_neuron_info(&self, now_seconds: u64) -> NeuronInfo {
-        // TODO(DO NOT MERGE): Enforce visibility.
+        // TODO(NNS1-3076): Enforce visibility.
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
