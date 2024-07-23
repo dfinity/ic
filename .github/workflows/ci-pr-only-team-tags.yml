@@ -6,6 +6,9 @@ on:
       - ready_for_review
       - synchronize
 
+env:
+  PR_NUMBER: "${{ github.event.pull_request.number }}"
+
 jobs:
   manage-tags:
     if: ${{ github.event.pull_request.draft == false }}
@@ -25,9 +28,6 @@ jobs:
       - name: Determine files changed
         id: changed_files
         run: |
-          PR_NUMBER=$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')
-          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
-
           CHANGED_FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
           echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
         env:
