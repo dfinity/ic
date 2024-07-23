@@ -157,7 +157,6 @@ version_file_path(
     name = "version_file_path",
     visibility = [
         "//rs/tests:__subpackages__",
-        "//scalability:__pkg__",
     ],
 )
 
