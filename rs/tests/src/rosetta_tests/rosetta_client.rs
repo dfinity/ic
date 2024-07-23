@@ -1,8 +1,8 @@
-use crate::driver::resource::AllocatedVm;
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockIndex;
 use ic_nns_governance::pb::v1::Proposal;
 use ic_rosetta_api::convert::to_model_account_identifier;
+use ic_system_test_driver::driver::resource::AllocatedVm;
 
 use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::Operation;

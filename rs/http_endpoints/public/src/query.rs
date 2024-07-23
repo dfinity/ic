@@ -1,7 +1,7 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor},
+    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
     ReplicaHealthStatus,
 };
 
@@ -154,7 +154,7 @@ pub(crate) async fn query(
         delegation_from_nns,
         query_execution_service,
     }): State<QueryService>,
-    Cbor(request): Cbor<HttpRequestEnvelope<HttpQueryContent>>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;

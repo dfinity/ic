@@ -243,9 +243,9 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{batch::BatchPayload, consensus::dkg::DealingContent};
     use ic_types::{
-        consensus::{dkg, idkg, DataPayload, Payload},
+        batch::BatchPayload,
+        consensus::{dkg, dkg::DealingContent, idkg, DataPayload, Payload},
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         RegistryVersion,
     };
@@ -413,7 +413,7 @@ mod tests {
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: dkg::Dealings::new(Height::from(0), messages.clone()),
-                    ecdsa: idkg::Payload::default(),
+                    idkg: idkg::Payload::default(),
                 }),
             );
             let mut parent = Block::from(pool.make_next_block());

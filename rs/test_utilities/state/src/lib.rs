@@ -1,6 +1,9 @@
 use ic_base_types::NumSeconds;
-use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
-use ic_management_canister_types::{CanisterStatusType, LogVisibility};
+use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
+use ic_management_canister_types::{
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibility, MasterPublicKeyId, SchnorrAlgorithm,
+    SchnorrKeyId,
+};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -46,6 +49,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Arc,
 };
+use strum::IntoEnumIterator;
 
 mod history;
 pub use history::MockIngressHistory;
@@ -824,33 +828,51 @@ pub fn insert_dummy_canister(
 
 prop_compose! {
     /// Produces a strategy that generates an arbitrary `signals_end` and between
-    /// `[min_signal_count, max_signal_count]` reject signals .
-    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize)(
-        sig_start in 0..10000u64,
-        sigs in prop::collection::btree_set(arbitrary::stream_index(100 + max_signal_count as u64), min_signal_count..=max_signal_count),
-        sig_end_delta in 0..10u64,
+    /// `[min_signal_count, max_signal_count]` reject signals.
+    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize, reject_reasons: Vec<RejectReason>)(
+        sig_start in 0..10000_u64,
+        reject_signals_map in prop::collection::btree_map(
+            0..(100 + max_signal_count),
+            proptest::sample::select(reject_reasons),
+            min_signal_count..=max_signal_count,
+        ),
+        signals_end_delta in 0..10u64,
     ) -> (StreamIndex, VecDeque<RejectSignal>) {
-        let mut reject_signals = VecDeque::with_capacity(sigs.len());
-        let sig_start = sig_start.into();
-        for s in sigs {
-            reject_signals.push_back(RejectSignal::new(RejectReason::CanisterMigrating, s + sig_start));
-        }
-        let sig_end = sig_start + reject_signals.back().map(|s| s.index).unwrap_or(0.into()).increment() + sig_end_delta.into();
-        (sig_end, reject_signals)
+        let reject_signals = reject_signals_map
+            .iter()
+            .map(|(index, reason)| RejectSignal::new(*reason, (*index as u64 + sig_start).into()))
+            .collect::<VecDeque<RejectSignal>>();
+        let signals_end = reject_signals
+            .back()
+            .map(|signal| signal.index)
+            .unwrap_or(0.into())
+            .increment() + signals_end_delta.into();
+        (signals_end, reject_signals)
     }
 }
 
 prop_compose! {
     /// Produces a strategy that generates a stream with between
     /// `[min_size, max_size]` messages; and between
-    /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_stream_with_config(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
+    /// `[min_signal_count, max_signal_count]` reject signals using `with_reject_reasons` to
+    /// determine the type of reject signal.
+    pub fn arb_stream_with_config(
+        min_size: usize,
+        max_size: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
+    )(
         msg_start in 0..10000u64,
         msgs in prop::collection::vec(
             arbitrary::request_or_response_with_config(true, true),
             min_size..=max_size
         ),
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
+        (signals_end, reject_signals) in arb_reject_signals(
+            min_signal_count,
+            max_signal_count,
+            with_reject_reasons,
+        ),
         responses_only_flag in any::<bool>(),
     ) -> Stream {
         let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(msg_start));
@@ -871,7 +893,15 @@ prop_compose! {
     /// `[min_size, max_size]` messages and between
     /// `[min_signal_count, max_signal_count]` reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count)
+        stream in arb_stream_with_config(
+            min_size,
+            max_size,
+            min_signal_count,
+            max_signal_count,
+            // TODO: MR-590 Include all `RejectReason` variants once
+            // the canonical representation supports them.
+            vec![RejectReason::CanisterMigrating],
+        )
     ) -> Stream {
         stream
     }
@@ -897,10 +927,15 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn arb_stream_header(min_signal_count: usize, max_signal_count: usize, with_responses_only_flag: Vec<bool>)(
+    pub fn arb_stream_header(
+        min_signal_count: usize,
+        max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
+        with_responses_only_flag: Vec<bool>,
+    )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
+        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
         responses_only in proptest::sample::select(with_responses_only_flag),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);
@@ -962,8 +997,36 @@ pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`SubnetMetrics`] (with only the fields relevant to
-    /// its canonical representation filled).
+    fn arb_ecdsa_key_id()(
+        curve in prop::sample::select(EcdsaCurve::iter().collect::<Vec<_>>())
+    ) -> EcdsaKeyId {
+        EcdsaKeyId {
+            curve,
+            name: String::from("ecdsa_key_id"),
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_schnorr_key_id()(
+        algorithm in prop::sample::select(SchnorrAlgorithm::iter().collect::<Vec<_>>())
+    ) -> SchnorrKeyId {
+        SchnorrKeyId {
+            algorithm,
+            name: String::from("schnorr_key_id"),
+        }
+    }
+}
+
+fn arb_master_public_key_id() -> impl Strategy<Value = MasterPublicKeyId> {
+    prop_oneof![
+        arb_ecdsa_key_id().prop_map(MasterPublicKeyId::Ecdsa),
+        arb_schnorr_key_id().prop_map(MasterPublicKeyId::Schnorr),
+    ]
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`SubnetMetrics`].
     pub fn arb_subnet_metrics()(
         consumed_cycles_by_deleted_canisters in arb_nominal_cycles(),
         consumed_cycles_http_outcalls in arb_nominal_cycles(),
@@ -972,6 +1035,8 @@ prop_compose! {
         canister_state_bytes in arb_num_bytes(),
         update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
+        threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
+        ecdsa_signature_agreements in any::<u64>(),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
@@ -981,6 +1046,8 @@ prop_compose! {
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
+        metrics.threshold_signature_agreements = threshold_signature_agreements;
+        metrics.ecdsa_signature_agreements = ecdsa_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(

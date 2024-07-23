@@ -9,6 +9,7 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
     "//rs/constants",
@@ -54,16 +55,18 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_macro",
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/ed25519",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/test_utils",
     "//rs/types/base_types",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:proptest",
@@ -91,6 +94,16 @@ rust_binary(
     name = "ic-rosetta-api",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = ROSETTA_VERSION,
+    deps = DEPENDENCIES + [":rosetta-api"],
+)
+
+rust_binary(
+    name = "ic-rosetta-api-rosetta-blocks",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["rosetta-blocks"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = ROSETTA_VERSION,
     deps = DEPENDENCIES + [":rosetta-api"],

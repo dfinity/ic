@@ -351,17 +351,17 @@ impl CanisterState {
 
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
-    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), StateError> {
+    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), String> {
         let memory_used = self.memory_usage();
         let memory_limit = self.memory_limit(default_limit);
 
         if memory_used > memory_limit {
-            return Err(StateError::InvariantBroken(format!(
-                "Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+            return Err(format!(
+                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
                 self.canister_id(),
                 memory_used,
                 memory_limit
-            )));
+            ));
         }
 
         self.system_state.check_invariants()

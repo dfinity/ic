@@ -39,20 +39,25 @@ fn nid(id: u64) -> NeuronId {
 #[test]
 fn test() {
     let controller = PrincipalId::default();
+    // TODO(NNS1-3199): Populate this field if it is relevant for this test
+    let hotkeys = Vec::new();
     let small_neuron = NeuronsFundNeuron {
         id: nid(111),
         maturity_equivalent_icp_e8s: 590,
         controller,
+        hotkeys: hotkeys.clone(),
     };
     let medium_neuron = NeuronsFundNeuron {
         id: nid(222),
         maturity_equivalent_icp_e8s: 5_000,
         controller,
+        hotkeys: hotkeys.clone(),
     };
     let big_neuron = NeuronsFundNeuron {
         id: nid(333),
         maturity_equivalent_icp_e8s: 500_000,
         controller,
+        hotkeys: hotkeys.clone(),
     };
     let swap_participation_limits = SwapParticipationLimits {
         min_participant_icp_e8s: 50,
@@ -148,6 +153,7 @@ fn test() {
                 amount_icp_e8s: 59,
                 maturity_equivalent_icp_e8s: small_neuron.maturity_equivalent_icp_e8s,
                 controller,
+                hotkeys: hotkeys.clone(),
                 is_capped: false,
             },
             NeuronsFundNeuronPortion {
@@ -155,6 +161,7 @@ fn test() {
                 amount_icp_e8s: 500,
                 maturity_equivalent_icp_e8s: medium_neuron.maturity_equivalent_icp_e8s,
                 controller,
+                hotkeys: hotkeys.clone(),
                 is_capped: false,
             },
             NeuronsFundNeuronPortion {
@@ -162,6 +169,7 @@ fn test() {
                 amount_icp_e8s: 39_506,
                 maturity_equivalent_icp_e8s: big_neuron.maturity_equivalent_icp_e8s,
                 controller,
+                hotkeys,
                 is_capped: false,
             },
         ]))

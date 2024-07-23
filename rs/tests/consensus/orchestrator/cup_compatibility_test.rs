@@ -22,10 +22,9 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_recovery::file_sync_helper::download_binary;
-use ic_tests::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
-use ic_tests::retry_with_msg_async;
-use ic_tests::systest;
-use ic_tests::util::block_on;
+use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
 use slog::{error, info, Logger};
 use std::fs;
@@ -105,7 +104,7 @@ and the custom `ExhaustiveSet` implementation is removed at the same time.
 /// 2. There is a way to automatically update the version of this dependency,
 ///    Ideally such that it is in sync with testnet/mainnet_revisions.json
 fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> PathBuf {
-    block_on(retry_with_msg_async!(
+    block_on(ic_system_test_driver::retry_with_msg_async!(
         "download mainnet binary",
         log,
         READY_WAIT_TIMEOUT,

@@ -2,7 +2,7 @@ load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@python_deps//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
-load("//rs/tests:common.bzl", "symlink_dir")
+load("//bazel:defs.bzl", "symlink_dir")
 
 IC_OS_ENV = "//ic-os/guestos/envs/dev"
 
@@ -33,6 +33,7 @@ py_library(
     name = "workload",
     srcs = ["common/workload.py"],
     deps = [
+        # Keep sorted.
         ":misc",
         ":ssh",
     ],
@@ -48,6 +49,7 @@ py_test(
     name = "test_report",
     srcs = ["common/tests/test_report.py"],
     deps = [
+        # Keep sorted.
         ":report",
         ":workload",
     ],
@@ -83,6 +85,7 @@ py_library(
     name = "flamegraphs",
     srcs = ["common/flamegraphs.py"],
     deps = [
+        # Keep sorted.
         ":metrics",
         ":ssh",
     ],
@@ -103,6 +106,7 @@ py_library(
     name = "base_experiment",
     srcs = ["common/base_experiment.py"],
     deps = [
+        # Keep sorted.
         ":ansible",
         ":flamegraphs",
         ":ictools",
@@ -120,6 +124,7 @@ py_test(
     srcs = ["common/tests/test_workload_description.py"],
     data = ["workloads/mixed-query-update.toml"],
     deps = [
+        # Keep sorted.
         ":base_experiment",
         ":workload",
         requirement("python-gflags"),
@@ -131,6 +136,7 @@ py_library(
     name = "farm",
     srcs = ["common/farm.py"],
     deps = [
+        # Keep sorted.
         ":ssh",
         requirement("paramiko"),
         requirement("requests"),
@@ -148,12 +154,13 @@ py_library(
     name = "icpy_stress_experiment",
     srcs = ["common/icpy_stress_experiment.py"],
     deps = [
+        # Keep sorted.
         ":base_experiment",
         ":delegation",
         ":misc",
         requirement("ic-py"),
-        requirement("python-gflags"),
         requirement("matplotlib"),
+        requirement("python-gflags"),
         requirement("termcolor"),
     ],
 )
@@ -221,6 +228,7 @@ py_binary(
         "ii/*",
     ]),
     deps = [
+        # Keep sorted.
         ":base_experiment",
         ":farm",
         ":icpy_stress_experiment",
@@ -236,9 +244,9 @@ py_binary(
         ":workload",
         ":workload_experiment",
         ":workload_xrc_hooks",
+        requirement("ic-py"),
         requirement("python-gflags"),
         requirement("six"),
-        requirement("ic-py"),
         requirement("toml"),
     ],
 )
@@ -279,6 +287,7 @@ py_library(
     name = "workload_experiment",
     srcs = ["common/workload_experiment.py"],
     deps = [
+        # Keep sorted.
         ":ansible",
         ":base_experiment",
         ":prometheus",
@@ -298,6 +307,7 @@ py_library(
     name = "workload_xrc_hooks",
     srcs = ["workloads/hooks/xrc_hooks.py"],
     deps = [
+        # Keep sorted.
         ":misc",
         ":workload_hooks",
         requirement("ic-py"),
@@ -310,6 +320,7 @@ py_library(
     name = "run_mixed_workload_experiment",
     srcs = ["experiments/run_mixed_workload_experiment.py"],
     deps = [
+        # Keep sorted.
         ":misc",
         ":report",
         ":workload",
@@ -324,6 +335,7 @@ py_library(
     name = "run_xnet_experiment",
     srcs = ["experiments/run_xnet_experiment.py"],
     deps = [
+        # Keep sorted.
         ":base_experiment",
         ":misc",
         ":prometheus",
@@ -338,6 +350,7 @@ py_library(
     name = "run_delegation_experiment",
     srcs = ["experiments/run_delegation_experiment.py"],
     deps = [
+        # Keep sorted.
         ":delegation",
         ":icpy_stress_experiment",
         ":misc",
@@ -349,6 +362,7 @@ py_library(
     name = "run_system_baseline_experiment",
     srcs = ["experiments/run_system_baseline_experiment.py"],
     deps = [
+        # Keep sorted.
         ":misc",
         ":workload_experiment",
         requirement("python-gflags"),
@@ -360,6 +374,7 @@ py_library(
     name = "run_large_payload_experiment",
     srcs = ["experiments/run_large_payload_experiment.py"],
     deps = [
+        # Keep sorted.
         ":misc",
         ":workload_experiment",
         requirement("python-gflags"),
@@ -370,6 +385,7 @@ py_library(
     name = "max_capacity_large_payload",
     srcs = ["experiments/max_capacity_large_payload.py"],
     deps = [
+        # Keep sorted.
         ":misc",
         ":run_system_baseline_experiment",
         ":workload_experiment",
@@ -380,6 +396,7 @@ py_library(
     name = "run_large_memory_experiment",
     srcs = ["experiments/run_large_memory_experiment.py"],
     deps = [
+        # Keep sorted.
         ":misc",
         ":workload_experiment",
         requirement("python-gflags"),
@@ -394,6 +411,7 @@ py_test(
         ":artifacts",
     ],
     deps = [
+        # Keep sorted.
         ":base_experiment",
         ":misc",
         ":run_mixed_workload_experiment",
@@ -408,6 +426,7 @@ py_test(
     srcs = ["common/tests/mock.py"],
     data = [":artifacts"],
     deps = [
+        # Keep sorted.
         ":base_experiment",
         ":misc",
         ":report",

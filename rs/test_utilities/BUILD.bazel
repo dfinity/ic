@@ -9,7 +9,8 @@ rust_library(
     crate_name = "ic_test_utilities",
     version = "0.9.0",
     deps = [
-        "//rs/bitcoin/types/internal",
+        # Keep sorted.
+        "//rs/bitcoin/replica_types",
         "//rs/config",
         "//rs/crypto/interfaces/sig_verification",
         "//rs/crypto/internal/crypto_lib/types",
@@ -32,8 +33,6 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/test_utilities/logger",
-        "//rs/test_utilities/registry",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
@@ -58,7 +57,10 @@ rust_test(
     name = "test_utilities_test",
     crate = ":test_utilities",
     deps = [
+        # Keep sorted.
         "//rs/artifact_pool",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
         "@crate_index//:rusty-fork",
         "@crate_index//:wasmprinter",
     ],
@@ -70,6 +72,7 @@ rust_doc_test(
     name = "test_utilities_doc_test",
     crate = ":test_utilities",
     deps = [
+        # Keep sorted.
         "//rs/artifact_pool",
         "@crate_index//:rusty-fork",
     ],

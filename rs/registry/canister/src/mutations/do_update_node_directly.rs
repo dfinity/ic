@@ -1,6 +1,6 @@
 use std::time::{Duration, SystemTime};
 
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use prost::Message;
 
@@ -149,7 +149,7 @@ impl Registry {
         // 6. Create mutation for new record
         let insert_idkg_key = update(
             idkg_pk_key.as_bytes(),
-            encode_or_panic(valid_idkg_dealing_encryption_pk.get()),
+            valid_idkg_dealing_encryption_pk.get().encode_to_vec(),
         );
 
         let mutations = vec![insert_idkg_key];
@@ -464,7 +464,7 @@ mod test {
                     );
                     update(
                         make_crypto_node_key(*id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-                        encode_or_panic(&idkg_public_key),
+                        idkg_public_key.encode_to_vec(),
                     )
                 })
                 .collect(),

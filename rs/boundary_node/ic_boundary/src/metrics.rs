@@ -672,7 +672,7 @@ pub async fn metrics_middleware(
     let subnet_id = subnet_id.or(response
         .extensions()
         .get::<Arc<RouteSubnet>>()
-        .map(|x| x.id.clone()));
+        .map(|x| x.id.to_string()));
 
     // Extract extensions
     let ctx = response

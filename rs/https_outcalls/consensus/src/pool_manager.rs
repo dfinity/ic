@@ -57,13 +57,18 @@ impl CanisterHttpPoolManagerImpl {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
         crypto: Arc<dyn ConsensusCrypto>,
-        membership: Arc<Membership>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
+        let membership = Arc::new(Membership::new(
+            consensus_pool_cache.clone(),
+            registry_client.clone(),
+            replica_config.subnet_id,
+        ));
+
         Self {
             state_reader,
             http_adapter_shim,
@@ -452,7 +457,6 @@ pub mod test {
                     crypto,
                     state_manager,
                     registry,
-                    membership,
                     ..
                 } = dependencies(pool_config.clone(), 5);
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
@@ -515,7 +519,6 @@ pub mod test {
                     state_manager as Arc<_>,
                     shim,
                     crypto,
-                    membership,
                     pool.get_cache(),
                     replica_config,
                     Arc::clone(&registry) as Arc<_>,
@@ -542,7 +545,6 @@ pub mod test {
                     crypto,
                     state_manager,
                     registry,
-                    membership,
                     ..
                 } = dependencies(pool_config.clone(), 4);
 
@@ -580,7 +582,6 @@ pub mod test {
                     state_manager,
                     shim,
                     crypto,
-                    membership,
                     pool.get_cache(),
                     replica_config,
                     Arc::clone(&registry) as Arc<_>,
@@ -603,7 +604,6 @@ pub mod test {
                     crypto,
                     state_manager,
                     registry,
-                    membership,
                     ..
                 } = dependencies(pool_config.clone(), 4);
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
@@ -653,7 +653,6 @@ pub mod test {
                     state_manager,
                     shim,
                     crypto.clone(),
-                    membership,
                     pool.get_cache(),
                     replica_config.clone(),
                     Arc::clone(&registry) as Arc<_>,

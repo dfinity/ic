@@ -1,16 +1,16 @@
 use std::io::Read;
 
 use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::init::TEST_NEURON_1_ID;
-use ic_tests::driver::nested::NestedVm;
-use ic_tests::driver::test_env_api::*;
-use ic_tests::nns::{
-    get_governance_canister, submit_update_elected_hostos_versions_proposal,
-    submit_update_nodes_hostos_version_proposal, vote_execute_proposal_assert_executed,
+use ic_system_test_driver::{
+    driver::{nested::NestedVm, test_env_api::*},
+    nns::{
+        get_governance_canister, submit_update_elected_hostos_versions_proposal,
+        submit_update_nodes_hostos_version_proposal, vote_execute_proposal_assert_executed,
+    },
+    util::runtime_from_url,
 };
-use ic_tests::util::runtime_from_url;
 use ic_types::{hostos_version::HostosVersion, NodeId};
 
 /// Use an SSH channel to check the version on the running HostOS.

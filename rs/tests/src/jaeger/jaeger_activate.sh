@@ -8,4 +8,4 @@ docker run -d --name jaeger \
     -e BADGER_DIRECTORY_KEY=/badger/key \
     -p 4317:4317 \
     -p 16686:16686 \
-    jaegertracing/all-in-one
+    jaegertracing/all-in-one:1.58

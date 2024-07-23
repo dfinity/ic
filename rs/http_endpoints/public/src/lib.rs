@@ -9,6 +9,7 @@ mod catch_up_package;
 mod common;
 mod dashboard;
 mod health_status_refresher;
+pub mod metrics;
 mod pprof;
 mod query;
 mod read_state;
@@ -19,22 +20,24 @@ mod tracing_flamegraph;
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod call;
-        pub mod metrics;
     } else {
-        mod metrics;
         mod call;
     }
 }
 
-pub use call::{CallServiceV2, IngressValidatorBuilder};
+pub use call::{
+    CallServiceV2, CallServiceV3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
+};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 
 use crate::{
-    call::ingress_watcher::IngressWatcher,
     catch_up_package::CatchUpPackageService,
-    common::{get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response},
+    common::{
+        get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
+        MAX_REQUEST_RECEIVE_TIMEOUT,
+    },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
@@ -88,12 +91,11 @@ use ic_replicated_state::ReplicatedState;
 use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
         HttpReadStateResponse, HttpRequestEnvelope, MessageId, QueryResponseHash,
-        ReplicaHealthStatus,
+        ReplicaHealthStatus, SignedIngress,
     },
     time::expiry_time_from_now,
     Height, NodeId, SubnetId,
@@ -282,7 +284,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -498,7 +500,7 @@ pub fn start_server(
                         .connection_duration
                         .with_label_values(&[LABEL_SECURE])
                         .start_timer();
-                    let mut config = match tls_config
+                    let mut server_config = match tls_config
                         .server_config_without_client_auth(registry_client.get_latest_version())
                     {
                         Ok(c) => c,
@@ -507,8 +509,8 @@ pub fn start_server(
                             return;
                         }
                     };
-                    config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
-                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+                    server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
 
                     match tls_acceptor.accept(stream).await {
                         Ok(stream) => {
@@ -516,7 +518,9 @@ pub fn start_server(
                                 .connection_setup_duration
                                 .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
                                 .observe(timer.elapsed().as_secs_f64());
-                            if let Err(err) = serve_http(stream, router).await {
+                            if let Err(err) =
+                                serve_http(stream, router, config.http_max_concurrent_streams).await
+                            {
                                 warn!(log, "failed to serve connection: {err}");
                             }
                         }
@@ -536,7 +540,9 @@ pub fn start_server(
                         .connection_setup_duration
                         .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
                         .observe(timer.elapsed().as_secs_f64());
-                    if let Err(err) = serve_http(stream, router).await {
+                    if let Err(err) =
+                        serve_http(stream, router, config.http_max_concurrent_streams).await
+                    {
                         warn!(log, "failed to serve connection: {err}");
                     }
                 };
@@ -548,11 +554,14 @@ pub fn start_server(
 async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
     stream: S,
     router: Router,
+    max_concurrent_streams: u32,
 ) -> Result<(), BoxError> {
     let stream = TokioIo::new(stream);
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
     hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+        .http2()
+        .max_concurrent_streams(max_concurrent_streams)
         .serve_connection_with_upgrades(stream, hyper_service)
         .await
 }
@@ -947,7 +956,7 @@ async fn try_fetch_delegation_from_nns(
     let raw_response_res = request_sender.send_request(nns_request).await?;
 
     let raw_response = match timeout(
-        Duration::from_secs(config.max_request_receive_seconds),
+        MAX_REQUEST_RECEIVE_TIMEOUT,
         http_body_util::Limited::new(
             raw_response_res.into_body(),
             config.max_delegation_certificate_size_bytes as usize,
@@ -968,7 +977,8 @@ async fn try_fetch_delegation_from_nns(
         Err(e) => {
             return Err(format!(
                 "Timeout of {}s reached while receiving http body: {}",
-                config.max_request_receive_seconds, e
+                MAX_REQUEST_RECEIVE_TIMEOUT.as_secs(),
+                e
             )
             .into())
         }

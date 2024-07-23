@@ -3,13 +3,13 @@ use ic_crypto::get_master_public_key_from_transcript;
 use ic_crypto_internal_threshold_sig_ecdsa_test_utils::{
     verify_bip340_signature_using_third_party, verify_ed25519_signature_using_third_party,
 };
-use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     generate_key_transcript, random_crypto_component_not_in_receivers, run_tschnorr_protocol,
     schnorr::environment_with_sig_inputs, schnorr_sig_share_from_each_receiver, CorruptBytes,
     IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_interfaces::crypto::ThresholdSchnorrSigVerifier;
 use ic_types::crypto::canister_threshold_sig::{
     error::ThresholdSchnorrVerifyCombinedSigError, idkg::IDkgTranscript, ThresholdSchnorrSigInputs,

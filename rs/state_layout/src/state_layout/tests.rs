@@ -211,9 +211,11 @@ fn test_canister_snapshots_decode() {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         stable_memory_size: NumWasmPages::new(10),
         wasm_memory_size: NumWasmPages::new(10),
+        total_size: NumBytes::new(100),
     };
 
-    let pb_bits = pb_canister_snapshot_bits::CanisterSnapshotBits::from(&canister_snapshot_bits);
+    let pb_bits =
+        pb_canister_snapshot_bits::CanisterSnapshotBits::from(canister_snapshot_bits.clone());
     let new_canister_snapshot_bits = CanisterSnapshotBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_snapshot_bits, new_canister_snapshot_bits);

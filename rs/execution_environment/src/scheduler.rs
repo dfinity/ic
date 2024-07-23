@@ -816,6 +816,7 @@ impl SchedulerImpl {
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
             // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
+            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
@@ -1256,9 +1257,9 @@ impl SchedulerImpl {
             .inc_by(inducted_messages_to_others as u64);
     }
 
-    // Iterates through the provided canisters and checks if the invariants are still valid.
-    //
-    // Returns `true` if all canisters are valid, `false` otherwise.
+    /// Iterates through the provided canisters and checks if the invariants are still valid.
+    ///
+    /// Returns `true` if all canisters are valid, `false` otherwise.
     fn check_canister_invariants(
         &self,
         round_log: &ReplicaLogger,
@@ -1269,25 +1270,20 @@ impl SchedulerImpl {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
             if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
+                let msg = format!(
+                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
+                    CANISTER_INVARIANT_BROKEN,
+                    current_round,
+                    state.time(),
+                    canister_id,
+                    err
+                );
+
                 // Crash in debug mode if any invariant fails.
-                debug_assert!(false,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                debug_assert!(false, "{}", msg);
+
                 self.metrics.canister_invariants.inc();
-                warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                warn!(round_log, "{}", msg);
                 return false;
             }
         }
@@ -1324,7 +1320,7 @@ impl SchedulerImpl {
             });
     }
 
-    // Code that must be executed unconditionally after each round.
+    /// Code that must be executed unconditionally after each round.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1381,6 +1377,10 @@ impl SchedulerImpl {
                             id
                         );
                     }
+                    // TODO [EXC-1666]
+                    // For now, since OnLowWasmMemory is not used we will copy behaviour similar
+                    // to Heartbeat and GlobalTimer, but when the feature is implemented we will
+                    // come back to it, to revisit if we should keep it after the round ends.
                     ExecutionTask::OnLowWasmMemory => {
                         panic!(
                             "Unexpected on low wasm memory task after a round in canister {:?}",
@@ -1706,26 +1706,13 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching quadruples.
         {
-            // TODO(EXC-1645): temporarily take sign_with_ecdsa contexts to update inner data.
-            // Remove after full migration to `sign_with_threshold_contexts` field.
-            let mut sign_with_ecdsa_contexts = state
+            let contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .take_sign_with_ecdsa_contexts();
-
-            let contexts = sign_with_ecdsa_contexts
+                .sign_with_threshold_contexts
                 .values_mut()
-                .map(SignatureRequestContext::Ecdsa)
-                .chain(
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .sign_with_threshold_contexts
-                        .values_mut()
-                        .map(SignatureRequestContext::Generic),
-                )
                 .collect();
 
             update_signature_request_contexts(
@@ -1736,11 +1723,6 @@ impl Scheduler for SchedulerImpl {
                 registry_settings,
                 self.metrics.as_ref(),
             );
-
-            state
-                .metadata
-                .subnet_call_context_manager
-                .put_sign_with_ecdsa_contexts(sign_with_ecdsa_contexts);
         }
 
         // Finalization.
@@ -2254,6 +2236,13 @@ fn observe_replicated_state_metrics(
         .ecdsa_signature_agreements
         .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
 
+    for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
+        metrics
+            .threshold_signature_agreements
+            .with_label_values(&[&key_id.to_string()])
+            .set(*count as i64);
+    }
+
     let observe_reading = |status: CanisterStatusType, num: i64| {
         metrics
             .registered_canisters
@@ -2300,21 +2289,6 @@ fn observe_replicated_state_metrics(
     metrics
         .stop_canister_calls_without_call_id
         .set(num_stop_canister_calls_without_call_id as i64);
-
-    // TODO(EXC-1645): temporary code to record the metrics during migration.
-    metrics.sign_with_ecdsa_contexts_len.set(
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts_len() as i64,
-    );
-    // TODO(EXC-1645): temporary code to record the metrics during migration.
-    metrics.sign_with_threshold_contexts_len.set(
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts_len() as i64,
-    );
 }
 
 fn join_consumed_cycles_by_use_case(
@@ -2400,7 +2374,6 @@ fn get_instructions_limits_for_subnet_message(
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
-            | ComputeInitialEcdsaDealings
             | ComputeInitialIDkgDealings
             | SchnorrPublicKey
             | SignWithSchnorr

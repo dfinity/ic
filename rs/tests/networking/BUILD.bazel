@@ -4,13 +4,16 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 PROXY_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/rust_canisters/proxy_canister:proxy_canister",
 ]
 
 CANISTER_HTTP_BASE_DEPS = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/proxy_canister:lib",
     "//rs/tests",
+    "//rs/tests/driver:ic-system-test-driver",
     "//rs/tests/networking/canister_http:canister_http",
     "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
@@ -21,8 +24,12 @@ CANISTER_HTTP_BASE_DEPS = [
 
 system_test(
     name = "canister_http_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["k8s"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -34,6 +41,9 @@ system_test(
 
 system_test(
     name = "canister_http_socks_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -57,8 +67,12 @@ system_test(
 
 system_test(
     name = "canister_http_correctness_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["k8s"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -76,9 +90,13 @@ system_test(
 
 system_test(
     name = "canister_http_fault_tolerance_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -99,9 +117,13 @@ system_test(
 
 system_test(
     name = "canister_http_time_out_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],

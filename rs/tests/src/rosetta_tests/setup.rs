@@ -15,9 +15,13 @@ use std::path::Path;
 use std::time::Duration;
 use url::Url;
 
-use crate::driver::test_env_api::{HasDependencies, SshSession};
-use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
-use crate::driver::{
+use crate::rosetta_tests::lib::hex2addr;
+use crate::rosetta_tests::rosetta_client::RosettaApiClient;
+use ic_system_test_driver::driver::test_env_api::{HasDependencies, SshSession};
+use ic_system_test_driver::driver::universal_vm::{
+    insert_file_to_config, UniversalVm, UniversalVms,
+};
+use ic_system_test_driver::driver::{
     ic::InternetComputer,
     resource::AllocatedVm,
     test_env::TestEnv,
@@ -25,9 +29,7 @@ use crate::driver::{
         HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
     },
 };
-use crate::rosetta_tests::lib::hex2addr;
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 
 /// Transfer fee on the ledger.
 pub const TRANSFER_FEE: u64 = 10_000;

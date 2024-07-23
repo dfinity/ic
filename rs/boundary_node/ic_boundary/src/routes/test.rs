@@ -41,7 +41,7 @@ pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
     let zero = 0u32;
 
     RouteSubnet {
-        id: Principal::from_text(id).unwrap().to_string(),
+        id: Principal::from_text(id).unwrap(),
         range_start: u256::from(zero),
         range_end: u256::from(zero),
         nodes,
@@ -534,6 +534,43 @@ async fn test_all_call_types() -> Result<(), Error> {
         .method("POST")
         .uri(format!(
             "http://localhost/api/v2/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let (_parts, body) = resp.into_parts();
+    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!(body, "a".repeat(1024));
+
+    // Test call v3
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
+            method_name: "foobar".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v3/canister/{canister_id}/call"
         ))
         .body(Body::from(body))
         .unwrap();

@@ -14,6 +14,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    batch::BatchSummary,
     consensus::certification::Certification,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     crypto::{CryptoHash, CryptoHashOf},
@@ -226,6 +227,7 @@ impl StateManager for FakeStateManager {
         state: ReplicatedState,
         height: Height,
         _scope: CertificationScope,
+        _batch_summary: Option<BatchSummary>,
     ) {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         self.states.write().unwrap().push(Snapshot {
@@ -394,12 +396,24 @@ impl From<SerializableStreamHeader> for StreamHeader {
 #[derive(Serialize, Deserialize)]
 pub enum SerializableRejectReason {
     CanisterMigrating = 1,
+    CanisterNotFound = 2,
+    CanisterStopped = 3,
+    CanisterStopping = 4,
+    QueueFull = 5,
+    OutOfMemory = 6,
+    Unknown = 7,
 }
 
 impl From<&RejectReason> for SerializableRejectReason {
     fn from(reason: &RejectReason) -> Self {
         match reason {
             RejectReason::CanisterMigrating => Self::CanisterMigrating,
+            RejectReason::CanisterNotFound => Self::CanisterNotFound,
+            RejectReason::CanisterStopped => Self::CanisterStopped,
+            RejectReason::CanisterStopping => Self::CanisterStopping,
+            RejectReason::QueueFull => Self::QueueFull,
+            RejectReason::OutOfMemory => Self::OutOfMemory,
+            RejectReason::Unknown => Self::Unknown,
         }
     }
 }
@@ -408,6 +422,12 @@ impl From<SerializableRejectReason> for RejectReason {
     fn from(reason: SerializableRejectReason) -> RejectReason {
         match reason {
             SerializableRejectReason::CanisterMigrating => RejectReason::CanisterMigrating,
+            SerializableRejectReason::CanisterNotFound => RejectReason::CanisterNotFound,
+            SerializableRejectReason::CanisterStopped => RejectReason::CanisterStopped,
+            SerializableRejectReason::CanisterStopping => RejectReason::CanisterStopping,
+            SerializableRejectReason::QueueFull => RejectReason::QueueFull,
+            SerializableRejectReason::OutOfMemory => RejectReason::OutOfMemory,
+            SerializableRejectReason::Unknown => RejectReason::Unknown,
         }
     }
 }
@@ -683,11 +703,12 @@ impl StateManager for RefMockStateManager {
         state: ReplicatedState,
         height: Height,
         scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
     ) {
         self.mock
             .read()
             .unwrap()
-            .commit_and_certify(state, height, scope)
+            .commit_and_certify(state, height, scope, batch_summary)
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {

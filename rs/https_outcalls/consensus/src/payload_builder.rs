@@ -95,12 +95,13 @@ impl CanisterHttpPayloadBuilderImpl {
         cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        membership: Arc<Membership>,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
+        let membership = Arc::new(Membership::new(cache.clone(), registry.clone(), subnet_id));
+
         Self {
             pool,
             cache,

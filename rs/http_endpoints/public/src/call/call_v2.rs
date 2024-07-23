@@ -2,7 +2,7 @@
 
 use super::{IngressError, IngressValidator};
 use crate::{
-    common::{Cbor, CborUserError},
+    common::{Cbor, CborUserError, WithTimeout},
     HttpError,
 };
 use axum::{
@@ -48,7 +48,7 @@ impl CallServiceV2 {
 async fn call_v2(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(call_handler): State<IngressValidator>,
-    request: Cbor<HttpRequestEnvelope<HttpCallContent>>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> Result<impl IntoResponse, Response> {
     call_handler
         .validate_ingress_message(request, effective_canister_id)

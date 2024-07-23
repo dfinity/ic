@@ -337,6 +337,7 @@ impl NervousSystemParameters {
 
     /// This is an upper bound for `max_number_of_neurons`. Exceeding it may cause
     /// degradation in the governance canister or the subnet hosting the SNS.
+    /// See also: `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`.
     pub const MAX_NUMBER_OF_NEURONS_CEILING: u64 = 200_000;
 
     /// This is an upper bound for `max_number_of_proposals_with_ballots`. Exceeding
@@ -2387,7 +2388,6 @@ impl UpgradeSnsControlledCanister {
 
 pub mod test_helpers {
     use super::*;
-    use ic_crypto_sha2::Sha256;
     use rand::{Rng, RngCore};
     use std::{
         borrow::BorrowMut,
@@ -2412,7 +2412,10 @@ pub mod test_helpers {
 
         /// Map of expected calls to a result, where key is hash of arguments (See `compute_call_canister_key`).
         #[allow(clippy::type_complexity)]
-        pub canister_calls_map: HashMap<[u8; 32], CanisterCallResult>,
+        pub canister_calls_map: HashMap<
+            (dfn_core::CanisterId, std::string::String, std::vec::Vec<u8>),
+            CanisterCallResult,
+        >,
 
         // The default response is canister_calls_map doesn't have an entry.  Useful when you only
         // care about specifying a single response for a given test, or alternately want to ensure
@@ -2446,19 +2449,6 @@ pub mod test_helpers {
         }
     }
 
-    /// Used to create a hash for our call map.
-    fn compute_call_canister_key(
-        canister_id: CanisterId,
-        method_name: &str,
-        arg: &Vec<u8>,
-    ) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        hasher.write(canister_id.get().as_slice());
-        hasher.write(method_name.as_bytes());
-        hasher.write(arg.as_slice());
-        hasher.finish()
-    }
-
     impl NativeEnvironment {
         pub fn new(local_canister_id: Option<CanisterId>) -> Self {
             Self {
@@ -2482,10 +2472,8 @@ pub mod test_helpers {
             arg: Vec<u8>,
             response: CanisterCallResult,
         ) {
-            self.canister_calls_map.insert(
-                compute_call_canister_key(canister_id, method_name, &arg),
-                response,
-            );
+            self.canister_calls_map
+                .insert((canister_id, method_name.to_string(), arg), response);
         }
 
         /// Requires that a call will be made (and optionally sets a response)
@@ -2578,11 +2566,11 @@ pub mod test_helpers {
                 }
             }
 
-            let entry = compute_call_canister_key(canister_id, method_name, &arg);
+            let entry = (canister_id, method_name.to_string(), arg.clone());
             match self.canister_calls_map.get(&entry) {
                 None => {
                     log!(INFO,
-                        "No call_canister entry found for: {:?} {} {:?}.  Using default response: {:?}",
+                        "No call_canister entry found for: {:?} {} {:?}.  Using default response: {:?}.",
                         canister_id, method_name, arg, &self.default_canister_call_response
                     );
                     &self.default_canister_call_response

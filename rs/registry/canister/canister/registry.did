@@ -231,6 +231,7 @@ type NodeOperatorRecord = record {
 
 type NodeProvidersMonthlyXdrRewards = record {
   rewards : vec record { text; nat64 };
+  registry_version: opt nat64;
 };
 
 type NodeRewardRate = record {

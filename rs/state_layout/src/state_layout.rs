@@ -56,6 +56,7 @@ pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
+pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -175,7 +176,7 @@ pub struct CanisterStateBits {
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanisterSnapshotBits {
     /// The ID of the canister snapshot.
     pub snapshot_id: SnapshotId,
@@ -195,6 +196,8 @@ pub struct CanisterSnapshotBits {
     pub stable_memory_size: NumWasmPages,
     /// The size of the wasm memory in pages.
     pub wasm_memory_size: NumWasmPages,
+    /// The total size of the snapshot in bytes.
+    pub total_size: NumBytes,
 }
 
 #[derive(Clone)]
@@ -698,6 +701,19 @@ impl StateLayout {
             }
         }
         CheckpointLayout::new(path, height, self.clone())
+    }
+
+    /// Returns the untracked `CheckpointLayout` for the given height (if there is one).
+    pub fn checkpoint_untracked(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let cp_name = Self::checkpoint_name(height);
+        let path = self.checkpoints().join(cp_name);
+        if !path.exists() {
+            return Err(LayoutError::NotFound(height));
+        }
+        CheckpointLayout::new_untracked(path, height)
     }
 
     fn increment_checkpoint_ref_counter(&self, height: Height) {
@@ -1371,6 +1387,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {
         self.root.join(STATS_FILE).into()
+    }
+
+    pub fn unverified_checkpoint_marker(&self) -> PathBuf {
+        self.root.join(UNVERIFIED_CHECKPOINT_MARKER)
     }
 
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {
@@ -2151,8 +2171,8 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
     }
 }
 
-impl From<&CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotBits {
-    fn from(item: &CanisterSnapshotBits) -> Self {
+impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotBits {
+    fn from(item: CanisterSnapshotBits) -> Self {
         Self {
             snapshot_id: item.snapshot_id.get_local_snapshot_id(),
             canister_id: Some((item.canister_id).into()),
@@ -2163,6 +2183,7 @@ impl From<&CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshot
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             stable_memory_size: item.stable_memory_size.get() as u64,
             wasm_memory_size: item.wasm_memory_size.get() as u64,
+            total_size: item.total_size.get(),
         }
     }
 }
@@ -2201,6 +2222,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             .unwrap_or_default(),
             stable_memory_size: NumWasmPages::from(item.stable_memory_size as usize),
             wasm_memory_size: NumWasmPages::from(item.wasm_memory_size as usize),
+            total_size: NumBytes::from(item.total_size),
         })
     }
 }

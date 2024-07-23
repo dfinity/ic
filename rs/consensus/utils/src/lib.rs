@@ -13,7 +13,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{idkg::EcdsaPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
+    consensus::{idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
@@ -41,6 +41,11 @@ pub const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the gap between notarized height and the height of the next pending CUP.
 pub const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 70;
+
+/// In order to have a bound on the validated consensus pool, we don't validate
+/// artifacts with a height greater than the given value above the next pending CUP.
+/// The only exception to this are CUPs, which have no upper bound on the height.
+pub const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
 
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
@@ -166,13 +171,13 @@ pub fn get_adjusted_notary_delay(
         }
         NotaryDelay::ReachedMaxNotarizationCUPGap {
             notarized_height,
-            cup_height,
+            next_cup_height,
         } => {
             warn!(
                 every_n_seconds => 5,
                 log,
                 "The gap between the notarization height ({notarized_height}) and \
-                the CUP height ({cup_height}) exceeds hard bound of \
+                the next CUP height ({next_cup_height}) exceeds hard bound of \
                 {ACCEPTABLE_NOTARIZATION_CUP_GAP}"
             );
             None
@@ -194,7 +199,7 @@ pub enum NotaryDelay {
     /// hard limit on this gap, the notary cannot progress for now.
     ReachedMaxNotarizationCUPGap {
         notarized_height: Height,
-        cup_height: Height,
+        next_cup_height: Height,
     },
 }
 
@@ -252,24 +257,15 @@ pub fn get_adjusted_notary_delay_from_settings(
     let certified_adjusted_delay =
         finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
 
-    // We measure the gap between our current CUP height and the current notarized
-    // height. If the notarized height is in a DKG interval for which we don't yet have
-    // the CUP, we limit the notarization-CUP gap to ACCEPTABLE_NOTARIZATION_CUP_GAP.
-    let last_cup = pool.get_highest_catch_up_package();
-    let last_cup_dkg_info = &last_cup
-        .content
-        .block
-        .as_ref()
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg;
-    let cup_height = last_cup.height();
-    let cup_gap = notarized_height.get().saturating_sub(cup_height.get());
-    if cup_gap >= last_cup_dkg_info.interval_length.get() + ACCEPTABLE_NOTARIZATION_CUP_GAP {
+    // We bound the gap between the next CUP height and the current notarization
+    // height by ACCEPTABLE_NOTARIZATION_CUP_GAP.
+    let next_cup_height = pool.get_next_cup_height();
+    if notarized_height.get().saturating_sub(next_cup_height.get())
+        >= ACCEPTABLE_NOTARIZATION_CUP_GAP
+    {
         return NotaryDelay::ReachedMaxNotarizationCUPGap {
             notarized_height,
-            cup_height,
+            next_cup_height,
         };
     }
 
@@ -568,19 +564,19 @@ pub fn get_subnet_record(
     }
 }
 
-/// Return the oldest registry version of transcripts in the given ECDSA summary payload that are
+/// Return the oldest registry version of transcripts in the given IDKG summary payload that are
 /// referenced by the given replicated state.
-pub fn get_oldest_ecdsa_state_registry_version(
-    ecdsa: &EcdsaPayload,
+pub fn get_oldest_idkg_state_registry_version(
+    idkg: &IDkgPayload,
     state: &ReplicatedState,
 ) -> Option<RegistryVersion> {
     state
         .signature_request_contexts()
         .values()
         .flat_map(|context| context.matched_pre_signature.as_ref())
-        .flat_map(|(pre_sig_id, _)| ecdsa.available_pre_signatures.get(pre_sig_id))
+        .flat_map(|(pre_sig_id, _)| idkg.available_pre_signatures.get(pre_sig_id))
         .flat_map(|pre_signature| pre_signature.get_refs())
-        .flat_map(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id))
+        .flat_map(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id))
         .map(|transcript| transcript.registry_version)
         .min()
 }
@@ -588,7 +584,7 @@ pub fn get_oldest_ecdsa_state_registry_version(
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Arc};
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
@@ -605,8 +601,8 @@ mod tests {
     use ic_types::{
         consensus::idkg::{
             common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
-            schnorr::PreSignatureTranscriptRef, EcdsaKeyTranscript, KeyTranscriptCreation,
-            MaskedTranscript, PreSigId, UnmaskedTranscript,
+            schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
+            MasterKeyTranscript, PreSigId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -674,13 +670,13 @@ mod tests {
                 .dkg
                 .clone();
 
-            for _ in 0..last_cup_dkg_info.interval_length.get() {
-                pool.advance_round_normal_operation_no_cup();
-            }
-
-            for _ in 0..(ACCEPTABLE_NOTARIZATION_CUP_GAP - 1) {
-                pool.advance_round_normal_operation_no_cup();
-            }
+            // Advance to next summary height
+            pool.advance_round_normal_operation_no_cup_n(
+                last_cup_dkg_info.interval_length.get() + 1,
+            );
+            assert!(pool.get_cache().finalized_block().payload.is_summary());
+            // Advance to one height before the highest possible CUP-less notarized height
+            pool.advance_round_normal_operation_no_cup_n(ACCEPTABLE_NOTARIZATION_CUP_GAP - 1);
 
             let gap_trigger_height = Height::new(
                 PoolReader::new(&pool).get_notarized_height().get()
@@ -782,11 +778,11 @@ mod tests {
         assert_eq!(round_robin.call_next(&calls), vec![1]);
     }
 
-    fn empty_ecdsa_payload(key_id: MasterPublicKeyId) -> EcdsaPayload {
-        EcdsaPayload::empty(
+    fn empty_idkg_payload(key_id: MasterPublicKeyId) -> IDkgPayload {
+        IDkgPayload::empty(
             Height::new(0),
             subnet_test_id(0),
-            vec![EcdsaKeyTranscript::new(
+            vec![MasterKeyTranscript::new(
                 key_id,
                 KeyTranscriptCreation::Begin,
             )],
@@ -876,7 +872,7 @@ mod tests {
                 }),
                 MasterPublicKeyId::Schnorr(key_id) => {
                     ThresholdArguments::Schnorr(SchnorrArguments {
-                        message: vec![1; 64],
+                        message: Arc::new(vec![1; 64]),
                         key_id: key_id.clone(),
                     })
                 }
@@ -909,9 +905,9 @@ mod tests {
         ]
     }
 
-    // Create an ECDSA payload with 10 pre-signatures, each using registry version 2, 3 or 4.
-    fn ecdsa_payload_with_pre_sigs(key_id: &MasterPublicKeyId) -> EcdsaPayload {
-        let mut ecdsa = empty_ecdsa_payload(key_id.clone());
+    // Create an IDKG payload with 10 pre-signatures, each using registry version 2, 3 or 4.
+    fn idkg_payload_with_pre_sigs(key_id: &MasterPublicKeyId) -> IDkgPayload {
+        let mut idkg = empty_idkg_payload(key_id.clone());
         let mut rvs = [
             RegistryVersion::from(2),
             RegistryVersion::from(3),
@@ -923,27 +919,22 @@ mod tests {
             let pre_sig = fake_pre_signature(i as u64, key_id);
             let rv = rvs.next().unwrap();
             for r in pre_sig.get_refs() {
-                ecdsa
-                    .idkg_transcripts
+                idkg.idkg_transcripts
                     .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
             }
-            ecdsa
-                .available_pre_signatures
+            idkg.available_pre_signatures
                 .insert(PreSigId(i as u64), pre_sig);
         }
-        ecdsa
+        idkg
     }
 
     #[test]
     fn test_empty_state_should_return_no_registry_version() {
         for key_id in fake_key_ids() {
             println!("Running test for key ID {key_id}");
-            let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+            let idkg = idkg_payload_with_pre_sigs(&key_id);
             let state = fake_state_with_contexts(vec![]);
-            assert_eq!(
-                None,
-                get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
-            );
+            assert_eq!(None, get_oldest_idkg_state_registry_version(&idkg, &state));
         }
     }
 
@@ -951,12 +942,9 @@ mod tests {
     fn test_state_without_matches_should_return_no_registry_version() {
         for key_id in fake_key_ids() {
             println!("Running test for key ID {key_id}");
-            let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+            let idkg = idkg_payload_with_pre_sigs(&key_id);
             let state = fake_state_with_contexts(vec![fake_context(None, &key_id)]);
-            assert_eq!(
-                None,
-                get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
-            );
+            assert_eq!(None, get_oldest_idkg_state_registry_version(&idkg, &state));
         }
     }
 
@@ -969,16 +957,16 @@ mod tests {
     }
 
     fn test_should_return_oldest_registry_version(key_id: MasterPublicKeyId) {
-        let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+        let idkg = idkg_payload_with_pre_sigs(&key_id);
         // create contexts for all pre-signatures, but only create a match for
         // pre-signatures with registry version >= 3 (not 2!). Thus the oldest
         // registry version referenced by the state should be 3.
-        let contexts = ecdsa
+        let contexts = idkg
             .available_pre_signatures
             .iter()
             .map(|(id, pre_sig)| {
                 let t_id = pre_sig.key_unmasked().as_ref().transcript_id;
-                let transcript = ecdsa.idkg_transcripts.get(&t_id).unwrap();
+                let transcript = idkg.idkg_transcripts.get(&t_id).unwrap();
                 (transcript.registry_version.get() >= 3).then_some(*id)
             })
             .map(|id| fake_context(id, &key_id))
@@ -986,21 +974,21 @@ mod tests {
         let state = fake_state_with_contexts(contexts);
         assert_eq!(
             Some(RegistryVersion::from(3)),
-            get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+            get_oldest_idkg_state_registry_version(&idkg, &state)
         );
 
-        let mut ecdsa_without_transcripts = ecdsa.clone();
-        ecdsa_without_transcripts.idkg_transcripts = BTreeMap::new();
+        let mut idkg_without_transcripts = idkg.clone();
+        idkg_without_transcripts.idkg_transcripts = BTreeMap::new();
         assert_eq!(
             None,
-            get_oldest_ecdsa_state_registry_version(&ecdsa_without_transcripts, &state)
+            get_oldest_idkg_state_registry_version(&idkg_without_transcripts, &state)
         );
 
-        let mut ecdsa_without_pre_sigs = ecdsa.clone();
-        ecdsa_without_pre_sigs.available_pre_signatures = BTreeMap::new();
+        let mut idkg_without_pre_sigs = idkg.clone();
+        idkg_without_pre_sigs.available_pre_signatures = BTreeMap::new();
         assert_eq!(
             None,
-            get_oldest_ecdsa_state_registry_version(&ecdsa_without_pre_sigs, &state)
+            get_oldest_idkg_state_registry_version(&idkg_without_pre_sigs, &state)
         );
     }
 }

@@ -41,7 +41,7 @@ criterion = { workspace = true }
 ic-btc-adapter-test-utils = { path = "./test_utils" }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-interface = { workspace = true }
-ic-btc-types-internal = { path = "../types/internal" }
+ic-btc-replica-types = { path = "../replica_types" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 tempfile = { workspace = true }

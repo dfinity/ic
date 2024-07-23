@@ -25,20 +25,20 @@ Success::
 
 end::catalog[] */
 
-use crate::{
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+        store_message,
+    },
+    set_sandbox_env_vars,
+};
+use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{IcNodeSnapshot, SubnetSnapshot, *},
-    },
-    orchestrator::utils::{
-        rw_message::{
-            can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-            store_message,
-        },
-        subnet_recovery::*,
     },
     util::*,
 };
@@ -53,6 +53,8 @@ use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 use slog::{info, Logger};
 
 use std::{thread, time::Duration};
+
+use crate::orchestrator::utils::subnet_recovery::assert_subnet_is_healthy;
 
 const DKG_INTERVAL: u64 = 9;
 const APP_NODES: usize = 1;

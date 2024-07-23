@@ -11,6 +11,7 @@ on:
       - '.bazelversion'
       - 'rust-toolchain.toml'
       - 'gitlab-ci/container/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}

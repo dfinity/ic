@@ -134,35 +134,43 @@ impl RegistryClient for FakeRegistryClient {
         // first entry of interest is at the insertion point of (prefix, 1).
         let search_key = &(key_prefix, &first_registry_version);
 
-        let i = match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
-            // An exact match just means the key family will have size 1.
-            Ok(idx) => idx,
-            // The entry at idx cannot be lexicographically less than key_prefix, otherwise the
-            // correctness assumption about bin search would not hold.
-            Err(idx) if records[idx].key.starts_with(key_prefix) => idx,
-            // No entry found, key does not exist
-            _ => return Ok(vec![]),
-        };
+        let first_match_index =
+            match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
+                // An exact match just means the key family will have size 1.
+                Ok(idx) => idx,
+                // The entry at idx cannot be lexicographically less than key_prefix, otherwise the
+                // correctness assumption about bin search would not hold.
+                Err(idx) => {
+                    if !records[idx].key.starts_with(key_prefix) {
+                        // If the key at this position does not start with `key_prefix`, the set of keys
+                        // starting with `key_prefix` is empty.
+                        return Ok(vec![]);
+                    }
+                    idx
+                }
+            };
 
+        // 1. Skip all entries up to the first_match_index
+        // 2. Filter out all versions newer than the one we are interested in
+        // 3. Only consider the subsequence that starts with the given prefix
         let records = records
             .iter()
-            .skip(i)
-            .filter(|r| r.version <= version)
-            .take_while(|r| r.key.starts_with(key_prefix));
-        let mut results = vec![];
+            .skip(first_match_index) // (1)
+            .filter(|r| r.version <= version) // (2)
+            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
+
+        // For each key, keep only the record values for the latest record versions. We rely upon
+        // the fact that for a fixed key, the records are sorted by version.
+        let mut effective_records = BTreeMap::new();
         for record in records {
-            let has_value = record.value.is_some();
-            let last_result_is_current_key =
-                results.last().map(|k| k == &record.key).unwrap_or(false);
-            if has_value {
-                if !last_result_is_current_key {
-                    results.push(record.key.clone());
-                }
-            } else if last_result_is_current_key {
-                results.pop();
-            }
+            effective_records.insert(record.key.clone(), &record.value);
         }
-        Ok(results)
+        // Finally, remove empty records, i.e., those for which `value` is `None`.
+        let result = effective_records
+            .into_iter()
+            .filter_map(|(key, value)| value.is_some().then_some(key))
+            .collect();
+        Ok(result)
     }
 
     fn get_latest_version(&self) -> RegistryVersion {

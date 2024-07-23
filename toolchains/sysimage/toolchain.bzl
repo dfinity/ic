@@ -82,13 +82,16 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--component-file", input_target.files.to_list()[0].path + ":" + install_target])
         inputs += input_target.files.to_list()
 
-    config_file = ctx.file.config_file
-    inputs.append(config_file)
-    args.extend(["--config-file", config_file.path])
-
     if ctx.file.dockerfile:
         inputs.append(ctx.file.dockerfile)
         args.extend(["--dockerfile", ctx.file.dockerfile.path])
+
+    build_args = ctx.attr.build_args
+    for build_arg in build_args:
+        args.extend(["--build-arg", build_arg])
+
+    if ctx.attr.file_build_arg:
+        args.extend(["--file-build-arg", ctx.attr.file_build_arg])
 
     if ctx.file.base_image_tar_file:
         inputs.append(ctx.file.base_image_tar_file)
@@ -123,12 +126,11 @@ build_container_filesystem = rule(
         "component_files": attr.label_keyed_string_dict(
             allow_files = True,
         ),
-        "config_file": attr.label(
-            allow_single_file = True,
-        ),
         "dockerfile": attr.label(
             allow_single_file = True,
         ),
+        "build_args": attr.string_list(),
+        "file_build_arg": attr.string(),
         "base_image_tar_file": attr.label(
             allow_single_file = True,
         ),
@@ -160,7 +162,7 @@ def _vfat_image_impl(ctx):
         ctx.attr.partition_size,
         "-p",
         ctx.attr.subdir,
-        "-d",
+        "--dflate",
         dflate.path,
     ]
 
@@ -224,7 +226,7 @@ def _fat32_image_impl(ctx):
         ctx.attr.partition_size,
         "-p",
         ctx.attr.subdir,
-        "-d",
+        "--dflate",
         dflate.path,
     ]
 
@@ -275,6 +277,7 @@ fat32_image = rule(
 
 def _ext4_image_impl(ctx):
     tool = ctx.files._build_ext4_image[0]
+    diroid = ctx.files._diroid[0]
     dflate = ctx.files._dflate[0]
 
     out = ctx.actions.declare_file(ctx.label.name)
@@ -292,7 +295,9 @@ def _ext4_image_impl(ctx):
         ctx.attr.partition_size,
         "-p",
         ctx.attr.subdir,
-        "-d",
+        "--diroid",
+        diroid.path,
+        "--dflate",
         dflate.path,
     ]
     if len(ctx.files.file_contexts) > 0:
@@ -307,7 +312,7 @@ def _ext4_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = [out],
-        tools = [tool, dflate],
+        tools = [tool, diroid, dflate],
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -333,6 +338,10 @@ ext4_image = rule(
             allow_files = True,
             default = ":build_ext4_image.py",
         ),
+        "_diroid": attr.label(
+            allow_files = True,
+            default = "//rs/ic_os/diroid",
+        ),
         "_dflate": attr.label(
             allow_files = True,
             default = "//rs/ic_os/dflate",
@@ -353,7 +362,7 @@ def _inject_files_impl(ctx):
         ctx.files.base[0].path,
         "--output",
         out.path,
-        "-d",
+        "--dflate",
         dflate.path,
     ]
 
@@ -420,7 +429,7 @@ def _disk_image_impl(ctx):
     for p in partitions:
         partition_files.append(p.path)
 
-    args = ["-p", in_layout.path, "-o", out.path, "-d", dflate.path]
+    args = ["-p", in_layout.path, "-o", out.path, "--dflate", dflate.path]
 
     if expanded_size:
         args += ["-s", expanded_size]
@@ -474,7 +483,7 @@ def _lvm_image_impl(ctx):
     for p in partitions:
         partition_files.append(p.path)
 
-    args = ["-v", in_layout.path, "-n", vg_name, "-u", vg_uuid, "-p", pv_uuid, "-o", out.path, "-d", dflate.path]
+    args = ["-v", in_layout.path, "-n", vg_name, "-u", vg_uuid, "-p", pv_uuid, "-o", out.path, "--dflate", dflate.path]
 
     args += partition_files
 
@@ -524,7 +533,7 @@ def _upgrade_image_impl(ctx):
     ctx.actions.run_shell(
         inputs = [in_boot_partition, in_root_partition, in_version_file],
         outputs = [out],
-        command = "python3 %s -b %s -r %s -v %s -o %s -d %s" % (
+        command = "python3 %s -b %s -r %s -v %s -o %s --dflate %s" % (
             tool_file.path,
             in_boot_partition.path,
             in_root_partition.path,

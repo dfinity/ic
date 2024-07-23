@@ -2,23 +2,22 @@
 end::catalog[] */
 
 use super::{enable_chain_key_signing, DKG_INTERVAL};
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-};
 use crate::tecdsa::{get_public_key_and_test_signature, make_key_ids_for_all_schemes};
-use crate::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
 use canister_test::Canister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+};
+use ic_system_test_driver::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;
 
 pub fn config(env: TestEnv) {
-    let malicious_behaviour =
-        MaliciousBehaviour::new(true).set_maliciously_corrupt_ecdsa_dealings();
+    let malicious_behaviour = MaliciousBehaviour::new(true).set_maliciously_corrupt_idkg_dealings();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -79,6 +78,6 @@ pub fn test(env: TestEnv) {
     });
 
     info!(logger, "Checking for malicious logs...");
-    assert_malicious_from_topo(&topology, vec!["maliciously_corrupt_ecdsa_dealings: true"]);
+    assert_malicious_from_topo(&topology, vec!["maliciously_corrupt_idkg_dealings: true"]);
     info!(logger, "Malicious log check succeeded.");
 }

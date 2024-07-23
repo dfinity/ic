@@ -18,6 +18,8 @@ def sanitize_external_crates(sanitizers_enabled):
         "ic-stable-structures": FUZZING_ANNOTATION,
     }
 
+IC_AGENT_CALL_V3_REV = "9e45b314fc7496d48065590fac90790e0bdc6eed"
+
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
@@ -26,6 +28,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
     CRATE_ANNOTATIONS = {
         "canbench": [crate.annotation(
             gen_binaries = True,
+        )],
+        "curve25519-dalek": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
         )],
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
@@ -40,6 +48,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ],
         )],
         "p256": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
+        "sha2": [crate.annotation(
             rustc_flags = [
                 "-C",
                 "opt-level=3",
@@ -146,9 +160,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "use-tokio",
                 ],
             ),
-            "async-socks5": crate.spec(
-                version = "^0.5.1",
-            ),
             "async-stream": crate.spec(
                 version = "^0.3.5",
             ),
@@ -163,7 +174,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "axum": crate.spec(
-                version = "^0.7.4",
+                version = "^0.7.5",
             ),
             "axum-extra": crate.spec(
                 version = "^0.9.0",
@@ -171,6 +182,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "axum-server": crate.spec(
                 version = "^0.5.1",
+                features = [
+                    "tls-rustls",
+                ],
+            ),
+            "axum-server_0_6_0": crate.spec(
+                package = "axum-server",
+                version = "^0.6.0",
                 features = [
                     "tls-rustls",
                 ],
@@ -191,7 +209,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.9.0",
             ),
             "bincode": crate.spec(
-                version = "^1.2.1",
+                version = "^1.3.3",
             ),
             "bindgen": crate.spec(
                 version = "^0.65.1",
@@ -228,7 +246,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "^0.8.0",
+                version = "^0.9.2",
                 features = [
                     "alloc",
                     "experimental",
@@ -257,7 +275,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.3.4",
             ),
             "bytes": crate.spec(
-                version = "^1.6.0",
+                version = "^1.6.1",
             ),
             "cached": crate.spec(
                 version = "^0.49",
@@ -372,9 +390,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
             ),
-            "ed25519-consensus": crate.spec(
-                version = "^2.0.1",
-            ),
             "ed25519-dalek": crate.spec(
                 version = "^2.1.1",
                 features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
@@ -391,9 +406,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "escargot": crate.spec(
                 version = "^0.5.7",
                 features = ["print"],
-            ),
-            "ethabi": crate.spec(
-                version = "^18.0.0",
             ),
             "ethers-core": crate.spec(
                 version = "^2.0.7",
@@ -483,6 +495,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
+            "humantime-serde": crate.spec(
+                version = "^1.1.1",
+            ),
             "hyper_0_14_27": crate.spec(
                 package = "hyper",
                 version = "^0.14.27",
@@ -496,7 +511,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper": crate.spec(
-                version = "^1.3.1",
+                version = "^1.4.1",
                 features = [
                     "full",
                 ],
@@ -509,21 +524,21 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.3",
+                version = "^0.1.6",
                 features = [
                     "full",
                 ],
             ),
-            "hyper-rustls": crate.spec(
+            "hyper_rustls_0_24_2": crate.spec(
                 version = "^0.24.2",
+                package = "hyper-rustls",
                 features = [
                     "http2",
                 ],
             ),
-            "hyper-rustls_0_27_x": crate.spec(
+            "hyper-rustls": crate.spec(
                 default_features = False,
-                package = "hyper-rustls",
-                version = "^0.27.1",
+                version = "^0.27.2",
                 features = [
                     "http1",
                     "http2",
@@ -554,6 +569,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "pem",
                 ],
             ),
+            # TODO: [NET-1734] Delete this once the feature is merged to master.
+            "ic-agent-call-v3": crate.spec(
+                package = "ic-agent",
+                git = "https://github.com/dfinity/agent-rs",
+                rev = IC_AGENT_CALL_V3_REV,
+                features = ["sync_call"],
+            ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.0",
             ),
@@ -565,6 +587,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
+            ),
+            "ic-canister-sig-creation": crate.spec(
+                version = "^1.0.1",
             ),
             "ic-cbor": crate.spec(
                 version = "2.3.0",
@@ -595,7 +620,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.6.4",
+                version = "^0.6.5",
             ),
             "ic-response-verification": crate.spec(
                 version = "2.3.0",
@@ -606,6 +631,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-utils": crate.spec(
                 version = "^0.35.0",
                 features = ["raw"],
+            ),
+            "ic-verify-bls-signature": crate.spec(
+                version = "^0.2.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.7.1",
@@ -618,7 +646,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "idna": crate.spec(
-                version = "^0.3.0",
+                version = "^1.0.2",
             ),
             "indexmap": crate.spec(
                 version = "^2.2.6",
@@ -706,9 +734,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.7",
                 default_features = False,
             ),
-            "libsecp256k1": crate.spec(
-                version = "^0.7.0",
-            ),
             "libnss": crate.spec(
                 version = "^0.5.0",
             ),
@@ -717,9 +742,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
-            ),
-            "log": crate.spec(
-                version = "^0.4.14",
             ),
             "lru": crate.spec(
                 version = "^0.7.8",
@@ -783,11 +805,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "nix": crate.spec(
                 version = "^0.24.3",
             ),
-            "num": crate.spec(
-                version = "^0.4.0",
-            ),
             "num-bigint": crate.spec(
-                version = "^0.4.0",
+                version = "^0.4.6",
             ),
             "num-bigint-dig": crate.spec(
                 version = "^0.8",
@@ -858,7 +877,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "pairing": crate.spec(
-                version = "^0.22",
+                version = "^0.23",
             ),
             "parking_lot": crate.spec(
                 version = "^0.12.1",
@@ -938,9 +957,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "prost-build": crate.spec(
                 version = "^0.12",
             ),
-            "prost-derive": crate.spec(
-                version = "^0.12",
-            ),
             "protobuf": crate.spec(
                 version = "^2.28.0",
             ),
@@ -951,13 +967,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.10.2",
-                features = [
-                    "ring",
-                ],
+                git = "https://github.com/quinn-rs/quinn",
+                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                default_features = False,
+                features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
-                version = "^0.5.1",
+                git = "https://github.com/quinn-rs/quinn",
+                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
             ),
             "quote": crate.spec(
                 version = "^1.0",
@@ -1077,9 +1094,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "rustls": crate.spec(
-                package = "rustls",
                 default_features = False,
-                version = "^0.23.8",
+                version = "^0.23.11",
                 features = [
                     "ring",
                 ],
@@ -1154,12 +1170,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "sha2": crate.spec(
                 version = "^0.10.8",
             ),
-            "sha2-0_9_1": crate.spec(
-                package = "sha2",
-                version = "^0.9.1",
-            ),
             "sha3": crate.spec(
-                version = "^0.9.1",
+                version = "^0.10.8",
             ),
             "signal-hook": crate.spec(
                 version = "^0.3.6",
@@ -1265,7 +1277,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.57",
+                version = "^1.0.62",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
@@ -1299,8 +1311,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.26.0",
                 default_features = False,
                 features = [
-                    "logging",
-                    "tls12",
                     "ring",
                 ],
             ),
@@ -1405,13 +1415,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.2",
             ),
             "url": crate.spec(
-                version = "^2.4.1",
+                version = "^2.5.2",
                 features = [
                     "serde",
                 ],
             ),
             "uuid": crate.spec(
-                version = "^1.3.0",
+                version = "^1.10.0",
                 features = [
                     "v4",
                     "serde",
@@ -1455,7 +1465,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^21.0.1",
+                version = "^22.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1465,7 +1475,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^21.0.1",
+                version = "^22.0.0",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",

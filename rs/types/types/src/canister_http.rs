@@ -42,6 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
+    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
     signature::*,
@@ -59,7 +60,7 @@ use ic_protobuf::{
     state::system_metadata::v1 as pb_metadata,
 };
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{convert::Infallible, time::Duration};
 use std::{
     convert::{TryFrom, TryInto},
     mem::size_of,
@@ -615,6 +616,25 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMe
 /// This is the artifact that will actually be gossiped.
 pub type CanisterHttpResponseShare =
     Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
+
+impl IdentifiableArtifact for CanisterHttpResponseShare {
+    const NAME: &'static str = "canisterhttp";
+    type Id = CanisterHttpResponseId;
+    type Attribute = ();
+    fn id(&self) -> Self::Id {
+        self.clone()
+    }
+    fn attribute(&self) -> Self::Attribute {}
+}
+
+impl PbArtifact for CanisterHttpResponseShare {
+    type PbId = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
+}
 
 /// A signature of of [`CanisterHttpResponseMetadata`].
 pub type CanisterHttpResponseProof =

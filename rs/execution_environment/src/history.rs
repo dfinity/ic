@@ -330,6 +330,9 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         ReservedCyclesLimitExceededInMemoryGrow => {
             "Canister cannot grow memory due to its reserved cycles limit"
         }
+        ReservedCyclesLimitIsTooLow => {
+            "Canister cannot set the reserved cycles limit below the reserved cycles balance"
+        }
         InsufficientCyclesInMessageMemoryGrow => {
             "Canister does not have enough cycles to grow message memory"
         }

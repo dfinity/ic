@@ -52,6 +52,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub replica_version: Option<ReplicaVersion>,
 
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
+
     /// IP address of the auxiliary host the registry is uploaded to
     #[clap(long)]
     pub aux_ip: Option<IpAddr>,
@@ -201,6 +205,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            StepType::ICReplayWithRegistryContent => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
+                }
+            }
+
             StepType::UploadAndHostTar => {
                 if self.params.aux_user.is_none() {
                     self.params.aux_user = read_optional(&self.logger, "Enter aux user:");
@@ -293,6 +304,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.params.subnet_id,
                     self.new_registry_local_store.clone(),
                     CANISTER_CALLER_ID,
+                    self.params.replay_until_height,
                 )?,
             )),
 

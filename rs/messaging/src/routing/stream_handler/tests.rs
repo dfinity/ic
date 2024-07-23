@@ -9,9 +9,11 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    replicated_state::{LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_OUT_OF_MEMORY},
+    replicated_state::{
+        LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_INVALID_RESPONSE, LABEL_VALUE_OUT_OF_MEMORY,
+    },
     testing::ReplicatedStateTesting,
-    CanisterState, ReplicatedState, Stream,
+    CanisterState, CanisterStatus, InputQueueType, ReplicatedState, Stream,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
@@ -1125,8 +1127,11 @@ fn garbage_collect_local_state_signals_for_inexistent_stream() {
             flags: Default::default(),
         });
 
-        stream_handler
-            .garbage_collect_local_state(state, &btreemap![REMOTE_SUBNET => incoming_slice]);
+        stream_handler.garbage_collect_local_state(
+            state,
+            &mut (i64::MAX / 2),
+            &btreemap![REMOTE_SUBNET => incoming_slice],
+        );
     });
 }
 
@@ -1153,6 +1158,7 @@ fn garbage_collect_local_state_inexistent_stream() {
 
         let pruned_state = stream_handler.garbage_collect_local_state(
             initial_state,
+            &mut (i64::MAX / 2),
             &btreemap![REMOTE_SUBNET => incoming_slice],
         );
 
@@ -1234,8 +1240,11 @@ fn garbage_collect_local_state_success() {
         let initial_available_guaranteed_response_memory =
             stream_handler.available_guaranteed_response_memory(&initial_state);
 
-        let pruned_state = stream_handler
-            .garbage_collect_local_state(initial_state, &btreemap![REMOTE_SUBNET => stream_slice]);
+        let pruned_state = stream_handler.garbage_collect_local_state(
+            initial_state,
+            &mut (i64::MAX / 2),
+            &btreemap![REMOTE_SUBNET => stream_slice],
+        );
 
         assert_eq!(pruned_state, expected_state);
 
@@ -1257,7 +1266,7 @@ fn garbage_collect_local_state_success() {
             1,
             fetch_int_counter(&metrics_registry, METRIC_STREAM_FLAGS_CHANGES).unwrap()
         );
-        assert_eq_critical_error_reject_signals_for_request(0, &metrics_registry);
+        assert_eq_critical_error_bad_reject_signal_for_response(0, &metrics_registry);
     });
 }
 
@@ -1325,8 +1334,11 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
             btreemap![REMOTE_SUBNET => pruned_stream, CANISTER_MIGRATION_SUBNET => rerouted_stream],
         );
 
-        let pruned_state = stream_handler
-            .garbage_collect_local_state(initial_state, &btreemap![REMOTE_SUBNET => stream_slice]);
+        let pruned_state = stream_handler.garbage_collect_local_state(
+            initial_state,
+            &mut (i64::MAX / 2),
+            &btreemap![REMOTE_SUBNET => stream_slice],
+        );
 
         assert_eq!(pruned_state, expected_state);
         assert_eq!(
@@ -1337,37 +1349,35 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
             0,
             fetch_int_counter(&metrics_registry, METRIC_GCED_XNET_REJECT_SIGNALS).unwrap()
         );
-        assert_eq_critical_error_reject_signals_for_request(0, &metrics_registry);
+        assert_eq_critical_error_bad_reject_signal_for_response(0, &metrics_registry);
     });
 }
 
-/// Tests that garbage collecting a provided `ReplicatedState` against reject signals for requests causes a critical error.
+/// Tests that garbage collecting a provided `ReplicatedState` against a bad reject signal for a response causes a critical error.
 #[test]
-fn garbage_collect_local_state_with_reject_signals_for_request() {
+fn garbage_collect_local_state_with_bad_reject_signal_for_response() {
     with_test_replica_logger(|log| {
         let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
-        // `initial_stream` has 2 requests.
-        let initial_stream = generate_outgoing_stream(StreamConfig {
+        // `initial_stream` has a request @31 and a response @32.
+        let mut initial_stream = generate_outgoing_stream(StreamConfig {
             messages_begin: 31,
-            message_count: 2,
+            message_count: 1,
             signals_end: 43,
             reject_signals: None,
         });
+        initial_stream.push(test_response(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
 
         initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
-        // 2 incoming messages, 3 new incoming signals including a reject signal @31.
+        // 2 incoming messages, 3 new incoming signals including a reject signal @32.
         let stream_slice = generate_stream_slice(StreamSliceConfig {
             header_begin: 42,
             header_end: None,
             messages_begin: 43,
             message_count: 2,
             signals_end: 33,
-            reject_signals: Some(vec![RejectSignal::new(
-                RejectReason::CanisterMigrating,
-                31.into(),
-            )]),
+            reject_signals: Some(vec![RejectSignal::new(RejectReason::QueueFull, 32.into())]),
             flags: Default::default(),
         });
 
@@ -1378,15 +1388,313 @@ fn garbage_collect_local_state_with_reject_signals_for_request() {
             CANISTER_MIGRATION_SUBNET,
         );
 
-        stream_handler
-            .garbage_collect_local_state(initial_state, &btreemap![REMOTE_SUBNET => stream_slice]);
+        stream_handler.garbage_collect_local_state(
+            initial_state,
+            &mut (i64::MAX / 2),
+            &btreemap![REMOTE_SUBNET => stream_slice],
+        );
 
-        assert_eq_critical_error_reject_signals_for_request(1, &metrics_registry);
+        assert_eq_critical_error_bad_reject_signal_for_response(1, &metrics_registry);
+    });
+}
+
+/// Calls `garbage_collect_local_state()` with one stream slice as input containing four reject
+/// signals (and no messages) on a state containing an outgoing stream on `LOCAL_SUBNET` with
+/// four requests in it; two from `LOCAL_CANISTER`, another one from `OTHER_LOCAL_CANISTER` and
+/// a misrouted request from and to `LOCAL_CANISTER`, i.e. it shouldn't be in any outgoing stream.
+///
+/// `LOCAL_CANISTER` is present on the subnet but has only 1 reservation for a reject response;
+/// `OTHER_LOCAL_CANISTER` is marked as having migrated to `CANISTER_MIGRATION_SUBNET`.
+///
+/// Tests that this results in a garbage collected stream, a successfully inducted reject response
+/// on `LOCAL_CANISTER`, a reject response that failed to induct due to the missing reservation,
+/// a reject response on the stream to `CANISTER_MIGRATION_SUBNET` and a dropped misrouted request;
+/// and that this causes exactly two critical errors, one due to the missing reservation and another
+/// due to the misrouted request.
+#[test]
+fn garbage_collect_local_state_with_reject_signals_for_request() {
+    with_test_replica_logger(|log| {
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
+
+        // Local canister with one reservation for one incoming reject response.
+        let mut initial_canister_state = new_canister_state(
+            *LOCAL_CANISTER,
+            user_test_id(24).get(),
+            *INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        make_input_queue_reservations(&mut initial_canister_state, 1, *REMOTE_CANISTER);
+        initial_state.put_canister_state(initial_canister_state);
+
+        // Mark `OTHER_LOCAL_CANISTER` as migrated from `LOCAL_SUBNET` to `CANISTER_MIGRATION_SUBNET`.
+        initial_state = simulate_canister_migration(
+            initial_state,
+            *OTHER_LOCAL_CANISTER,
+            LOCAL_SUBNET,
+            CANISTER_MIGRATION_SUBNET,
+        );
+
+        // An outgoing stream...
+        let mut outgoing_stream = generate_outgoing_stream(StreamConfig {
+            messages_begin: 21,
+            message_count: 0,
+            signals_end: 43,
+            reject_signals: None,
+        });
+        // ...with 1 request @21 from `LOCAL_CANISTER` that is expected to induct successfully, ...
+        outgoing_stream.push(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
+        // ...1 request @22 from `OTHER_LOCAL_CANISTER` that is expected to cause a reject response
+        // rerouted into the stream to `MIGRATION_SUBNET`, ...
+        outgoing_stream.push(test_request(*OTHER_LOCAL_CANISTER, *REMOTE_CANISTER).into());
+        // ...1 request to and from `LOCAL_CANISTER` @23 that is expected to raid a critical error
+        // because it is misrouted; and the corresponding reject response is expected to fail
+        // induction because of the missing reservation.
+        outgoing_stream.push(test_request(*LOCAL_CANISTER, *LOCAL_CANISTER).into());
+
+        // An incoming stream slice with 3 reject signals for the requests @21..=23.
+        let stream_slice = generate_stream_slice(StreamSliceConfig {
+            header_begin: 43,
+            header_end: None,
+            messages_begin: 43,
+            message_count: 0,
+            signals_end: 24,
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::QueueFull, 21.into()),
+                RejectSignal::new(RejectReason::CanisterStopping, 22.into()),
+                RejectSignal::new(RejectReason::Unknown, 23.into()),
+            ]),
+            flags: Default::default(),
+        });
+
+        // The expected canister state has two reject responses successfully inducted
+        // into `LOCAL_CANISTER` due to the reject signals in the incoming slice.
+        let mut expected_state = initial_state.clone();
+        expected_state
+            .push_input(
+                generate_reject_response_for(
+                    RejectReason::QueueFull,
+                    get_request_at(outgoing_stream.messages(), 21),
+                ),
+                &mut (i64::MAX / 2),
+            )
+            .unwrap();
+
+        // The expected outgoing stream is empty with `begin` avanced.
+        let expected_stream = generate_outgoing_stream(StreamConfig {
+            messages_begin: 24,
+            message_count: 0,
+            signals_end: 43,
+            reject_signals: None,
+        });
+        // The stream to the migration subnet is new and has 1 reject response in it
+        // due to the other reject signal.
+        let mut migration_stream = generate_outgoing_stream(StreamConfig {
+            messages_begin: 0,
+            message_count: 0,
+            signals_end: 0,
+            reject_signals: None,
+        });
+        migration_stream.push(generate_reject_response_for(
+            RejectReason::CanisterStopping,
+            get_request_at(outgoing_stream.messages(), 22),
+        ));
+
+        // Put streams.
+        initial_state.with_streams(btreemap![REMOTE_SUBNET => outgoing_stream]);
+        expected_state.with_streams(btreemap![
+            REMOTE_SUBNET => expected_stream,
+            CANISTER_MIGRATION_SUBNET => migration_stream,
+        ]);
+
+        // Act.
+        let mut available_guaranteed_response_memory =
+            stream_handler.available_guaranteed_response_memory(&initial_state);
+        let inducted_state = stream_handler.garbage_collect_local_state(
+            initial_state,
+            &mut available_guaranteed_response_memory,
+            &btreemap![REMOTE_SUBNET => stream_slice],
+        );
+
+        // Compare inducted to expected.
+        assert_eq!(inducted_state, expected_state);
+        assert_eq!(
+            stream_handler.available_guaranteed_response_memory(&inducted_state),
+            available_guaranteed_response_memory
+        );
+
+        // 1 reject response rerouted due to migrating canister; 1 reject response failed to induct
+        // due to missing reservation; 1 reject response successfully inducted.
+        assert_inducted_xnet_messages_eq(
+            metric_vec(&[
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_CANISTER_MIGRATED),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_INVALID_RESPONSE),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                        (LABEL_STATUS, LABEL_VALUE_REQUEST_MISROUTED),
+                    ],
+                    1,
+                ),
+            ]),
+            &metrics_registry,
+        );
+
+        // One critical error raised.
+        assert_eq_critical_errors(
+            1, // induct_response_failed
+            0, // bad_reject_signal_for_response
+            0, // sender_subnet_mismatch
+            0, // receiver_subnet_mismatch
+            1, // request_misrouted
+            &metrics_registry,
+        );
+    });
+}
+
+/// Calls `induct_stream_slices()` with one stream slice coming from `CANISTER_MIGRATION_SUBNET`
+/// as input containing 3 messages, a reject response for a request sent to `REMOTE_CANISTER` from
+/// `LOCAL_CANISTER`, a normal response and a normal request with the same recipients.
+///
+/// `LOCAL_CANISTER` is marked as having migrated from `CANISTER_MIGRATION_SUBNET` to
+/// `LOCAL_SUBNET`.
+///
+/// Tests that this results in the reject response accepted and inducted due the exception in
+/// `StreamHandler::should_accept_message_from()` and the normal response and request accepted
+/// and dropped.
+#[test]
+fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
+    with_test_replica_logger(|log| {
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
+
+        // Local canister with one reservation for two incoming responses.
+        let mut initial_canister_state = new_canister_state(
+            *LOCAL_CANISTER,
+            user_test_id(24).get(),
+            *INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        make_input_queue_reservations(&mut initial_canister_state, 2, *REMOTE_CANISTER);
+        initial_state.put_canister_state(initial_canister_state);
+
+        // A stream with 3 messages in it...
+        let mut stream = generate_loopback_stream(StreamConfig {
+            messages_begin: 0,
+            message_count: 0,
+            signals_end: 0,
+            reject_signals: None,
+        });
+        // ...a reject response for a request from `LOCAL_CANISTER` to `REMOTE_CANISTER`...
+        let reject_response = generate_reject_response_for(
+            RejectReason::QueueFull,
+            &test_request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+        );
+        stream.push(reject_response.clone());
+        // ...a normal response from `REMOTE_CANISTER` to `LOCAL_CANISTER`...
+        stream.push(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
+        // ...and a request from `REMOTE_CANISTER` to `LOCAL_CANISTER`...
+        stream.push(test_request(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
+
+        // ...turned into a stream slice.
+        let stream_slice: StreamSlice = stream.into();
+
+        // Mark `LOCAL_CANISTER` as having migrated from `CANISTER_MIGRATION_SUBNET`
+        // to `LOCAL_SUBNET`.
+        initial_state = simulate_canister_migration(
+            initial_state,
+            *LOCAL_CANISTER,
+            CANISTER_MIGRATION_SUBNET,
+            LOCAL_SUBNET,
+        );
+
+        // Expect a state, where the reject response was successfully inducted...
+        let mut expected_state = initial_state.clone();
+        expected_state
+            .push_input(reject_response, &mut (i64::MAX / 2))
+            .unwrap();
+        // ...and a stream to `CANISTER_MIGRATION_SUBNET` with all 3 messages accepted.
+        let mut expected_stream = Stream::default();
+        expected_stream.push_accept_signal(); // `reject_response` accepted and inducted.
+        expected_stream.push_accept_signal(); // `response` accepted and dropped.
+        expected_stream.push_accept_signal(); // `request` accepted and dropped.
+        expected_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
+
+        // Induct `stream_slice` as a slice from `CANISTER_MIGRATION_SUBNET`
+        // (the former host subnet of `LOCAL_CANISTER`).
+        let mut available_guaranteed_response_memory =
+            stream_handler.available_guaranteed_response_memory(&initial_state);
+        let inducted_state = stream_handler.induct_stream_slices(
+            initial_state,
+            btreemap![CANISTER_MIGRATION_SUBNET => stream_slice],
+            &mut available_guaranteed_response_memory,
+        );
+
+        // Compare inducted to expected.
+        assert_eq!(inducted_state, expected_state);
+        assert_eq!(
+            stream_handler.available_guaranteed_response_memory(&inducted_state),
+            available_guaranteed_response_memory
+        );
+
+        // Expect the reject response was inducted, the response and request got rejected.
+        assert_inducted_xnet_messages_eq(
+            metric_vec(&[
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_SENDER_SUBNET_MISMATCH),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                        (LABEL_STATUS, LABEL_VALUE_SENDER_SUBNET_MISMATCH),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                    ],
+                    1,
+                ),
+            ]),
+            &metrics_registry,
+        );
+
+        assert_eq_critical_errors(
+            0, // induct_response_failed
+            0, // bad_reject_signal_for_response
+            2, // sender_subnet_mismatch
+            0, // receiver_subnet_mismatch
+            0, // request_misrouted
+            &metrics_registry,
+        );
     });
 }
 
 #[test]
-fn reroute_rejected_messages_success() {
+fn reroute_rejected_response_success() {
     with_test_replica_logger(|log| {
         // Empty initial state.
         let (stream_handler, mut initial_state, _) = new_fixture(&log);
@@ -1407,15 +1715,12 @@ fn reroute_rejected_messages_success() {
 
         // Act
         let mut streams = initial_state.take_streams();
-        stream_handler.reroute_rejected_messages(
+        stream_handler.handle_rejected_messages(
             vec![(RejectReason::CanisterMigrating, response)],
-            &mut streams,
-            initial_state
-                .metadata
-                .network_topology
-                .routing_table
-                .as_ref(),
             REMOTE_SUBNET,
+            &mut initial_state,
+            &mut streams,
+            &mut (i64::MAX / 2),
         );
 
         // Assert
@@ -1423,51 +1728,159 @@ fn reroute_rejected_messages_success() {
     });
 }
 
-#[test]
-fn generate_reject_response_queue_full() {
-    let request = test_request(*REMOTE_CANISTER, *LOCAL_CANISTER);
-    let err = StateError::QueueFull { capacity: 13 };
+/// Common implementation for tests checking reject responses generated by the `StreamHandler`
+/// directly.
+fn check_stream_handler_generated_reject_response_impl(
+    mut available_guaranteed_response_memory: i64,
+    // This function will be fed with a local canister and a state prepared for testing.
+    // It's purpose is to set the stage as required such that inducting the `loopback_stream`
+    // induces the type of reject response that will be be compared against a reference given
+    // by `expected_reject_code` and `expected_state_error`.
+    canister_setup: &dyn Fn(CanisterState, &mut ReplicatedState),
+    expected_reject_code: RejectCode,
+    expected_state_error: StateError,
+) {
+    with_test_replica_logger(|log| {
+        let (stream_handler, mut state, _) = new_fixture(&log);
 
-    assert_eq!(
-        RequestOrResponse::Response(
-            Response {
-                originator: request.sender,
-                respondent: request.receiver,
-                originator_reply_callback: request.sender_reply_callback,
-                refund: request.payment,
-                response_payload: Payload::Reject(RejectContext::new(
-                    RejectCode::SysTransient,
-                    &err
-                )),
-                deadline: request.deadline,
-            }
-            .into()
-        ),
-        generate_reject_response(&request, RejectCode::SysTransient, err.to_string())
+        // A loopback stream with one request in it.
+        let loopback_stream = generate_loopback_stream(StreamConfig {
+            messages_begin: 0,
+            message_count: 1,
+            signals_end: 0,
+            reject_signals: None,
+        });
+
+        // Generate the expected reject response for the request in `loopback_stream`.
+        let request = get_request_at(loopback_stream.messages(), 0);
+        let reject_response = Response {
+            originator: request.sender,
+            respondent: request.receiver,
+            originator_reply_callback: request.sender_reply_callback,
+            refund: request.payment,
+            response_payload: Payload::Reject(RejectContext::new(
+                expected_reject_code,
+                expected_state_error,
+            )),
+            deadline: request.deadline,
+        };
+
+        state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+        // Setup the canister testing environment using a local canister and a state for testing.
+        canister_setup(
+            new_canister_state(
+                *LOCAL_CANISTER,
+                user_test_id(24).get(),
+                *INITIAL_CYCLES,
+                NumSeconds::from(100_000),
+            ),
+            &mut state,
+        );
+
+        let inducted_state =
+            stream_handler.induct_loopback_stream(state, &mut available_guaranteed_response_memory);
+
+        assert_eq!(
+            get_response_at(
+                inducted_state.get_stream(&LOCAL_SUBNET).unwrap().messages(),
+                1
+            ),
+            &reject_response,
+        );
+    });
+}
+
+#[test]
+fn check_stream_handler_generated_reject_response_canister_not_found() {
+    check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|_, _| {},
+        RejectCode::DestinationInvalid,
+        StateError::CanisterNotFound(*LOCAL_CANISTER),
     );
 }
 
 #[test]
-fn generate_reject_response_canister_not_found() {
-    let request = test_request(*REMOTE_CANISTER, *LOCAL_CANISTER);
-    let err = StateError::CanisterNotFound(*LOCAL_CANISTER);
+fn check_stream_handler_generated_reject_response_canister_stopped() {
+    check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|mut canister_state, state| {
+            canister_state.system_state.status = CanisterStatus::Stopped;
+            state.put_canister_state(canister_state);
+        },
+        RejectCode::CanisterError,
+        StateError::CanisterStopped(*LOCAL_CANISTER),
+    );
+}
 
-    assert_eq!(
-        RequestOrResponse::Response(
-            Response {
-                originator: request.sender,
-                respondent: request.receiver,
-                originator_reply_callback: request.sender_reply_callback,
-                refund: request.payment,
-                response_payload: Payload::Reject(RejectContext::new(
-                    RejectCode::DestinationInvalid,
-                    &err
-                )),
-                deadline: request.deadline,
-            }
-            .into()
-        ),
-        generate_reject_response(&request, RejectCode::DestinationInvalid, err.to_string())
+#[test]
+fn check_stream_handler_generated_reject_response_canister_stopping() {
+    check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|mut canister_state, state| {
+            canister_state.system_state.status = CanisterStatus::Stopping {
+                call_context_manager: Default::default(),
+                stop_contexts: Default::default(),
+            };
+            state.put_canister_state(canister_state);
+        },
+        RejectCode::CanisterError,
+        StateError::CanisterStopping(*LOCAL_CANISTER),
+    );
+}
+
+#[test]
+fn check_stream_handler_generated_reject_response_queue_full() {
+    check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|mut canister_state, state| {
+            let mut available_guaranteed_response_memory = i64::MAX / 2;
+            while let Ok(()) = canister_state.push_input(
+                test_request(*LOCAL_CANISTER, *LOCAL_CANISTER).into(),
+                &mut available_guaranteed_response_memory,
+                SubnetType::Application,
+                InputQueueType::LocalSubnet,
+            ) {}
+            state.put_canister_state(canister_state);
+        },
+        RejectCode::SysTransient,
+        StateError::QueueFull { capacity: 500 },
+    );
+}
+
+#[test]
+fn check_stream_handler_generated_reject_response_out_of_memory() {
+    check_stream_handler_generated_reject_response_impl(
+        0, // `available_guaranteed_response_memory`
+        &|canister_state, state| {
+            state.put_canister_state(canister_state);
+        },
+        RejectCode::CanisterError,
+        StateError::OutOfMemory {
+            requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
+            available: 0,
+        },
+    );
+}
+
+#[test]
+fn check_stream_handler_generated_reject_response_canister_migrating() {
+    check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|_, state| {
+            *state = simulate_canister_migration(
+                state.clone(),
+                *LOCAL_CANISTER,
+                LOCAL_SUBNET,
+                CANISTER_MIGRATION_SUBNET,
+            );
+        },
+        RejectCode::SysTransient,
+        StateError::CanisterMigrating {
+            canister_id: *LOCAL_CANISTER,
+            host_subnet: CANISTER_MIGRATION_SUBNET,
+        },
     );
 }
 
@@ -3390,32 +3803,33 @@ fn simulate_canister_migration(
 }
 
 fn assert_eq_critical_error_induct_response_failed(count: u64, metrics_registry: &MetricsRegistry) {
-    assert_eq_critical_errors(count, 0, 0, 0, metrics_registry);
+    assert_eq_critical_errors(count, 0, 0, 0, 0, metrics_registry);
 }
 
-fn assert_eq_critical_error_reject_signals_for_request(
+fn assert_eq_critical_error_bad_reject_signal_for_response(
     count: u64,
     metrics_registry: &MetricsRegistry,
 ) {
-    assert_eq_critical_errors(0, count, 0, 0, metrics_registry);
+    assert_eq_critical_errors(0, count, 0, 0, 0, metrics_registry);
 }
 
 fn assert_eq_critical_error_sender_subnet_mismatch(count: u64, metrics_registry: &MetricsRegistry) {
-    assert_eq_critical_errors(0, 0, count, 0, metrics_registry);
+    assert_eq_critical_errors(0, 0, count, 0, 0, metrics_registry);
 }
 
 fn assert_eq_critical_error_receiver_subnet_mismatch(
     count: u64,
     metrics_registry: &MetricsRegistry,
 ) {
-    assert_eq_critical_errors(0, 0, 0, count, metrics_registry);
+    assert_eq_critical_errors(0, 0, 0, count, 0, metrics_registry);
 }
 
 fn assert_eq_critical_errors(
     induct_response_failed: u64,
-    reject_signals_for_request: u64,
+    bad_reject_signal_for_response: u64,
     sender_subnet_mismatch: u64,
     receiver_subnet_mismatch: u64,
+    request_misrouted: u64,
     metrics_registry: &MetricsRegistry,
 ) {
     assert_eq!(
@@ -3427,13 +3841,17 @@ fn assert_eq_critical_errors(
             (
                 &[(
                     "error",
-                    &CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST.to_string()
+                    &CRITICAL_ERROR_BAD_REJECT_SIGNAL_FOR_RESPONSE.to_string()
                 )],
-                reject_signals_for_request
+                bad_reject_signal_for_response
             ),
             (
                 &[("error", &CRITICAL_ERROR_SENDER_SUBNET_MISMATCH.to_string())],
                 sender_subnet_mismatch
+            ),
+            (
+                &[("error", &CRITICAL_ERROR_REQUEST_MISROUTED.to_string())],
+                request_misrouted
             ),
             (
                 &[(

@@ -1,45 +1,38 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::orchestrator::utils::rw_message::{
-    can_store_msg, cert_state_makes_progress_with_retries,
-};
-use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::tecdsa::{
     add_chain_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
     empty_subnet_update, execute_update_subnet_proposal, get_public_key_with_retries,
     get_signature_with_logger, verify_signature,
 };
-use crate::util::*;
-use crate::{
-    driver::{test_env::TestEnv, test_env_api::*},
-    orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg},
-    retry_with_msg,
-    util::runtime_from_url,
-};
 use anyhow::bail;
 use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::SubnetId;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg, can_store_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
+    },
+    ssh_access::execute_bash_command,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_recovery::steps::Step;
 use ic_recovery::{get_node_metrics, NodeMetrics, Recovery};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::*;
+use ic_system_test_driver::{
+    driver::{test_env::TestEnv, test_env_api::*},
+    util::runtime_from_url,
+};
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
-
-pub fn set_sandbox_env_vars(dir: PathBuf) {
-    set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
-    set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
-    set_var_to_path("COMPILER_BINARY", dir.join("compiler_sandbox"));
-}
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
@@ -95,7 +88,7 @@ pub(crate) fn halt_subnet(
         .halt_subnet(subnet_id, true, &[])
         .exec()
         .expect("Failed to halt subnet.");
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "check if consensus is halted",
         logger.clone(),
         secs(120),
@@ -212,7 +205,7 @@ pub(crate) fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) 
         .block_on_ssh_session()
         .expect("Failed to establish SSH session");
 
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         format!("check if node {} is unassigned", node.node_id),
         logger.clone(),
         secs(300),
@@ -295,7 +288,7 @@ pub fn enable_chain_key_on_subnet(
 
 /// Pre-condition: subnet has the Chain key and no other subnet has signing enabled for that key.
 /// Enables Chain key signing on the given subnet and returns a public key for the given canister.
-pub(crate) fn enable_chain_key_signing_on_subnet(
+pub fn enable_chain_key_signing_on_subnet(
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
     subnet_id: SubnetId,
@@ -432,7 +425,7 @@ pub(crate) fn disable_chain_key_on_subnet(
     info!(logger, "Waiting until signing fails.");
     let message_hash = vec![0xabu8; 32];
     for key_id in key_ids {
-        retry_with_msg!(
+        ic_system_test_driver::retry_with_msg!(
             "check if signing has failed",
             logger.clone(),
             secs(120),

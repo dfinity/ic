@@ -10,10 +10,12 @@ rust_library(
     ),
     crate_name = "ic_cketh_test_utils",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/cketh/minter",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
@@ -41,6 +43,7 @@ rust_test(
     name = "lib_tests",
     crate = ":test_utils",
     deps = [
+        # Keep sorted.
         ":test_utils",
     ],
 )

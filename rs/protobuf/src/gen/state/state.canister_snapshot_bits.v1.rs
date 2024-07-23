@@ -20,4 +20,6 @@ pub struct CanisterSnapshotBits {
     pub stable_memory_size: u64,
     #[prost(uint64, tag = "9")]
     pub wasm_memory_size: u64,
+    #[prost(uint64, tag = "10")]
+    pub total_size: u64,
 }

@@ -8,7 +8,7 @@ use ic_interfaces::{
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     batch::ValidationContext,
-    consensus::idkg::{EcdsaBlockReader, EcdsaStats, RequestId},
+    consensus::idkg::{IDkgBlockReader, IDkgStats, RequestId},
     consensus::{
         dkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable,
         HasHeight, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
@@ -146,7 +146,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
-                ecdsa: None,
+                idkg: None,
             }),
         ),
         height,
@@ -178,10 +178,10 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
     }
 }
 
-pub struct EcdsaStatsNoOp {}
-impl EcdsaStats for EcdsaStatsNoOp {
-    fn update_active_transcripts(&self, _block_reader: &dyn EcdsaBlockReader) {}
-    fn update_active_pre_signatures(&self, _block_reader: &dyn EcdsaBlockReader) {}
+pub struct IDkgStatsNoOp {}
+impl IDkgStats for IDkgStatsNoOp {
+    fn update_active_transcripts(&self, _block_reader: &dyn IDkgBlockReader) {}
+    fn update_active_pre_signatures(&self, _block_reader: &dyn IDkgBlockReader) {}
     fn record_support_validation(&self, _support: &IDkgDealingSupport, _duration: Duration) {}
     fn record_support_aggregation(
         &self,

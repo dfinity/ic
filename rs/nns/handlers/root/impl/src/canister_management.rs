@@ -12,7 +12,7 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
-    registry::{encode_or_panic, get_value, mutate_registry},
+    registry::{get_value, mutate_registry},
     types::CallCanisterProposal,
 };
 use ic_nns_handler_root_interface::{
@@ -24,6 +24,7 @@ use ic_protobuf::{
 };
 use ic_registry_keys::make_nns_canister_records_key;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
+use prost::Message;
 
 pub async fn do_add_nns_canister(request: AddCanisterRequest) {
     let key = make_nns_canister_records_key().into_bytes();
@@ -67,7 +68,7 @@ pub async fn do_add_nns_canister(request: AddCanisterRequest) {
         vec![RegistryMutation {
             mutation_type: Type::Update as i32,
             key: key.clone(),
-            value: encode_or_panic(&nns_canister_records),
+            value: nns_canister_records.encode_to_vec(),
         }],
         vec![Precondition {
             key: key.clone(),
@@ -92,7 +93,7 @@ pub async fn do_add_nns_canister(request: AddCanisterRequest) {
         vec![RegistryMutation {
             mutation_type: Type::Update as i32,
             key: key.clone(),
-            value: encode_or_panic(&nns_canister_records),
+            value: nns_canister_records.encode_to_vec(),
         }],
         vec![Precondition {
             key: key.clone(),

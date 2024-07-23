@@ -1,0 +1,8 @@
+/var/log/libvirt/qemu/guestos-serial.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

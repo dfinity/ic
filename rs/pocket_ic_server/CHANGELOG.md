@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- A new subnet is created on an existing PocketIC instance if a new canister is created with a specified mainnet canister ID that does not belong to any existing subnet's canister range.
+- The argument of the endpoint `/http_gateway` takes an additional optional field `domains` specifying the domains at which the HTTP gateway is listening (default to `localhost`).
+- The argument of the endpoint `/http_gateway` takes an additional optional field `https_config` specifying the TLS certificate and key. If provided, then an HTTPS gateway is started using that TLS certificate.
+- A new endpoint `/instances/<instance_id>/read/topology` to retrieve the topology of the PocketIC instance. The topology contains a list of node IDs instead of subnet size which can be derived from the number of node IDs.
+- New CLI option `--ready-file` to specify a file which is created by the PocketIC server once it is ready to accept HTTP connections.
+- A new endpoint `/instances/<instance_id>/_/dashboard` serving a PocketIC dashboard.
+- ECDSA support (IC mainnet-like): there are three ECDSA keys with names `dfx_test_key1`, `test_key_1`, and `key_1` on the II subnet.
+- The argument of the endpoint `/instances/` to create a new PocketIC instance becomes a struct with three fields:
+  the original argument of that endpoint is the field `subnet_config_set`, the new optional field `state_dir`
+  specifies a directory in which the state of the PocketIC instance can be preserved across the PocketIC instance lifetime
+  (that directory should be empty when specified as `state_dir` for the very first time), and the new optional field `nonmainnet_features`
+  specifies if non-mainnet features (e.g., best-effort responses) should be enabled for the PocketIC instance.
+  The topology contains a new field `subnet_seed` which is equal to the directory name of the directory in the `state_dir`
+  storing the state of the corresponding subnet.
+  The state directory (if specified) also contains a file `registry.proto` containing the current snapshot of the registry.
+- Support for canister HTTP outcalls: endpoint `/instances/<instance_id>/get_canister_http` to retrieve pending canister HTTP outcalls
+  and endpoint `/instances/<instance_id>/mock_canister_http_response` to mock a response for a pending canister HTTP outcall,
+  the server produces responses for pending canister HTTP outcalls automatically in the auto-progress mode (started by calling the endpoint `/instances/<instance_id>/auto_progress`).
+- New endpoint `/instance/<instance_id>/api/v3/canister/<effective_canister_id>/call` supporting a synchronous HTTP interface of the IC for update calls.
+  Note that this endpoint might non-deterministically return a response with status code 202 and empty body (in this case, the status of the call
+  must be polled at the endpoint `/instance/<instance_id>/api/v3/canister/<effective_canister_id>/read_state`).
+  
+### Fixed
+- Executing a query call on a new PocketIC instance crashed the PocketIC server.
+
 ## 4.0.0 - 2024-04-30
 
 ### Added

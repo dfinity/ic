@@ -5,7 +5,7 @@ workspace(
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
-load("mainnet-canisters.bzl", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
+load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 http_archive(
     name = "aspect_rules_sol",
@@ -483,6 +483,8 @@ http_archive(
 
 mainnet_core_nns_canisters()
 
+mainnet_ck_canisters()
+
 mainnet_sns_canisters()
 
 # Asset canister
@@ -651,6 +653,16 @@ http_file(
     name = "ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz",
     sha256 = "8730fd2aa3b9fe67468fc5e853436f618d0b16be34ff30d7e6492eac55f78d90",
     url = "https://download.dfinity.systems/ic/300dc603a92b5f70dae79229793c902f346af3cc/canisters/ic-icrc1-ledger-u256.wasm.gz",
+)
+
+# XC artifacts for testing
+
+# EVM RPC canister
+
+http_file(
+    name = "evm_rpc.wasm.gz",
+    sha256 = "ccce0d8e3210db42ff12b03360c20246855ad8529da0f844faa343bf8b393529",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/release-2024-05-23/evm_rpc.wasm.gz",
 )
 
 # Haskell toolchain for spec_compliance tests

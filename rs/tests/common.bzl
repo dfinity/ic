@@ -2,12 +2,14 @@
 Common dependencies for system-tests.
 """
 
+load("//bazel:defs.bzl", "symlink_dir")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/artifact_pool",
+    "//rs/async_utils",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
@@ -15,6 +17,7 @@ DEPENDENCIES = [
     "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "//rs/canister_client",
     "//rs/canister_client/sender",
+    "//rs/rosetta-api/icrc1/test_utils",
     "//rs/certification",
     "//rs/config",
     "//rs/constants",
@@ -81,7 +84,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
-    "//rs/rust_canisters/proxy_canister:lib",
     "//rs/rust_canisters/xnet_test",
     "//rs/sns/governance",
     "//rs/sns/init",
@@ -92,6 +94,8 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/tests/consensus/utils",
+    "//rs/tests/driver:ic-system-test-driver",
     "//rs/tests/test_canisters/message:lib",
     "//rs/tree_deserializer",
     "//rs/types/base_types",
@@ -101,6 +105,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "@crate_index//:anyhow",
+    "@crate_index//:axum",
     "@crate_index//:assert_matches",
     "@crate_index//:assert-json-diff",
     "@crate_index//:backon",
@@ -110,7 +115,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:chacha20poly1305",
     "@crate_index//:chrono",
-    "@crate_index//:cidr",
     "@crate_index//:clap",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:ed25519-dalek",
@@ -119,8 +123,6 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http_0_2_12",
     "@crate_index//:humantime",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:hyper_0_14_27",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
@@ -384,68 +386,3 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
     "@candid//:didc",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 ]
-
-def _symlink_dir(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dir = rule(
-    implementation = _symlink_dir,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
-
-def _symlink_dir_test(ctx):
-    # Use the no-op script as the executable
-    no_op_output = ctx.actions.declare_file("no_op")
-    ctx.actions.write(output = no_op_output, content = ":")
-
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns), executable = no_op_output)]
-
-symlink_dir_test = rule(
-    implementation = _symlink_dir_test,
-    test = True,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
-
-def _symlink_dirs(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, childdirname in ctx.attr.targets.items():
-        for file in target[DefaultInfo].files.to_list():
-            ln = ctx.actions.declare_file(dirname + "/" + childdirname + "/" + file.basename)
-            ctx.actions.symlink(
-                output = ln,
-                target_file = file,
-            )
-            lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dirs = rule(
-    implementation = _symlink_dirs,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)

@@ -318,7 +318,7 @@ struct Atom {
 }
 
 /// Unoptimized yet simple implementation, avoiding the `decimal::maths` dependency.
-/// The main reason why the `decimal::maths` implementation is not ideal is becasue it defines
+/// The main reason why the `decimal::maths` implementation is not ideal is because it defines
 /// `0^0`, while this may cause confusion and is thus better treated as an error case.
 /// More concretely, this function will return an error in the following cases:
 /// * If `x` and `exp` are both zero.
@@ -438,7 +438,7 @@ impl BinomialFormula {
             .enumerate()
             .map(|(i, coefficient)| {
                 let coefficient = Decimal::from(coefficient);
-                // Casting `i` to `u8` and computing `degree - i` is safe becasue we checked above
+                // Casting `i` to `u8` and computing `degree - i` is safe because we checked above
                 // that `coefficients.len() == degree + 1`, so `i <= degree: u8`.
                 let i = i as u8;
                 let left = Atom::new(left_param, degree - i);

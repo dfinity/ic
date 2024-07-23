@@ -73,7 +73,7 @@ pub fn run_launcher(socket: std::os::unix::net::UnixStream, embedder_config_arg:
     // Wrap it all up to handle frames received on socket.
     let frame_handler = transport::Demux::<_, _, protocol::transport::ControllerToLauncher>::new(
         Arc::new(rpc::ServerStub::new(svc, reply_out_stream)),
-        reply_handler,
+        reply_handler.clone(),
     );
 
     // Run RPC operations on the stream socket.
@@ -84,6 +84,7 @@ pub fn run_launcher(socket: std::os::unix::net::UnixStream, embedder_config_arg:
         socket,
         SocketReaderConfig::default(),
     );
+    reply_handler.flush_with_errors();
 }
 
 #[derive(Debug)]

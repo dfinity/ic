@@ -1,10 +1,10 @@
 use anyhow::Result;
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_aggregator::{
     config_fast, validate_aggregator_data, wait_until_aggregator_finds_sns,
 };
 use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
-use ic_tests::systest;
 
 /// This is a non-interactive load test:
 /// 1. Install NNS, SNS, and the Aggregator canister

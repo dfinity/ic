@@ -1,13 +1,9 @@
-use std::time::Duration;
-
-use crate::{nns::vote_and_execute_proposal, util::MessageCanister};
-
-use candid::{Encode, Principal};
+use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
-use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
@@ -15,15 +11,18 @@ use ic_management_canister_types::{
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
     SignWithSchnorrReply,
 };
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_message::ForwardParams;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{NnsFunction, ProposalStatus},
-};
+use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    canister_api::{CallMode, Request},
+    nns::vote_and_execute_proposal,
+    util::MessageCanister,
+};
 use ic_types::{PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
@@ -34,16 +33,16 @@ use registry_canister::mutations::{
     do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
 };
 use slog::{debug, info, Logger};
+use std::time::Duration;
 
 pub mod tecdsa_add_nodes_test;
 pub mod tecdsa_complaint_test;
 pub mod tecdsa_remove_nodes_test;
 pub mod tecdsa_signature_test;
 pub mod tecdsa_two_signing_subnets_test;
+pub mod tschnorr_message_sizes_test;
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
-pub(crate) const KEY_ID2: &str = "some_other_key";
-pub(crate) const KEY_ID3: &str = "yet_another_key";
 
 /// The default DKG interval takes too long before the keys are created and
 /// passed to execution.
@@ -60,7 +59,7 @@ pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     }
 }
 
-pub(crate) fn make_ecdsa_key_id() -> MasterPublicKeyId {
+pub fn make_ecdsa_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: "some_ecdsa_key".to_string(),
@@ -99,15 +98,6 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
@@ -125,6 +115,16 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }
 
@@ -462,7 +462,9 @@ pub(crate) async fn get_schnorr_signature_with_logger(
     };
     info!(
         logger,
-        "Sending a Schnorr signing request: {:?}", signature_request
+        "Sending a {} signing request of size: {}",
+        key_id,
+        signature_request.message.len(),
     );
 
     let mut count = 0;
@@ -619,7 +621,6 @@ pub(crate) async fn create_new_subnet_with_keys(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
@@ -630,14 +631,6 @@ pub(crate) async fn create_new_subnet_with_keys(
         ),
         dkg_interval_length: DKG_INTERVAL,
         dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
-        gossip_max_artifact_streams_per_peer: 0,
-        gossip_max_chunk_wait_ms: 0,
-        gossip_max_duplicity: 0,
-        gossip_max_chunk_size: 0,
-        gossip_receive_check_cache_size: 0,
-        gossip_pfn_evaluation_period_ms: 0,
-        gossip_registry_poll_period_ms: 0,
-        gossip_retransmission_request_ms: 0,
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
@@ -649,9 +642,17 @@ pub(crate) async fn create_new_subnet_with_keys(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
-
-        // Deprecated fields
+        // Unused section follows
         ecdsa_config: None,
+        ingress_bytes_per_block_soft_cap: Default::default(),
+        gossip_max_artifact_streams_per_peer: Default::default(),
+        gossip_max_chunk_wait_ms: Default::default(),
+        gossip_max_duplicity: Default::default(),
+        gossip_max_chunk_size: Default::default(),
+        gossip_receive_check_cache_size: Default::default(),
+        gossip_pfn_evaluation_period_ms: Default::default(),
+        gossip_registry_poll_period_ms: Default::default(),
+        gossip_retransmission_request_ms: Default::default(),
     };
     execute_create_subnet_proposal(governance, payload, logger).await;
 }
@@ -705,4 +706,96 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
         },
     };
     assert!(res);
+}
+
+#[derive(CandidType, Deserialize, Debug)]
+pub enum SignWithChainKeyReply {
+    Ecdsa(SignWithECDSAReply),
+    Schnorr(SignWithSchnorrReply),
+}
+
+#[derive(Clone)]
+pub struct ChainSignatureRequest {
+    pub key_id: MasterPublicKeyId,
+    pub principal: Principal,
+    pub payload: Vec<u8>,
+}
+
+impl ChainSignatureRequest {
+    pub fn new(
+        principal: Principal,
+        key_id: MasterPublicKeyId,
+        schnorr_message_size: usize,
+    ) -> Self {
+        let params = match key_id.clone() {
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => Self::ecdsa_params(ecdsa_key_id),
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+                Self::schnorr_params(schnorr_key_id, schnorr_message_size)
+            }
+        };
+        let payload = Encode!(&params).unwrap();
+
+        Self {
+            key_id,
+            principal,
+            payload,
+        }
+    }
+
+    fn ecdsa_params(ecdsa_key_id: EcdsaKeyId) -> ForwardParams {
+        let signature_request = SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: ecdsa_key_id,
+        };
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_ecdsa".to_string(),
+            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
+            payload: Encode!(&signature_request).unwrap(),
+        }
+    }
+
+    fn schnorr_params(schnorr_key_id: SchnorrKeyId, message_size: usize) -> ForwardParams {
+        let signature_request = SignWithSchnorrArgs {
+            message: vec![1; message_size],
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: schnorr_key_id,
+        };
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_schnorr".to_string(),
+            cycles: SCHNORR_SIGNATURE_FEE.get() * 2,
+            payload: Encode!(&signature_request).unwrap(),
+        }
+    }
+}
+
+impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+
+    fn canister_id(&self) -> Principal {
+        self.principal
+    }
+
+    fn method_name(&self) -> String {
+        "forward".to_string()
+    }
+
+    fn payload(&self) -> Vec<u8> {
+        self.payload.clone()
+    }
+
+    fn parse_response(&self, raw_response: &[u8]) -> anyhow::Result<SignWithChainKeyReply> {
+        Ok(match self.key_id {
+            MasterPublicKeyId::Ecdsa(_) => {
+                SignWithChainKeyReply::Ecdsa(SignWithECDSAReply::decode(raw_response)?)
+            }
+            MasterPublicKeyId::Schnorr(_) => {
+                SignWithChainKeyReply::Schnorr(SignWithSchnorrReply::decode(raw_response)?)
+            }
+        })
+    }
 }

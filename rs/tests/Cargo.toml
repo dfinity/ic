@@ -7,24 +7,24 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-system-test-driver = { path = "./driver" }
 anyhow = { workspace = true }
+axum = { workspace = true }
 assert-json-diff = "2.0.1"
 assert_matches = { workspace = true }
 async-recursion = { workspace = true }
 async-trait = { workspace = true }
 backon = "0.4.1"
 base64 = { workspace = true }
-bincode = "1.3.3"
+bincode = { workspace = true }
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
 deterministic_ips = { path = "../ic_os/deterministic_ips" }
 discower_bowndary = { path = "../boundary_node/discower_bowndary" }
-proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 chrono = { workspace = true }
-cidr = "0.2.2"
 clap = { version = "3.2.25", features = ["derive"] }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
@@ -40,9 +40,11 @@ ic-base-types = { path = "../types/base_types" }
 ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-async-utils = { path = "../async_utils" }
 ic-backup = { path = "../backup" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
+ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
@@ -51,6 +53,7 @@ ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
+ic_consensus_system_test_utils = { path = "./consensus/utils" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -122,8 +125,6 @@ json5 = "0.4.1"
 k256 = { workspace = true }
 k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
 kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
-hyper = "0.14.18"
-hyper-rustls = { workspace = true }
 http = "0.2.12"
 lazy_static = { workspace = true }
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
@@ -158,7 +159,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-sha2 = "0.10"
+sha2 = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
@@ -168,13 +169,13 @@ strum_macros = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
-walkdir = "2.3.1"
+walkdir = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
-url = "2.1.1"
+url = { workspace = true }
 wat = "1.0.52"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
@@ -190,10 +191,6 @@ name = "ic-colocate"
 path = "testing_verification/colocate_test.rs"
 
 [[bin]]
-name = "ic-systest-basic-health"
-path = "testing_verification/basic_health_test.rs"
-
-[[bin]]
 name = "ic-ii-delegation-test"
 path = "testing_verification/ii_delegation_test.rs"
 
@@ -204,6 +201,10 @@ path = "consensus/orchestrator/rotate_ecdsa_idkg_key_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
 path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-tschnorr-message-sizes"
+path = "consensus/tecdsa/tschnorr_message_sizes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-key-rotation"
@@ -320,18 +321,6 @@ path = "financial_integrations/icrc1_agent_test.rs"
 [[bin]]
 name = "ic-systest-node-assign-test"
 path = "consensus/orchestrator/node_assign_test.rs"
-
-[[bin]]
-name = "ic-systest-node-reassignment-test"
-path = "consensus/orchestrator/node_reassignment_test.rs"
-
-[[bin]]
-name = "ic-systest-ssh-access-to-nodes-test"
-path = "consensus/orchestrator/ssh_access_to_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-node-registration-test"
-path = "consensus/orchestrator/node_registration_test.rs"
 
 [[bin]]
 name = "ic-systest-rejoin-test"
@@ -452,10 +441,6 @@ path = "testing_verification/replicable_mock_test.rs"
 [[bin]]
 name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
-
-[[bin]]
-name = "ic-systest-cup-compatibility"
-path = "consensus/orchestrator/cup_compatibility_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
@@ -584,22 +569,6 @@ path = "testing_verification/testnets/medium.rs"
 [[bin]]
 name = "ic-systest-large"
 path = "testing_verification/testnets/large.rs"
-
-[[bin]]
-name = "ic-systest-consensus-performance"
-path = "consensus/consensus_performance.rs"
-
-[[bin]]
-name = "ic-systest-consensus-performance-bytes"
-path = "consensus/throughput_with_large_messages.rs"
-
-[[bin]]
-name = "ic-systest-consensus-performance-requests"
-path = "consensus/throughput_with_small_messages.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-performance"
-path = "consensus/tecdsa/tecdsa_performance.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-performance"

@@ -8,7 +8,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     ThresholdEcdsaVerifySigShareInternalError, ThresholdEcdsaVerifySignatureInternalError,
 };
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgReceivers;
@@ -46,7 +46,7 @@ pub fn sign_share(
     vault: &dyn CspVault,
     self_node_id: &NodeId,
     inputs: &ThresholdEcdsaSigInputs,
-) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
     ensure_self_was_receiver(self_node_id, inputs.receivers())?;
 
     let key = inputs.key_transcript().transcript_to_bytes();
@@ -57,7 +57,7 @@ pub fn sign_share(
     let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytes();
     let key_times_lambda = q.key_times_lambda().transcript_to_bytes();
 
-    let internal_sig_share = vault.ecdsa_sign_share(
+    let internal_sig_share = vault.create_ecdsa_sig_share(
         inputs.derivation_path().clone(),
         inputs.hashed_message().to_vec(),
         *inputs.nonce(),
@@ -70,7 +70,7 @@ pub fn sign_share(
     )?;
 
     let sig_share_raw = internal_sig_share.serialize().map_err(|e| {
-        ThresholdEcdsaSignShareError::SerializationError {
+        ThresholdEcdsaCreateSigShareError::SerializationError {
             internal_error: format!("{:?}", e),
         }
     })?;
@@ -251,11 +251,11 @@ pub fn combine_sig_shares(
 fn ensure_self_was_receiver(
     self_node_id: &NodeId,
     receivers: &IDkgReceivers,
-) -> Result<(), ThresholdEcdsaSignShareError> {
+) -> Result<(), ThresholdEcdsaCreateSigShareError> {
     if receivers.contains(*self_node_id) {
         Ok(())
     } else {
-        Err(ThresholdEcdsaSignShareError::NotAReceiver)
+        Err(ThresholdEcdsaCreateSigShareError::NotAReceiver)
     }
 }
 

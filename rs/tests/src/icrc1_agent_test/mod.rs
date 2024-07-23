@@ -1,6 +1,5 @@
 use std::convert::TryFrom;
 
-use crate::util::{agent_with_identity, random_ed25519_identity};
 use assert_matches::assert_matches;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
@@ -9,6 +8,7 @@ use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument, UpgradeArgs};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::{agent_with_identity, random_ed25519_identity};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -18,8 +18,9 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
 };
 use on_wire::IntoWire;
+use std::env;
 
-use crate::{
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
@@ -404,7 +405,7 @@ pub async fn install_icrc1_ledger<'a>(
 ) {
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path("rs/rosetta-api/icrc1/ledger/ledger_canister.wasm"),
+        env.get_dependency_path(&env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),
         Some(Encode!(&args).unwrap()),
     )
     .await
