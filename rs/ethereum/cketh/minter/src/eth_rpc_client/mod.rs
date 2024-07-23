@@ -35,6 +35,8 @@ pub mod requests;
 pub mod responses;
 
 #[cfg(test)]
+pub mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 // We expect most of the calls to contain zero events.
@@ -441,6 +443,20 @@ pub enum SingleCallError {
     EvmRpcError(String),
 }
 
+impl From<EvmRpcError> for SingleCallError {
+    fn from(value: EvmRpcError) -> Self {
+        match value {
+            EvmRpcError::ProviderError(e) => SingleCallError::EvmRpcError(e.to_string()),
+            EvmRpcError::HttpOutcallError(e) => SingleCallError::HttpOutcallError(e.into()),
+            EvmRpcError::JsonRpcError(e) => SingleCallError::JsonRpcError {
+                code: e.code,
+                message: e.message,
+            },
+            EvmRpcError::ValidationError(e) => SingleCallError::EvmRpcError(e.to_string()),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum MultiCallError<T> {
     ConsistentHttpOutcallError(HttpOutcallError),
@@ -494,21 +510,7 @@ impl<T> ReducedResult<T> {
         fn into_single_call_result<T>(result: EvmRpcResult<T>) -> Result<T, SingleCallError> {
             match result {
                 Ok(t) => Ok(t),
-                Err(e) => match e {
-                    EvmRpcError::ProviderError(e) => {
-                        Err(SingleCallError::EvmRpcError(e.to_string()))
-                    }
-                    EvmRpcError::HttpOutcallError(e) => {
-                        Err(SingleCallError::HttpOutcallError(e.into()))
-                    }
-                    EvmRpcError::JsonRpcError(e) => Err(SingleCallError::JsonRpcError {
-                        code: e.code,
-                        message: e.message,
-                    }),
-                    EvmRpcError::ValidationError(e) => {
-                        Err(SingleCallError::EvmRpcError(e.to_string()))
-                    }
-                },
+                Err(e) => Err(SingleCallError::from(e)),
             }
         }
 
@@ -648,9 +650,6 @@ impl Reduce for MultiCallResults<FeeHistory> {
             .into()
     }
 }
-
-// TODO XC-131: add proptest to ensure HttpOutcallError are kept, so that the halving
-// of the log scraping happens correctly
 
 impl<T> MultiCallError<T> {
     pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(

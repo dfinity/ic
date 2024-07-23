@@ -661,17 +661,21 @@ mod eth_get_transaction_count {
 }
 
 mod evm_rpc_conversion {
-    use crate::eth_rpc_client::providers::RpcNodeProvider;
-    use crate::eth_rpc_client::{Block, MultiCallError};
-    use crate::eth_rpc_client::{MultiCallResults, ReducedResult};
+    use crate::eth_rpc_client::{
+        providers::RpcNodeProvider, test_fixtures::arb::arb_evm_rpc_error, Block, FeeHistory,
+        HttpOutcallError, MultiCallError, MultiCallResults, ReducedResult, SingleCallError,
+    };
     use crate::numeric::{BlockNumber, Wei};
     use assert_matches::assert_matches;
     use candid::Nat;
     use evm_rpc_client::types::candid::{
-        Block as EvmBlock, EthMainnetService as EvmEthMainnetService,
-        MultiRpcResult as EvmMultiRpcResult, RpcService as EvmRpcService,
+        Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
+        HttpOutcallError as EvmHttpOutcallError, MultiRpcResult as EvmMultiRpcResult,
+        RpcError as EvmRpcError, RpcService as EvmRpcService,
     };
     use num_bigint::BigUint;
+    use proptest::proptest;
+    use serde_json::Value;
 
     #[test]
     fn should_map_consistent_result() {
@@ -794,6 +798,43 @@ mod evm_rpc_conversion {
             );
         }
     }
+
+    proptest! {
+        #[test]
+        fn should_preserve_http_outcall_errors(evm_error in arb_evm_rpc_error()) {
+            let minter_error = SingleCallError::from(evm_error.clone());
+
+            match (evm_error, minter_error) {
+                (EvmRpcError::HttpOutcallError(e), SingleCallError::HttpOutcallError(m)) => match e {
+                    EvmHttpOutcallError::IcError { code, message } => {
+                        assert_eq!(m, HttpOutcallError::IcError { code, message })
+                    }
+                    EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
+                        status,
+                        body,
+                        parsing_error,
+                    } => {
+                        assert_eq!(
+                            m,
+                            HttpOutcallError::InvalidHttpJsonRpcResponse {
+                                status,
+                                body,
+                                parsing_error
+                            }
+                        )
+                    }
+                },
+                (EvmRpcError::HttpOutcallError(e), _) => {
+                    panic!("EVM-RPC HTTP outcall error not preserved: {:?}", e)
+                }
+                (_, SingleCallError::HttpOutcallError(e)) => {
+                    panic!("Unexpected Minter HTTP outcall error: {:?}", e)
+                }
+                _ => (),
+            };
+        }
+    }
+
 
     fn evm_rpc_block() -> EvmBlock {
         EvmBlock {
