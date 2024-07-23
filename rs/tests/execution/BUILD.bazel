@@ -1,7 +1,7 @@
 load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "compute_allocation_test",
