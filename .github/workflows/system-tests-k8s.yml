@@ -15,13 +15,15 @@ on:
       targets:
         description: 'System Tests / Bazel Targets'
         required: false
+        default: '//rs/tests/testing_verification:basic_health_test'
       jobs:
         description: 'Concurrent Bazel Jobs'
         required: false
+        default: '32'
 
 env:
-  TARGETS: "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.targets || //rs/tests/testing_verification:basic_health_test }}"
-  JOBS: "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.jobs || 32 }}"
+  TARGETS: "${{ github.event.inputs.targets }}"
+  JOBS: "${{ github.event.inputs.jobs }}"
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
