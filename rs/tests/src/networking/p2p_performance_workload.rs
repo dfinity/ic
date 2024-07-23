@@ -14,6 +14,7 @@ use ic_system_test_driver::{
     },
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 
 use anyhow::bail;
 use ic_agent::Agent;
@@ -41,6 +42,8 @@ const TESTNET_DURATION: Duration = Duration::from_secs(24 * 60 * 60);
 
 // 1 hour
 const PROMETHEUS_DOWNLOAD_FREQUENCY: Duration = Duration::from_secs(60 * 60);
+
+const EXECUTION_DELAY_DURATION: Duration = Duration::from_millis(550);
 
 // Create an IC with two subnets, with variable number of nodes.
 // Install NNS canister on system subnet.
@@ -95,21 +98,25 @@ pub fn config(
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_app_subnet),
+                .add_malicious_nodes(
+                    nodes_app_subnet,
+                    MaliciousBehaviour::new(true)
+                        .set_maliciously_delay_execution(EXECUTION_DELAY_DURATION),
+                ),
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     env.sync_with_prometheus();
-    info!(logger, "Step 1: Installing NNS canisters ...");
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-    NnsInstallationBuilder::new()
-        .install(&nns_node, &env)
-        .expect("Could not install NNS canisters.");
+    // info!(logger, "Step 1: Installing NNS canisters ...");
+    // let nns_node = env
+    //     .topology_snapshot()
+    //     .root_subnet()
+    //     .nodes()
+    //     .next()
+    //     .unwrap();
+    // NnsInstallationBuilder::new()
+    //     .install(&nns_node, &env)
+    //     .expect("Could not install NNS canisters.");
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
