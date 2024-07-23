@@ -9,11 +9,11 @@ fn main() -> Result<()> {
     let from = NestedVersionTarget::Branch(false);
     let to = NestedVersionTarget::Branch(true);
 
-    let todo = move |e| nested::upgrade(e, &to);
+    let nested_upgrade = move |e| nested::upgrade(e, &to);
 
     SystemTestGroup::new()
         .with_setup(move |e| nested::config(e, &from))
-        .add_test(systest!(todo))
+        .add_test(systest!(nested_upgrade))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(40 * 60))
         .execute_from_args()?;

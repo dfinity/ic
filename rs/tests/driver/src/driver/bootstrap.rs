@@ -618,7 +618,7 @@ pub fn configure_setupos_image(
             version: _,
             url,
             sha256,
-        } => download_setupos_image(tmp_dir.path(), &url, Some(sha256.to_owned()))?,
+        } => download_setupos_image(tmp_dir.path(), url, Some(sha256.to_owned()))?,
     };
 
     let setupos_inject_configs = env
