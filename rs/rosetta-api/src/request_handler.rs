@@ -464,7 +464,7 @@ impl RosettaRequestHandler {
                 .transactions
                 .into_iter()
                 .find(|t| t.transaction_identifier == msg.transaction_identifier)
-                .ok_or_else(|| ApiError::InvalidTransactionId(false, Default::default()))?
+                .ok_or_else(|| ApiError::InvalidTransactionId(false, Default::default()))?,
         };
         Ok(BlockTransactionResponse::new(transaction))
     }

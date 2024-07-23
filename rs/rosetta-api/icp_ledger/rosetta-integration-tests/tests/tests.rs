@@ -926,6 +926,17 @@ async fn test_block_transaction() {
         .transaction;
     assert!(transaction == transactions[0]);
 
+    let transaction = env
+        .rosetta
+        .block_transaction(
+            block_identifier.clone(),
+            transactions[1].transaction_identifier.clone(),
+        )
+        .await
+        .unwrap()
+        .transaction;
+    assert!(transaction == transactions[1]);
+
     assert!(env
         .rosetta
         .block_transaction(
