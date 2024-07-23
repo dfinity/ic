@@ -16,3 +16,14 @@ package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],
 )
+
+# Targets for preparing (e.g. stripping binaries, compressiong wasms, etc) release artifacts.
+package_group(
+    name = "release-pkg",
+    packages = ["//publish/..."],
+)
+
+package_group(
+    name = "ic-os-pkg",
+    packages = ["//rs/ic_os/..."],
+)

@@ -203,5 +203,5 @@ upload_artifacts(
     testonly = True,
     inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:ic-os-pkg"],
 )
