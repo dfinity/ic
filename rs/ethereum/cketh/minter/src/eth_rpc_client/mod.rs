@@ -244,20 +244,21 @@ impl EthRpcClient {
         params: FeeHistoryParams,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            let result = evm_rpc_client
+            return evm_rpc_client
                 .eth_fee_history(EvmFeeHistoryArgs {
                     block_count: params.block_count.as_u128(),
                     newest_block: into_evm_block_tag(params.highest_block),
                     reward_percentiles: Some(params.reward_percentiles),
                 })
-                .await;
-            return ReducedResult::from(result).into();
+                .await
+                .reduce()
+                .into();
         }
         // A typical response is slightly above 300 bytes.
-        let results: MultiCallResults<FeeHistory> = self
-            .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
-            .await;
-        results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
+        self.parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
+            .await
+            .reduce()
+            .into()
     }
 
     pub async fn eth_send_raw_transaction(
@@ -607,8 +608,15 @@ impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> 
     }
 }
 
-impl From<EvmMultiRpcResult<Option<EvmFeeHistory>>> for ReducedResult<FeeHistory> {
-    fn from(value: EvmMultiRpcResult<Option<EvmFeeHistory>>) -> Self {
+trait Reduce {
+    type Item;
+    fn reduce(self) -> ReducedResult<Self::Item>;
+}
+
+impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
+    type Item = FeeHistory;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
         fn map_fee_history(fee_history: Option<EvmFeeHistory>) -> Result<FeeHistory, String> {
             let fee_history = fee_history.ok_or("No fee history available")?;
             Ok(FeeHistory {
@@ -626,9 +634,18 @@ impl From<EvmMultiRpcResult<Option<EvmFeeHistory>>> for ReducedResult<FeeHistory
             values.into_iter().map(WeiPerGas::try_from).collect()
         }
 
-        ReducedResult::from_internal(value).map_reduce(&map_fee_history, |results| {
+        ReducedResult::from_internal(self).map_reduce(&map_fee_history, |results| {
             results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
         })
+    }
+}
+
+impl Reduce for MultiCallResults<FeeHistory> {
+    type Item = FeeHistory;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        self.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
+            .into()
     }
 }
 
