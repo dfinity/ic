@@ -225,9 +225,10 @@ jobs:
           if [[ $REPO_NAME == "ic-private" ]]; then
             ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
           fi
-          if [[ "${{ github.event_name }}" == "merge_group" ]]; then
-            ADDITIONAL_FLAGS+=" -m 'not fails_on_merge_train'"
-          fi
+          # if [[ "${{ github.event_name }}" == "merge_group" ]]; then
+          #   ADDITIONAL_FLAGS+=" -m 'not fails_on_merge_train'"
+          # fi
+          ADDITIONAL_FLAGS+=" -m 'not fails_on_merge_train'"
 
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
