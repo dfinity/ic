@@ -148,7 +148,11 @@ LIBRARIES = {
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [ "//rs:ic-os-pkg" ],
+        visibility = [
+            "//ic-os/boundary-guestos/envs:__subpackages__",
+            "//ic-os/guestos/envs:__subpackages__",
+            "//ic-os/hostos/envs:__subpackages__",
+            "//ic-os/setupos/envs:__subpackages__",
         ],
     )
     for name in BINARIES
@@ -167,7 +171,12 @@ genrule(
         "@platforms//os:osx": "cp $< $@",
     }),
     executable = True,
-    visibility = [ "//rs:ic-os-pkg" ],
+    visibility = [
+        "//ic-os/boundary-guestos/envs:__subpackages__",
+        "//ic-os/guestos/envs:__subpackages__",
+        "//ic-os/hostos/envs:__subpackages__",
+        "//ic-os/setupos/envs:__subpackages__",
+    ],
 )
 
 [
@@ -181,7 +190,12 @@ genrule(
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [ "//rs:ic-os-pkg" ],
+        visibility = [
+            "//ic-os/boundary-guestos/envs:__subpackages__",
+            "//ic-os/guestos/envs:__subpackages__",
+            "//ic-os/hostos/envs:__subpackages__",
+            "//ic-os/setupos/envs:__subpackages__",
+        ],
     )
     for name in TEST_BINARIES
 ]
@@ -196,8 +210,13 @@ genrule(
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [ "//rs:ic-os-pkg" ],
-
+        visibility = [
+            "//ic-os/boundary-api-guestos/envs:__subpackages__",
+            "//ic-os/boundary-guestos/envs:__subpackages__",
+            "//ic-os/guestos/envs:__subpackages__",
+            "//ic-os/hostos/envs:__subpackages__",
+            "//ic-os/setupos/envs:__subpackages__",
+        ],
     )
     for name in LIBRARIES
 ]
