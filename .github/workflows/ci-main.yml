@@ -246,14 +246,13 @@ jobs:
           if [[ $REPO_NAME == "ic-private" ]]; then
             ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
           fi
-          # if [[ $EVENT_NAME == "merge_group" ]]; then
-          #   ADDITIONAL_FLAGS+=" -m 'not fails_on_merge_train'"
-          # fi
-          ADDITIONAL_FLAGS+=" -m 'not fails_on_merge_train'"
+          if [[ $EVENT_NAME == "merge_group" ]]; then
+            ADDITIONAL_FLAGS+=" -m 'not fails_on_merge_train'"
+          fi
 
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
-           # Use eval to correctly interpret ADDITIONAL_FLAGS
+          # Use eval to correctly interpret ADDITIONAL_FLAGS
           eval pytest --ignore=gitlab_config/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
