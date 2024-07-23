@@ -22,8 +22,8 @@ on:
         default: '32'
 
 env:
-  TARGETS: "${{ github.event.inputs.targets }}"
-  JOBS: "${{ github.event.inputs.jobs }}"
+  TARGETS: "${{ github.event.inputs.targets || '//rs/tests/testing_verification:basic_health_test' }}"
+  JOBS: "${{ github.event.inputs.jobs || '32' }}"
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
