@@ -616,11 +616,7 @@ pub(crate) fn syscalls<
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
-                let canister_logging_is_enabled =
-                    feature_flags.canister_logging == FlagStatus::Enabled;
-                if canister_logging_is_enabled {
-                    num_bytes += logging_charge_bytes(&mut caller, length)?
-                }
+                num_bytes += logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
@@ -629,12 +625,7 @@ pub(crate) fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length = length as usize;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.save_log_message(
-                        canister_logging_is_enabled,
-                        offset,
-                        length,
-                        memory,
-                    );
+                    system_api.save_log_message(offset, length, memory);
                     if debug_print_is_enabled {
                         system_api.ic0_debug_print(offset, length, memory)
                     } else {

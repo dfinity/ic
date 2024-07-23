@@ -10899,29 +10899,37 @@ lazy_static! {
     };
 
     static ref CF_PARTICIPANTS: Vec<sns_swap_pb::CfParticipant> = {
+        #[allow(deprecated)] // TODO[#NNS-2338]: Remove this once hotkey_principal is removed.
         let mut result = vec![
             sns_swap_pb::CfParticipant {
+                controller: Some(principal(1)),
                 hotkey_principal: principal(1).to_string(),
                 cf_neurons: vec![
                     sns_swap_pb::CfNeuron::try_new(
                         1,
                         NEURONS_FUND_INVESTMENT_E8S * 60 / 100,
+                        vec![],
                     ).unwrap(),
                     sns_swap_pb::CfNeuron::try_new(
                         2,
-                        NEURONS_FUND_INVESTMENT_E8S * 10 / 100
+                        NEURONS_FUND_INVESTMENT_E8S * 10 / 100,
+                        vec![],
                     ).unwrap(),
                 ],
             },
             sns_swap_pb::CfParticipant {
+                controller: Some(principal(2)),
                 hotkey_principal: principal(2).to_string(),
-                cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(
-                    3,
-                    NEURONS_FUND_INVESTMENT_E8S * 30 / 100,
-                ).unwrap()],
+                cf_neurons: vec![
+                    sns_swap_pb::CfNeuron::try_new(
+                        3,
+                        NEURONS_FUND_INVESTMENT_E8S * 30 / 100,
+                        vec![],
+                    ).unwrap()
+                ],
             },
         ];
-        result.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
+        result.sort_by_key(|p1| p1.try_get_controller().unwrap());
         result
     };
 

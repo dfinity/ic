@@ -64,6 +64,7 @@ impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
+            visibility: item.visibility,
         }
     }
 }
@@ -81,6 +82,7 @@ impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
+            visibility: item.visibility,
         }
     }
 }
@@ -140,6 +142,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -171,6 +174,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -215,6 +219,26 @@ impl From<pb_api::neuron::DissolveState> for pb::neuron::DissolveState {
     }
 }
 
+impl From<pb::Visibility> for pb_api::Visibility {
+    fn from(item: pb::Visibility) -> Self {
+        match item {
+            pb::Visibility::Unspecified => pb_api::Visibility::Unspecified,
+            pb::Visibility::Private => pb_api::Visibility::Private,
+            pb::Visibility::Public => pb_api::Visibility::Public,
+        }
+    }
+}
+
+impl From<pb_api::Visibility> for pb::Visibility {
+    fn from(item: pb_api::Visibility) -> Self {
+        match item {
+            pb_api::Visibility::Unspecified => pb::Visibility::Unspecified,
+            pb_api::Visibility::Private => pb::Visibility::Private,
+            pb_api::Visibility::Public => pb::Visibility::Public,
+        }
+    }
+}
+
 impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
     fn from(item: pb::AbridgedNeuron) -> Self {
         Self {
@@ -233,6 +257,7 @@ impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -254,6 +279,7 @@ impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -571,6 +597,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
                 pb_api::proposal::Action::CreateServiceNervousSystem(v.into())
             }
             pb::proposal::Action::InstallCode(v) => pb_api::proposal::Action::InstallCode(v.into()),
+            pb::proposal::Action::StopOrStartCanister(v) => {
+                pb_api::proposal::Action::StopOrStartCanister(v.into())
+            }
         }
     }
 }
@@ -615,6 +644,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
             }
             pb_api::proposal::Action::InstallCode(v) => pb::proposal::Action::InstallCode(v.into()),
+            pb_api::proposal::Action::StopOrStartCanister(v) => {
+                pb::proposal::Action::StopOrStartCanister(v.into())
+            }
         }
     }
 }
@@ -2778,6 +2810,60 @@ impl From<pb_api::install_code::CanisterInstallMode> for pb::install_code::Canis
             }
             pb_api::install_code::CanisterInstallMode::Upgrade => {
                 pb::install_code::CanisterInstallMode::Upgrade
+            }
+        }
+    }
+}
+
+impl From<pb::StopOrStartCanister> for pb_api::StopOrStartCanister {
+    fn from(item: pb::StopOrStartCanister) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            action: item.action,
+        }
+    }
+}
+
+impl From<pb_api::StopOrStartCanister> for pb::StopOrStartCanister {
+    fn from(item: pb_api::StopOrStartCanister) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            action: item.action,
+        }
+    }
+}
+
+impl From<pb::stop_or_start_canister::CanisterAction>
+    for pb_api::stop_or_start_canister::CanisterAction
+{
+    fn from(item: pb::stop_or_start_canister::CanisterAction) -> Self {
+        match item {
+            pb::stop_or_start_canister::CanisterAction::Unspecified => {
+                pb_api::stop_or_start_canister::CanisterAction::Unspecified
+            }
+            pb::stop_or_start_canister::CanisterAction::Stop => {
+                pb_api::stop_or_start_canister::CanisterAction::Stop
+            }
+            pb::stop_or_start_canister::CanisterAction::Start => {
+                pb_api::stop_or_start_canister::CanisterAction::Start
+            }
+        }
+    }
+}
+
+impl From<pb_api::stop_or_start_canister::CanisterAction>
+    for pb::stop_or_start_canister::CanisterAction
+{
+    fn from(item: pb_api::stop_or_start_canister::CanisterAction) -> Self {
+        match item {
+            pb_api::stop_or_start_canister::CanisterAction::Unspecified => {
+                pb::stop_or_start_canister::CanisterAction::Unspecified
+            }
+            pb_api::stop_or_start_canister::CanisterAction::Stop => {
+                pb::stop_or_start_canister::CanisterAction::Stop
+            }
+            pb_api::stop_or_start_canister::CanisterAction::Start => {
+                pb::stop_or_start_canister::CanisterAction::Start
             }
         }
     }
