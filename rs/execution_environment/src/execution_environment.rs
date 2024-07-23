@@ -603,8 +603,6 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::DeleteChunks) => Self::reject_due_to_api_not_implemented(&mut msg),
-
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
@@ -755,11 +753,6 @@ impl ExecutionEnvironment {
 
                         let canister_id = args.get_canister_id();
                         let sender_canister_version = args.get_sender_canister_version();
-
-                        // Track whether the deprecated `controller` field was used.
-                        if args.settings.get_controller().is_some() {
-                            self.metrics.controller_in_update_settings_total.inc();
-                        }
 
                         let result = match CanisterSettings::try_from(args.settings) {
                             Err(err) => Err(err.into()),
@@ -2794,7 +2787,10 @@ impl ExecutionEnvironment {
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
-                args: ThresholdArguments::Schnorr(SchnorrArguments { key_id, message }),
+                args: ThresholdArguments::Schnorr(SchnorrArguments {
+                    key_id,
+                    message: Arc::new(message),
+                }),
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
@@ -3169,6 +3165,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
@@ -3265,7 +3262,8 @@ impl ExecutionEnvironment {
                     ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. }
                     | ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer => task,
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => task,
                     ExecutionTask::PausedExecution { id, .. } => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (input, prepaid_execution_cycles) = paused.abort(log);
@@ -3819,6 +3817,10 @@ pub fn execute_canister(
             }
             ExecutionTask::GlobalTimer => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
+                (task, None)
+            }
+            ExecutionTask::OnLowWasmMemory => {
+                let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
                 (task, None)
             }
             ExecutionTask::AbortedExecution {

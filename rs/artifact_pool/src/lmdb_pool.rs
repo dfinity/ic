@@ -7,7 +7,7 @@ use ic_interfaces::{
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
     },
-    ecdsa::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
+    idkg::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -1033,12 +1033,12 @@ impl PoolArtifact for ConsensusMessage {
                 Box::new(move || match payload_type {
                     PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
                         dkg: dkg::Summary::default(),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
                         dealings: dkg::Dealings::new_empty(start_height),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                 }),
             );

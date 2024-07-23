@@ -63,7 +63,7 @@ little-loadshedder = "0.1.0"
 maxminddb = "0.24"
 mockall = { workspace = true }
 moka = { version = "0.12", features = ["sync", "future"] }
-nftables = "0.4"
+nftables = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
@@ -106,7 +106,7 @@ tracing-core = "0.1.32"
 tracing-serde = "0.1.3"
 tracing-slog = "0.2"
 tracing-subscriber = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 x509-parser = { workspace = true }
 zeroize = { workspace = true }
 

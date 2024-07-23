@@ -44,20 +44,24 @@ use crate::{
         settle_neurons_fund_participation_response::NeuronsFundNeuron as NeuronsFundNeuronPb,
         swap_background_information, Ballot, CreateServiceNervousSystem, ExecuteNnsFunction,
         GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-        Governance as GovernanceProto, GovernanceError, KnownNeuron, ListKnownNeuronsResponse,
-        ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics,
-        Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron as NeuronProto, NeuronInfo, NeuronState,
+        NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
-        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Principals,
-        Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus,
-        RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse, Tally,
-        Topic, UpdateNodeProvider, Vote, WaitForQuietState,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
+        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        StopOrStartCanister, Tally, Topic, UpdateNodeProvider, Vote, WaitForQuietState,
         XdrConversionRate as XdrConversionRatePb,
     },
-    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
+    proposals::{
+        call_canister::CallCanister,
+        create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
+    },
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -74,6 +78,7 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
+use ic_nervous_system_proto::pb::v1::Principals;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -296,7 +301,7 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             controller: Some(neuron.controller),
-            hotkeys: Some(neuron.hotkeys.into()),
+            hotkeys: Some(Principals::from(neuron.hotkeys.clone())),
             is_capped: Some(neuron.is_capped),
             hotkey_principal: Some(neuron.controller.to_string()),
         }
@@ -811,6 +816,18 @@ impl Proposal {
                 Action::SetSnsTokenSwapOpenTimeWindow(_)
                 | Action::OpenSnsTokenSwap(_)
                 | Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+                Action::InstallCode(install_code) => {
+                    // There should be a valid topic since the validation should be done when the
+                    // proposal is created. We avoid panicking here since `topic()` is called in a
+                    // lot of places.
+                    install_code.valid_topic().unwrap_or(Topic::Unspecified)
+                }
+                Action::StopOrStartCanister(stop_or_start) => {
+                    // There should be a valid topic since the validation should be done when the
+                    // proposal is created. We avoid panicking here since `topic()` is called in a
+                    // lot of places.
+                    stop_or_start.valid_topic().unwrap_or(Topic::Unspecified)
+                }
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -881,6 +898,8 @@ impl Action {
             Action::OpenSnsTokenSwap(_) => "ACTION_OPEN_SNS_TOKEN_SWAP",
             Action::CreateServiceNervousSystem(_) => "ACTION_CREATE_SERVICE_NERVOUS_SYSTEM",
             Action::ExecuteNnsFunction(_) => "ACTION_EXECUTE_NNS_FUNCTION",
+            Action::InstallCode(_) => "ACTION_CHANGE_CANISTER",
+            Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
         }
     }
 
@@ -1245,17 +1264,6 @@ impl ProposalInfo {
     }
 }
 
-impl From<Vec<PrincipalId>> for Principals {
-    fn from(principals: Vec<PrincipalId>) -> Self {
-        Self { principals }
-    }
-}
-
-impl From<Principals> for Vec<PrincipalId> {
-    fn from(principals: Principals) -> Self {
-        principals.principals
-    }
-}
 #[cfg(test)]
 mod test_wait_for_quiet {
     use crate::pb::v1::{ProposalData, Tally, WaitForQuietState};
@@ -4410,6 +4418,13 @@ impl Governance {
             Action::OpenSnsTokenSwap(obsolete_action) => {
                 self.perform_obsolete_action(pid, obsolete_action);
             }
+            Action::InstallCode(install_code) => {
+                self.perform_install_code(pid, install_code).await;
+            }
+            Action::StopOrStartCanister(stop_or_start) => {
+                self.perform_stop_or_start_canister(pid, stop_or_start)
+                    .await;
+            }
         }
     }
 
@@ -4425,6 +4440,45 @@ impl Governance {
                 format!("Proposal action {:?} is obsolete.", obsolete_action),
             )),
         );
+    }
+
+    async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
+        let result = self.perform_call_canister(proposal_id, install_code).await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_stop_or_start_canister(
+        &mut self,
+        proposal_id: u64,
+        stop_or_start: StopOrStartCanister,
+    ) {
+        let result = self.perform_call_canister(proposal_id, stop_or_start).await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_call_canister(
+        &mut self,
+        proposal_id: u64,
+        call_canister: impl CallCanister,
+    ) -> Result<(), GovernanceError> {
+        let (canister_id, function) = call_canister.canister_and_function()?;
+        let payload = call_canister.payload()?;
+
+        let response = self
+            .env
+            .call_canister_method(canister_id, function, payload)
+            .await;
+
+        match response {
+            Ok(_) => Ok(()),
+            Err((code, message)) => Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Error calling external canister for proposal {}. Rejection code: {:?} message: {}",
+                    proposal_id, code, message
+                ),
+            )),
+        }
     }
 
     /// Always fails, because this type of proposal is obsolete.
@@ -4767,6 +4821,8 @@ impl Governance {
             Action::OpenSnsTokenSwap(obsolete_action) => {
                 Self::validate_obsolete_proposal_action(obsolete_action)
             }
+            Action::InstallCode(install_code) => install_code.validate(),
+            Action::StopOrStartCanister(stop_or_start) => stop_or_start.validate(),
         }?;
 
         Ok(action.clone())

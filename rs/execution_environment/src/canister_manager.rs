@@ -489,7 +489,6 @@ impl CanisterManager {
             | Ok(Ic00Method::InstallChunkedCode)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::LoadCanisterSnapshot)
@@ -504,7 +503,6 @@ impl CanisterManager {
                     | Ok(Ic00Method::StoredChunks) if self.config.wasm_chunk_store == FlagStatus::Enabled => {}
                     Ok(Ic00Method::UploadChunk)
                     | Ok(Ic00Method::StoredChunks)
-                    | Ok(Ic00Method::DeleteChunks)
                     | Ok(Ic00Method::ClearChunkStore)
                     | Ok(Ic00Method::InstallChunkedCode) => return Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
@@ -597,11 +595,6 @@ impl CanisterManager {
         canister: &mut CanisterState,
     ) {
         // Note: At this point, the settings are validated.
-        if let Some(controller) = settings.controller() {
-            // Remove all the other controllers and add the new one.
-            canister.system_state.controllers.clear();
-            canister.system_state.controllers.insert(controller);
-        }
         if let Some(controllers) = settings.controllers() {
             canister.system_state.controllers.clear();
             for principal in controllers {
@@ -684,8 +677,7 @@ impl CanisterManager {
             canister.system_state.reserved_balance_limit(),
         )?;
 
-        let is_controllers_change =
-            validated_settings.controller().is_some() || validated_settings.controllers().is_some();
+        let is_controllers_change = validated_settings.controllers().is_some();
 
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
@@ -2248,9 +2240,6 @@ pub(crate) enum CanisterManagerError {
         requested: Cycles,
         limit: Cycles,
     },
-    // TODO(RUN-1001): Use this error type after successful rollout of the next
-    // replica version.
-    #[allow(dead_code)]
     ReservedCyclesLimitIsTooLow {
         cycles: Cycles,
         limit: Cycles,

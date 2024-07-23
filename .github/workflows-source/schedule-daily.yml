@@ -65,7 +65,7 @@ jobs:
           git config --global user.email "infra+github-automation@dfinity.org"
           git config --global user.name "IDX GitLab Automation"
 
-          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')--github"
+          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
           git switch --force-create "$RC_BRANCH_NAME" HEAD
           git push --force --set-upstream origin "$RC_BRANCH_NAME"
 
