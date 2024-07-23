@@ -2613,6 +2613,14 @@ impl ExecutionEnvironment {
         .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
     }
 
+    fn calculate_signature_fee(&self, args: &ThresholdArguments, subnet_size: usize) -> Cycles {
+        let cam = &self.cycles_account_manager;
+        match args {
+            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
+            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn sign_with_threshold(
         &self,
@@ -2628,11 +2636,7 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let cam = &self.cycles_account_manager;
-            let signature_fee = match args {
-                ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
-                ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
-            };
+            let signature_fee = self.calculate_signature_fee(&arg, subnet_size);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
