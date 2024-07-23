@@ -2,7 +2,6 @@
 //! are defi data_source: (), timestamp_seconds: ()ned as small but
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.
-
 use crate::fake::{
     DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, NODE_PROVIDER_REWARD, SNS_GOVERNANCE_CANISTER_ID,
     SNS_LEDGER_ARCHIVE_CANISTER_ID, SNS_LEDGER_CANISTER_ID, SNS_LEDGER_INDEX_CANISTER_ID,
@@ -6094,11 +6093,16 @@ async fn test_not_for_profit_neurons() {
         Topic::NeuronManagement as i32,
         Followees {
             followees: vec![normal_neuron.id.unwrap()],
-        },
+        }
+        .into(),
     );
 
-    let (_, mut gov) =
-        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+    let (_, mut gov) = governance_with_neurons(
+        &init_neurons
+            .values()
+            .map(|n| n.clone().into())
+            .collect::<Vec<Neuron>>(),
+    );
 
     let not_for_profit_neuron = init_neurons[&25].clone();
 
@@ -6169,8 +6173,12 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
         .hot_keys
         .push(*second_neuron.controller.as_ref().unwrap());
 
-    let (_, mut gov) =
-        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+    let (_, mut gov) = governance_with_neurons(
+        &init_neurons
+            .values()
+            .map(|n| n.clone().into())
+            .collect::<Vec<Neuron>>(),
+    );
 
     let first_neuron = init_neurons[&25].clone();
 
@@ -6234,8 +6242,12 @@ fn test_add_and_remove_hot_key() {
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
-    let (_, mut gov) =
-        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+    let (_, mut gov) = governance_with_neurons(
+        &init_neurons
+            .values()
+            .map(|n| n.clone().into())
+            .collect::<Vec<Neuron>>(),
+    );
 
     let neuron = init_neurons[&25].clone();
     let new_controller = init_neurons[&42].controller.unwrap();
@@ -6313,13 +6325,17 @@ fn test_manage_and_reward_node_providers() {
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
 
     let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-    ));
+    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
+        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
+    );
     let np_pid = PrincipalId::new_self_authenticating(&[14]);
 
-    let (driver, mut gov) =
-        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+    let (driver, mut gov) = governance_with_neurons(
+        &init_neurons
+            .values()
+            .map(|n| n.clone().into())
+            .collect::<Vec<Neuron>>(),
+    );
 
     println!(
         "Ledger {:?}\n",
@@ -6659,15 +6675,19 @@ fn test_manage_and_reward_multiple_node_providers() {
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
 
     let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-    ));
+    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
+        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
+    );
     let np_pid_0 = PrincipalId::new_self_authenticating(&[14]);
     let np_pid_1 = PrincipalId::new_self_authenticating(&[15]);
     let np_pid_2 = PrincipalId::new_self_authenticating(&[16]);
 
-    let (driver, mut gov) =
-        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+    let (driver, mut gov) = governance_with_neurons(
+        &init_neurons
+            .values()
+            .map(|n| n.clone().into())
+            .collect::<Vec<Neuron>>(),
+    );
 
     println!(
         "Ledger {:?}\n",
@@ -7029,11 +7049,15 @@ fn test_network_economics_proposal() {
 
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
     let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-    ));
-    let (_, mut gov) =
-        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
+        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
+    );
+    let (_, mut gov) = governance_with_neurons(
+        &init_neurons
+            .values()
+            .map(|n| n.clone().into())
+            .collect::<Vec<Neuron>>(),
+    );
 
     gov.heap_data.economics.as_mut().unwrap().reject_cost_e8s = 1234;
     gov.heap_data
@@ -7138,11 +7162,15 @@ fn test_default_followees() {
 
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
     let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-    ));
-    let (mut driver, mut gov) =
-        governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
+    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
+        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
+    );
+    let (mut driver, mut gov) = governance_with_neurons(
+        &init_neurons
+            .values()
+            .map(|n| n.clone().into())
+            .collect::<Vec<Neuron>>(),
+    );
 
     let default_followees = hashmap![
         Topic::Unspecified as i32 => Followees { followees: vec![voter_neuron]},
