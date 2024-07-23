@@ -875,6 +875,8 @@ message Proposal {
     CreateServiceNervousSystem create_service_nervous_system = 24;
     // Calls install_code for a canister (install, reinstall, or upgrade).
     InstallCode install_code = 25;
+    // Stops or starts a canister controlled by Root.
+    StopOrStartCanister stop_or_start_canister = 26;
   }
 }
 
@@ -1540,7 +1542,7 @@ message NeuronsFundSnapshot {
     // participation constraints.
     optional bool is_capped = 5;
 
-    // The principal that can manage this neuron.
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
 
     // The principals that can vote, propose, and follow on behalf of this neuron.
@@ -2068,6 +2070,20 @@ message InstallCode {
   optional bytes arg = 4;
   // Whether to skip stopping the canister before installing. Optional. Default is false.
   optional bool skip_stopping_before_installing = 5;
+}
+
+message StopOrStartCanister {
+  // The target canister ID to call stop_canister or start_canister on. The canister must be
+  // controlled by NNS Root, and it cannot be NNS Governance or Lifeline. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // The action to take on the canister. Required.
+  enum CanisterAction {
+    CANISTER_ACTION_UNSPECIFIED = 0;
+    CANISTER_ACTION_STOP = 1;
+    CANISTER_ACTION_START = 2;
+  }
+  optional CanisterAction action = 2;
 }
 
 // This represents the whole NNS governance system. It contains all
@@ -2646,7 +2662,7 @@ message SettleNeuronsFundParticipationResponse {
     optional uint64 nns_neuron_id = 1;
     // The amount of Neurons' Fund participation associated with this neuron.
     optional uint64 amount_icp_e8s = 2;
-    // The principal that can manage this neuron.
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
     // The principals that can vote, propose, and follow on behalf of this neuron.
     optional ic_nervous_system.pb.v1.Principals hotkeys = 7;

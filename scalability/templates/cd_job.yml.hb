@@ -16,7 +16,7 @@
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
 
-      $SHELL_WRAPPER pip3 install -r requirements.txt
+      $SHELL_WRAPPER PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/{{benchmark_path}} --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET
 
