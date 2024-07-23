@@ -15,8 +15,8 @@ Typical example usage:
 import os
 import shutil
 
-from git import Repo
 import pytest
+from git import Repo
 
 import git_changes
 
