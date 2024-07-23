@@ -1,11 +1,3 @@
-use discower_bowndary::{
-    check::{HealthCheck, HealthCheckImpl},
-    fetch::{NodesFetcher, NodesFetcherImpl},
-    node::Node,
-    route_provider::HealthCheckRouteProvider,
-    snapshot_health_based::HealthBasedSnapshot,
-    transport::{TransportProvider, TransportProviderImpl},
-};
 use ic_base_types::NodeId;
 use k256::SecretKey;
 use std::{collections::HashSet, time::Instant};
@@ -13,9 +5,7 @@ use tokio::time::sleep;
 
 use crate::boundary_nodes::{
     constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
-    helpers::{
-        install_canisters, read_counters_on_counter_canisters, set_counters_on_counter_canisters,
-    },
+    helpers::install_canisters,
     setup::TEST_PRIVATE_KEY,
 };
 use candid::{Decode, Encode};
@@ -46,9 +36,14 @@ use registry_canister::mutations::{
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::bail;
-use ic_agent::{
+use ic_agent_with_discovery::{
     agent::{
         http_transport::{
+            dynamic_routing::{
+                dynamic_route_provider::DynamicRouteProviderBuilder, health_check::HealthChecker,
+                node::Node, nodes_fetch::NodesFetcher,
+                snapshot::round_robin_routing::RoundRobinRoutingSnapshot,
+            },
             reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
             route_provider::RouteProvider,
             ReqwestTransport,
@@ -89,7 +84,6 @@ pub fn decentralization_test(env: TestEnv) {
 }
 
 async fn test(env: TestEnv) {
-    use ic_agent_with_discovery;
     let log = env.logger();
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let unassigned_nodes: Vec<_> = env.topology_snapshot().unassigned_nodes().collect();
@@ -97,7 +91,19 @@ async fn test(env: TestEnv) {
 
     // Identity is needed to execute `update_node_domain_directly` as the caller is checked.
     let agent_with_identity = {
-        let mut agent = nns_node.build_default_agent_async().await;
+        // let addr = nns_node.get_public_addr();
+        let url = nns_node.get_public_url();
+        let client = Client::builder()
+            .danger_accept_invalid_certs(true)
+            // .resolve(addr, url)
+            .build()
+            .expect("Could not create HTTP client.");
+        let transport = ReqwestTransport::create_with_client(url, client).unwrap();
+        let mut agent = Agent::builder().with_transport(transport).build().unwrap();
+        agent
+            .fetch_root_key()
+            .await
+            .expect("Failed to fetch root key");
         let identity = Secp256k1Identity::from_private_key(
             SecretKey::from_sec1_pem(TEST_PRIVATE_KEY).unwrap(),
         );
@@ -209,27 +215,26 @@ async fn test(env: TestEnv) {
             .next()
             .unwrap()
             .subnet_id
-            .get();
-        let api_bn_fetch_interval = Duration::from_secs(5);
-        let transport_provider =
-            Arc::new(TransportProviderImpl::new(http_client.clone())) as Arc<dyn TransportProvider>;
-        let fetcher = Arc::new(NodesFetcherImpl::new(transport_provider, subnet_id.into()));
+            .get()
+            .0;
+        // let fetcher = Arc::new(NodesFetcherImpl::new(transport_provider, subnet_id.into()));
         let health_timeout = Duration::from_secs(5);
         let check_interval = Duration::from_secs(1);
-        let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
-        let seed_nodes = vec![Node::new("api1.com"), Node::new("api2.com")];
-        let snapshot = HealthBasedSnapshot::new();
-        let route_provider = Arc::new(HealthCheckRouteProvider::new(
-            snapshot,
-            Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
-            api_bn_fetch_interval,
-            Arc::clone(&checker) as Arc<dyn HealthCheck>,
-            check_interval,
-            seed_nodes,
-        ));
-
-        route_provider.run().await;
-
+        let seed_nodes = vec![
+            Node::new("api1.com").unwrap(),
+            Node::new("api2.com").unwrap(),
+        ];
+        let snapshot = RoundRobinRoutingSnapshot::new();
+        let route_provider =
+            DynamicRouteProviderBuilder::new(snapshot, seed_nodes, http_client.clone())
+                .with_checker(Arc::new(HealthChecker::new(
+                    http_client.clone(),
+                    Duration::from_secs(5),
+                )))
+                .with_fetcher(Arc::new(NodesFetcher::new(http_client.clone(), subnet_id)))
+                .build()
+                .await;
+        let route_provider = Arc::new(route_provider) as Arc<dyn RouteProvider>;
         info!(
             log,
             "Assert: HealthCheckRouteProvider has discovered API BNs {:?} and routes calls correctly", &all_api_domains[..2]
@@ -237,7 +242,7 @@ async fn test(env: TestEnv) {
 
         assert_routing_via_domains(
             &log,
-            Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
+            Arc::clone(&route_provider),
             all_api_domains[..2].to_vec(),
             API_BN_DISCOVERY_TIMEOUT,
             ROUTE_CALL_INTERVAL,
@@ -251,7 +256,7 @@ async fn test(env: TestEnv) {
         // This agent routes directly via ipv6 addresses and doesn't employ domain names.
         // Ideally, domains with valid certificates should be used in testing.
         let transport = ReqwestTransport::create_with_client_route(
-            Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
+            Arc::clone(&route_provider),
             http_client.clone(),
         )
         .unwrap();
@@ -440,10 +445,6 @@ async fn test(env: TestEnv) {
     .await;
 
     assert_eq!(counters, vec![2, 6]);
-
-    info!(log, "Gracefully stopping HealthCheckRouteProvider");
-
-    route_provider.stop().await;
 }
 
 pub fn read_state_via_subnet_path_test(env: TestEnv) {
@@ -691,4 +692,110 @@ async fn assert_routing_via_domains(
         sleep(route_call_interval).await;
     }
     panic!("Expected routes {expected_domains:?} were not observed over {route_calls} consecutive routing calls");
+}
+
+pub async fn set_counters_on_counter_canisters(
+    log: &slog::Logger,
+    agent: Agent,
+    canisters: Vec<Principal>,
+    counter_values: Vec<u32>,
+    backoff: Duration,
+    retry_timeout: Duration,
+) {
+    let mut requests_all = vec![];
+    // Dispatch all write calls sequentially. As there is no polling, each call should return very fast.
+    for (idx, canister_id) in canisters.into_iter().enumerate() {
+        let mut requests = vec![];
+        let calls_count = counter_values[idx];
+        for _ in 0..calls_count {
+            let request_id = ic_system_test_driver::retry_with_msg_async!(
+                format!("write call on canister={canister_id}"),
+                log,
+                retry_timeout,
+                backoff,
+                || async {
+                    let result = agent.update(&canister_id, "write").call().await;
+                    if let Ok(id) = result {
+                        Ok(id)
+                    } else {
+                        bail!(
+                            "write call on canister={canister_id} failed, err: {:?}",
+                            result.unwrap_err()
+                        )
+                    }
+                }
+            )
+            .await
+            .expect("write call on canister={canister_id} failed");
+
+            requests.push((canister_id, request_id));
+        }
+        requests_all.push(requests);
+    }
+
+    // Poll all results sequentially.
+    // Overall polling duration should be roughly equal to a single polling duration. As all requests were submitted at nearly same time.
+    for (canister_id, request_id) in requests_all.into_iter().flatten() {
+        ic_system_test_driver::retry_with_msg_async!(
+            format!("call wait on canister={canister_id}"),
+            log,
+            retry_timeout,
+            backoff,
+            || async {
+                let result = agent.wait(request_id, canister_id).await;
+                if result.is_ok() {
+                    Ok(())
+                } else {
+                    bail!(
+                        "wait call on canister={canister_id} failed, err: {:?}",
+                        result.unwrap_err()
+                    )
+                }
+            }
+        )
+        .await
+        .expect("wait call on canister={canister_id} failed");
+    }
+}
+
+pub async fn read_counters_on_counter_canisters(
+    log: &slog::Logger,
+    agent: Agent,
+    canisters: Vec<Principal>,
+    backoff: Duration,
+    retry_timeout: Duration,
+) -> Vec<u32> {
+    // Perform query read calls on canisters sequentially.
+    let mut results = vec![];
+    for canister_id in canisters {
+        let read_result = ic_system_test_driver::retry_with_msg_async!(
+            format!("call read on canister={canister_id}"),
+            log,
+            retry_timeout,
+            backoff,
+            || async {
+                let read_result = agent.query(&canister_id, "read").call().await;
+                if let Ok(bytes) = read_result {
+                    Ok(bytes)
+                } else {
+                    bail!(
+                        "read call on canister={canister_id} failed, err: {:?}",
+                        read_result.unwrap_err()
+                    )
+                }
+            }
+        )
+        .await
+        .expect("read call on canister={canister_id} failed after {max_attempts} attempts");
+
+        let counter = u32::from_le_bytes(
+            read_result
+                .as_slice()
+                .try_into()
+                .expect("slice with incorrect length"),
+        );
+
+        results.push(counter)
+    }
+    results
 }
