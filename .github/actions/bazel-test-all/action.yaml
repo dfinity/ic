@@ -46,7 +46,7 @@ runs:
           fi
 
           echo "KUBECONFIG: ${KUBECONFIG:-}"
-          export KUBECONFIG=$KUBECONFIG
+          cat ${KUBECONFIG} | grep server
           kubectl -n tnets get pods || true
           sleep 180
 
