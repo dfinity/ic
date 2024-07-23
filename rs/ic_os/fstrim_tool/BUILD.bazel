@@ -31,7 +31,6 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_fstrim_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//visibility:public"],
     deps = DEPENDENCIES,
 )
 
@@ -40,7 +39,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [":fstrim_tool"],
 )
 

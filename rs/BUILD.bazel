@@ -24,3 +24,11 @@ package_group(
     name = "release-pkg",
     packages = ["//publish/..."],
 )
+
+package_group(
+    name = "ic-os-pkg",
+    packages = [
+        "//ic-os/...",
+        "//rs/ic_os/...",
+    ],
+)
