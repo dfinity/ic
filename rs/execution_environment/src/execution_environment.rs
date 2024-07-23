@@ -2636,7 +2636,7 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self.calculate_signature_fee(&arg, subnet_size);
+            let signature_fee = self.calculate_signature_fee(&args, subnet_size);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
