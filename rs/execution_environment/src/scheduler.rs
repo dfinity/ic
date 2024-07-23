@@ -1705,7 +1705,7 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignWithThresholdContext`]s by assigning randomness and matching quadruples.
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
             let contexts = state
                 .metadata
@@ -2230,10 +2230,6 @@ fn observe_replicated_state_metrics(
     metrics.observe_consumed_cycles(consumed_cycles_total);
 
     metrics.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
-
-    metrics
-        .ecdsa_signature_agreements
-        .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
 
     for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
         metrics
