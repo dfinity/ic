@@ -35,12 +35,12 @@ use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
     CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrKeyId, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
+    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -603,8 +603,6 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::DeleteChunks) => Self::reject_due_to_api_not_implemented(&mut msg),
-
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
@@ -644,11 +642,13 @@ impl ExecutionEnvironment {
                                     response: Err(err),
                                     refund: msg.take_cycles(),
                                 },
-                                Ok(_) => match self.sign_with_ecdsa(
+                                Ok(_) => match self.sign_with_threshold(
                                     (**request).clone(),
-                                    args.message_hash,
+                                    ThresholdArguments::Ecdsa(EcdsaArguments {
+                                        key_id: args.key_id,
+                                        message_hash: args.message_hash,
+                                    }),
                                     args.derivation_path.into_inner(),
-                                    args.key_id,
                                     registry_settings
                                         .chain_key_settings
                                         .get(&key_id)
@@ -1194,11 +1194,13 @@ impl ExecutionEnvironment {
                                         response: Err(err),
                                         refund: msg.take_cycles(),
                                     },
-                                    Ok(_) => match self.sign_with_schnorr(
+                                    Ok(_) => match self.sign_with_threshold(
                                         (**request).clone(),
-                                        args.message,
+                                        ThresholdArguments::Schnorr(SchnorrArguments {
+                                            key_id: args.key_id,
+                                            message: Arc::new(args.message),
+                                        }),
                                         args.derivation_path.into_inner(),
-                                        args.key_id,
                                         registry_settings
                                             .chain_key_settings
                                             .get(&key_id)
@@ -2609,111 +2611,20 @@ impl ExecutionEnvironment {
         .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn sign_with_ecdsa(
-        &self,
-        mut request: Request,
-        message_hash: [u8; 32],
-        derivation_path: Vec<Vec<u8>>,
-        key_id: EcdsaKeyId,
-        max_queue_size: u32,
-        state: &mut ReplicatedState,
-        rng: &mut dyn RngCore,
-        subnet_size: usize,
-    ) -> Result<(), UserError> {
-        // We already ensured message_hash is 32 byte statically, so there is
-        // no need to check length here.
-
-        let topology = &state.metadata.network_topology;
-        // If the request isn't from the NNS, then we need to charge for it.
-        let source_subnet = topology.routing_table.route(request.sender.get());
-        if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
-            if request.payment < signature_fee {
-                return Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} request sent with {} cycles, but {} cycles are required.",
-                        request.method_name, request.payment, signature_fee
-                    ),
-                ));
-            } else {
-                request.payment -= signature_fee;
-                let nominal_fee = NominalCycles::from(signature_fee);
-                state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
-                state
-                    .metadata
-                    .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(
-                        CyclesUseCase::ECDSAOutcalls,
-                        nominal_fee,
-                    );
-            }
+    fn calculate_signature_fee(&self, args: &ThresholdArguments, subnet_size: usize) -> Cycles {
+        let cam = &self.cycles_account_manager;
+        match args {
+            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
+            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
         }
-
-        let threshold_key = MasterPublicKeyId::Ecdsa(key_id.clone());
-        if !topology
-            .idkg_signing_subnets(&threshold_key)
-            .contains(&state.metadata.own_subnet_id)
-        {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} request failed: unknown or signing disabled threshold key {}.",
-                    request.method_name, threshold_key
-                ),
-            ));
-        }
-
-        if state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts_count(&threshold_key)
-            >= max_queue_size as usize
-        {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} request failed: signature queue for key {} is full.",
-                    request.method_name, threshold_key
-                ),
-            ));
-        }
-
-        let mut pseudo_random_id = [0u8; 32];
-        rng.fill_bytes(&mut pseudo_random_id);
-
-        info!(
-            self.log,
-            "Assigned the pseudo_random_id {:?} to the new sign_with_ECDSA request from {:?}",
-            pseudo_random_id,
-            request.sender()
-        );
-
-        state.metadata.subnet_call_context_manager.push_context(
-            SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
-                request,
-                args: ThresholdArguments::Ecdsa(EcdsaArguments {
-                    key_id,
-                    message_hash,
-                }),
-                derivation_path,
-                pseudo_random_id,
-                batch_time: state.metadata.batch_time,
-                matched_pre_signature: None,
-                nonce: None,
-            }),
-        );
-        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn sign_with_schnorr(
+    fn sign_with_threshold(
         &self,
         mut request: Request,
-        message: Vec<u8>,
+        args: ThresholdArguments,
         derivation_path: Vec<Vec<u8>>,
-        key_id: SchnorrKeyId,
         max_queue_size: u32,
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
@@ -2723,9 +2634,7 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self
-                .cycles_account_manager
-                .schnorr_signature_fee(subnet_size);
+            let signature_fee = self.calculate_signature_fee(&args, subnet_size);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2735,18 +2644,26 @@ impl ExecutionEnvironment {
                     ),
                 ));
             } else {
+                // Charge for signing request.
                 request.payment -= signature_fee;
+                let nominal_fee = NominalCycles::from(signature_fee);
+                let use_case = match args {
+                    ThresholdArguments::Ecdsa(_) => {
+                        state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
+                        CyclesUseCase::ECDSAOutcalls
+                    }
+                    ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
+                };
                 state
                     .metadata
                     .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(
-                        CyclesUseCase::SchnorrOutcalls,
-                        NominalCycles::from(signature_fee),
-                    );
+                    .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
             }
         }
 
-        let threshold_key = MasterPublicKeyId::Schnorr(key_id.clone());
+        let threshold_key = args.key_id();
+
+        // Check if signing is enabled.
         if !topology
             .idkg_signing_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
@@ -2760,6 +2677,7 @@ impl ExecutionEnvironment {
             ));
         }
 
+        // Check if the queue is full.
         if state
             .metadata
             .subnet_call_context_manager
@@ -2789,10 +2707,7 @@ impl ExecutionEnvironment {
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
-                args: ThresholdArguments::Schnorr(SchnorrArguments {
-                    key_id,
-                    message: Arc::new(message),
-                }),
+                args,
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
