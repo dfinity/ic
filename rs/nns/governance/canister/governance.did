@@ -3,6 +3,7 @@ type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   ManageNeuron : ManageNeuron;
   InstallCode : InstallCode;
+  StopOrStartCanister : StopOrStartCanister;
   CreateServiceNervousSystem : CreateServiceNervousSystem;
   ExecuteNnsFunction : ExecuteNnsFunction;
   RewardNodeProvider : RewardNodeProvider;
@@ -42,10 +43,12 @@ type CanisterSummary = record {
 };
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
+  hotkeys : opt Principals;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
 type CfParticipant = record {
+  controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
@@ -637,6 +640,10 @@ type StakeMaturity = record { percentage_to_stake : opt nat32 };
 type StakeMaturityResponse = record {
   maturity_e8s : nat64;
   staked_maturity_e8s : nat64;
+};
+type StopOrStartCanister = record {
+  action : opt int32;
+  canister_id : opt principal;
 };
 type SwapBackgroundInformation = record {
   ledger_index_canister_summary : opt CanisterSummary;

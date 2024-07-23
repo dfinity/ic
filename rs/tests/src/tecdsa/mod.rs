@@ -48,8 +48,6 @@ pub(crate) const KEY_ID1: &str = "secp256k1";
 /// passed to execution.
 pub(crate) const DKG_INTERVAL: u64 = 19;
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 pub(crate) const NUMBER_OF_NODES: usize = 4;
 
 pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
@@ -128,15 +126,9 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
     }
 }
 
-// TODO(EXC-1168): cleanup after cost scaling is fully implemented.
 pub(crate) fn scale_cycles(cycles: Cycles) -> Cycles {
-    match USE_COST_SCALING_FLAG {
-        false => cycles,
-        true => {
-            // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
-            (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
-        }
-    }
+    // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
+    (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
 }
 
 pub(crate) async fn get_public_key_and_test_signature(

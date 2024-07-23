@@ -231,7 +231,6 @@ fn simulate_one_gib_per_second_cost(
     let one_second = Duration::from_secs(1);
 
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .build();
@@ -318,7 +317,6 @@ fn filtered_subnet_config(subnet_type: SubnetType, filter: KeepFeesFilter) -> Su
 /// eg. ingress induction cost.
 fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
@@ -356,7 +354,6 @@ fn simulate_execute_ingress_cost(
     filter: KeepFeesFilter,
 ) -> Cycles {
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
@@ -389,7 +386,6 @@ fn simulate_execute_message_cost(subnet_type: SubnetType, subnet_size: usize) ->
 /// including charging and refunding execution cycles.
 fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .build();
@@ -420,7 +416,6 @@ fn simulate_sign_with_ecdsa_cost(
         name: "key_id_secp256k1".to_string(),
     };
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_nns_subnet_id(nns_subnet_id)
@@ -475,7 +470,6 @@ fn simulate_sign_with_ecdsa_cost(
 /// after executing the message.
 fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_features(SubnetFeatures::from_str("http_requests").unwrap())
@@ -537,7 +531,6 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
 /// Filtered subnet config is used to avoid dealing with irrelevant costs.
 fn simulate_xnet_call_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
@@ -583,7 +576,6 @@ fn simulate_xnet_call_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycle
 /// Simulates creating canister B from canister A to get a canister creation cost.
 fn simulate_create_canister_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
     let env = StateMachineBuilder::new()
-        .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .build();
