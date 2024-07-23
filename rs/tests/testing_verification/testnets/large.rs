@@ -65,9 +65,6 @@ use ic_tests::nns_dapp::{
 };
 
 const NUM_NODES_FULL_CONSENSUS_APP_SUBNET: usize = 13;
-const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
-const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 0;
-const NUM_BN: u64 = 0;
 const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(4 * 60 * 60);
 
 const NETWORK_SIMULATION: NetworkSimulation =
@@ -88,8 +85,8 @@ pub fn setup(env: TestEnv) {
 
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(256 * 1024 * 1024)), // <- 512 GB
+        vcpus: Some(NrOfVCPUs::new(48)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(128 * 1024 * 1024)), // <- 128 GB
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
 

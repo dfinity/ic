@@ -11,7 +11,7 @@ use ic_system_test_driver::{
 use ic_tests::networking::p2p_performance_workload::{config, test};
 
 // Test parameters
-const RPS: usize = 10;
+const RPS: usize = 0;
 const PAYLOAD_SIZE_BYTES: usize = 1024 * 1024;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 1;

@@ -36,6 +36,12 @@ const JAEGER_VM_NAME: &str = "jaeger-vm";
 // 5 minutes
 const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(60 * 60);
 
+// 24 Hours just in case
+const TESTNET_DURATION: Duration = Duration::from_secs(24 * 60 * 60);
+
+// 1 hour
+const PROMETHEUS_DOWNLOAD_FREQUENCY: Duration = Duration::from_secs(60 * 60);
+
 // Create an IC with two subnets, with variable number of nodes.
 // Install NNS canister on system subnet.
 pub fn config(
@@ -74,18 +80,18 @@ pub fn config(
     );
 
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-        boot_image_minimal_size_gibibytes,
+        vcpus: Some(NrOfVCPUs::new(32)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(64 * 1024 * 1024)), // <- 64 GB
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(1000)),
     };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_nns_subnet),
-        )
+        // .add_subnet(
+        //     Subnet::new(SubnetType::System)
+        //         .with_default_vm_resources(vm_resources)
+        //         .add_nodes(nodes_nns_subnet),
+        // )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
@@ -234,12 +240,20 @@ pub fn test(
         );
     }
 
-    // Download Prometheus data if required.
+    let end_time = std::time::Instant::now() + TESTNET_DURATION;
+    while std::time::Instant::now() < end_time {
+        std::thread::sleep(Duration::from_secs(60 * 60));
+        // Download Prometheus data if required.
+        if download_prometheus_data {
+            info!(&log, "Downloading p8s data");
+            env.download_prometheus_data_dir_if_exists();
+        }
+    }
+
+    info!(&log, "Testnet duration has expired.");
+    info!(&log, "Downloading Prometheus data one last time.");
+
     if download_prometheus_data {
-        info!(
-            &log,
-            "Waiting {:?} before download.", DOWNLOAD_PROMETHEUS_WAIT_TIME
-        );
         std::thread::sleep(DOWNLOAD_PROMETHEUS_WAIT_TIME);
         info!(&log, "Downloading p8s data");
         env.download_prometheus_data_dir_if_exists();
