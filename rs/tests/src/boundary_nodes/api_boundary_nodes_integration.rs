@@ -217,9 +217,6 @@ async fn test(env: TestEnv) {
             .subnet_id
             .get()
             .0;
-        // let fetcher = Arc::new(NodesFetcherImpl::new(transport_provider, subnet_id.into()));
-        let health_timeout = Duration::from_secs(5);
-        let check_interval = Duration::from_secs(1);
         let seed_nodes = vec![
             Node::new("api1.com").unwrap(),
             Node::new("api2.com").unwrap(),
