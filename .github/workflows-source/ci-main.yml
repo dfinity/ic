@@ -217,7 +217,7 @@ jobs:
         id: python-ci-tests
         shell: bash
         env:
-          REPO_NAME: "${{ github.repository }}"
+          REPO_NAME: "${{ github.repository.name }}"
           EVENT_NAME: "${{ github.event_name }}"
         run: |
           set -xeuo pipefail
