@@ -603,8 +603,6 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::DeleteChunks) => Self::reject_due_to_api_not_implemented(&mut msg),
-
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
