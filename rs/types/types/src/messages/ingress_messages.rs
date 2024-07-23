@@ -12,9 +12,9 @@ use crate::{
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, FetchCanisterLogsRequest,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, Method, Payload, StoredChunksArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, Method, Payload, StoredChunksArgs, UpdateSettingsArgs, UploadChunkArgs,
+    IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
