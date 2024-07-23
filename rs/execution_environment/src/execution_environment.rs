@@ -2700,9 +2700,10 @@ impl ExecutionEnvironment {
 
         info!(
             self.log,
-            "Assigned the pseudo_random_id {:?} to the new sign_with_ECDSA request from {:?}",
+            "Assigned the pseudo_random_id {:?} to the new {} request from {:?}",
             pseudo_random_id,
-            request.sender()
+            request.method_name,
+            request.sender(),
         );
 
         state.metadata.subnet_call_context_manager.push_context(
