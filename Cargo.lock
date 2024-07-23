@@ -9603,7 +9603,6 @@ dependencies = [
  "candid",
  "comparable",
  "criterion",
- "csv",
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
@@ -9622,7 +9621,6 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
- "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-governance",
  "ic-nervous-system-proto",
@@ -9632,6 +9630,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-nns-governance-init",
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
  "ic-protobuf",
@@ -9692,6 +9691,22 @@ dependencies = [
  "serde_bytes",
  "strum 0.26.2",
  "strum_macros 0.26.2",
+]
+
+[[package]]
+name = "ic-nns-governance-init"
+version = "0.9.0"
+dependencies = [
+ "csv",
+ "ic-base-types",
+ "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-governance-api",
+ "icp-ledger",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
@@ -9914,6 +9929,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
@@ -9989,6 +10005,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-gtc-accounts",
  "ic-nns-handler-lifeline-interface",

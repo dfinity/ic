@@ -6,6 +6,7 @@ use crate::{
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
+use ic_nns_governance_api::pb::v1::ProposalData as ApiProposalData;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use maplit::btreemap;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
@@ -18,13 +19,13 @@ fn proposal_passes_if_not_too_many_nf_neurons_can_occur() {
         .with_test_neurons_fund_neurons(500_000 * E8)
         .build();
     governance_proto.proposals = btreemap! {
-        123 => ProposalData {
+        123 => ApiProposalData {
             id: Some(proposal_id),
-            ..ProposalData::default()
+            ..ApiProposalData::default()
         }
     };
     let mut governance = Governance::new(
-        governance_proto,
+        governance_proto.into(),
         Box::<MockEnvironment>::default(),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
