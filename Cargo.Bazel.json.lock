@@ -1,5 +1,5 @@
 {
-  "checksum": "35dba37464c5f4e0d5e6d658bb47692a53d0783189bfdc96d8d2fea6520cc873",
+  "checksum": "929162aa2a34e5602d4248ba15981a35e5300b068d5b72d74d7b684f00f0f39a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -27806,9 +27806,9 @@
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Git": {
-          "remote": "https://github.com/dfinity/agent-rs",
+          "remote": "https://github.com/nikolay-komarevskiy/agent-rs",
           "commitish": {
-            "Rev": "05a7baa2514c9d1e6adcc35a45a9236228ad606e"
+            "Rev": "fe39797feacadc9de64e6a8eee33a9355329c694"
           },
           "strip_prefix": "ic-agent"
         }
@@ -29603,9 +29603,9 @@
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Git": {
-          "remote": "https://github.com/dfinity/agent-rs",
+          "remote": "https://github.com/nikolay-komarevskiy/agent-rs",
           "commitish": {
-            "Rev": "05a7baa2514c9d1e6adcc35a45a9236228ad606e"
+            "Rev": "fe39797feacadc9de64e6a8eee33a9355329c694"
           },
           "strip_prefix": "ic-transport-types"
         }

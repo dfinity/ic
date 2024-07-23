@@ -4834,7 +4834,7 @@ dependencies = [
 [[package]]
 name = "ic-agent-with-discovery"
 version = "0.36.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=05a7baa2514c9d1e6adcc35a45a9236228ad606e#05a7baa2514c9d1e6adcc35a45a9236228ad606e"
+source = "git+https://github.com/nikolay-komarevskiy/agent-rs?rev=fe39797feacadc9de64e6a8eee33a9355329c694#fe39797feacadc9de64e6a8eee33a9355329c694"
 dependencies = [
  "arc-swap",
  "async-lock 3.3.0",
@@ -5200,7 +5200,7 @@ dependencies = [
 [[package]]
 name = "ic-transport-types"
 version = "0.36.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=05a7baa2514c9d1e6adcc35a45a9236228ad606e#05a7baa2514c9d1e6adcc35a45a9236228ad606e"
+source = "git+https://github.com/nikolay-komarevskiy/agent-rs?rev=fe39797feacadc9de64e6a8eee33a9355329c694#fe39797feacadc9de64e6a8eee33a9355329c694"
 dependencies = [
  "candid",
  "hex",
