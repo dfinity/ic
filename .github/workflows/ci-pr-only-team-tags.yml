@@ -10,7 +10,8 @@ env:
   PR_NUMBER: "${{ github.event.pull_request.number }}"
 
 jobs:
-  manage-tags:
+  set-team-tags:
+    name: Set Team Tags
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
@@ -25,19 +26,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Determine files changed
-        id: changed_files
-        shell: bash
-        run: |
-          set -x
-          CHANGED_FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
-          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Determine teams to tag
         id: determine_teams
         run: |
+          CHANGED_FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
+
           TEAM_TAGS=""
           for FILE in $CHANGED_FILES; do
             TEAMS=$(grep -E "^.* $FILE" .github/CODEOWNERS | awk '{print $NF}')
