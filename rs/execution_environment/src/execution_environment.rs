@@ -2646,6 +2646,7 @@ impl ExecutionEnvironment {
                     ),
                 ));
             } else {
+                // Charge for signing request.
                 request.payment -= signature_fee;
                 let nominal_fee = NominalCycles::from(signature_fee);
                 let use_case = match args {
@@ -2663,6 +2664,8 @@ impl ExecutionEnvironment {
         }
 
         let threshold_key = args.key_id();
+
+        // Check if signing is enabled.
         if !topology
             .idkg_signing_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
@@ -2676,6 +2679,7 @@ impl ExecutionEnvironment {
             ));
         }
 
+        // Check if the queue is full.
         if state
             .metadata
             .subnet_call_context_manager
