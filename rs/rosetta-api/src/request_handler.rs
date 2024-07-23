@@ -331,7 +331,11 @@ impl RosettaRequestHandler {
             }
             _ => {
                 if self.is_rosetta_blocks_mode_enabled().await {
-                    todo!("Fetching the latest block is not supported yet")
+                    let blocks = self.ledger.read_blocks().await;
+                    let highest_block_index = blocks
+                        .get_highest_rosetta_block_index()
+                        .map_err(ApiError::from)?;
+                    self.get_rosetta_block_by_index(highest_block_index).await
                 } else {
                     self.get_latest_verified_block().await
                 }
@@ -561,37 +565,54 @@ impl RosettaRequestHandler {
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
-        let first = blocks.get_first_verified_hashed_block()?;
-        let tip = blocks.get_latest_verified_hashed_block()?;
-        let tip_id = convert::block_id(&tip)?;
-        let tip_timestamp = models::timestamp::from_system_time(
-            Block::decode(tip.block).unwrap().timestamp.into(),
-        )?;
+        let (first_block, tip_block) = match self.is_rosetta_blocks_mode_enabled().await {
+            true => {
+                let first_idx = blocks.get_lowest_rosetta_block_index()?;
+                let tip_idx = blocks.get_highest_rosetta_block_index()?;
+                let rosetta_block_with_lowest_block_idx =
+                    self.get_rosetta_block_by_index(first_idx).await?;
+                let rosetta_block_with_highest_block_idx =
+                    self.get_rosetta_block_by_index(tip_idx).await?;
+                (
+                    rosetta_block_with_lowest_block_idx,
+                    rosetta_block_with_highest_block_idx,
+                )
+            }
+            false => {
+                let first_verified_block = blocks.get_first_verified_hashed_block()?;
+                let tip_verified_block = blocks.get_latest_verified_hashed_block()?;
+                (
+                    self.hashed_block_to_rosetta_core_block(first_verified_block)
+                        .await?,
+                    self.hashed_block_to_rosetta_core_block(tip_verified_block)
+                        .await?,
+                )
+            }
+        };
 
-        let genesis_block = blocks.get_hashed_block(&0)?;
-        let genesis_block_id = convert::block_id(&genesis_block)?;
+        let genesis_block = self
+            .get_block(Some(PartialBlockIdentifier {
+                index: Some(0),
+                hash: None,
+            }))
+            .await?;
         let peers = vec![];
-        let oldest_block_id = if first.index != 0 {
-            Some(convert::block_id(&first)?)
+        let oldest_block_id = if first_block.block_identifier.index != 0 {
+            Some(first_block.block_identifier)
         } else {
             None
         };
 
-        let mut sync_status = SyncStatus::new(tip.index as i64, None);
+        let mut sync_status = SyncStatus::new(tip_block.block_identifier.index as i64, None);
         let target = crate::rosetta_server::TARGET_HEIGHT.get();
         if target != 0 {
             sync_status.target_index = Some(crate::rosetta_server::TARGET_HEIGHT.get());
         }
 
         Ok(NetworkStatusResponse::new(
-            tip_id,
-            tip_timestamp.0.try_into().map_err(|err: TryFromIntError| {
-                ApiError::InternalError(
-                    false,
-                    Details::from(format!("Cannot convert timestamp to u64: {}", err)),
-                )
-            })?,
-            genesis_block_id,
+            tip_block.block_identifier,
+            tip_block.timestamp,
+            genesis_block.block_identifier,
             oldest_block_id,
             sync_status,
             peers,
