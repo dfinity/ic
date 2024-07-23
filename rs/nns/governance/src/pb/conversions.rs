@@ -597,6 +597,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
                 pb_api::proposal::Action::CreateServiceNervousSystem(v.into())
             }
             pb::proposal::Action::InstallCode(v) => pb_api::proposal::Action::InstallCode(v.into()),
+            pb::proposal::Action::StopOrStartCanister(v) => {
+                pb_api::proposal::Action::StopOrStartCanister(v.into())
+            }
         }
     }
 }
@@ -641,6 +644,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
             }
             pb_api::proposal::Action::InstallCode(v) => pb::proposal::Action::InstallCode(v.into()),
+            pb_api::proposal::Action::StopOrStartCanister(v) => {
+                pb::proposal::Action::StopOrStartCanister(v.into())
+            }
         }
     }
 }
@@ -804,6 +810,21 @@ impl From<pb_api::manage_neuron::ChangeAutoStakeMaturity>
     }
 }
 
+impl From<pb::manage_neuron::SetVisibility> for pb_api::manage_neuron::SetVisibility {
+    fn from(item: pb::manage_neuron::SetVisibility) -> Self {
+        Self {
+            visibility: item.visibility,
+        }
+    }
+}
+impl From<pb_api::manage_neuron::SetVisibility> for pb::manage_neuron::SetVisibility {
+    fn from(item: pb_api::manage_neuron::SetVisibility) -> Self {
+        Self {
+            visibility: item.visibility,
+        }
+    }
+}
+
 impl From<pb::manage_neuron::Configure> for pb_api::manage_neuron::Configure {
     fn from(item: pb::manage_neuron::Configure) -> Self {
         Self {
@@ -849,6 +870,9 @@ impl From<pb::manage_neuron::configure::Operation> for pb_api::manage_neuron::co
             pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
                 pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
             }
+            pb::manage_neuron::configure::Operation::SetVisibility(v) => {
+                pb_api::manage_neuron::configure::Operation::SetVisibility(v.into())
+            }
         }
     }
 }
@@ -881,6 +905,9 @@ impl From<pb_api::manage_neuron::configure::Operation> for pb::manage_neuron::co
             }
             pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
                 pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
+            }
+            pb_api::manage_neuron::configure::Operation::SetVisibility(v) => {
+                pb::manage_neuron::configure::Operation::SetVisibility(v.into())
             }
         }
     }
@@ -2804,6 +2831,60 @@ impl From<pb_api::install_code::CanisterInstallMode> for pb::install_code::Canis
             }
             pb_api::install_code::CanisterInstallMode::Upgrade => {
                 pb::install_code::CanisterInstallMode::Upgrade
+            }
+        }
+    }
+}
+
+impl From<pb::StopOrStartCanister> for pb_api::StopOrStartCanister {
+    fn from(item: pb::StopOrStartCanister) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            action: item.action,
+        }
+    }
+}
+
+impl From<pb_api::StopOrStartCanister> for pb::StopOrStartCanister {
+    fn from(item: pb_api::StopOrStartCanister) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            action: item.action,
+        }
+    }
+}
+
+impl From<pb::stop_or_start_canister::CanisterAction>
+    for pb_api::stop_or_start_canister::CanisterAction
+{
+    fn from(item: pb::stop_or_start_canister::CanisterAction) -> Self {
+        match item {
+            pb::stop_or_start_canister::CanisterAction::Unspecified => {
+                pb_api::stop_or_start_canister::CanisterAction::Unspecified
+            }
+            pb::stop_or_start_canister::CanisterAction::Stop => {
+                pb_api::stop_or_start_canister::CanisterAction::Stop
+            }
+            pb::stop_or_start_canister::CanisterAction::Start => {
+                pb_api::stop_or_start_canister::CanisterAction::Start
+            }
+        }
+    }
+}
+
+impl From<pb_api::stop_or_start_canister::CanisterAction>
+    for pb::stop_or_start_canister::CanisterAction
+{
+    fn from(item: pb_api::stop_or_start_canister::CanisterAction) -> Self {
+        match item {
+            pb_api::stop_or_start_canister::CanisterAction::Unspecified => {
+                pb::stop_or_start_canister::CanisterAction::Unspecified
+            }
+            pb_api::stop_or_start_canister::CanisterAction::Stop => {
+                pb::stop_or_start_canister::CanisterAction::Stop
+            }
+            pb_api::stop_or_start_canister::CanisterAction::Start => {
+                pb::stop_or_start_canister::CanisterAction::Start
             }
         }
     }

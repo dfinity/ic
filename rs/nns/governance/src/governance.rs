@@ -54,8 +54,8 @@ use crate::{
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
         ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary,
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse, Tally,
-        Topic, UpdateNodeProvider, Vote, WaitForQuietState,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        StopOrStartCanister, Tally, Topic, UpdateNodeProvider, Vote, WaitForQuietState,
         XdrConversionRate as XdrConversionRatePb,
     },
     proposals::{
@@ -822,6 +822,12 @@ impl Proposal {
                     // lot of places.
                     install_code.valid_topic().unwrap_or(Topic::Unspecified)
                 }
+                Action::StopOrStartCanister(stop_or_start) => {
+                    // There should be a valid topic since the validation should be done when the
+                    // proposal is created. We avoid panicking here since `topic()` is called in a
+                    // lot of places.
+                    stop_or_start.valid_topic().unwrap_or(Topic::Unspecified)
+                }
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -893,6 +899,7 @@ impl Action {
             Action::CreateServiceNervousSystem(_) => "ACTION_CREATE_SERVICE_NERVOUS_SYSTEM",
             Action::ExecuteNnsFunction(_) => "ACTION_EXECUTE_NNS_FUNCTION",
             Action::InstallCode(_) => "ACTION_CHANGE_CANISTER",
+            Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
         }
     }
 
@@ -4414,6 +4421,10 @@ impl Governance {
             Action::InstallCode(install_code) => {
                 self.perform_install_code(pid, install_code).await;
             }
+            Action::StopOrStartCanister(stop_or_start) => {
+                self.perform_stop_or_start_canister(pid, stop_or_start)
+                    .await;
+            }
         }
     }
 
@@ -4433,6 +4444,15 @@ impl Governance {
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
         let result = self.perform_call_canister(proposal_id, install_code).await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_stop_or_start_canister(
+        &mut self,
+        proposal_id: u64,
+        stop_or_start: StopOrStartCanister,
+    ) {
+        let result = self.perform_call_canister(proposal_id, stop_or_start).await;
         self.set_proposal_execution_status(proposal_id, result);
     }
 
@@ -4802,6 +4822,7 @@ impl Governance {
                 Self::validate_obsolete_proposal_action(obsolete_action)
             }
             Action::InstallCode(install_code) => install_code.validate(),
+            Action::StopOrStartCanister(stop_or_start) => stop_or_start.validate(),
         }?;
 
         Ok(action.clone())

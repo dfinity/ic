@@ -535,8 +535,7 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
-        Ok(Method::DeleteChunks)
-        | Ok(Method::TakeCanisterSnapshot)
+        Ok(Method::TakeCanisterSnapshot)
         | Ok(Method::LoadCanisterSnapshot)
         | Ok(Method::ListCanisterSnapshots)
         | Ok(Method::DeleteCanisterSnapshot) => Err(ParseIngressError::UnknownSubnetMethod),

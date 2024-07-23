@@ -560,7 +560,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -648,6 +648,9 @@ pub mod proposal {
         /// Calls install_code for a canister (install, reinstall, or upgrade).
         #[prost(message, tag = "25")]
         InstallCode(super::InstallCode),
+        /// Stops or starts a canister controlled by Root.
+        #[prost(message, tag = "26")]
+        StopOrStartCanister(super::StopOrStartCanister),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -749,6 +752,13 @@ pub mod manage_neuron {
         #[prost(bool, tag = "1")]
         pub requested_setting_for_auto_stake_maturity: bool,
     }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct SetVisibility {
+        #[prost(enumeration = "super::Visibility", optional, tag = "1")]
+        pub visibility: ::core::option::Option<i32>,
+    }
     /// Commands that only configure a given neuron, but do not interact
     /// with the outside world. They all require the caller to be the
     /// controller of the neuron.
@@ -756,7 +766,7 @@ pub mod manage_neuron {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Configure {
-        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9")]
+        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10")]
         pub operation: ::core::option::Option<configure::Operation>,
     }
     /// Nested message and enum types in `Configure`.
@@ -785,6 +795,8 @@ pub mod manage_neuron {
             LeaveCommunityFund(super::LeaveCommunityFund),
             #[prost(message, tag = "9")]
             ChangeAutoStakeMaturity(super::ChangeAutoStakeMaturity),
+            #[prost(message, tag = "10")]
+            SetVisibility(super::SetVisibility),
         }
     }
     /// Disburse this neuron's stake: transfer the staked ICP to the
@@ -2362,6 +2374,68 @@ pub mod install_code {
                 "CANISTER_INSTALL_MODE_INSTALL" => Some(Self::Install),
                 "CANISTER_INSTALL_MODE_REINSTALL" => Some(Self::Reinstall),
                 "CANISTER_INSTALL_MODE_UPGRADE" => Some(Self::Upgrade),
+                _ => None,
+            }
+        }
+    }
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopOrStartCanister {
+    /// The target canister ID to call stop_canister or start_canister on. The canister must be
+    /// controlled by NNS Root, and it cannot be NNS Governance or Lifeline. Required.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(
+        enumeration = "stop_or_start_canister::CanisterAction",
+        optional,
+        tag = "2"
+    )]
+    pub action: ::core::option::Option<i32>,
+}
+/// Nested message and enum types in `StopOrStartCanister`.
+pub mod stop_or_start_canister {
+    /// The action to take on the canister. Required.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum CanisterAction {
+        Unspecified = 0,
+        Stop = 1,
+        Start = 2,
+    }
+    impl CanisterAction {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                CanisterAction::Unspecified => "CANISTER_ACTION_UNSPECIFIED",
+                CanisterAction::Stop => "CANISTER_ACTION_STOP",
+                CanisterAction::Start => "CANISTER_ACTION_START",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "CANISTER_ACTION_UNSPECIFIED" => Some(Self::Unspecified),
+                "CANISTER_ACTION_STOP" => Some(Self::Stop),
+                "CANISTER_ACTION_START" => Some(Self::Start),
                 _ => None,
             }
         }
