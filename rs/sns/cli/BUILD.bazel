@@ -72,23 +72,6 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_library(
-    name = "cli--test_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = [
-            "**/*tests.rs",
-            "main.rs",
-        ],
-    ),
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_sns_cli",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.0.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
-)
-
 rust_binary(
     name = "sns",
     srcs = ["src/main.rs"],
@@ -96,17 +79,6 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
     deps = DEPENDENCIES + [":cli"],
-)
-
-rust_binary(
-    name = "sns--test_feature",
-    srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "sns",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.0.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":cli--test_feature"],
 )
 
 rust_test(
