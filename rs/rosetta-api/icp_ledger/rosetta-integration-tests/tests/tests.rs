@@ -878,7 +878,7 @@ async fn test_block_transaction() {
         .0
         .message
         .contains("Block not found"));
-    
+
     // We are creating a second rosetta block that contains 4 transactions with each having an unique tx hash
     env.icrc1_transfers(vec![
         TransferArg {
