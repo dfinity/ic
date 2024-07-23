@@ -45,9 +45,6 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          echo "KUBECONFIG: ${KUBECONFIG:-}"
-          sleep 120
-
           ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
           BAZEL_EXIT_CODE="$?"
 
