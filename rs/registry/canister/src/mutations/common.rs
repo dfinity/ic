@@ -13,17 +13,6 @@ use std::{
     cmp::Eq, collections::HashSet, convert::TryFrom, fmt, hash::Hash, net::Ipv4Addr, str::FromStr,
 };
 
-/// Wraps around Message::encode and panics on error.
-pub(crate) fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
-    let mut buf = Vec::<u8>::new();
-    msg.encode(&mut buf).unwrap();
-    buf
-}
-
-pub fn decode_registry_value<T: Message + Default>(registry_value: Vec<u8>) -> T {
-    T::decode(registry_value.as_slice()).unwrap()
-}
-
 pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<SubnetId> {
     subnet_list
         .subnets
@@ -58,8 +47,7 @@ pub(crate) fn get_blessed_replica_versions(
         .map_or(
             Err("Failed to retrieve the blessed replica versions.".to_string()),
             |result| {
-                let decoded =
-                    decode_registry_value::<BlessedReplicaVersions>(result.value.to_vec());
+                let decoded = BlessedReplicaVersions::decode(result.value.as_slice()).unwrap();
                 Ok(decoded)
             },
         )
@@ -121,37 +109,10 @@ pub fn get_unassigned_nodes_record(
         .map_or(
             Err("No unassigned nodes record found in the registry.".to_string()),
             |result| {
-                let decoded =
-                    decode_registry_value::<UnassignedNodesConfigRecord>(result.value.to_vec());
+                let decoded = UnassignedNodesConfigRecord::decode(result.value.as_slice()).unwrap();
                 Ok(decoded)
             },
         )
-}
-
-// Perform a basic domain validation for a string
-// Note that this is not meant to be an exhaustive check
-pub fn is_valid_domain(domain: &str) -> bool {
-    let parts: Vec<&str> = domain.split('.').collect();
-
-    if parts.len() < 2 {
-        return false; // Domain should have at least one subdomain and a TLD
-    }
-
-    for part in parts {
-        if part.is_empty() || part.len() > 63 {
-            return false; // Each part should not be empty and should not exceed 63 characters
-        }
-
-        if part.starts_with('-') || part.ends_with('-') {
-            return false; // Parts should not start or end with a hyphen
-        }
-
-        if !part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return false; // Parts should consist only of ASCII alphanumeric characters and hyphens
-        }
-    }
-
-    true
 }
 
 // Check that the given string is indeed a valid IPv4 address
@@ -292,8 +253,7 @@ where
 #[cfg(test)]
 pub(crate) mod test {
     use crate::mutations::common::{
-        are_in_the_same_subnet, check_ipv6_format, is_global_ipv4_address, is_valid_domain,
-        is_valid_ipv4_address,
+        are_in_the_same_subnet, check_ipv6_format, is_global_ipv4_address, is_valid_ipv4_address,
     };
 
     pub(crate) const TEST_NODE_ID: &str = "2vxsx-fae";
@@ -311,25 +271,6 @@ pub(crate) mod test {
         // Valid IPv6
         assert!(check_ipv6_format("0:0:0:0:0:0:0:0"));
         assert!(check_ipv6_format("123:221:4567:323:4123:2111:7:7"));
-    }
-
-    #[test]
-    fn test_is_valid_domain() {
-        // Invalid cases
-        for d in ["", "com", ".com", "-a.com", "a-.com"] {
-            assert!(!is_valid_domain(d), "expected {d} to be an invalid domain");
-        }
-
-        // Valid cases
-        for d in [
-            "example.com",
-            "a.example.com",
-            "a.b.example.com",
-            "example--a.com",
-            "example-a.com",
-        ] {
-            assert!(is_valid_domain(d), "expected {d} to be a valid domain");
-        }
     }
 
     #[test]

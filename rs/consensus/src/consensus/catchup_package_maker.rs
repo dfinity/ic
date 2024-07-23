@@ -267,8 +267,8 @@ impl CatchUpPackageMaker {
 #[cfg(test)]
 mod tests {
     //! CatchUpPackageMaker unit tests
-    use crate::ecdsa::test_utils::{
-        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_master_public_key_id,
+    use crate::idkg::test_utils::{
+        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
         fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };
 
@@ -439,7 +439,7 @@ mod tests {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut ecdsa = empty_ecdsa_payload(subnet_test_id(0));
+            let mut ecdsa = empty_idkg_payload(subnet_test_id(0));
             // Add the three quadruples using registry version 3, 1 and 2 in order
             add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id1, RegistryVersion::from(3));
             add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id2, RegistryVersion::from(1));

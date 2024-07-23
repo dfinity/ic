@@ -14,7 +14,7 @@ mod common {
     use slog::info;
     use xnet_test::CanisterId;
 
-    use crate::driver::{test_env::TestEnv, test_env_api::HasDependencies};
+    use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::HasDependencies};
 
     /// Concurrently calls `start` on all canisters in `canisters` with the
     /// given parameters.

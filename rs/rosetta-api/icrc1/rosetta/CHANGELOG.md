@@ -5,9 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [1.1.1] - 2024-07-09
 ### Added
 - Added /ready endpoint which indicates whether Rosetta is finished with its initial block synch
-- Added Sync Status to network/status
+- /call endpoint with the method 'query_block_range' to fetch multiple blocks at once
+### Fixes
+- Changed default database path to match /data/db.sqlite
 
 ## [1.1.0] - 2024-06-13
 ### Fixes

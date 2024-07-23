@@ -2,11 +2,11 @@
 
 use anyhow::Result;
 
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::consensus::payload_builder_test::{
     max_ingress_payload_size_test, max_payload_size_config,
 };
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

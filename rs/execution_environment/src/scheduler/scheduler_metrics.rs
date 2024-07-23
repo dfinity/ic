@@ -106,15 +106,13 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
+    // TODO(CON-1302): Remove metric once `threshold_signature_agreements` is rolled out.
     pub(super) ecdsa_signature_agreements: IntGauge,
+    pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
-    // TODO(EXC-1645): temporary code to record the metrics during migration.
-    pub(super) sign_with_ecdsa_contexts_len: IntGauge,
-    // TODO(EXC-1645): temporary code to record the metrics during migration.
-    pub(super) sign_with_threshold_contexts_len: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -231,6 +229,11 @@ impl SchedulerMetrics {
             ecdsa_signature_agreements: metrics_registry.int_gauge(
                 "replicated_state_ecdsa_signature_agreements_total",
                 "Total number of ECDSA signature agreements created",
+            ),
+            threshold_signature_agreements: metrics_registry.int_gauge_vec(
+                "replicated_state_threshold_signature_agreements_total",
+                "Total number of threshold signature agreements created by key Id",
+                &["key_id"],
             ),
             delivered_pre_signatures: metrics_registry.histogram_vec(
                 "execution_ecdsa_delivered_quadruples",
@@ -677,14 +680,6 @@ impl SchedulerMetrics {
             stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
                 "scheduler_stop_canister_calls_without_call_id",
                 "Number of stop canister calls with missing call ID.",
-            ),
-            sign_with_ecdsa_contexts_len: metrics_registry.int_gauge(
-                "replicated_state_sign_with_ecdsa_contexts_len",
-                "Total number of entries kept in sign_with_ecdsa_contexts.",
-            ),
-            sign_with_threshold_contexts_len: metrics_registry.int_gauge(
-                "replicated_state_sign_with_threshold_contexts_len",
-                "Total number of entries kept in sign_with_threshold_contexts.",
             ),
         }
     }

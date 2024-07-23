@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::networking::network_large::{setup, test};
-use ic_tests::systest;
 
 // Timeout parameters
 const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);

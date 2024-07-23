@@ -93,6 +93,7 @@ const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
 pub const PATH_STATUS: &str = "/api/v2/status";
 pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
 pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
+pub const PATH_CALL_V3: &str = "/api/v3/canister/:canister_id/call";
 pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
 pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/:subnet_id/read_state";
 pub const PATH_HEALTH: &str = "/health";
@@ -112,6 +113,7 @@ pub enum RequestType {
     Status,
     Query,
     Call,
+    CallV3,
     ReadState,
     ReadStateSubnet,
 }
@@ -121,7 +123,7 @@ pub enum RequestType {
 pub enum RateLimitCause {
     Normal,
     Bouncer,
-    Canister,
+    Generic,
 }
 
 // Categorized possible causes for request processing failures
@@ -191,13 +193,7 @@ impl ErrorCause {
     }
 
     pub fn retriable(&self) -> bool {
-        matches!(
-            self,
-            Self::ReplicaErrorDNS(_)
-                | Self::ReplicaErrorConnect
-                | Self::ReplicaTLSErrorOther(_)
-                | Self::ReplicaTLSErrorCert(_)
-        )
+        !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
     }
 }
 
@@ -520,6 +516,7 @@ pub async fn validate_canister_request(
     let request_type = match matched_path.as_str() {
         PATH_QUERY => RequestType::Query,
         PATH_CALL => RequestType::Call,
+        PATH_CALL_V3 => RequestType::CallV3,
         PATH_READ_STATE => RequestType::ReadState,
         _ => panic!("unknown path, should never happen"),
     };
@@ -591,7 +588,6 @@ pub async fn validate_request(
     }
 
     let resp = next.run(request).await;
-
     Ok(resp)
 }
 
@@ -733,7 +729,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
         response.headers_mut().insert(
             HEADER_IC_SUBNET_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.id.clone())).unwrap(),
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
         );
     }
 

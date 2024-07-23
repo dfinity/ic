@@ -1,13 +1,13 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_base_types::NodeId;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
+use prost::Message;
+use serde::Serialize;
 
 impl Registry {
     pub fn do_update_nodes_hostos_version(&mut self, payload: UpdateNodesHostosVersionPayload) {
@@ -23,7 +23,7 @@ impl Registry {
                 .clone_from(&payload.hostos_version_id);
 
             // Update HostOS version
-            mutations.push(update(node_key, encode_or_panic(&node_record)));
+            mutations.push(update(node_key, node_record.encode_to_vec()));
         }
 
         // Check invariants before applying mutations

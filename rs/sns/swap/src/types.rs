@@ -710,7 +710,7 @@ impl CfInvestment {
     pub fn validate(&self) -> Result<(), String> {
         if !is_valid_principal(&self.hotkey_principal) {
             return Err(format!(
-                "Invalid hotkey principal {}",
+                "Invalid hotkey_principal {}",
                 self.hotkey_principal
             ));
         }
@@ -741,7 +741,7 @@ impl CfParticipant {
     pub fn validate(&self) -> Result<(), String> {
         if !is_valid_principal(&self.hotkey_principal) {
             return Err(format!(
-                "Invalid hotkey principal {}",
+                "Invalid hotkey_principal {}",
                 self.hotkey_principal
             ));
         }
@@ -1087,7 +1087,9 @@ impl TryInto<NeuronId> for SaleNeuronId {
 pub(crate) struct NeuronsFundNeuron {
     pub(crate) nns_neuron_id: u64,
     pub(crate) amount_icp_e8s: u64,
-    pub(crate) hotkey_principal: PrincipalId,
+    pub(crate) controller: PrincipalId,
+    #[allow(unused)]
+    pub(crate) hotkeys: Vec<PrincipalId>,
     #[allow(unused)]
     pub(crate) is_capped: bool,
 }
@@ -1096,15 +1098,15 @@ impl NeuronsFundNeuron {
     pub fn try_new(
         nns_neuron_id: u64,
         amount_icp_e8s: u64,
-        hotkey_principal: String,
+        controller: PrincipalId,
+        hotkeys: Vec<PrincipalId>,
         is_capped: bool,
     ) -> Result<Self, String> {
-        let hotkey_principal = PrincipalId::from_str(&hotkey_principal)
-            .map_err(|_| format!("Invalid hotkey principal {}", hotkey_principal))?;
         Self {
             nns_neuron_id,
             amount_icp_e8s,
-            hotkey_principal,
+            controller,
+            hotkeys,
             is_capped,
         }
         .validate()
@@ -1131,34 +1133,41 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
     fn try_from(
         value: crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron,
     ) -> Result<Self, Self::Error> {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed
         let crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron {
             nns_neuron_id,
             amount_icp_e8s,
+            controller,
+            hotkeys,
+            is_capped,
             hotkey_principal,
-            is_capped,
         } = value;
+        let hotkeys = hotkeys.unwrap_or_default().principals;
 
-        match (
-            nns_neuron_id,
-            amount_icp_e8s,
-            hotkey_principal.clone(),
-            is_capped,
-        ) {
-            (
-                Some(nns_neuron_id),
-                Some(amount_icp_e8s),
-                Some(hotkey_principal),
-                Some(is_capped),
-            ) => NeuronsFundNeuron::try_new(
-                nns_neuron_id,
-                amount_icp_e8s,
-                hotkey_principal,
-                is_capped,
-            ),
+        let controller = match (controller, hotkey_principal) {
+            (Some(controller), _) => controller,
+            // TODO(NNS1-3198): Remove this case once hotkey_principal is removed
+            (None, Some(hotkey_principal)) => PrincipalId::from_str(&hotkey_principal)
+                .map_err(|_| format!("Invalid hotkey_principal {}", hotkey_principal))?,
+            (None, None) => {
+                return Err("Either controller or hotkey_principal must be specified".to_string())
+            }
+        };
+
+        match (nns_neuron_id, amount_icp_e8s, is_capped) {
+            (Some(nns_neuron_id), Some(amount_icp_e8s), Some(is_capped)) => {
+                NeuronsFundNeuron::try_new(
+                    nns_neuron_id,
+                    amount_icp_e8s,
+                    controller,
+                    hotkeys,
+                    is_capped,
+                )
+            }
             _ => Err(format!(
                 "Expected all fields to be set. nns_neuron_id({:?}), \
-                amount_icp_e8s({:?}), hotkey_principal({:?}), is_capped({:?})",
-                nns_neuron_id, amount_icp_e8s, hotkey_principal, is_capped
+                amount_icp_e8s({:?}), is_capped({:?})",
+                nns_neuron_id, amount_icp_e8s, is_capped
             )),
         }
     }

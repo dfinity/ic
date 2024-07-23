@@ -1,16 +1,11 @@
-use crate::{
-    driver::test_env::TestEnv,
-    rosetta_tests::{
-        ledger_client::LedgerClient,
-        lib::{
-            check_balance, create_ledger_client, do_multiple_txn, one_day_from_now_nanos,
-            NeuronDetails,
-        },
-        rosetta_client::RosettaApiClient,
-        setup::setup,
-        test_neurons::TestNeurons,
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::{
+        check_balance, create_ledger_client, do_multiple_txn, one_day_from_now_nanos, NeuronDetails,
     },
-    util::block_on,
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
 use ic_ledger_core::Tokens;
 use ic_nns_governance::pb::v1::Neuron;
@@ -20,6 +15,7 @@ use ic_rosetta_api::{
     request_types::{ChangeAutoStakeMaturity, StakeMaturity, Status},
 };
 use ic_rosetta_test_utils::RequestInfo;
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use icp_ledger::AccountIdentifier;
 use std::{collections::HashMap, sync::Arc};
 

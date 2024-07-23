@@ -2,8 +2,9 @@
 
 use anyhow::Result;
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
@@ -14,7 +15,6 @@ use ic_tests::driver::{
         NnsCustomizations,
     },
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 

@@ -38,19 +38,19 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
+idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"
 ipnet = "2.5.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
-url = "2"
+url = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-cycles-minting-canister = { path = "../../nns/cmc" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }

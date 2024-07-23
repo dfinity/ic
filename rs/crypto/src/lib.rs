@@ -266,8 +266,8 @@ fn key_from_registry(
 ///  * Should not have too many collisions within a short time span (e.g., 5 minutes)
 ///  * The generation of the identifier should not block or panic
 ///  * The generation of the identifier should not require synchronization between threads
-fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
-    if logger.is_enabled_at(slog::Level::Debug, module_path) {
+fn get_log_id(logger: &ReplicaLogger) -> u64 {
+    if logger.is_enabled_at(slog::Level::Debug) {
         ic_types::time::current_time().as_nanos_since_unix_epoch()
     } else {
         0

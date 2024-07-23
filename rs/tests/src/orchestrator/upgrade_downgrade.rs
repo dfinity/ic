@@ -12,36 +12,36 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::generic_workload_engine::metrics::LoadTestMetricsProvider;
-use crate::generic_workload_engine::metrics::RequestOutcome;
 use crate::{
+    orchestrator::utils::{
+        subnet_recovery::{enable_chain_key_signing_on_subnet, run_chain_key_signature_test},
+        upgrade::*,
+    },
+    tecdsa::{make_key_ids_for_all_schemes, ChainSignatureRequest},
+};
+use candid::Principal;
+use futures::future::join_all;
+use ic_agent::Agent;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message,
+};
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::generic_workload_engine::metrics::LoadTestMetricsProvider;
+use ic_system_test_driver::generic_workload_engine::metrics::RequestOutcome;
+use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
     canister_requests,
-    consensus::tecdsa_performance_test::ChainSignatureRequest,
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::*,
     },
     generic_workload_engine::engine::Engine,
-    orchestrator::utils::{
-        rw_message::{
-            can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
-            store_message,
-        },
-        subnet_recovery::{enable_chain_key_signing_on_subnet, run_chain_key_signature_test},
-        upgrade::*,
-    },
-    tecdsa::make_key_ids_for_all_schemes,
     util::{block_on, get_app_subnet_and_node, MessageCanister},
 };
-use candid::Principal;
-use futures::future::join_all;
-use ic_agent::Agent;
-use ic_management_canister_types::MasterPublicKeyId;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
 use std::collections::BTreeMap;
@@ -52,6 +52,7 @@ const DKG_INTERVAL: u64 = 9;
 
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
+const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
 
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -139,7 +140,7 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
 
     let requests = key_ids
         .iter()
-        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone()))
+        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone(), SCHNORR_MSG_SIZE_BYTES))
         .collect::<Vec<_>>();
 
     let rt: Runtime = Builder::new_multi_thread()

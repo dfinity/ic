@@ -15,18 +15,18 @@ from scanner.scanner_job_type import ScannerJobType
 REPOS_TO_SCAN = [
     Repository(
         "ic",
-        "https://gitlab.com/dfinity-lab/public/ic",
+        "https://github.com/dfinity/ic",
         [
             Project(
                 name="boundary-guestos",
                 path="ic/ic-os/boundary-guestos/envs/prod",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/context",
+                link="https://github.com/dfinity/ic/tree/master/ic-os/boundary-guestos/context",
                 owner=Team.BOUNDARY_NODE_TEAM,
             ),
             Project(
                 name="guestos",
                 path="ic/ic-os/guestos/envs/prod",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/guestos/context",
+                link="https://github.com/dfinity/ic/tree/master/ic-os/guestos/context",
                 owner=Team.NODE_TEAM,
             ),
         ],

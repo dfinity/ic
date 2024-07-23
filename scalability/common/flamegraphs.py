@@ -167,7 +167,7 @@ if __name__ == "__main__":
         def __init__(self):
             self.iter_outdir = "/tmp"
 
-    TARGET = "2001:4d78:40d:0:506a:82ff:fe97:57b4"
+    TARGET = "2602:fb2b:110:10:506a:82ff:fe97:57b4"
     m = Flamegraph("flamegraph", TARGET, True)
     m.init()
     m.start_iteration("/tmp")

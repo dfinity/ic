@@ -5,8 +5,8 @@ mod tests;
 
 use crate::scheduler::{Task, TaskExecution};
 use crate::state::{
-    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, Wasm, WasmHash,
-    ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerSuiteVersion, LedgerWasm,
+    Wasm, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
 use crate::storage::memory::{
     deadline_by_task_memory, task_queue_memory, wasm_store_memory, StableMemory,
@@ -242,25 +242,40 @@ pub fn record_icrc1_ledger_suite_wasms(
     wasm_store: &mut WasmStore,
     timestamp: u64,
     git_commit: GitCommitHash,
-) -> Result<(), WasmStoreError> {
-    wasm_store_try_insert(
+) -> Result<LedgerSuiteVersion, WasmStoreError> {
+    let ledger_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit.clone(),
         LedgerWasm::from(LEDGER_BYTECODE),
     )?;
-    wasm_store_try_insert(
+    let index_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit.clone(),
         IndexWasm::from(INDEX_BYTECODE),
     )?;
-    wasm_store_try_insert(
+    let archive_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit,
         ArchiveWasm::from(ARCHIVE_NODE_BYTECODE),
-    )
+    )?;
+    Ok(LedgerSuiteVersion {
+        ledger_compressed_wasm_hash,
+        index_compressed_wasm_hash,
+        archive_compressed_wasm_hash,
+    })
+}
+
+fn record_wasm<T: StorableWasm>(
+    wasm_store: &mut WasmStore,
+    timestamp: u64,
+    git_commit: GitCommitHash,
+    wasm: Wasm<T>,
+) -> Result<WasmHash, WasmStoreError> {
+    let hash = wasm.hash().clone();
+    wasm_store_try_insert(wasm_store, timestamp, git_commit, wasm).map(|()| hash)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -300,7 +315,7 @@ pub fn validate_wasm_hashes(
     ])
 }
 
-fn wasm_store_contain<T: StorableWasm>(wasm_store: &WasmStore, wasm_hash: &WasmHash) -> bool {
+pub fn wasm_store_contain<T: StorableWasm>(wasm_store: &WasmStore, wasm_hash: &WasmHash) -> bool {
     match wasm_store_try_get::<T>(wasm_store, wasm_hash) {
         Ok(Some(_)) => true,
         Ok(None) | Err(_) => false,

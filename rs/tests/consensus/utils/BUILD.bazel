@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs/tests:__subpackages__"])
+
+rust_library(
+    name = "utils",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_consensus_system_test_utils",
+    deps = [
+        # Keep sorted.
+        "//rs/nns/cmc",
+        "//rs/nns/constants",
+        "//rs/nns/governance",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:leb128",
+        "@crate_index//:openssh-keys",
+        "@crate_index//:rand",
+        "@crate_index//:reqwest",
+        "@crate_index//:rsa",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)

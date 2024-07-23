@@ -33,15 +33,14 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialEcdsaDealingsArgs,
-    ComputeInitialIDkgDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
-    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SchnorrKeyId, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -50,9 +49,9 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, EcdsaDealingsContext, IDkgDealingsContext, InstallCodeCall,
-        InstallCodeCallId, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
-        StopCanisterCall, SubnetCallContext, ThresholdArguments,
+        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
+        SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
+        ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -492,6 +491,32 @@ impl ExecutionEnvironment {
                             },
                         );
 
+                        if let (
+                            SubnetCallContext::SignWithThreshold(threshold_context),
+                            Payload::Data(_),
+                        ) = (&context, &response.response_payload)
+                        {
+                            // TODO(CON-1302): This abuses the fact that we currently only have
+                            // at most one ECDSA key per subnet. So when we find the first ECDSA
+                            // signature agreement after the introduction of this metric, we will
+                            // initialize it with the old value from `ecdsa_signature_agreements`.
+                            // This can be removed once we will no longer rollback to a version
+                            // without the new metric.
+                            let default = if threshold_context.is_ecdsa() {
+                                state.metadata.subnet_metrics.ecdsa_signature_agreements
+                            } else {
+                                0
+                            };
+                            *state
+                                .metadata
+                                .subnet_metrics
+                                .threshold_signature_agreements
+                                .entry(threshold_context.key_id())
+                                .or_insert(default) += 1;
+                        }
+
+                        // TODO(CON-1302): Remove this metric once we will no longer rollback to a
+                        // version without the new metric above
                         if matches!(
                             (&context, &response.response_payload),
                             (
@@ -730,11 +755,6 @@ impl ExecutionEnvironment {
 
                         let canister_id = args.get_canister_id();
                         let sender_canister_version = args.get_sender_canister_version();
-
-                        // Track whether the deprecated `controller` field was used.
-                        if args.settings.get_controller().is_some() {
-                            self.metrics.controller_in_update_settings_total.inc();
-                        }
 
                         let result = match CanisterSettings::try_from(args.settings) {
                             Err(err) => Err(err.into()),
@@ -1039,42 +1059,6 @@ impl ExecutionEnvironment {
                     }
                     CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::ECDSAPublicKey)
-                    }
-                }
-            }
-
-            Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
-                let cycles = msg.take_cycles();
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_public_key(
-                                idkg_subnet_public_keys,
-                                self.own_subnet_id,
-                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
-                            ) {
-                                Ok(_) => self
-                                    .compute_initial_ecdsa_dealings(&mut state, args, request)
-                                    .map_or_else(
-                                        |err| ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
-                                            refund: cycles,
-                                        },
-                                        |()| ExecuteSubnetMessageResult::Processing,
-                                    ),
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: cycles,
-                                },
-                            },
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: cycles,
-                            },
-                        }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialEcdsaDealings)
                     }
                 }
             }
@@ -1738,7 +1722,7 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a canister task of a given canister.
-    pub fn execute_canister_task(
+    fn execute_canister_task(
         &self,
         canister: CanisterState,
         task: CanisterTask,
@@ -2675,7 +2659,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: invalid or disabled key {}.",
+                    "{} request failed: unknown or signing disabled threshold key {}.",
                     request.method_name, threshold_key
                 ),
             ));
@@ -2770,7 +2754,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: invalid or disabled key {}.",
+                    "{} request failed: unknown or signing disabled threshold key {}.",
                     request.method_name, threshold_key
                 ),
             ));
@@ -2805,7 +2789,10 @@ impl ExecutionEnvironment {
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
-                args: ThresholdArguments::Schnorr(SchnorrArguments { key_id, message }),
+                args: ThresholdArguments::Schnorr(SchnorrArguments {
+                    key_id,
+                    message: Arc::new(message),
+                }),
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
@@ -2813,27 +2800,6 @@ impl ExecutionEnvironment {
                 nonce: None,
             }),
         );
-        Ok(())
-    }
-
-    fn compute_initial_ecdsa_dealings(
-        &self,
-        state: &mut ReplicatedState,
-        args: ComputeInitialEcdsaDealingsArgs,
-        request: &Request,
-    ) -> Result<(), UserError> {
-        let nodes = args.get_set_of_nodes()?;
-        let registry_version = args.get_registry_version();
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::EcdsaDealings(EcdsaDealingsContext {
-                request: request.clone(),
-                key_id: args.key_id,
-                nodes,
-                registry_version,
-                time: state.time(),
-            }));
         Ok(())
     }
 
@@ -3102,7 +3068,7 @@ impl ExecutionEnvironment {
                             execution_duration,
                             result.old_wasm_hash,
                             result.new_wasm_hash,
-                            instructions_used);
+                            instructions_used.display());
 
                         Ok(EmptyBlob.encode())
                     }
@@ -3113,7 +3079,7 @@ impl ExecutionEnvironment {
                             canister_id,
                             execution_duration,
                             err,
-                            instructions_used);
+                            instructions_used.display());
                         Err(err.into())
                     }
                 };
@@ -3201,6 +3167,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
@@ -3297,7 +3264,8 @@ impl ExecutionEnvironment {
                     ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. }
                     | ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer => task,
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => task,
                     ExecutionTask::PausedExecution { id, .. } => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (input, prepaid_execution_cycles) = paused.abort(log);
@@ -3853,6 +3821,10 @@ pub fn execute_canister(
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
                 (task, None)
             }
+            ExecutionTask::OnLowWasmMemory => {
+                let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
+                (task, None)
+            }
             ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
@@ -3893,7 +3865,10 @@ fn get_master_public_key<'a>(
     match idkg_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!("Subnet {} does not hold iDKG key {}.", subnet_id, key_id),
+            format!(
+                "Subnet {} does not hold threshold key {}.",
+                subnet_id, key_id
+            ),
         )),
         Some(master_key) => Ok(master_key),
     }

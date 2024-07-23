@@ -6,9 +6,10 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, ExecuteIngressMessage, GetCyclesBalance,
-    GetStableMemory, GetSubnet, GetTime, PubKey, Query, QueryRequest, ReadStateRequest,
-    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, DashboardRequest,
+    ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
+    GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory,
+    SetTime, StatusRequest, SubmitIngressMessage, Tick,
 };
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
@@ -34,14 +35,16 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId, RawSetStableMemory,
-    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult,
+    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawMessageId, RawMockCanisterHttpResponse, RawSetStableMemory,
+    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
 
 type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
@@ -66,7 +69,9 @@ where
 {
     ApiRouter::new()
         .directory_route("/query", post(handler_json_query))
+        .directory_route("/topology", get(handler_topology))
         .directory_route("/get_time", get(handler_get_time))
+        .directory_route("/get_canister_http", get(handler_get_canister_http))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
         .directory_route("/get_subnet", post(handler_get_subnet))
@@ -95,6 +100,7 @@ where
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
+        .directory_route("/mock_canister_http", post(handler_mock_canister_http))
 }
 
 pub fn instance_api_v2_routes<S>() -> ApiRouter<S>
@@ -102,12 +108,11 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    use tower_http::limit::RequestBodyLimitLayer;
     ApiRouter::new()
         .directory_route("/status", get(handler_status))
         .directory_route(
             "/canister/:ecid/call",
-            post(handler_call)
+            post(handler_call_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -129,6 +134,21 @@ where
                 ))
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
+}
+
+pub fn instance_api_v3_routes<S>() -> ApiRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: extract::FromRef<S>,
+{
+    ApiRouter::new().directory_route(
+        "/canister/:ecid/call",
+        post(handler_call_v3)
+            .layer(RequestBodyLimitLayer::new(
+                4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+            ))
+            .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+    )
 }
 
 pub fn instances_routes<S>() -> ApiRouter<S>
@@ -156,6 +176,12 @@ where
         //
         // All the api v2 endpoints
         .nest("/:id/api/v2", instance_api_v2_routes())
+        //
+        // All the api v3 endpoints
+        .nest("/:id/api/v3", instance_api_v3_routes())
+        //
+        // The instance dashboard
+        .api_route("/:id/_/dashboard", get(handler_dashboard))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
@@ -299,6 +325,16 @@ impl TryFrom<OpOut> for RawTime {
     }
 }
 
+impl TryFrom<OpOut> for Topology {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::Topology(topology) => Ok(topology),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 impl TryFrom<OpOut> for () {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
@@ -414,10 +450,23 @@ impl TryFrom<OpOut> for RawSubmitIngressResult {
     }
 }
 
+impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::CanisterHttp(canister_http_requests) => Ok(canister_http_requests
+                .into_iter()
+                .map(|r| r.into())
+                .collect()),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
     fn from(value: OpOut) -> Self {
         match value {
-            OpOut::ApiV2Response((status, headers, bytes)) => (
+            OpOut::RawResponse((status, headers, bytes)) => (
                 StatusCode::from_u16(status).unwrap(),
                 ApiResponse::Success((headers, bytes)),
             ),
@@ -461,6 +510,17 @@ pub async fn handler_json_query(
     }
 }
 
+pub async fn handler_topology(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<Topology>>) {
+    let timeout = timeout_or_default(headers);
+    let op = GetTopology {};
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
 pub async fn handler_get_time(
     State(AppState { api_state, .. }): State<AppState>,
     headers: HeaderMap,
@@ -469,6 +529,35 @@ pub async fn handler_get_time(
     let timeout = timeout_or_default(headers);
     let time_op = GetTime {};
     let (code, response) = run_operation(api_state, instance_id, timeout, time_op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_get_canister_http(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<Vec<RawCanisterHttpRequest>>>) {
+    let timeout = timeout_or_default(headers);
+    let op = GetCanisterHttp {};
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_mock_canister_http(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_mock_canister_http_response): axum::extract::Json<
+        RawMockCanisterHttpResponse,
+    >,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let mock_canister_http_response: MockCanisterHttpResponse =
+        raw_mock_canister_http_response.into();
+    let op = MockCanisterHttp {
+        mock_canister_http_response,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))
 }
 
@@ -553,63 +642,74 @@ pub async fn handler_pub_key(
     (code, Json(res))
 }
 
+pub async fn handler_dashboard(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = DashboardRequest {};
+    handle_raw(api_state, instance_id, op).await
+}
+
 pub async fn handler_status(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = StatusRequest { bytes, runtime };
-    handler_api_v2(api_state, instance_id, op).await
+    let op = StatusRequest { bytes };
+    handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_call(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+pub async fn handler_call_v3(
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
         effective_canister_id,
         bytes,
-        runtime,
+        version: CallRequestVersion::V3,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_call_v2(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = CallRequest {
+        effective_canister_id,
+        bytes,
+        version: CallRequestVersion::V2,
+    };
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_query(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = QueryRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_read_state(
-    State(AppState {
-        api_state, runtime, ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = ReadStateRequest {
         effective_canister_id,
         bytes,
-        runtime,
     };
-    handler_api_v2(api_state, instance_id, op).await
+    handle_raw(api_state, instance_id, op).await
 }
 
-async fn handler_api_v2<T: Operation + Send + Sync + 'static>(
+async fn handle_raw<T: Operation + Send + Sync + 'static>(
     api_state: Arc<ApiState>,
     instance_id: InstanceId,
     op: T,
@@ -656,6 +756,9 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             Json(ApiResponse::Success(())).into_response(),
         )
             .into_response(),
+        OpOut::Topology(topology) => {
+            (StatusCode::OK, Json(ApiResponse::Success(topology))).into_response()
+        }
         opout @ OpOut::Time(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(RawTime::try_from(opout).unwrap())),
@@ -706,7 +809,14 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             }),
         )
             .into_response(),
-        OpOut::ApiV2Response((status, headers, bytes)) => {
+        opout @ OpOut::CanisterHttp(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                Vec::<RawCanisterHttpRequest>::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        OpOut::RawResponse((status, headers, bytes)) => {
             let code = StatusCode::from_u16(status).unwrap();
             let mut resp = Response::builder().status(code);
             for (name, value) in headers {
@@ -931,9 +1041,20 @@ pub async fn create_instance(
         runtime,
         blob_store: _,
     }): State<AppState>,
-    extract::Json(subnet_configs): extract::Json<ExtendedSubnetConfigSet>,
+    extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
-    if subnet_configs.validate().is_err() {
+    let subnet_configs = instance_config.subnet_config_set;
+    if (instance_config.state_dir.is_none()
+        || File::open(
+            instance_config
+                .state_dir
+                .clone()
+                .unwrap()
+                .join("topology.json"),
+        )
+        .is_err())
+        && subnet_configs.validate().is_err()
+    {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
@@ -951,11 +1072,18 @@ pub async fn create_instance(
         );
     }
 
-    let pocket_ic = tokio::task::spawn_blocking(move || PocketIc::new(runtime, subnet_configs))
-        .await
-        .expect("Failed to launch PocketIC");
+    let pocket_ic = tokio::task::spawn_blocking(move || {
+        PocketIc::new(
+            runtime,
+            subnet_configs,
+            instance_config.state_dir,
+            instance_config.nonmainnet_features,
+        )
+    })
+    .await
+    .expect("Failed to launch PocketIC");
 
-    let topology = pocket_ic.topology.clone();
+    let topology = pocket_ic.topology().clone();
     let instance_id = api_state.add_instance(pocket_ic).await;
     (
         StatusCode::CREATED,

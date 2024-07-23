@@ -122,7 +122,6 @@ use maplit::hashmap;
 use prost::Message;
 use recover_subnet::ProposeToUpdateRecoveryCupCmd;
 use registry_canister::mutations::{
-    common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
@@ -4216,7 +4215,7 @@ async fn main() {
                 .await
                 .unwrap();
 
-            let firewall_config = decode_registry_value::<FirewallConfig>(bytes);
+            let firewall_config = FirewallConfig::decode(bytes.as_slice()).unwrap();
             println!("{:#?}", firewall_config);
         }
         SubCommand::ProposeToSetFirewallConfig(cmd) => {
@@ -4414,7 +4413,7 @@ async fn main() {
                 pub table: BTreeMap<String, NodeRewardRatesFlattened>,
             }
 
-            let table = decode_registry_value::<NodeRewardsTableFlattened>(bytes);
+            let table = NodeRewardsTableFlattened::decode(bytes.as_slice()).unwrap();
             println!(
                 "{}",
                 serde_json::to_string_pretty(&table)
@@ -5244,7 +5243,7 @@ async fn get_node_list_since(
         .await
         .unwrap();
     let nns_subnet_id =
-        decode_registry_value::<ic_protobuf::types::v1::SubnetId>(nns_subnet_id_vec);
+        ic_protobuf::types::v1::SubnetId::decode(nns_subnet_id_vec.as_slice()).unwrap();
     let (nns_pub_key_vec, _) = registry
         .get_value_with_update(
             make_crypto_threshold_signing_pubkey_key(SubnetId::new(

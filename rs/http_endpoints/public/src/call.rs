@@ -1,10 +1,11 @@
 //! Module that deals with ingress messages
 mod call_v2;
 mod call_v3;
-pub(crate) mod ingress_watcher;
+mod ingress_watcher;
 
 pub use call_v2::CallServiceV2;
 pub use call_v3::CallServiceV3;
+pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
     common::{build_validator, validation_error_to_http_error},
@@ -15,7 +16,7 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info_sample, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{error, replica_logger::no_op_logger, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -24,7 +25,6 @@ use ic_registry_client_helpers::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
@@ -48,7 +48,7 @@ pub struct IngressValidatorBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidatorBuilder {
@@ -59,7 +59,7 @@ impl IngressValidatorBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
             log: None,
@@ -173,7 +173,7 @@ pub struct IngressValidator {
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidator {
@@ -276,16 +276,14 @@ impl IngressValidator {
         Ok(IngressMessageSubmitter {
             ingress_tx,
             node_id,
-            log,
             message: msg,
         })
     }
 }
 
 pub struct IngressMessageSubmitter {
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     node_id: NodeId,
-    log: ReplicaLogger,
     message: SignedIngress,
 }
 
@@ -301,12 +299,8 @@ impl IngressMessageSubmitter {
         let Self {
             ingress_tx,
             node_id,
-            log,
             message,
         } = self;
-
-        let message_id = message.id();
-        let ingress_log_entry = message.log_entry();
 
         // Submission will fail if P2P is not running, meaning there is
         // no receiver for the ingress message.
@@ -315,19 +309,12 @@ impl IngressMessageSubmitter {
             .is_err();
 
         if send_ingress_to_p2p_failed {
-            Err(HttpError {
+            return Err(HttpError {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 message: "P2P is not running on this node.".to_string(),
-            })
-        } else {
-            info_sample!(
-                "message_id" => &message_id,
-                &log,
-                "ingress_message_submit";
-                ingress_message => ingress_log_entry
-            );
-            Ok(())
+            });
         }
+        Ok(())
     }
 }
 

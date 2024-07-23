@@ -80,7 +80,7 @@ struct Args {
     store_type: StoreType,
 
     /// The file to use for the store if [store_type] is file.
-    #[arg(short = 'f', long, default_value = "db.sqlite")]
+    #[arg(short = 'f', long, default_value = "/data/db.sqlite")]
     store_file: PathBuf,
 
     /// The network type that rosetta connects to.
@@ -346,6 +346,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/ready", get(ready))
         .route("/health", get(health))
+        .route("/call", post(call))
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))

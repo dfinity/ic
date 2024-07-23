@@ -9,6 +9,7 @@ mod catch_up_package;
 mod common;
 mod dashboard;
 mod health_status_refresher;
+pub mod metrics;
 mod pprof;
 mod query;
 mod read_state;
@@ -19,20 +20,19 @@ mod tracing_flamegraph;
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod call;
-        pub mod metrics;
     } else {
-        mod metrics;
         mod call;
     }
 }
 
-pub use call::{CallServiceV2, IngressValidatorBuilder};
+pub use call::{
+    CallServiceV2, CallServiceV3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
+};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 
 use crate::{
-    call::ingress_watcher::IngressWatcher,
     catch_up_package::CatchUpPackageService,
     common::{
         get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
@@ -91,12 +91,11 @@ use ic_replicated_state::ReplicatedState;
 use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
         HttpReadStateResponse, HttpRequestEnvelope, MessageId, QueryResponseHash,
-        ReplicaHealthStatus,
+        ReplicaHealthStatus, SignedIngress,
     },
     time::expiry_time_from_now,
     Height, NodeId, SubnetId,
@@ -285,7 +284,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,

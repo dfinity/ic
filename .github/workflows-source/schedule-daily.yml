@@ -24,14 +24,18 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+    image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -61,19 +65,28 @@ jobs:
           git config --global user.email "infra+github-automation@dfinity.org"
           git config --global user.name "IDX GitLab Automation"
 
-          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')--github"
+          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
           git switch --force-create "$RC_BRANCH_NAME" HEAD
           git push --force --set-upstream origin "$RC_BRANCH_NAME"
 
   rust-benchmarks:
     name: Bazel Run Rust Benchmarks
     <<: *dind-large-setup
+    runs-on:
+      # see linux-x86-64 runner group
+      labels: rust-benchmarks
+    container:
+      <<: *image
+      # running on bare metal machine using ubuntu user
+      options: --user ubuntu -v /cache:/cache
     timeout-minutes: 720 # 12 hours
-    # TODO: disable in GitLab before enabling here
-    if: ${{ vars.RUN_CI == 'true' && false }}
     strategy:
       matrix:
-        targets: ["//rs/crypto/...", "//rs/state_manager/..."]
+        targets:
+          - "//rs/crypto/..."
+          - "//rs/state_manager/..."
+          - "//rs/certification/..."
+          - "//rs/boundary_node/ic_boundary/..."
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -94,8 +107,9 @@ jobs:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
     timeout-minutes: 120
-    # TODO: enable when zh1 is active again
-    if: ${{ vars.RUN_CI == 'true' && false }}
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -123,7 +137,6 @@ jobs:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
     timeout-minutes: 20
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -142,7 +155,6 @@ jobs:
     name: Bazel System Test Benchmarks
     <<: *dind-large-setup
     timeout-minutes: 480
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -161,3 +173,42 @@ jobs:
           # note: there's just one performance cluster, so the job can't be parallelized
           BAZEL_EXTRA_ARGS: "--//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+
+  dependency-scan-nightly:
+    name: Dependency Scan Nightly
+    <<: *dind-large-setup
+    timeout-minutes: 60
+    permissions:
+      actions: write
+    env:
+      SHELL_WRAPPER: "/usr/bin/time"
+      CARGO_WASMPACK_VERSION: "0.12.1"
+      DEFAULT_NODE_VERSION : "20"
+      CI_PROJECT_PATH: ${{ github.repository }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - name: Setup environment deps
+        id: setup-environment-deps
+        shell: bash
+        run: |
+          pip3 install --ignore-installed -r requirements.txt
+          cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
+          source "${NVM_DIR}/nvm.sh"
+          nvm use ${DEFAULT_NODE_VERSION}
+          node --version
+          npm --version
+      - name: Run Dependency Scan Nightly
+        id: dependency-scan-nightly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          cd gitlab-ci/src/dependencies/
+          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
+          $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
+          $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py

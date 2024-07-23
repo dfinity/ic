@@ -6,26 +6,26 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
 # WASM metadata is a 2-tuple of git commit ID and WASM hash.
 CANISTER_NAME_TO_WASM_METADATA = {
-    "governance": ("b39f782ae9e976f6f25c8f1d75b977bd22c81507", "ee407c6f48c892f8f6bd2cc6558d7d897d89b1990c931125ba48bd9513e7c425"),
-    "ledger": ("bb76748d1d225c08d88037e99ca9a066f97de496", "96f00dc30c8040992c454e285eca25ac6f14e06210417742caf7d10554a9d57f"),
-    "archive": ("8d80b3b3703988645a604641f8d600d525bb5c21", "d7229caa5106454413c5382437cfb0864dedc36058611111debf94da0258998b"),
-    "index": ("463296c0bc82ad5999b70245e5f125c14ba7d090", "8157f5cba913d9db25a2c54ebf823d4edcc50cce00b97a18e5d33c2f73e59c93"),
-    "root": ("b9a20425f94eb1433385a7ed0c59c41095c17b7b", "0c791dc6010b041112ab23935d1be8ca28e2b7ae1374c0051a1dde12262b658b"),
-    "registry": ("b39f782ae9e976f6f25c8f1d75b977bd22c81507", "21788e6c715ce1dd6189151f32b6b3216ed7df9e97935ab11bd3c227c335225c"),
+    "governance": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "8f76b2de37197b3ff0ae188f1ef99ddd5bd75cb8f83fb87c2889822ece0b5576"),
+    "ledger": ("b43280208c32633a29657a1051660324e88a373d", "209d01896799444a40a80ac21ac22ad23fd7abdde7d6cff0c96326d178e4c5a8"),
+    "archive": ("b43280208c32633a29657a1051660324e88a373d", "db0f094005a0e84e243f8f300236be879dcefa412c2fd36d675390caa689d88d"),
+    "index": ("b43280208c32633a29657a1051660324e88a373d", "62bbbada301838ad0f6e371415be990ce70e36c6f11267d4ba9fac8ff09aa32d"),
+    "root": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "713f44b9d26cfc9ed2083bad954cdfcabb7de211bfc1c4fc811d8c7bb4f47d81"),
+    "registry": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "f1555a94d322d5ffa024748d20a58b88b7bca756a82f5da2b3c7ef0f3cd190ea"),
     "lifeline": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "614d7d418c4eaa9984b6c3f4afe2d1e45b2f110369edcc2dc767792181742348"),
-    "genesis-token": ("87f48a595b6f666fbc7fe6ad4081aa98fd113d12", "dd71862512af57e938e01810be016e17431912d9ca0ea3952bc04015eb02acc4"),
+    "genesis-token": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "a403f573c4426065b1a9b7b5b1a7f95c04534c6d79a06be71f1d04212b40e9de"),
     "cycles-minting": ("b9a20425f94eb1433385a7ed0c59c41095c17b7b", "58ee30cb6cb074dc066b7e8dfc78d8e2b1a9e97a48e39fedbace65c547703d80"),
     "sns-wasm": ("b39f782ae9e976f6f25c8f1d75b977bd22c81507", "394b936be4af54ad27c1eb44537202549ad8c23445b34f08d4db1ae9e983ed01"),
     "swap": ("b39f782ae9e976f6f25c8f1d75b977bd22c81507", "67f64e705afd70c0de03529a8b914f122b3fb8920d9e9d81e357b8b5e2a4d10a"),
-    "sns_root": ("e790c6636115482db53ca3daa2f1900202ab04cf", "12b6bba135b8bcff8a1384f15d202dd4f6e7bbbf0554994d5da4949125b6fdaa"),
+    "sns_root": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "2c6018ca27ae077a26acb63821d20328bf1db2dc2710d9a7245cd1c4ae22d388"),
     "sns_governance": ("a9a67996f7a5f0c4e95a697fafcad6b15a5aae62", "d806d992ccd7f4f6ac0fe9faaed19f2a7b806f2b8136ba5a278fe1d093defc25"),
     "sns_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
     "sns_ledger": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "26de3e745b0e98cc83850ebf0f8fd1a574905bf7c73d52fcf61ee3f35e4875e1"),
     "sns_archive": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "ea2df4e0e3f4e5e91d43baf281728b2443ab3236ba473d78913cfbe2b5763d3c"),
-    "ckbtc_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
-    "ckbtc_ledger": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "26de3e745b0e98cc83850ebf0f8fd1a574905bf7c73d52fcf61ee3f35e4875e1"),
-    "cketh_index": ("b43280208c32633a29657a1051660324e88a373d", "23b3ee69f3ca906a85b5cf4668a487d9519095121d8d4ccda7a3da4369238311"),
-    "cketh_ledger": ("b43280208c32633a29657a1051660324e88a373d", "d58fc4d707861d93e71a2c5b39353bee703942a94d2f400a6da1cd6a0211c589"),
+    "ck_btc_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
+    "ck_btc_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "4264ce2952c4e9ff802d81a11519d5e3ffdaed4215d5831a6634e59efd72f7d8"),
+    "ck_eth_index": ("b43280208c32633a29657a1051660324e88a373d", "23b3ee69f3ca906a85b5cf4668a487d9519095121d8d4ccda7a3da4369238311"),
+    "ck_eth_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "e5c8a297d1c0c6d2ab2253c0280aaefd6e23fe3a8a994fc64706a1f3c3116062"),
 }
 
 def canister_url(git_commit_id, filename):
@@ -121,6 +121,43 @@ def mainnet_core_nns_canisters():
         url = canister_url(git_commit_id, "sns-wasm-canister.wasm.gz"),
     )
 
+def mainnet_ck_canisters():
+    """
+    Provides Bazel targets for the latest ckBTC and ckETH canisters published to the mainnet fiduciary subnet.
+    """
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_btc_ledger"]
+    http_file(
+        name = "mainnet_ckbtc_ic-icrc1-ledger",
+        downloaded_file_path = "ic-icrc1-ledger.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-ledger.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ckbtc_index"]
+    http_file(
+        name = "mainnet_ckbtc-index-ng",
+        downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-index-ng.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_eth_ledger"]
+    http_file(
+        name = "mainnet_cketh_ic-icrc1-ledger-u256",
+        downloaded_file_path = "ic-icrc1-ledger-u256.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-ledger-u256.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["cketh_index"]
+    http_file(
+        name = "mainnet_cketh-index-ng",
+        downloaded_file_path = "ic-icrc1-index-ng-u256.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-index-ng-u256.wasm.gz"),
+    )
+
 def mainnet_sns_canisters():
     """
     Provides Bazel targets for the latest SNS canisters published to the mainnet SNS-W.
@@ -174,43 +211,4 @@ def mainnet_sns_canisters():
         downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
         sha256 = sha256,
         url = canister_url(git_commit_id, "ic-icrc1-index-ng.wasm.gz"),
-    )
-
-def mainnet_fi_canisters():
-    """
-    Provides Bazel targets for canisters published to the mainnet for use in testing by the FI team.
-
-    This includes: ckBTC (64-bit tokens), ckETH (256-bit tokens).
-    """
-
-    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ckbtc_ledger"]
-    http_file(
-        name = "mainnet_ckbtc-ledger",
-        downloaded_file_path = "ic-icrc1-ledger.wasm.gz",
-        sha256 = sha256,
-        url = canister_url(git_commit_id, "ic-icrc1-ledger.wasm.gz"),
-    )
-
-    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ckbtc_index"]
-    http_file(
-        name = "mainnet_ckbtc-index-ng",
-        downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
-        sha256 = sha256,
-        url = canister_url(git_commit_id, "ic-icrc1-index-ng.wasm.gz"),
-    )
-
-    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["cketh_ledger"]
-    http_file(
-        name = "mainnet_cketh-ledger",
-        downloaded_file_path = "ic-icrc1-ledger-u256.wasm.gz",
-        sha256 = sha256,
-        url = canister_url(git_commit_id, "ic-icrc1-ledger-u256.wasm.gz"),
-    )
-
-    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["cketh_index"]
-    http_file(
-        name = "mainnet_cketh-index-ng",
-        downloaded_file_path = "ic-icrc1-index-ng-u256.wasm.gz",
-        sha256 = sha256,
-        url = canister_url(git_commit_id, "ic-icrc1-index-ng-u256.wasm.gz"),
     )

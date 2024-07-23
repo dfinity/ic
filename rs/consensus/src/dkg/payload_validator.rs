@@ -243,9 +243,9 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{batch::BatchPayload, consensus::dkg::DealingContent};
     use ic_types::{
-        consensus::{dkg, idkg, DataPayload, Payload},
+        batch::BatchPayload,
+        consensus::{dkg, dkg::DealingContent, idkg, DataPayload, Payload},
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         RegistryVersion,
     };

@@ -9,12 +9,12 @@ use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegis
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     replicated_state::{
+        IngressInductionError, LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
         LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
         LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
-        LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
-        LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
+        LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
     },
-    ReplicatedState, StateError,
+    ReplicatedState,
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus},
@@ -87,8 +87,8 @@ impl VsrMetrics {
             LABEL_VALUE_CANISTER_STOPPED,
             LABEL_VALUE_CANISTER_STOPPING,
             LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
-            LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
-            LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
+            LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
+            LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
         ] {
             inducted_ingress_messages.with_label_values(&[status]);
         }
@@ -167,7 +167,7 @@ impl ValidSetRuleImpl {
                 LABEL_VALUE_SUCCESS
             }
             Err(err) => {
-                if let StateError::CanisterNotFound(canister_id) = &err {
+                if let IngressInductionError::CanisterNotFound(canister_id) = &err {
                     error!(
                         self.log,
                         "Failed to induct message: canister does not exist";
@@ -238,11 +238,11 @@ impl ValidSetRuleImpl {
         state: &mut ReplicatedState,
         msg: SignedIngressContent,
         subnet_size: usize,
-    ) -> Result<(), StateError> {
+    ) -> Result<(), IngressInductionError> {
         if state.metadata.own_subnet_type != SubnetType::System
             && state.metadata.ingress_history.len() >= self.ingress_history_max_messages
         {
-            return Err(StateError::IngressHistoryFull {
+            return Err(IngressInductionError::IngressHistoryFull {
                 capacity: self.ingress_history_max_messages,
             });
         }
@@ -254,12 +254,12 @@ impl ValidSetRuleImpl {
                     ParseIngressError::UnknownSubnetMethod
                     | ParseIngressError::SubnetMethodNotAllowed,
                 ) => {
-                    return Err(StateError::UnknownSubnetMethod(
+                    return Err(IngressInductionError::CanisterMethodNotFound(
                         msg.method_name().to_string(),
                     ))
                 }
                 Err(ParseIngressError::InvalidSubnetPayload(_)) => {
-                    return Err(StateError::InvalidSubnetPayload)
+                    return Err(IngressInductionError::InvalidManagementPayload)
                 }
             };
 
@@ -282,7 +282,7 @@ impl ValidSetRuleImpl {
                 // Get the paying canister from the state.
                 let canister = match state.canister_states.get_mut(&payer) {
                     Some(canister) => canister,
-                    None => return Err(StateError::CanisterNotFound(payer)),
+                    None => return Err(IngressInductionError::CanisterNotFound(payer)),
                 };
 
                 // Withdraw cost of inducting the message.
@@ -299,7 +299,7 @@ impl ValidSetRuleImpl {
                     subnet_size,
                     reveal_top_up,
                 ) {
-                    return Err(StateError::CanisterOutOfCycles(err));
+                    return Err(IngressInductionError::CanisterOutOfCycles(err));
                 }
 
                 // Ensure the canister is running if the message isn't to a subnet.
@@ -307,10 +307,14 @@ impl ValidSetRuleImpl {
                     match canister.status() {
                         CanisterStatusType::Running => {}
                         CanisterStatusType::Stopping => {
-                            return Err(StateError::CanisterStopping(canister.canister_id()))
+                            return Err(IngressInductionError::CanisterStopping(
+                                canister.canister_id(),
+                            ))
                         }
                         CanisterStatusType::Stopped => {
-                            return Err(StateError::CanisterStopped(canister.canister_id()))
+                            return Err(IngressInductionError::CanisterStopped(
+                                canister.canister_id(),
+                            ))
                         }
                     }
                 }

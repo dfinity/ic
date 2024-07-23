@@ -76,7 +76,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
 /// This struct maintains an invariant that `usage <= capacity` and
 /// `threshold <= capacity`.  There are no constraints between `usage` and
 /// `threshold`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct ResourceSaturation {
     usage: u64,
     threshold: u64,

@@ -253,10 +253,7 @@ pub mod test {
             "http_request_timeout_secs": 20,
             "incoming_source": "Systemd",
             "logger": {
-                "dc_id": 200,
-                "format": "text_full",
-                "debug_overrides": [],
-                "block_on_overflow": false
+                "format": "text_full"
             }        
         }       
         "#;
@@ -275,10 +272,7 @@ pub mod test {
             http_request_timeout_secs: 20,
             incoming_source: IncomingSource::Systemd,
             logger: ic_config::logger::Config {
-                dc_id: 200,
                 format: ic_config::logger::LogFormat::TextFull,
-                debug_overrides: Vec::new(),
-                block_on_overflow: false,
                 ..Default::default()
             },
             ..Default::default()
@@ -298,18 +292,12 @@ pub mod test {
                     "Path": "/tmp/path.socket"
             },
             "logger": {
-                "node_id": 0,
-                "dc_id": 200,
                 "level": "info",
-                "format": "json",
-                "debug_overrides": [],
-                "enabled_tags": [],
-                "block_on_overflow": true
+                "format": "json"
             },
-            "socks_proxy": "socks5://notaproxy.com:1080"        
+            "socks_proxy": "socks5://notaproxy.com:1080" 
         }       
         "#;
-
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
         writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
 
@@ -325,11 +313,8 @@ pub mod test {
             http_request_timeout_secs: 50,
             incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
-                node_id: 0,
-                dc_id: 200,
-                level: slog::Level::Info,
+                level: ic_config::logger::Level::Info,
                 format: ic_config::logger::LogFormat::Json,
-                debug_overrides: Vec::new(),
                 ..Default::default()
             },
             socks_proxy: "socks5://notaproxy.com:1080".to_string(),

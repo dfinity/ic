@@ -1,9 +1,8 @@
 use crate::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, GAS_USED, HEADER_SIZE_LIMIT,
-    MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
-    USDC_ERC20_CONTRACT_ADDRESS,
+    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, GAS_USED, MINTER_ADDRESS,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC, USDC_ERC20_CONTRACT_ADDRESS,
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
@@ -103,23 +102,6 @@ pub fn multi_logs_for_single_transaction<Entry: Clone + Into<ethers_core::types:
     logs
 }
 
-pub fn all_eth_get_logs_response_size_estimates() -> Vec<u64> {
-    vec![
-        100 + HEADER_SIZE_LIMIT,
-        2048 + HEADER_SIZE_LIMIT,
-        4096 + HEADER_SIZE_LIMIT,
-        8192 + HEADER_SIZE_LIMIT,
-        16_384 + HEADER_SIZE_LIMIT,
-        32_768 + HEADER_SIZE_LIMIT,
-        65_536 + HEADER_SIZE_LIMIT,
-        131_072 + HEADER_SIZE_LIMIT,
-        262_144 + HEADER_SIZE_LIMIT,
-        524_288 + HEADER_SIZE_LIMIT,
-        1_048_576 + HEADER_SIZE_LIMIT,
-        2_000_000,
-    ]
-}
-
 pub fn send_raw_transaction_response() -> ethers_core::types::TxHash {
     ethers_core::types::TxHash::decode_hex(
         "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d",
@@ -128,9 +110,31 @@ pub fn send_raw_transaction_response() -> ethers_core::types::TxHash {
 }
 
 pub fn block_response(block_number: u64) -> ethers_core::types::Block<ethers_core::types::TxHash> {
+    use ethers_core::types::{H256, H64};
+
+    let mut hash = [0_u8; 32];
+    hex::decode_to_slice(&DEFAULT_BLOCK_HASH[2..], &mut hash).unwrap();
+
+    let mut log_blooms = [0_u8; 256];
+    hex::decode_to_slice(&"0x93ab55f727ed7f7f7ffa47b6e520df221dce71f165d0f470a71d051cfd36ab0ad4015725f16938bb3798fb4fc58fd3d95e23a8689ba06ae3ce16ffba95afbedcfece0dcdce2f1e7f6eb6573a92c5a8feadec65bd2655296a5ff07ecee9ae5b2abfddd7b2877ed3f5ac7bf4d95061bd5d6f8e37fb87995ea0904d58d6d8cbb86f9fef7af0364e834154dbb74a2ff7c6355a43ac1d73d9bcf9f5a9ed756492fffdfbffd1e7ffdf7f274e36fbc4e9e3bdf9e56fdad089dd582fd7e5fc733fcc63753762f4f7c49dbffeb5a196ae6a3fddd749f1f26effedd1df23ad5d23b9d2fc2f19ffa5513504a53155d477f1f155b966ddadfa195b4c6bdafb9df97ff065debf"[2..], &mut log_blooms).unwrap();
+
+    let mut miner = [0_u8; 20];
+    hex::decode_to_slice(
+        &"0x1f9090aae28b8a3dceadf281b0f12828e676c326"[2..],
+        &mut miner,
+    )
+    .unwrap();
+
     ethers_core::types::Block::<ethers_core::types::TxHash> {
+        hash: Some(hash.into()),
         number: Some(block_number.into()),
         base_fee_per_gas: Some(0x3e4f64de7_u64.into()),
+        nonce: Some(H64::zero()),
+        logs_bloom: Some(log_blooms.into()),
+        total_difficulty: Some(0xc70d815d562d3cfa955_u128.into()),
+        mix_hash: Some(H256::zero()),
+        author: Some(miner.into()),
+        size: Some(0x19eea_u64.into()),
         ..Default::default()
     }
 }

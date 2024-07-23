@@ -15,6 +15,14 @@ impl<T: AsRef<CkEthSetup>> MinterEventAssert<T> {
 }
 
 impl<T> MinterEventAssert<T> {
+    pub fn skip(self, count: usize) -> Self {
+        let events = self.events.into_iter().skip(count).collect();
+        Self {
+            setup: self.setup,
+            events,
+        }
+    }
+
     pub fn assert_has_unique_events_in_order(self, expected_events: &[EventPayload]) -> T {
         let mut found_event_indexes = BTreeMap::new();
         for (index_expected_event, expected_event) in expected_events.iter().enumerate() {

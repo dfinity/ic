@@ -4,11 +4,13 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 BTC_RUNTIME_DEPS = [
-    "@btc_canister//file",
+    # Keep sorted.
     "//rs/tests:btc_uvm_config_image",
+    "@btc_canister//file",
 ]
 
 LEDGER_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
 ]
 
