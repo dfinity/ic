@@ -531,10 +531,6 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
-        Ok(Method::FetchCanisterLogs) => match FetchCanisterLogsRequest::decode(ingress.arg()) {
-            Ok(record) => Ok(Some(record.get_canister_id())),
-            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
-        },
         Ok(Method::TakeCanisterSnapshot)
         | Ok(Method::LoadCanisterSnapshot)
         | Ok(Method::ListCanisterSnapshots)
@@ -556,7 +552,8 @@ pub fn extract_effective_canister_id(
         | Ok(Method::BitcoinSendTransactionInternal)
         | Ok(Method::BitcoinGetSuccessors)
         | Ok(Method::BitcoinGetCurrentFeePercentiles)
-        | Ok(Method::NodeMetricsHistory) => {
+        | Ok(Method::NodeMetricsHistory)
+        | Ok(Method::FetchCanisterLogs) => {
             // Subnet method not allowed for ingress.
             Err(ParseIngressError::SubnetMethodNotAllowed)
         }
