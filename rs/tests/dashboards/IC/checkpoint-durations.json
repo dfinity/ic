@@ -370,7 +370,7 @@
     },
     "timepicker": {},
     "timezone": "utc",
-    "title": "Checkpoint Step Durations",
+    "title": "Checkpoint Durations",
     "uid": "checkpoint-durations",
     "version": 1,
     "weekStart": ""
