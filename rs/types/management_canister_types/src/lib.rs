@@ -2197,6 +2197,18 @@ pub enum MasterPublicKeyId {
     Schnorr(SchnorrKeyId),
 }
 
+impl MasterPublicKeyId {
+    /// Returns true if ECDSA key.
+    pub fn is_ecdsa(&self) -> bool {
+        matches!(&self, MasterPublicKeyId::Ecdsa(_))
+    }
+
+    /// Returns true if Schnorr key.
+    pub fn is_schnorr(&self) -> bool {
+        matches!(&self, MasterPublicKeyId::Schnorr(_))
+    }
+}
+
 impl From<&MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
     fn from(item: &MasterPublicKeyId) -> Self {
         use pb_registry_crypto::master_public_key_id::KeyId;
