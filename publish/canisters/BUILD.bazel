@@ -166,7 +166,6 @@ filegroup(
     name = "canisters",
     srcs = [name for name in CANISTERS] +
            [name for name in COMPRESSED_CANISTERS],
-    visibility = ["//visibility:public"],
 )
 
 # the further targets are all testonly for simplicity because if a target was
@@ -203,5 +202,4 @@ upload_artifacts(
     testonly = True,
     inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
-    visibility = ["//visibility:public"],
 )
