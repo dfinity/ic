@@ -861,6 +861,7 @@ async fn test_query_block_range() {
 #[tokio::test]
 async fn test_block_transaction() {
     let env = TestEnv::setup_or_panic(true).await;
+    env.pocket_ic.stop_progress().await;
     assert!(env
         .rosetta
         .block_transaction(
@@ -877,32 +878,47 @@ async fn test_block_transaction() {
         .0
         .message
         .contains("Block not found"));
-
-    let minter = test_identity()
-        .sender()
-        .expect("test identity sender not found!");
-    let mut block_indices: Vec<Nat> = vec![];
-    for i in 0..4u64 {
-        let mint_arg = TransferArg {
+    
+    // We are creating a second rosetta block that contains 4 transactions with each having an unique tx hash
+    env.icrc1_transfers(vec![
+        TransferArg {
             from_subaccount: None,
             to: Account::from(Principal::anonymous()),
             fee: None,
             created_at_time: None,
-            memo: None,
-            amount: Nat::from(i),
-        };
-        let arg = Encode!(&mint_arg).unwrap();
-        block_indices.push(
-            env.pocket_ic
-                .update_call(env.ledger_id, minter, "icrc1_transfer", arg)
-                .await
-                .expect("Unable to submit call")
-                .unwrap_as::<Result<BlockIndex, TransferError>>()
-                .expect("Error performing icrc1_transfer"),
-        );
-    }
+            memo: Some(1.into()),
+            amount: Nat::from(1u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: Some(2.into()),
+            amount: Nat::from(1u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: Some(3.into()),
+            amount: Nat::from(2u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            memo: Some(4.into()),
+            created_at_time: None,
+            fee: None,
+            amount: Nat::from(1u64),
+        },
+    ])
+    .await;
+    env.pocket_ic.auto_progress().await;
     env.rosetta.wait_or_panic_until_synced_up_to(4).await;
 
+    // We try to fetch the RosettaBlock we just created earlier
     let rosetta_core::objects::Block {
         block_identifier,
         transactions,
@@ -910,7 +926,7 @@ async fn test_block_transaction() {
     } = env
         .rosetta
         .block_or_panic(PartialBlockIdentifier {
-            index: Some(4),
+            index: Some(1),
             hash: None,
         })
         .await;
