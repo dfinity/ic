@@ -2658,10 +2658,7 @@ impl ExecutionEnvironment {
             }
         }
 
-        let threshold_key = match &args {
-            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
-            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
-        };
+        let threshold_key = args.key_id();
         if !topology
             .idkg_signing_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
