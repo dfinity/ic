@@ -662,10 +662,11 @@ mod eth_get_transaction_count {
 
 mod evm_rpc_conversion {
     use crate::eth_rpc_client::{
-        providers::RpcNodeProvider, test_fixtures::arb::arb_evm_rpc_error, Block, FeeHistory,
-        HttpOutcallError, MultiCallError, MultiCallResults, ReducedResult, SingleCallError,
+        providers::RpcNodeProvider, Block, FeeHistory, HttpOutcallError, MultiCallError,
+        MultiCallResults, ReducedResult, SingleCallError,
     };
     use crate::numeric::{BlockNumber, Wei};
+    use crate::test_fixtures::arb::{arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio};
     use assert_matches::assert_matches;
     use candid::Nat;
     use evm_rpc_client::types::candid::{
@@ -675,7 +676,6 @@ mod evm_rpc_conversion {
     };
     use num_bigint::BigUint;
     use proptest::proptest;
-    use serde_json::Value;
 
     #[test]
     fn should_map_consistent_result() {

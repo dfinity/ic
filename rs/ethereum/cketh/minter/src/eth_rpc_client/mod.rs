@@ -35,8 +35,6 @@ pub mod requests;
 pub mod responses;
 
 #[cfg(test)]
-pub mod test_fixtures;
-#[cfg(test)]
 mod tests;
 
 // We expect most of the calls to contain zero events.
