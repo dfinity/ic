@@ -208,17 +208,17 @@ impl TestConsensusPool {
         }
     }
 
-    // Utility function to determine the identity of the block maker with the
-    // specified rank at a given height. Panics if this rank does not exist.
+    /// Utility function to determine the identity of the block maker with the
+    /// specified rank at a given height. Panics if this rank does not exist.
     pub fn get_block_maker_by_rank(&self, height: Height, rank: Rank) -> NodeId {
         let pool_reader = PoolReader::new(&self.pool);
+        let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
         *self
             .membership
             .get_nodes(height)
             .unwrap()
             .iter()
             .find(|node| {
-                let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
                 self.membership
                     .get_block_maker_rank(height, &prev_beacon, **node)
                     == Ok(Some(rank))
