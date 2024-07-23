@@ -22,9 +22,9 @@ CANISTER_NAME_TO_WASM_METADATA = {
     "sns_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
     "sns_ledger": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "26de3e745b0e98cc83850ebf0f8fd1a574905bf7c73d52fcf61ee3f35e4875e1"),
     "sns_archive": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "ea2df4e0e3f4e5e91d43baf281728b2443ab3236ba473d78913cfbe2b5763d3c"),
-    "ck_btc_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
+    "ck_btc_index": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "cac207cf438df8c9fba46d4445c097f05fd8228a1eeacfe0536b7e9ddefc5f1c"),
     "ck_btc_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "4264ce2952c4e9ff802d81a11519d5e3ffdaed4215d5831a6634e59efd72f7d8"),
-    "ck_eth_index": ("b43280208c32633a29657a1051660324e88a373d", "23b3ee69f3ca906a85b5cf4668a487d9519095121d8d4ccda7a3da4369238311"),
+    "ck_eth_index": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "8104acad6105abb069b2dbc8289692bd63c2d110127f8e91f99db51465962606"),
     "ck_eth_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "e5c8a297d1c0c6d2ab2253c0280aaefd6e23fe3a8a994fc64706a1f3c3116062"),
 }
 
@@ -134,7 +134,7 @@ def mainnet_ck_canisters():
         url = canister_url(git_commit_id, "ic-icrc1-ledger.wasm.gz"),
     )
 
-    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ckbtc_index"]
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_btc_index"]
     http_file(
         name = "mainnet_ckbtc-index-ng",
         downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
@@ -150,7 +150,7 @@ def mainnet_ck_canisters():
         url = canister_url(git_commit_id, "ic-icrc1-ledger-u256.wasm.gz"),
     )
 
-    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["cketh_index"]
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_eth_index"]
     http_file(
         name = "mainnet_cketh-index-ng",
         downloaded_file_path = "ic-icrc1-index-ng-u256.wasm.gz",

@@ -180,14 +180,14 @@ rust_ic_test(
     for (name_suffix, mainnet_ledger, mainnet_index, features, extra_deps) in [
         (
             "",
-            "mainnet_ckbtc-ledger",
+            "mainnet_ckbtc_ic-icrc1-ledger",
             "mainnet_ckbtc-index-ng",
             [],
             ["//rs/rosetta-api/icrc1/tokens_u64"],
         ),
         (
             "_u256",
-            "mainnet_cketh-ledger",
+            "mainnet_cketh_ic-icrc1-ledger-u256",
             "mainnet_cketh-index-ng",
             ["u256-tokens"],
             ["//rs/rosetta-api/icrc1/tokens_u256"],
