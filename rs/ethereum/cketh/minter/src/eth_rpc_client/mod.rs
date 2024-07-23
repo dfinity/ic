@@ -434,7 +434,7 @@ impl<T: PartialEq> MultiCallResults<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Ord, PartialOrd)]
 pub enum SingleCallError {
     HttpOutcallError(HttpOutcallError),
     JsonRpcError { code: i64, message: String },
@@ -543,6 +543,12 @@ impl<T> ReducedResult<T> {
             }
         };
         Self { result }
+    }
+}
+
+impl<T> AsRef<Result<T, MultiCallError<T>>> for ReducedResult<T> {
+    fn as_ref(&self) -> &Result<T, MultiCallError<T>> {
+        &self.result
     }
 }
 
