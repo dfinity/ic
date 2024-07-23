@@ -35,12 +35,12 @@ use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
     CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrKeyId, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
+    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1200,7 +1200,7 @@ impl ExecutionEnvironment {
                                         (**request).clone(),
                                         ThresholdArguments::Schnorr(SchnorrArguments {
                                             key_id: args.key_id,
-                                            message: args.message,
+                                            message: Arc::new(args.message),
                                         }),
                                         args.derivation_path.into_inner(),
                                         registry_settings
@@ -2628,13 +2628,10 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
+            let cam = &self.cycles_account_manager;
             let signature_fee = match args {
-                ThresholdArguments::Ecdsa(_) => {
-                    self.cycles_account_manager.ecdsa_signature_fee(subnet_size)
-                }
-                ThresholdArguments::Schnorr(_) => self
-                    .cycles_account_manager
-                    .schnorr_signature_fee(subnet_size),
+                ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
+                ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
             };
             if request.payment < signature_fee {
                 return Err(UserError::new(
@@ -2661,11 +2658,9 @@ impl ExecutionEnvironment {
             }
         }
 
-        let threshold_key = match args {
-            ThresholdArguments::Ecdsa(ecdsa_args) => MasterPublicKeyId::Ecdsa(ecdsa_args.key_id),
-            ThresholdArguments::Schnorr(schnorr_args) => {
-                MasterPublicKeyId::Schnorr(schnorr_args.key_id)
-            }
+        let threshold_key = match &args {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
         };
         if !topology
             .idkg_signing_subnets(&threshold_key)
