@@ -61,7 +61,7 @@ pub(crate) async fn tracing_flamegraph_handle(
     let reader = BufReader::new(data.as_slice());
     let mut body: Vec<u8> = vec![];
     let mut opts = inferno::flamegraph::Options::default();
-    let res = inferno::flamegraph::from_reader(&mut opts, reader, &mut body);
+    inferno::flamegraph::from_reader(&mut opts, reader, &mut body)
         .map_err(|err| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
