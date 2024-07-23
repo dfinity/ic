@@ -234,10 +234,11 @@ jobs:
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           # Use eval to correctly interpret ADDITIONAL_FLAGS
-          ADDITIONAL_FLAGS=$(eval echo $ADDITIONAL_FLAGS)
-          pytest --ignore=gitlab_config/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
+          COMMAND="pytest --ignore=gitlab_config/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
-            --cov-report=term-missing --cov-report=html --cov-branch
+            --cov-report=term-missing --cov-report=html --cov-branch"
+          echo "Executing command: $COMMAND"
+          eval $COMMAND
   build-ic:
     name: Build IC
     <<: *dind-large-setup
