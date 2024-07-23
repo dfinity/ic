@@ -1,3 +1,9 @@
+# The goal of using package_groups is to decouple semantically different parts of the whole IC codebase.
+# There is a 1-to-1 mapping between each package and a package group defined in this file.
+# The relationship between package_groups is also defined here.
+# In the future when upgrade to bazel >7, package groups will be moved into bazel modules so
+# all the dependency rules between package groups will be more strictly enforced.
+
 # The system tests package group contains all code related to system testing.
 # Packages from this package group can depend on any other package from the repository.
 # Packages outside this package group cannot depend on any packages part of the group.
@@ -5,7 +11,7 @@
 #   //rs/ic_os/launch-single-vm:__pkg__ can depend on rs/tests/driver:ic-system-test-driver
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/httpbin-rs:httpbin
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests:ic-hs
-#   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/testing_verification/spec_compliance
+#   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/testing_verification:spec_compliance
 package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],
