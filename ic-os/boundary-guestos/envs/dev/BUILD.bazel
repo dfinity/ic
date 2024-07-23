@@ -6,8 +6,8 @@ load("//ic-os/boundary-guestos:defs.bzl", "image_deps")
 #       //ic-os/boundary-guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
 boundary_node_icos_build(
-    package(default_visibility = ["//rs:is-os"]),
     name = "dev",
     ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
+    visibility = ["//rs:ic-os-pkg"],
 )
