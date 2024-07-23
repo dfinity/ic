@@ -46,9 +46,7 @@ runs:
           fi
 
           echo "KUBECONFIG: ${KUBECONFIG:-}"
-          cat ${KUBECONFIG} | grep server
           kubectl -n tnets get pods || true
-          sleep 180
 
           ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
           BAZEL_EXIT_CODE="$?"

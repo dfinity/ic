@@ -62,8 +62,10 @@ jobs:
       - name: Set KUBECONFIG
         shell: bash
         run: |
-          echo "$TNET_KUBECONFIG" > /var/tmp/kubeconfig
-          echo "KUBECONFIG=/var/tmp/kubeconfig" >> $GITHUB_ENV
+          echo "$TNET_KUBECONFIG" > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> $GITHUB_ENV
+        env:
+          TNET_KUBECONFIG: ${{ secrets.TNET_KUBECONFIG }}
 
       - name: Run System Tests on K8s
         id: bazel-test-all
