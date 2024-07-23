@@ -40,6 +40,8 @@ jobs:
           done
           TEAM_TAGS=$(echo $TEAM_TAGS | tr ' ' '\n' | sort -u | tr '\n' ' ')
           echo "TEAM_TAGS=$TEAM_TAGS" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get current PR labels
         id: get_labels
