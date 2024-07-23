@@ -31,6 +31,10 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_fstrim_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//visibility:private",
+    ],
     deps = DEPENDENCIES,
 )
 
