@@ -816,7 +816,6 @@ impl SchedulerImpl {
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
             // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
-            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
