@@ -7,9 +7,9 @@
 set -euo pipefail
 
 grafana_dashboards_path=$(
-    cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+    cd "$(dirname ${BASH_SOURCE[0]})"
     pwd -P
-)/rs/tests/dashboards
+)/dashboards
 
 function usage() {
     cat <<EOF
