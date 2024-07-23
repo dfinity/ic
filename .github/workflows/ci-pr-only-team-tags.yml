@@ -27,7 +27,9 @@ jobs:
 
       - name: Determine files changed
         id: changed_files
+        shell: bash
         run: |
+          set -x
           CHANGED_FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
           echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
         env:
