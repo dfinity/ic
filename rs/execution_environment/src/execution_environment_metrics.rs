@@ -197,7 +197,6 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::ProvisionalTopUpCanister
                     | ic00::Method::UploadChunk
                     | ic00::Method::StoredChunks
-                    | ic00::Method::DeleteChunks
                     | ic00::Method::ClearChunkStore
                     | ic00::Method::TakeCanisterSnapshot
                     | ic00::Method::LoadCanisterSnapshot

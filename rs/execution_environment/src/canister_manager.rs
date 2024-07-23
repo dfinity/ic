@@ -489,7 +489,6 @@ impl CanisterManager {
             | Ok(Ic00Method::InstallChunkedCode)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::LoadCanisterSnapshot)
@@ -504,7 +503,6 @@ impl CanisterManager {
                     | Ok(Ic00Method::StoredChunks) if self.config.wasm_chunk_store == FlagStatus::Enabled => {}
                     Ok(Ic00Method::UploadChunk)
                     | Ok(Ic00Method::StoredChunks)
-                    | Ok(Ic00Method::DeleteChunks)
                     | Ok(Ic00Method::ClearChunkStore)
                     | Ok(Ic00Method::InstallChunkedCode) => return Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
