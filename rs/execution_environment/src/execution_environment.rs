@@ -389,7 +389,6 @@ impl ExecutionEnvironment {
             config.max_canister_memory_size,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
-            config.wasm_chunk_store,
             config.rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
@@ -585,22 +584,18 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::InstallChunkedCode) => {
-                if self.config.wasm_chunk_store == FlagStatus::Enabled {
-                    // Tail call is needed for deterministic time slicing here to
-                    // properly handle the case of a paused execution.
-                    return self.execute_install_code(
-                        msg,
-                        None,
-                        None,
-                        DtsInstallCodeStatus::StartingFirstExecution,
-                        state,
-                        instruction_limits,
-                        round_limits,
-                        registry_settings.subnet_size,
-                    );
-                } else {
-                    Self::reject_due_to_api_not_implemented(&mut msg)
-                }
+                // Tail call is needed for deterministic time slicing here to
+                // properly handle the case of a paused execution.
+                return self.execute_install_code(
+                    msg,
+                    None,
+                    None,
+                    DtsInstallCodeStatus::StartingFirstExecution,
+                    state,
+                    instruction_limits,
+                    round_limits,
+                    registry_settings.subnet_size,
+                );
             }
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
