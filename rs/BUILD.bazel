@@ -18,6 +18,8 @@ package_group(
 )
 
 # Targets for preparing (e.g. stripping binaries, compressiong wasms, etc) release artifacts.
+# Packages from this package group can't depend on targets from the //rs:system-tests-pkg (TODO continue the list)
+# Only packages from //rs/ic_os //ic-os can depend on targets from this package group (TODO add an ic-os package group)
 package_group(
     name = "release-pkg",
     packages = ["//publish/..."],
