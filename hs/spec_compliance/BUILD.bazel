@@ -144,7 +144,6 @@ did_git_test(
 haskell_library(
     name = "IC-Crypto-BLS",
     srcs = ["src/IC/Crypto/BLS.hsc"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -158,7 +157,6 @@ haskell_library(
 haskell_library(
     name = "IC-Id-Fresh",
     srcs = ["src/IC/Id/Fresh.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -172,7 +170,6 @@ haskell_library(
 haskell_library(
     name = "IC-Id-Forms",
     srcs = ["src/IC/Id/Forms.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -185,7 +182,6 @@ haskell_library(
 haskell_library(
     name = "IC-Utils",
     srcs = ["src/IC/Utils.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -200,7 +196,6 @@ haskell_library(
 haskell_library(
     name = "IC-Certificate",
     srcs = ["src/IC/Certificate.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -226,7 +221,6 @@ haskell_library(
 haskell_library(
     name = "IC-Purify",
     srcs = ["src/IC/Purify.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -238,7 +232,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto",
     srcs = ["src/IC/Crypto.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -257,7 +250,6 @@ haskell_library(
 haskell_library(
     name = "IC-HTTP-RequestId",
     srcs = ["src/IC/HTTP/RequestId.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -272,7 +264,6 @@ haskell_library(
 haskell_library(
     name = "IC-HTTP-CBOR",
     srcs = ["src/IC/HTTP/CBOR.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -285,7 +276,6 @@ haskell_library(
 haskell_library(
     name = "IC-HTTP-GenR",
     srcs = ["src/IC/HTTP/GenR.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -297,7 +287,6 @@ haskell_library(
 haskell_library(
     name = "IC-HTTP-GenR-Parse",
     srcs = ["src/IC/HTTP/GenR/Parse.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -310,7 +299,6 @@ haskell_library(
 haskell_library(
     name = "IC-Types",
     srcs = ["src/IC/Types.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -322,7 +310,6 @@ haskell_library(
 haskell_library(
     name = "IC-HashTree-CBOR",
     srcs = ["src/IC/HashTree/CBOR.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -336,7 +323,6 @@ haskell_library(
 haskell_library(
     name = "IC-HashTree",
     srcs = ["src/IC/HashTree.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -348,7 +334,6 @@ haskell_library(
 haskell_library(
     name = "IC-Constants",
     srcs = ["src/IC/Constants.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -361,7 +346,6 @@ haskell_library(
 haskell_library(
     name = "IC-Certificate-Value",
     srcs = ["src/IC/Certificate/Value.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -375,7 +359,6 @@ haskell_library(
 haskell_library(
     name = "IC-Certificate-Validate",
     srcs = ["src/IC/Certificate/Validate.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -392,7 +375,6 @@ haskell_library(
 haskell_library(
     name = "IC-Certificate-CBOR",
     srcs = ["src/IC/Certificate/CBOR.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -409,7 +391,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-Secp256k1",
     srcs = ["src/IC/Crypto/Secp256k1.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -421,7 +402,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-Ed25519",
     srcs = ["src/IC/Crypto/Ed25519.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -433,7 +413,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-DER-Decode",
     srcs = ["src/IC/Crypto/DER/Decode.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -445,7 +424,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-DER",
     srcs = ["src/IC/Crypto/DER.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -458,7 +436,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-DER_BLS",
     srcs = ["src/IC/Crypto/DER_BLS.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -472,7 +449,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-WebAuthn",
     srcs = ["src/IC/Crypto/WebAuthn.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -490,7 +466,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-CanisterSig",
     srcs = ["src/IC/Crypto/CanisterSig.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -511,7 +486,6 @@ haskell_library(
 haskell_library(
     name = "IC-Crypto-ECDSA",
     srcs = ["src/IC/Crypto/ECDSA.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -523,7 +497,6 @@ haskell_library(
 haskell_library(
     name = "IC-Version",
     srcs = ["src/IC/Version.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -536,7 +509,6 @@ haskell_library(
 haskell_library(
     name = "IC-Hash",
     srcs = ["src/IC/Hash.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -548,7 +520,6 @@ haskell_library(
 haskell_library(
     name = "IC-CBOR-Utils",
     srcs = ["src/IC/CBOR/Utils.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -563,7 +534,6 @@ haskell_library(
 haskell_library(
     name = "IC-CBOR-Parser",
     srcs = ["src/IC/CBOR/Parser.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -576,7 +546,6 @@ haskell_library(
 haskell_library(
     name = "IC-CBOR-Patterns",
     srcs = ["src/IC/CBOR/Patterns.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -588,7 +557,6 @@ haskell_library(
 haskell_library(
     name = "IC-DRun-Parse",
     srcs = ["src/IC/DRun/Parse.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -600,7 +568,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Secp256k1",
     srcs = ["src/IC/Test/Secp256k1.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -613,7 +580,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Spec",
     srcs = ["src/IC/Test/Spec.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -648,7 +614,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-WebAuthn",
     srcs = ["src/IC/Test/WebAuthn.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -661,7 +626,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Spec-Utils",
     srcs = ["src/IC/Test/Spec/Utils.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -683,7 +647,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Spec-CanisterHistory",
     srcs = ["src/IC/Test/Spec/CanisterHistory.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -704,7 +667,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Spec-HTTP",
     srcs = ["src/IC/Test/Spec/HTTP.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -726,7 +688,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Spec-CanisterVersion",
     srcs = ["src/IC/Test/Spec/CanisterVersion.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -744,7 +705,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Spec-Timer",
     srcs = ["src/IC/Test/Spec/Timer.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -761,7 +721,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-BLS",
     srcs = ["src/IC/Test/BLS.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -774,7 +733,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-ECDSA",
     srcs = ["src/IC/Test/ECDSA.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -787,7 +745,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Agent",
     srcs = ["src/IC/Test/Agent.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -817,7 +774,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-HashTree",
     srcs = ["src/IC/Test/HashTree.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -831,7 +787,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Universal",
     srcs = ["src/IC/Test/Universal.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -843,7 +798,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Options",
     srcs = ["src/IC/Test/Options.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -859,7 +813,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Agent-UnsafeCalls",
     srcs = ["src/IC/Test/Agent/UnsafeCalls.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -877,7 +830,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Agent-SafeCalls",
     srcs = ["src/IC/Test/Agent/SafeCalls.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -895,7 +847,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Agent-Calls",
     srcs = ["src/IC/Test/Agent/Calls.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -910,7 +861,6 @@ haskell_library(
 haskell_library(
     name = "IC-Test-Agent-UserCalls",
     srcs = ["src/IC/Test/Agent/UserCalls.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
@@ -926,7 +876,6 @@ haskell_library(
 haskell_library(
     name = "SourceId",
     srcs = ["src/SourceId.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
