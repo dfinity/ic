@@ -1,5 +1,5 @@
 {
-  "checksum": "295dee6fe8cf0487e324a176e0ff545059ef9caab88533db17591d32cc2a24fb",
+  "checksum": "736c70ef24463716ad2db005615e027bbebd5825cc9f3bcf6ef9bff81d3a023c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17425,6 +17425,11 @@
             },
             {
               "id": "ic-agent 0.35.0",
+              "target": "ic_agent",
+              "alias": "ic_agent_0_35"
+            },
+            {
+              "id": "ic-agent 0.36.0",
               "target": "ic_agent"
             },
             {
@@ -17494,6 +17499,11 @@
             },
             {
               "id": "ic-utils 0.35.0",
+              "target": "ic_utils",
+              "alias": "ic_utils_0_35"
+            },
+            {
+              "id": "ic-utils 0.36.0",
               "target": "ic_utils"
             },
             {
@@ -27753,12 +27763,9 @@
       "version": "0.36.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/agent-rs",
-          "commitish": {
-            "Rev": "9e45b314fc7496d48065590fac90790e0bdc6eed"
-          },
-          "strip_prefix": "ic-agent"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-agent/0.36.0/download",
+          "sha256": "ba85280257d8663adef20bf5c043b287b3a283d4f916073eb3ca9166a4a59d4b"
         }
       },
       "targets": [
@@ -27783,6 +27790,7 @@
         "crate_features": {
           "common": [
             "default",
+            "hyper",
             "pem",
             "reqwest",
             "sync_call"
@@ -27800,7 +27808,7 @@
               "target": "backoff"
             },
             {
-              "id": "cached 0.52.0",
+              "id": "cached 0.46.1",
               "target": "cached"
             },
             {
@@ -27828,6 +27836,10 @@
               "target": "http_body"
             },
             {
+              "id": "hyper 1.4.1",
+              "target": "hyper"
+            },
+            {
               "id": "ic-certification 2.5.0",
               "target": "ic_certification"
             },
@@ -27836,7 +27848,7 @@
               "target": "ic_transport_types"
             },
             {
-              "id": "ic-verify-bls-signature 0.5.0",
+              "id": "ic-verify-bls-signature 0.1.0",
               "target": "ic_verify_bls_signature"
             },
             {
@@ -27852,7 +27864,7 @@
               "target": "p256"
             },
             {
-              "id": "pem 3.0.2",
+              "id": "pem 2.0.1",
               "target": "pem"
             },
             {
@@ -27915,12 +27927,32 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
-                "id": "rustls-webpki 0.102.5",
+                "id": "http-body-to-bytes 0.2.0",
+                "target": "http_body_to_bytes"
+              },
+              {
+                "id": "http-body-util 0.1.0",
+                "target": "http_body_util"
+              },
+              {
+                "id": "hyper-rustls 0.26.0",
+                "target": "hyper_rustls"
+              },
+              {
+                "id": "hyper-util 0.1.6",
+                "target": "hyper_util"
+              },
+              {
+                "id": "rustls-webpki 0.101.7",
                 "target": "webpki"
               },
               {
                 "id": "tokio 1.38.0",
                 "target": "tokio"
+              },
+              {
+                "id": "tower 0.4.13",
+                "target": "tower"
               }
             ]
           }
@@ -29521,12 +29553,9 @@
       "version": "0.36.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/agent-rs",
-          "commitish": {
-            "Rev": "9e45b314fc7496d48065590fac90790e0bdc6eed"
-          },
-          "strip_prefix": "ic-transport-types"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-transport-types/0.36.0/download",
+          "sha256": "ce14c068bd053c0f5ab525326f3f358f265cdfcae279fbf6461fb529e9682acd"
         }
       },
       "targets": [
@@ -29573,10 +29602,6 @@
             {
               "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
-            },
-            {
-              "id": "serde_with 3.8.1",
-              "target": "serde_with"
             },
             {
               "id": "sha2 0.10.8",
@@ -29710,6 +29735,116 @@
           "selects": {}
         },
         "version": "0.35.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-utils 0.36.0": {
+      "name": "ic-utils",
+      "version": "0.36.0",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-utils/0.36.0/download",
+          "sha256": "ae2e0da151b7fab7b977fbca381db15da51b0e9af896c97a17de567858df548f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_utils",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_utils",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "raw"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "ic-agent 0.36.0",
+              "target": "ic_agent"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.14",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "strum 0.24.1",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 1.0.62",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
+            },
+            {
+              "id": "tokio 1.38.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            },
+            {
+              "id": "strum_macros 0.24.3",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.36.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -79090,6 +79225,7 @@
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.35.0",
+    "ic-utils 0.36.0",
     "ic-verify-bls-signature 0.2.0",
     "ic-wasm 0.7.1",
     "ic-xrc-types 1.2.0",

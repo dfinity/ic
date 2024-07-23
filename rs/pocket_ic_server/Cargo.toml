@@ -29,9 +29,9 @@ ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-https-outcalls-service = { path = "../https_outcalls/service" }
-ic-agent = { workspace = true }
+ic-agent = { version = "0.35.0", features = ["hyper","reqwest", "pem"] }
 ic-agent-call-v3 = { workspace = true }
-ic-utils = { workspace = true }
+ic-utils = { version = "0.35.0" , features = ["raw"] }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-config = { path = "../config" }
