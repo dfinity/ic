@@ -236,14 +236,14 @@ jobs:
         id: python-ci-tests
         shell: bash
         env:
-          REPO_NAME: "${{ github.repository.name }}"
+          REPO_NAME: "${{ github.repository }}"
           EVENT_NAME: "${{ github.event_name }}"
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           # Todo: remove once dependency scanner tests don't reference name of repo
           ADDITIONAL_FLAGS=""
-          if [[ $REPO_NAME == "ic-private" ]]; then
+          if [[ $REPO_NAME == "dfinity/ic-private" ]]; then
             ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
           fi
           if [[ $EVENT_NAME == "merge_group" ]]; then
