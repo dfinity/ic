@@ -6,9 +6,9 @@
 
 # The system tests package group contains all code related to system testing.
 # Can depend on: on any other package.
-# Dependants:#  none.
+# Dependants: none.
 # Exceptions:
-#   //rs/ic_os/launch-single-vm:__pkg__ can depend on rs/tests/driver:ic-system-test-driver
+#   //rs/ic_os/launch-single-vm:__pkg__ depends on rs/tests/driver:ic-system-test-driver
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/httpbin-rs:httpbin
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests:ic-hs
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/testing_verification:spec_compliance
@@ -27,6 +27,8 @@ package_group(
 
 # Targets containing tooling relevant for the released VMs.
 # Can depend on: //rs:release-pkg.
+# Exceptions:
+#   //rs/ic_os/launch-single-vm:__pkg__ depends on rs/tests/driver:ic-system-test-driver
 # Dependants: //rs:system-tests-pkg.
 package_group(
     name = "ic-os-pkg",
