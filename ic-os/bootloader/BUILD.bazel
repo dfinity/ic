@@ -1,6 +1,6 @@
 load("//toolchains/sysimage:toolchain.bzl", "vfat_image")
 
-package(default_visibility = ["//rs:is-os"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 exports_files([
     "grubenv",
