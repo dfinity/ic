@@ -31,7 +31,6 @@ jobs:
           fi
           if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
             FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
-          fi
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
           fi
