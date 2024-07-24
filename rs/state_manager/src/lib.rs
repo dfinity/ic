@@ -833,7 +833,7 @@ fn load_checkpoint(
 ) -> Result<(ReplicatedState, CheckpointLayout<ReadOnly>), CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
-    let cp_layout = state_layout.checkpoint(height)?;
+    let cp_layout = state_layout.checkpoint_verified(height)?;
     let _timer = metrics
         .checkpoint_op_duration
         .with_label_values(&["recover"])
@@ -1511,14 +1511,16 @@ impl StateManagerImpl {
         let states = checkpoint_heights
             .iter()
             .map(|height| {
-                let cp_layout = state_layout.checkpoint(*height).unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to create checkpoint layout @{}: {}",
-                        height,
-                        err
-                    )
-                });
+                let cp_layout = state_layout
+                    .checkpoint_verified(*height)
+                    .unwrap_or_else(|err| {
+                        fatal!(
+                            log,
+                            "Failed to create checkpoint layout @{}: {}",
+                            height,
+                            err
+                        )
+                    });
                 let state = checkpoint::load_checkpoint_parallel(
                     &cp_layout,
                     own_subnet_type,
@@ -1869,7 +1871,7 @@ impl StateManagerImpl {
                     .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
             );
 
-            let checkpoint_layout = layout.checkpoint(height).unwrap();
+            let checkpoint_layout = layout.checkpoint_verified(height).unwrap();
 
             let metadata = metadatas.remove(&height);
 
@@ -2363,7 +2365,7 @@ impl StateManagerImpl {
                     Some((base_manifest, *base_height))
                 })
                 .and_then(|(base_manifest, base_height)| {
-                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint(base_height) {
+                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint_verified(base_height) {
                         // If `lsmt_status` is enabled, then `dirty_pages` is not needed, as each file is either completely
                         // new, or identical (same inode) to before.
                         let dirty_pages = match self.lsmt_status {
@@ -2518,7 +2520,7 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-            let checkpoint_layout = self.state_layout.checkpoint(height).unwrap();
+            let checkpoint_layout = self.state_layout.checkpoint_verified(height).unwrap();
             // With lsmt, we do not need the defrag.
             // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {

@@ -686,6 +686,7 @@ impl StateLayout {
         Ok(())
     }
 
+    // TODO: make this method private.
     /// Returns the layout of the checkpoint with the given height (if
     /// there is one).
     pub fn checkpoint<P>(&self, height: Height) -> Result<CheckpointLayout<P>, LayoutError>
