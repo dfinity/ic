@@ -86,7 +86,7 @@ getRootCerts :: (HasRefConfig) => [C.SignedCertificate]
 getRootCerts = tc_root_certs refConfig
 
 -- Canister http_request
-max_response_size :: ((r .! "max_response_bytes") ~ Maybe W.Word64) => R.Rec r -> W.Word64
+max_response_size :: HttpRequest -> W.Word64
 max_response_size r = aux $ fmap fromIntegral $ r .! #max_response_bytes
   where
     aux Nothing = max_response_bytes_limit
