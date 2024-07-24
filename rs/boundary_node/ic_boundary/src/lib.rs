@@ -2,13 +2,12 @@ mod acme;
 mod bouncer;
 mod cache;
 mod check;
-pub mod cli;
-pub mod core;
+mod cli;
+mod core;
 mod dns;
 mod firewall;
 mod geoip;
 mod http;
-pub mod log;
 mod metrics;
 mod persist;
 mod rate_limiting;
@@ -25,4 +24,5 @@ mod configuration;
 #[cfg(feature = "tls")]
 mod tls;
 
+pub use crate::core::main;
 pub use crate::routes::{status, Health, RootKey};

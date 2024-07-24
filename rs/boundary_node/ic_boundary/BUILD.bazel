@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/ed25519",
     "//rs/crypto/tree_hash",
@@ -94,7 +95,6 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/certification/test-utils",
     "@crate_index//:criterion",
     "@crate_index//:tempfile",
     "@crate_index//:wiremock",
@@ -105,34 +105,17 @@ MACRO_DEV_DEPENDENCIES = [
     "@crate_index//:indoc",
 ]
 
-VERSION = "0.1.0"
+ALIASES = {}
 
-rust_library(
-    name = "ic_boundary_lib",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["src/main.rs"],
-    ),
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = VERSION,
-    deps = DEPENDENCIES,
-)
+VERSION = "0.1.0"
 
 rust_binary(
     name = "ic-boundary",
-    srcs = ["src/main.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = VERSION,
-    deps = DEPENDENCIES + [":ic_boundary_lib"],
-)
-
-rust_library(
-    name = "ic_boundary_tls_lib",
     srcs = glob(
         ["src/**"],
-        exclude = ["src/main.rs"],
+        exclude = ["src/lib.rs"],
     ),
-    crate_features = ["tls"],
+    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES,
@@ -140,27 +123,33 @@ rust_library(
 
 rust_binary(
     name = "ic-boundary-tls",
-    srcs = ["src/main.rs"],
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/lib.rs"],
+    ),
+    aliases = ALIASES,
     crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = VERSION,
-    deps = DEPENDENCIES + [":ic_boundary_tls_lib"],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "ic_boundary_tls_test",
-    crate = ":ic_boundary_tls_lib",
+    name = "ic_boundary_test",
+    aliases = ALIASES,
+    crate = ":ic-boundary",
+    crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_library(
-    name = "ic_boundary_testonly_lib",
-    testonly = True,
+    name = "ic_boundary",
     srcs = glob(
         ["src/**"],
         exclude = ["src/main.rs"],
     ),
+    aliases = ALIASES,
     crate_features = [
         "tls",
         "bench",
@@ -172,8 +161,16 @@ rust_library(
 
 rust_bench(
     name = "ic_boundary_bench",
-    srcs = ["benches/perf.rs"],
+    srcs = glob(
+        [
+            "benches/**",
+            "src/**",
+        ],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_root = "benches/perf.rs",
     pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary_testonly_lib"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary"],
 )
