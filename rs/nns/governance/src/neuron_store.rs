@@ -797,12 +797,7 @@ impl NeuronStore {
             return Ok(neuron_clone);
         }
 
-        let is_authorized_to_vote_for_any_neuron_manager = neuron_clone
-            .neuron_managers()
-            .into_iter()
-            .any(|neuron_manager| self.is_authorized_to_vote(principal_id, neuron_manager));
-
-        if is_authorized_to_vote_for_any_neuron_manager {
+        if self.can_principal_vote_on_proposals_that_target_neuron(principal_id, &neuron_clone) {
             Ok(neuron_clone)
         } else {
             Err(NeuronStoreError::not_authorized_to_get_full_neuron(
@@ -822,6 +817,17 @@ impl NeuronStore {
             |neuron| neuron.is_authorized_to_vote(&principal_id),
         )
         .unwrap_or(false)
+    }
+
+    pub fn can_principal_vote_on_proposals_that_target_neuron(
+        &self,
+        principal_id: PrincipalId,
+        neuron: &Neuron,
+    ) -> bool {
+        neuron
+            .neuron_managers()
+            .into_iter()
+            .any(|manager_neuron_id| self.is_authorized_to_vote(principal_id, manager_neuron_id))
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,
