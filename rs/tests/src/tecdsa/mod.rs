@@ -48,8 +48,6 @@ pub(crate) const KEY_ID1: &str = "secp256k1";
 /// passed to execution.
 pub(crate) const DKG_INTERVAL: u64 = 19;
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 pub(crate) const NUMBER_OF_NODES: usize = 4;
 
 pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
@@ -102,9 +100,6 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
-        max_instructions_per_message: None,
-        max_instructions_per_round: None,
-        max_instructions_per_install_code: None,
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
@@ -128,15 +123,9 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
     }
 }
 
-// TODO(EXC-1168): cleanup after cost scaling is fully implemented.
 pub(crate) fn scale_cycles(cycles: Cycles) -> Cycles {
-    match USE_COST_SCALING_FLAG {
-        false => cycles,
-        true => {
-            // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
-            (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
-        }
-    }
+    // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
+    (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
 }
 
 pub(crate) async fn get_public_key_and_test_signature(
@@ -617,7 +606,6 @@ pub(crate) async fn create_new_subnet_with_keys(
         SubnetType::Application,
         node_ids.len(),
     );
-    let scheduler = ic_config::subnet_config::SchedulerConfig::application_subnet();
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
@@ -634,9 +622,6 @@ pub(crate) async fn create_new_subnet_with_keys(
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
-        max_instructions_per_message: scheduler.max_instructions_per_message.get(),
-        max_instructions_per_round: scheduler.max_instructions_per_round.get(),
-        max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
         features: Default::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],

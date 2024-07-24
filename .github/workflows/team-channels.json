@@ -2,7 +2,7 @@
     "boundary-node": "eng-boundary-nodes",
     "Consensus": "eng-consensus",
     "cross-chain-team": "eng-cross-chain",
-    "dept-Crypto Library": "eng-crypto-mr",
+    "crypto-team": "eng-crypto-mr",
     "DRE": "eng-release-bots",
     "execution": "eng-execution-mrs",
     "FinInt": "eng-fi-mrs",
@@ -14,10 +14,11 @@
     "InfraSec": "eng-infrasec",
     "networking": "eng-networking",
     "nns-team": "eng-nns",
-    "node": "eng-node",
+    "node": "eng-node-prs",
     "Platform Operations": "eng-platform-ops",
     "pocket-ic": "pocket-ic",
     "Product Security": "eng-prodsec",
     "runtime": "runtime-code-reviews",
+    "sdk": "sdk",
     "utopia": "eng-utopia"
 }

@@ -94,6 +94,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/tests/consensus/utils",
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/tests/test_canisters/message:lib",
     "//rs/tree_deserializer",

@@ -63,6 +63,7 @@ rust_library(
     crate_name = "ic_https_outcalls_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 
@@ -83,7 +84,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//publish:__subpackages__"],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [":adapter_with_http"],
 )
 

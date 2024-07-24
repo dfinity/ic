@@ -1552,10 +1552,23 @@ fn debug_print_cost(bytes: usize) -> u64 {
 // The maximum allowed size of a canister log buffer.
 pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
-/// Calculate logging instruction cost from the message length.
+/// Calculate logging instruction cost from the allocated and transmitted bytes.
 fn canister_logging_cost(allocated_bytes: usize, transmitted_bytes: usize) -> u64 {
     const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
     debug_print_cost(2 * allocated_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_bytes)
+}
+
+/// Calculate debug_print and canister logging instruction cost from the message length,
+/// allocated bytes, and transmitted bytes.
+fn debug_print_and_canister_logging_cost(
+    debug_print_bytes: usize,
+    allocated_bytes: usize,
+    transmitted_bytes: usize,
+) -> u64 {
+    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let canister_logging_bytes =
+        2 * allocated_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_bytes;
+    debug_print_cost(debug_print_bytes + canister_logging_bytes)
 }
 
 /// Create a WAT that calls debug_print with a message of a given length.
@@ -1603,38 +1616,37 @@ fn wasm_debug_print_instructions_charging() {
         (
             FlagStatus::Disabled,
             SubnetType::System,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Disabled,
             SubnetType::Application,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Disabled,
             SubnetType::VerifiedApplication,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Enabled,
             SubnetType::System,
-            debug_print_cost(message_len),
+            debug_print_and_canister_logging_cost(message_len, message_len, message_len),
         ),
         (
             FlagStatus::Enabled,
             SubnetType::Application,
-            debug_print_cost(0),
+            debug_print_and_canister_logging_cost(0, message_len, message_len),
         ),
         (
             FlagStatus::Enabled,
             SubnetType::VerifiedApplication,
-            debug_print_cost(0),
+            debug_print_and_canister_logging_cost(0, message_len, message_len),
         ),
     ];
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.canister_logging = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1646,14 +1658,16 @@ fn wasm_debug_print_instructions_charging() {
             .unwrap();
         let instructions_used = before - instance.instruction_counter();
 
-        assert_eq!(instructions_used, expected_instructions as i64);
+        assert_eq!(
+            instructions_used, expected_instructions as i64,
+            "rate_limiting: {rate_limiting:?}, subnet_type: {subnet_type:?}"
+        );
     }
 
     // same for wasm64
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.canister_logging = FlagStatus::Disabled;
         config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
@@ -1674,19 +1688,13 @@ fn wasm_debug_print_instructions_charging() {
 fn wasm_canister_logging_instructions_charging() {
     // Test charging for canister logging is limited by the maximum allowed buffer size.
     let test_cases = vec![
-        // (canister_logging, message_len, expected_instructions)
-        (FlagStatus::Disabled, 0, canister_logging_cost(0, 0)),
-        (FlagStatus::Enabled, 0, canister_logging_cost(0, 0)),
-        (FlagStatus::Enabled, 1, canister_logging_cost(1, 1)),
-        (FlagStatus::Enabled, 10, canister_logging_cost(10, 10)),
-        (FlagStatus::Enabled, 100, canister_logging_cost(100, 100)),
+        // (message_len, expected_instructions)
+        (0, canister_logging_cost(0, 0)),
+        (1, canister_logging_cost(1, 1)),
+        (10, canister_logging_cost(10, 10)),
+        (100, canister_logging_cost(100, 100)),
+        (1_000, canister_logging_cost(1_000, 1_000)),
         (
-            FlagStatus::Enabled,
-            1_000,
-            canister_logging_cost(1_000, 1_000),
-        ),
-        (
-            FlagStatus::Enabled,
             10_000,
             canister_logging_cost(
                 MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
@@ -1694,10 +1702,9 @@ fn wasm_canister_logging_instructions_charging() {
             ),
         ),
     ];
-    for (canister_logging, message_len, expected_instructions) in test_cases.clone() {
+    for (message_len, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.canister_logging = canister_logging;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1713,10 +1720,9 @@ fn wasm_canister_logging_instructions_charging() {
     }
 
     // same for wasm64
-    for (canister_logging, message_len, expected_instructions) in test_cases {
+    for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.canister_logging = canister_logging;
         config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
@@ -1776,7 +1782,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.canister_logging = FlagStatus::Enabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1788,7 +1793,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.canister_logging = FlagStatus::Enabled;
     config.feature_flags.wasm64 = FlagStatus::Enabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
@@ -1877,6 +1881,33 @@ fn wasm64_memory_copy_test() {
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap();
     assert_eq!(res.exported_globals[0], Global::I64(137));
+}
+
+#[test]
+fn wasm64_memory_init_test() {
+    let wat = r#"
+       (module
+            (export "memory" (memory 0))
+            (func (export "canister_update test")
+                i64.const 1024  ;; target memory address
+                i32.const 0     ;; data segment offset
+                i32.const 4     ;; byte length
+                memory.init 0   ;; load passive data segment by index
+            )
+            (memory i64 1)
+            (data (;0;) "\01\02\03\04")
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
+        Ok(_) => {}
+        Err(e) => panic!("Error: {:?}", e),
+    }
 }
 
 #[test]
@@ -2732,4 +2763,25 @@ fn wasm64_cycles_burn128() {
     expected_heap[0..16].copy_from_slice(&x.to_le_bytes());
 
     assert_eq!(wasm_heap, expected_heap);
+}
+
+#[test]
+fn large_wasm64_memory_allocation_test() {
+    let wat = r#"
+    (module
+        (func $test (export "canister_update test"))
+        (memory i64 0 16777216)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+
+    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
+        Ok(_) => {}
+        Err(e) => panic!("Unexpected error: {:?}", e),
+    }
 }

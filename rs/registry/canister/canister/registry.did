@@ -81,14 +81,11 @@ type CompleteCanisterMigrationPayload = record {
 
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
-  max_instructions_per_round : nat64;
   features : SubnetFeatures;
-  max_instructions_per_message : nat64;
   gossip_registry_poll_period_ms : nat32;
   max_ingress_bytes_per_message : nat64;
   dkg_dealings_per_block : nat64;
   max_block_payload_size : nat64;
-  max_instructions_per_install_code : nat64;
   start_as_nns : bool;
   is_halted : bool;
   gossip_pfn_evaluation_period_ms : nat32;
@@ -231,7 +228,7 @@ type NodeOperatorRecord = record {
 
 type NodeProvidersMonthlyXdrRewards = record {
   rewards : vec record { text; nat64 };
-  registry_version: opt nat64;
+  registry_version : opt nat64;
 };
 
 type NodeRewardRate = record {
@@ -374,17 +371,14 @@ type UpdateSshReadOnlyAccessForAllUnassignedNodesPayload = record {
 type UpdateSubnetPayload = record {
   unit_delay_millis : opt nat64;
   max_duplicity : opt nat32;
-  max_instructions_per_round : opt nat64;
   features : opt SubnetFeatures;
   set_gossip_config_to_default : bool;
-  max_instructions_per_message : opt nat64;
   halt_at_cup_height : opt bool;
   pfn_evaluation_period_ms : opt nat32;
   subnet_id : principal;
   max_ingress_bytes_per_message : opt nat64;
   dkg_dealings_per_block : opt nat64;
   max_block_payload_size : opt nat64;
-  max_instructions_per_install_code : opt nat64;
   start_as_nns : opt bool;
   is_halted : opt bool;
   max_ingress_messages_per_block : opt nat64;
@@ -432,11 +426,11 @@ service : {
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
   create_subnet : (CreateSubnetPayload) -> ();
   deploy_guestos_to_all_subnet_nodes : (
-      DeployGuestosToAllSubnetNodesPayload,
-    ) -> ();
+    DeployGuestosToAllSubnetNodesPayload
+  ) -> ();
   deploy_guestos_to_all_unassigned_nodes : (
-      DeployGuestosToAllUnassignedNodesPayload,
-    ) -> ();
+    DeployGuestosToAllUnassignedNodesPayload
+  ) -> ();
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
   get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
@@ -460,18 +454,18 @@ service : {
   update_node_directly : (UpdateNodeDirectlyPayload) -> ();
   update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (UpdateNodeDomainDirectlyResponse);
   update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (
-      UpdateNodeIpv4ConfigDirectlyResponse,
-    );
+    UpdateNodeIpv4ConfigDirectlyResponse
+  );
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (
-      UpdateNodeOperatorConfigDirectlyPayload,
-    ) -> ();
+    UpdateNodeOperatorConfigDirectlyPayload
+  ) -> ();
   update_node_rewards_table : (UpdateNodeRewardsTableProposalPayload) -> ();
   update_nodes_hostos_version : (UpdateNodesHostosVersionPayload) -> ();
   update_ssh_readonly_access_for_all_unassigned_nodes : (
-      UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
-    ) -> ();
+    UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
+  ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
   update_subnet_replica_version : (DeployGuestosToAllSubnetNodesPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
-}
+};

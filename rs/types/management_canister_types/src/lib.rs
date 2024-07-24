@@ -108,7 +108,6 @@ pub enum Method {
     // Support for chunked uploading of Wasm modules.
     UploadChunk,
     StoredChunks,
-    DeleteChunks,
     ClearChunkStore,
 
     // Support for canister snapshots.
@@ -1651,7 +1650,6 @@ impl DataSize for PrincipalId {
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     controller: opt principal;
 ///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
@@ -1662,8 +1660,6 @@ impl DataSize for PrincipalId {
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSettingsArgs {
-    /// The field controller is deprecated and should not be used in new code.
-    controller: Option<PrincipalId>,
     pub controllers: Option<BoundedControllers>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
@@ -1680,7 +1676,6 @@ impl CanisterSettingsArgs {
     #[deprecated(note = "please use `CanisterSettingsArgsBuilder` instead")]
     pub fn new() -> Self {
         Self {
-            controller: None,
             controllers: None,
             compute_allocation: None,
             memory_allocation: None,
@@ -1690,15 +1685,10 @@ impl CanisterSettingsArgs {
             wasm_memory_limit: None,
         }
     }
-
-    pub fn get_controller(&self) -> Option<PrincipalId> {
-        self.controller
-    }
 }
 
 #[derive(Default)]
 pub struct CanisterSettingsArgsBuilder {
-    controller: Option<PrincipalId>,
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<candid::Nat>,
     memory_allocation: Option<candid::Nat>,
@@ -1716,7 +1706,6 @@ impl CanisterSettingsArgsBuilder {
 
     pub fn build(self) -> CanisterSettingsArgs {
         CanisterSettingsArgs {
-            controller: self.controller,
             controllers: self.controllers.map(BoundedControllers::new),
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
@@ -1724,13 +1713,6 @@ impl CanisterSettingsArgsBuilder {
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
-        }
-    }
-
-    pub fn with_controller(self, controller: PrincipalId) -> Self {
-        Self {
-            controller: Some(controller),
-            ..self
         }
     }
 
