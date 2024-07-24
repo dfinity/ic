@@ -22,6 +22,7 @@ jobs:
         id: requested_reviewers
         shell: bash
         run: |
+          echo "$GITHUB_TOKEN" | gh auth login --with-token
           set -x
           TEAMS=$(gh pr view $PR_NUMBER --json reviewRequests --jq '.reviewRequests[].name' | tr '\n' ' ')
           if [ -z "$TEAMS" ]; then
