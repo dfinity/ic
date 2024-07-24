@@ -36,8 +36,8 @@ jobs:
           fi
           echo "requested_teams=$TEAMS" >> $GITHUB_ENV
         env:
-          GH_TOKEN: ${{ secrets.TEAM_TAGS }}
-          # GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag PR with Teams
         if: env.requested_teams != 'none'
