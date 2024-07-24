@@ -18,7 +18,7 @@ impl ReloadHandles {
     pub fn push(&self, layer: BoxedRegistryLayer) {
         // ignore errors
         let _ = self.0.modify(|layers| {
-            layers.push(layer);
+            layers.insert(0, layer);
         });
     }
 

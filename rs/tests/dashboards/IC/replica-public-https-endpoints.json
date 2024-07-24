@@ -314,7 +314,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "replica_in_flight_requests{ic=~\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}",
+          "expr": "replica_http_tcp_connections_total{ic=~\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"} - replica_http_tcp_closed_connections_total{ic=~\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}",
           "interval": "",
           "legendFormat": "{{instance}}",
           "range": true,
