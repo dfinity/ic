@@ -156,13 +156,7 @@ impl Upgrade {
                     })?;
                 (subnet_id, maybe_proto, Some(cup))
             } else {
-                // No local CUP found, check registry.
-                // Note that if we ended up here because we could not deserialize the local CUP,
-                // checking the registry to determine membership is technically wrong, as the
-                // source of truth should be the latest CUP (which we can't deserialize).
-                // However, the only way to recover from a CUP that cannot be deserialized is
-                // subnet recovery, which resets the subnet's membership to the latest registry
-                // version.
+                // No local CUP found, check registry
                 match self.registry.get_subnet_id(latest_registry_version) {
                     Ok(subnet_id) => {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
