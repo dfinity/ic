@@ -67,6 +67,7 @@ rust_library(
         "//rs/nns/sns-wasm",
         "//rs/nns/test_utils",
         "//rs/phantom_newtype",
+        "//rs/prep",
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/client",

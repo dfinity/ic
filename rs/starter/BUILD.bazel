@@ -11,6 +11,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/monitoring/logger",
+    "//rs/prep",
     "//rs/protobuf",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_features",
