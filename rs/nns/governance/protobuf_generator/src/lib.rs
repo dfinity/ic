@@ -135,11 +135,15 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     // END type_attribute.
 
-    let src_file = proto
+    let gov_file = proto
         .governance
         .join("ic_nns_governance/pb/v1/governance.proto");
 
-    config.compile_protos(&[src_file], &proto.to_vec()).unwrap();
+    let storage_file = proto.governance.join("ic_nns_governance/pb/storage.proto");
+
+    config
+        .compile_protos(&[gov_file, storage_file], &proto.to_vec())
+        .unwrap();
 
     ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

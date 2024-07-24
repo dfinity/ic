@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package ic_nns_governance.pb.storage;
+
+message VersionedMonthlyNodeProviderRewards {
+  enum MonthlyNodeProviderRewardsVersion {
+
+    MONTHLY_NODE_PROVIDER_REWARDS_VERSION_UNSPECIFIED = 0;
+    MONTHLY_NODE_PROVIDER_REWARDS_VERSION_V1 = 1;
+  }
+
+  MonthlyNodeProviderRewardsVersion version = 1;
+
+}
