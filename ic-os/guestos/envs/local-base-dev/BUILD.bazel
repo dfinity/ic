@@ -1,7 +1,7 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 
-package(default_visibility = ["//rs:ic-os-pkg"])
+package(default_visibility = ["//ic-os/guestos:__subpackages__"])
 
 # The macro contains several targets.
 # Check
