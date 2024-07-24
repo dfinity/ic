@@ -271,6 +271,7 @@ run_binary(
 
 symlink_dirs(
     name = "ic-hs",
+    tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
     targets = {
         "//hs/spec_compliance:ic-ref-test": "bin",
