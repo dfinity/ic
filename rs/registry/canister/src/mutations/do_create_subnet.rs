@@ -312,10 +312,6 @@ pub struct CreateSubnetPayload {
 
     pub is_halted: bool,
 
-    pub max_instructions_per_message: u64,
-    pub max_instructions_per_round: u64,
-    pub max_instructions_per_install_code: u64,
-
     pub features: SubnetFeaturesPb,
 
     pub max_number_of_canisters: u64,
@@ -633,9 +629,6 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             is_halted: val.is_halted,
             halt_at_cup_height: false,
 
-            max_instructions_per_message: val.max_instructions_per_message,
-            max_instructions_per_round: val.max_instructions_per_round,
-            max_instructions_per_install_code: val.max_instructions_per_install_code,
             features: Some(SubnetFeatures::from(val.features).into()),
             max_number_of_canisters: val.max_number_of_canisters,
             ssh_readonly_access: val.ssh_readonly_access,
