@@ -26,7 +26,7 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
-    use crate::eth_rpc::{Block, FeeHistory};
+    use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use candid::Nat;
     use evm_rpc_client::types::candid::{
         HttpOutcallError as EvmHttpOutcallError, JsonRpcError as EvmJsonRpcError,
@@ -34,8 +34,11 @@ pub mod arb {
         ValidationError as EvmValidationError,
     };
     use ic_cdk::api::call::RejectionCode;
+    use ic_ethereum_types::Address;
     use proptest::{
+        array::{uniform20, uniform32},
         collection::vec,
+        option,
         prelude::{any, Just, Strategy},
         prop_oneof,
     };
@@ -51,6 +54,22 @@ pub mod arb {
             .prop_map(|checked_amount: CheckedAmountOf<()>| Nat::from(checked_amount))
     }
 
+    pub fn arb_address() -> impl Strategy<Value = Address> {
+        uniform20(any::<u8>()).prop_map(Address::new)
+    }
+
+    pub fn arb_hash() -> impl Strategy<Value = Hash> {
+        uniform32(any::<u8>()).prop_map(Hash)
+    }
+
+    pub fn arb_fixed_size_data() -> impl Strategy<Value = FixedSizeData> {
+        uniform32(any::<u8>()).prop_map(FixedSizeData)
+    }
+
+    pub fn arb_data() -> impl Strategy<Value = Data> {
+        vec(any::<u8>(), 1..1000).prop_map(Data)
+    }
+
     pub fn arb_block() -> impl Strategy<Value = Block> {
         (arb_checked_amount_of(), arb_checked_amount_of()).prop_map(|(number, base_fee_per_gas)| {
             Block {
@@ -58,6 +77,43 @@ pub mod arb {
                 base_fee_per_gas,
             }
         })
+    }
+
+    pub fn arb_log_entry() -> impl Strategy<Value = LogEntry> {
+        (
+            arb_address(),
+            vec(arb_fixed_size_data(), 1..=10),
+            arb_data(),
+            option::of(arb_checked_amount_of()),
+            option::of(arb_hash()),
+            option::of(arb_checked_amount_of::<()>()),
+            option::of(arb_hash()),
+            option::of(arb_checked_amount_of()),
+            any::<bool>(),
+        )
+            .prop_map(
+                |(
+                    address,
+                    topics,
+                    data,
+                    block_number,
+                    transaction_hash,
+                    transaction_index,
+                    block_hash,
+                    log_index,
+                    removed,
+                )| LogEntry {
+                    address,
+                    topics,
+                    data,
+                    block_number,
+                    transaction_hash,
+                    transaction_index: transaction_index.map(CheckedAmountOf::into_inner),
+                    block_hash,
+                    log_index,
+                    removed,
+                },
+            )
     }
 
     pub fn arb_fee_history() -> impl Strategy<Value = FeeHistory> {

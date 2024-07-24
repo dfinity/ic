@@ -664,21 +664,24 @@ mod eth_get_transaction_count {
 mod evm_rpc_conversion {
     use crate::eth_rpc_client::tests::{ANKR, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
-        providers::RpcNodeProvider, Block, FeeHistory, HttpOutcallError, MultiCallError,
+        providers::RpcNodeProvider, Block, FeeHistory, HttpOutcallError, LogEntry, MultiCallError,
         MultiCallResults, Reduce, SingleCallError,
     };
     use crate::numeric::{BlockNumber, Wei};
     use crate::test_fixtures::arb::{
-        arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_nat_256,
+        arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_log_entry,
+        arb_nat_256,
     };
     use assert_matches::assert_matches;
     use candid::Nat;
     use evm_rpc_client::types::candid::{
         Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
-        HttpOutcallError as EvmHttpOutcallError, MultiRpcResult as EvmMultiRpcResult,
-        RpcApi as EvmRpcApi, RpcError as EvmRpcError, RpcService as EvmRpcService,
+        HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
+        MultiRpcResult as EvmMultiRpcResult, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
+        RpcService as EvmRpcService,
     };
     use num_bigint::BigUint;
+    use proptest::collection::vec;
     use proptest::{prelude::Strategy, prop_assert_eq, proptest};
     use std::collections::BTreeSet;
     use std::fmt::Debug;
@@ -852,6 +855,20 @@ mod evm_rpc_conversion {
         ) {
             let (minter_block, evm_rpc_block) = blocks;
             test_consistency_between_minter_and_evm_rpc(minter_block, evm_rpc_block, first_error, second_error, third_error)?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_be_consistent_log_entries_between_minter_and_evm_rpc
+        (
+            minter_logs in vec(arb_log_entry(), 1..=100),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let evm_rpc_logs: Vec<_> = minter_logs.clone().into_iter().map(evm_rpc_log_entry).collect();
+            test_consistency_between_minter_and_evm_rpc(minter_logs, evm_rpc_logs, first_error, second_error, third_error)?;
         }
     }
 
@@ -1088,6 +1105,28 @@ mod evm_rpc_conversion {
                     uncles,
                 },
             )
+    }
+
+    fn evm_rpc_log_entry(minter_log_entry: LogEntry) -> EvmLogEntry {
+        EvmLogEntry {
+            address: minter_log_entry.address.to_string(),
+            topics: minter_log_entry
+                .topics
+                .into_iter()
+                .map(|topic| topic.to_string())
+                .collect(),
+            data: format!("0x{}", hex::encode(minter_log_entry.data)),
+            block_number: minter_log_entry.block_number.map(Nat::from),
+            transaction_hash: minter_log_entry
+                .transaction_hash
+                .map(|hash| hash.to_string()),
+            transaction_index: minter_log_entry
+                .transaction_index
+                .map(crate::eth_rpc::into_nat),
+            block_hash: minter_log_entry.block_hash.map(|hash| hash.to_string()),
+            log_index: minter_log_entry.log_index.map(Nat::from),
+            removed: minter_log_entry.removed,
+        }
     }
 
     pub fn evm_rpc_fee_history(
