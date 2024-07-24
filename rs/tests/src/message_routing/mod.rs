@@ -100,8 +100,10 @@ mod common {
     ) -> Vec<Canister> {
         let logger = env.logger();
         let wasm = Wasm::from_file(
-            env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
-                .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+            env.get_dependency_path(
+                env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+                    .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+            ),
         );
         let mut futures: Vec<_> = Vec::new();
         for canister_idx in 0..num_canisters {
