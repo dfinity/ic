@@ -78,11 +78,11 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
         BallotInfoChange, CreateServiceNervousSystem, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceChange, GovernanceError,
-        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
-        ProposalChange, ProposalData, ProposalDataChange,
+        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
+        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
+        NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
+        NodeProvider, Proposal, ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
@@ -9774,6 +9774,111 @@ fn test_neuron_set_visibility() {
     assert_neuron_visibility(typical_neuron.id.unwrap(), Some(Visibility::Public));
 
     assert_neuron_visibility(known_neuron.id.unwrap(), None);
+}
+
+#[test]
+fn test_include_public_neurons_in_full_neurons() {
+    // Step 1: Prepare the world.
+
+    let controller = PrincipalId::new_user_test_id(1);
+    let caller = PrincipalId::new_user_test_id(2);
+    assert_ne!(caller, controller);
+
+    let new_neuron = |id, visibility, known_neuron_data| {
+        let account = account(id);
+        let id = Some(NeuronId { id });
+
+        let visibility = match visibility {
+            Visibility::Unspecified => None,
+            ok => Some(ok as i32),
+        };
+
+        Neuron {
+            visibility,
+            known_neuron_data,
+
+            id,
+            account,
+
+            cached_neuron_stake_e8s: 10 * E8,
+            controller: Some(controller),
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+            aging_since_timestamp_seconds: 1_721_727_936,
+            ..Default::default()
+        }
+    };
+
+    let legacy_neuron = new_neuron(1, Visibility::Unspecified, None); // We say this is legacy, because its visibility is None.
+    let known_neuron = new_neuron(2, Visibility::Unspecified, Some(KnownNeuronData::default()));
+    let explicitly_private_neuron = new_neuron(3, Visibility::Private, None);
+    let explicitly_public_neuron = new_neuron(4, Visibility::Public, None);
+    let caller_controlled_neuron = Neuron {
+        id: Some(NeuronId { id: 5 }),
+        account: account(5),
+        controller: Some(caller),
+        ..legacy_neuron.clone()
+    };
+
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::default()),
+        neurons: btreemap! {
+            1 => legacy_neuron.clone(),
+            2 => known_neuron.clone(),
+            3 => explicitly_private_neuron.clone(),
+            4 => explicitly_public_neuron.clone(),
+            5 => caller_controlled_neuron.clone(),
+        },
+        ..Default::default()
+    };
+
+    let total_icp_suppply = Tokens::new(200, 0).unwrap();
+    let driver = fake::FakeDriver::default()
+        .at(60 * 60 * 24 * 30)
+        .with_supply(total_icp_suppply);
+    let governance = Governance::new(
+        governance_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call the code under test.
+
+    let list_neurons_response = governance.list_neurons(
+        &ListNeurons {
+            // Try to read all neurons that are not controlled by caller. Only the public ones
+            // should appear in full_neurons.
+            neuron_ids: vec![1, 2, 3, 4],
+
+            // This is the operative input for this test.
+            include_public_neurons_in_full_neurons: Some(true),
+
+            // This is to make sure that existing behavior still works.
+            include_neurons_readable_by_caller: true,
+
+            // This should have no effect.
+            include_empty_neurons_readable_by_caller: Some(true),
+        },
+        caller,
+    );
+
+    // Step 3: Inspect results.
+
+    assert_eq!(
+        list_neurons_response.full_neurons,
+        vec![
+            Neuron {
+                // Thanks to normalization.
+                visibility: Some(Visibility::Public as i32),
+                ..known_neuron
+            },
+            explicitly_public_neuron,
+            // In particular, legacy and explicitly_private are NOT in the result.
+
+            // This behavior already existed. This just makes sure that we did not break it.
+            caller_controlled_neuron,
+        ],
+    );
 }
 
 /// Struct to help with the wait for quiet tests.

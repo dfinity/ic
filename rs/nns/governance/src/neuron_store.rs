@@ -555,37 +555,50 @@ impl NeuronStore {
         neuron_id: NeuronId,
         sections: NeuronSections,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
+        let main = || {
+            let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
 
-        if let Some(heap_neuron) = heap_neuron.clone() {
-            // If the neuron is active on heap, return early to avoid any operation on stable
-            // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
-            // on stable storage.
-            if !heap_neuron.is_inactive(self.now()) {
-                return Ok((heap_neuron, StorageLocation::Heap));
+            if let Some(heap_neuron) = heap_neuron.clone() {
+                // If the neuron is active on heap, return early to avoid any operation on stable
+                // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
+                // on stable storage.
+                if !heap_neuron.is_inactive(self.now()) {
+                    return Ok((heap_neuron, StorageLocation::Heap));
+                }
             }
-        }
 
-        let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store
-                .read(neuron_id, sections)
-                .ok()
-                .map(Cow::Owned)
-        });
-        let (neuron, storage_location) = match (stable_neuron, heap_neuron) {
-            (Some(stable), Some(_)) => {
+            let mut result_copies = vec![];
+            let mut filter_push = |neuron, storage_location| {
+                if let Some(neuron) = neuron {
+                    result_copies.push((neuron, storage_location));
+                }
+            };
+
+            filter_push(heap_neuron, StorageLocation::Heap);
+
+            let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
+                stable_neuron_store
+                    .read(neuron_id, sections)
+                    .ok()
+                    .map(Cow::Owned)
+            });
+            filter_push(stable_neuron, StorageLocation::Stable);
+
+            if result_copies.len() > 1 {
                 println!(
                     "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
                         we are at risk of having stale copies",
                     LOG_PREFIX, neuron_id
                 );
-                (stable, StorageLocation::Stable)
             }
-            (Some(stable), None) => (stable, StorageLocation::Stable),
-            (None, Some(heap)) => (heap, StorageLocation::Heap),
-            (None, None) => return Err(NeuronStoreError::not_found(neuron_id)),
+
+            match result_copies.pop() {
+                Some(ok) => Ok(ok),
+                None => Err(NeuronStoreError::not_found(neuron_id)),
+            }
         };
 
+        let (neuron, storage_location) = main()?;
         let neuron = normalized(neuron);
         Ok((neuron, storage_location))
     }
