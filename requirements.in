@@ -1,5 +1,5 @@
 absl-py>=0.14.1
-ansible==6.6.0
+ansible==8.5.0
 cbor>=1.0.0
 configargparse
 cvss==2.5
