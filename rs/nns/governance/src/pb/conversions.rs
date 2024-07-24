@@ -810,6 +810,21 @@ impl From<pb_api::manage_neuron::ChangeAutoStakeMaturity>
     }
 }
 
+impl From<pb::manage_neuron::SetVisibility> for pb_api::manage_neuron::SetVisibility {
+    fn from(item: pb::manage_neuron::SetVisibility) -> Self {
+        Self {
+            visibility: item.visibility,
+        }
+    }
+}
+impl From<pb_api::manage_neuron::SetVisibility> for pb::manage_neuron::SetVisibility {
+    fn from(item: pb_api::manage_neuron::SetVisibility) -> Self {
+        Self {
+            visibility: item.visibility,
+        }
+    }
+}
+
 impl From<pb::manage_neuron::Configure> for pb_api::manage_neuron::Configure {
     fn from(item: pb::manage_neuron::Configure) -> Self {
         Self {
@@ -855,6 +870,9 @@ impl From<pb::manage_neuron::configure::Operation> for pb_api::manage_neuron::co
             pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
                 pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
             }
+            pb::manage_neuron::configure::Operation::SetVisibility(v) => {
+                pb_api::manage_neuron::configure::Operation::SetVisibility(v.into())
+            }
         }
     }
 }
@@ -887,6 +905,9 @@ impl From<pb_api::manage_neuron::configure::Operation> for pb::manage_neuron::co
             }
             pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
                 pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
+            }
+            pb_api::manage_neuron::configure::Operation::SetVisibility(v) => {
+                pb::manage_neuron::configure::Operation::SetVisibility(v.into())
             }
         }
     }
