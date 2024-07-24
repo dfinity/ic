@@ -454,7 +454,7 @@ pub enum ParseIngressError {
     UnknownSubnetMethod,
     /// Failed to parse method payload.
     InvalidSubnetPayload(String),
-    /// The subnet method can be called only by a canister.
+    /// The subnet method can not be called via ingress messages.
     SubnetMethodNotAllowed,
 }
 
@@ -468,7 +468,7 @@ impl ParseIngressError {
             ParseIngressError::SubnetMethodNotAllowed => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "ic00 method {} can be called only by a canister",
+                    "ic00 method {} can be not be called via ingress messages",
                     method_name
                 ),
             ),
