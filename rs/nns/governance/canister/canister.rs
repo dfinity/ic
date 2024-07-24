@@ -42,22 +42,17 @@ use ic_nns_governance::{
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
 use ic_nns_governance_api::pb::v1::{
-    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::{GovernanceCachedMetrics, Migrations},
     governance_error::ErrorType,
-    manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
-        ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
-    },
-    manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-    ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
-    ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+    manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
+    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
+    ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
+    ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+    NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    RewardNodeProvider, RewardNodeProviders, SettleCommunityFundParticipation,
+    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+    UpdateNodeProvider, Vote,
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
