@@ -15,6 +15,9 @@ jobs:
     # if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Get Requested Reviewers
         id: requested_reviewers
         run: |
@@ -22,4 +25,3 @@ jobs:
           echo "requested_teams=$TEAMS" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
