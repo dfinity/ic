@@ -32,7 +32,6 @@ BINARIES = {
     "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
     "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
-    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     "fstrim_tool": "//rs/ic_os/fstrim_tool:fstrim_tool_bin",
     "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
     "hostos_tool": "//rs/ic_os/hostos_tool:hostos_tool",
@@ -51,10 +50,7 @@ BINARIES = {
     "ic-regedit": "//rs/registry/regedit:ic-regedit",
     "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
     "ic-replay": "//rs/replay:ic-replay",
-    "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
-    "ic-icrc-rosetta": "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
     "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
-    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
@@ -79,7 +75,6 @@ BINARIES = {
 # test binaries or binaries using test utils
 TESTONLY_BINARIES = [
     "drun",
-    "e2e-test-driver",
     "ic-admin",
     "ic-backup",
     "ic-boundary",

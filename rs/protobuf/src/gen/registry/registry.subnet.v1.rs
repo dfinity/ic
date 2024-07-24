@@ -40,18 +40,6 @@ pub struct SubnetRecord {
     /// The maximum combined size of the ingress and xnet messages that fit into a block.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "20")]
-    pub max_instructions_per_message: u64,
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "21")]
-    pub max_instructions_per_round: u64,
-    /// The maximum number of instructions an `install_code` message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "22")]
-    pub max_instructions_per_install_code: u64,
     /// Information on whether a feature is supported by this subnet.
     #[prost(message, optional, tag = "23")]
     pub features: ::core::option::Option<SubnetFeatures>,

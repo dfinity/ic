@@ -5,14 +5,35 @@
 # all the dependency rules between package groups will be more strictly enforced.
 
 # The system tests package group contains all code related to system testing.
-# Packages from this package group can depend on any other package from the repository.
-# Packages outside this package group cannot depend on any packages part of the group.
+# Can depend on: any other package.
+# Dependants: none.
 # Exceptions:
-#   //rs/ic_os/launch-single-vm:__pkg__ can depend on rs/tests/driver:ic-system-test-driver
+#   //rs/ic_os/launch-single-vm:__pkg__ depends on rs/tests/driver:ic-system-test-driver
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/httpbin-rs:httpbin
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests:ic-hs
 #   //rs/pocket_ic_server:__pkg__ can depend on rs/tests/testing_verification:spec_compliance
 package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],
+)
+
+# Targets for preparing (e.g. stripping binaries, compressiong wasms, etc) release artifacts.
+# Can depend on: all targets excluding the //rs:system-tests-pkg package group.
+# Dependants: //rs:ic-os-pkg, //rs:system-tests-pkg
+package_group(
+    name = "release-pkg",
+    packages = ["//publish/..."],
+)
+
+# Targets containing tooling relevant for the released VMs.
+# Can depend on: //rs:release-pkg.
+# Exceptions:
+#   //rs/ic_os/launch-single-vm:__pkg__ depends on rs/tests/driver:ic-system-test-driver
+# Dependants: //rs:system-tests-pkg.
+package_group(
+    name = "ic-os-pkg",
+    packages = [
+        "//ic-os/...",
+        "//rs/ic_os/...",
+    ],
 )
