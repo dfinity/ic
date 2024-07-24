@@ -457,12 +457,14 @@ impl RosettaRequestHandler {
             hash: Some(msg.block_identifier.hash),
         });
         let mut block = self.get_block(block_id).await?;
-        // TODO: for Rosetta blocks fetch the right transactions
+
         let transaction = match self.rosetta_blocks_mode().await {
             RosettaBlocksMode::Disabled => block.transactions.remove(0),
-            RosettaBlocksMode::Enabled { .. } => {
-                todo!("/block/transaction not supported in rosetta block mode yet")
-            }
+            RosettaBlocksMode::Enabled { .. } => block
+                .transactions
+                .into_iter()
+                .find(|t| t.transaction_identifier == msg.transaction_identifier)
+                .ok_or_else(|| ApiError::InvalidTransactionId(false, Default::default()))?,
         };
         Ok(BlockTransactionResponse::new(transaction))
     }

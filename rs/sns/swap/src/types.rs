@@ -18,6 +18,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, ONE_DAY_SECONDS};
+use ic_nervous_system_proto::pb::v1::Principals;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -708,16 +709,37 @@ impl DirectInvestment {
 
 impl CfInvestment {
     pub fn validate(&self) -> Result<(), String> {
-        if !is_valid_principal(&self.hotkey_principal) {
-            return Err(format!(
-                "Invalid hotkey_principal {}",
-                self.hotkey_principal
-            ));
-        }
+        self.try_get_controller()?;
+
         if self.nns_neuron_id == 0 {
             return Err("Missing nns_neuron_id".to_string());
         }
         Ok(())
+    }
+
+    /// Tries to get the controller, which may be either in the `controller` or `hotkey_principal` field.
+    /// If both fields are set, requires that they refer to the same principal before returning one.
+    pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
+        match (
+            self.controller,
+            crate::swap::string_to_principal(&self.hotkey_principal),
+        ) {
+            (Some(p1), Some(p2)) if p1 == p2 => Ok(p1),
+            // If hotkey_principal refers to a different principal than controller,
+            // or if neither is set, something has gone wrong.
+            (Some(_), Some(_)) => {
+                Err("Invalid NF neuron: controller and hotkey_principal do not match".to_string())
+            }
+            // If both fields are none, something has also gone wrong.
+            (None, None) => Err(
+                "Invalid NF neuron: controller is unset and hotkey_principal is invalid"
+                    .to_string(),
+            ),
+            // If only one is set, just use that one
+            (Some(p), None) => Ok(p),
+            (None, Some(p)) => Ok(p),
+        }
     }
 }
 
@@ -739,16 +761,12 @@ impl SnsNeuronRecipe {
 
 impl CfParticipant {
     pub fn validate(&self) -> Result<(), String> {
-        if !is_valid_principal(&self.hotkey_principal) {
-            return Err(format!(
-                "Invalid hotkey_principal {}",
-                self.hotkey_principal
-            ));
-        }
+        self.try_get_controller()?;
+
         if self.cf_neurons.is_empty() {
             return Err(format!(
-                "A CF participant ({}) must have at least one neuron",
-                self.hotkey_principal
+                "A CF participant ({:?}) must have at least one neuron",
+                self.try_get_controller()?
             ));
         }
         for n in &self.cf_neurons {
@@ -756,20 +774,49 @@ impl CfParticipant {
         }
         Ok(())
     }
+
     pub fn participant_total_icp_e8s(&self) -> u64 {
         self.cf_neurons
             .iter()
             .map(|x| x.amount_icp_e8s)
             .fold(0, |sum, v| sum.saturating_add(v))
     }
+
+    pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
+        match (
+            self.controller,
+            crate::swap::string_to_principal(&self.hotkey_principal),
+        ) {
+            (Some(p1), Some(p2)) if p1 == p2 => Ok(p1),
+            // If hotkey_principal refers to a different principal than controller,
+            // or if neither is set, something has gone wrong.
+            (Some(_), Some(_)) => Err(
+                "Invalid NF participant: controller and hotkey_principal do not match".to_string(),
+            ),
+            // If both fields are none, something has also gone wrong.
+            (None, None) => Err(
+                "Invalid NF participant: controller and hotkey_principal are both unset"
+                    .to_string(),
+            ),
+            // If only one is set, just use that one
+            (Some(p), None) => Ok(p),
+            (None, Some(p)) => Ok(p),
+        }
+    }
 }
 
 impl CfNeuron {
-    pub fn try_new(nns_neuron_id: u64, amount_icp_e8s: u64) -> Result<Self, String> {
+    pub fn try_new(
+        nns_neuron_id: u64,
+        amount_icp_e8s: u64,
+        hotkeys: Vec<PrincipalId>,
+    ) -> Result<Self, String> {
         let cf_neuron = Self {
             nns_neuron_id,
             amount_icp_e8s,
             has_created_neuron_recipes: Some(false),
+            hotkeys: Some(Principals::from(hotkeys.clone())),
         };
 
         cf_neuron.validate()?;
@@ -1174,6 +1221,9 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
 }
 
 #[cfg(test)]
+// TODO(NNS1-3198): remove #[allow(deprecated)] once hotkey_principal is removed.
+// Unfortunately, this must be applied to the whole module to avoid warnings on the hotkey_principal field in lazy_static.
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::{
@@ -1213,12 +1263,19 @@ mod tests {
         static ref OPEN_REQUEST: OpenRequest = OpenRequest {
             params: Some(PARAMS),
             cf_participants: vec![CfParticipant {
+                controller: Some(PrincipalId::new_user_test_id(423939)),
                 hotkey_principal: PrincipalId::new_user_test_id(423939).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(42 ,99).unwrap()],
-            },],
+                cf_neurons: vec![CfNeuron::try_new(
+                    42,
+                    99,
+                    Vec::new() // TODO(NNS1-3199): populate with some hotkey principals
+                ).unwrap()],
+            }],
             open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         };
+    }
 
+    lazy_static! {
         // Fill out Init just enough to test Params validation. These values are
         // similar to, but not the same analogous values in NNS.
         static ref INIT: Init = Init {
@@ -1337,10 +1394,11 @@ mod tests {
     #[test]
     fn participant_total_icp_e8s_no_overflow() {
         let participant = CfParticipant {
+            controller: None,
             hotkey_principal: "".to_string(),
             cf_neurons: vec![
-                CfNeuron::try_new(1, u64::MAX).unwrap(),
-                CfNeuron::try_new(2, u64::MAX).unwrap(),
+                CfNeuron::try_new(1, u64::MAX, Vec::new()).unwrap(),
+                CfNeuron::try_new(2, u64::MAX, Vec::new()).unwrap(),
             ],
         };
         let total = participant.participant_total_icp_e8s();

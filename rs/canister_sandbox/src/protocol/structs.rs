@@ -32,7 +32,7 @@ pub struct SandboxExecInput {
     pub wasm_reserved_pages: NumWasmPages,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SandboxExecOutput {
     pub slice: SliceExecutionOutput,
     pub wasm: WasmExecutionOutput,
@@ -48,7 +48,7 @@ pub struct MemoryModifications {
     pub size: NumWasmPages,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct StateModifications {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,

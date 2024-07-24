@@ -565,7 +565,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
 
     let cf_participants_principals = cf_participants
         .iter()
-        .map(|cf_participant| cf_participant.hotkey_principal.clone())
+        .map(|cf_participant| cf_participant.try_get_controller().unwrap())
         .collect::<Vec<_>>();
     let neurons = sns_governance_list_neurons(
         &sns_initialization_flow_test.state_machine,
@@ -578,7 +578,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         if neuron.is_neurons_fund_controlled() {
             at_least_one_sns_neuron_is_nf_controlled = true;
             let from_neurons_fund = neuron.permissions.iter().any(|permission| {
-                cf_participants_principals.contains(&permission.principal.unwrap().to_string())
+                cf_participants_principals.contains(&permission.principal.unwrap())
             });
             assert!(
                 from_neurons_fund,
