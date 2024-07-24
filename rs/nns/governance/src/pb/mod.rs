@@ -3,3 +3,4 @@
 pub mod v1;
 
 mod conversions;
+mod convert_struct_to_enum;

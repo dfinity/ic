@@ -29,6 +29,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_MERGE_REQUEST_TARGET_BRANCH_SHA: ${{ github.event.pull_request.base.sha }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -86,7 +87,7 @@ jobs:
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
             echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
           fi
-          if [[ $BRANCH_NAME =~ hotfix-.*-rc--.* ]]; then
+          if [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
             echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate" >> $GITHUB_ENV
           fi
       - name: Run Bazel Test All
@@ -215,20 +216,29 @@ jobs:
       - name: Run Python CI Tests
         id: python-ci-tests
         shell: bash
+        env:
+          REPO_NAME: "${{ github.repository }}"
+          EVENT_NAME: "${{ github.event_name }}"
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           # Todo: remove once dependency scanner tests don't reference name of repo
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
           ADDITIONAL_FLAGS=""
-          if [[ $REPO_NAME == "ic-private" ]]; then
+          if [[ $REPO_NAME == "dfinity/ic-private" ]]; then
             ADDITIONAL_FLAGS="--ignore=dependencies/scanner/"
           fi
+          if [[ $EVENT_NAME == "merge_group" ]]; then
+            ADDITIONAL_FLAGS+=" -m 'not fails_on_merge_train'"
+          fi
+
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
-          pytest --ignore=gitlab_config/ --ignore=git_changes/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
+          # Use eval to correctly interpret ADDITIONAL_FLAGS
+          COMMAND="pytest --ignore=gitlab_config/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
-            --cov-report=term-missing --cov-report=html --cov-branch
+            --cov-report=term-missing --cov-report=html --cov-branch"
+          echo "Executing command: $COMMAND"
+          eval $COMMAND
   build-ic:
     name: Build IC
     <<: *dind-large-setup

@@ -808,6 +808,16 @@ pub enum ThresholdArguments {
     Schnorr(SchnorrArguments),
 }
 
+impl ThresholdArguments {
+    /// Returns the generic key id.
+    pub fn key_id(&self) -> MasterPublicKeyId {
+        match self {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
+}
+
 impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
     fn from(context: &ThresholdArguments) -> Self {
         let threshold_scheme = match context {
