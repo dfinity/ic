@@ -124,6 +124,7 @@ DEPENDENCIES = [
     "@crate_index//:http_0_2_12",
     "@crate_index//:humantime",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-agent-with-discovery",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-utils",
