@@ -1809,10 +1809,7 @@ pub mod test {
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
-    use std::{
-        borrow::Borrow,
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
         match results.first() {
@@ -2370,7 +2367,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2410,12 +2406,7 @@ pub mod test {
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
 
-            let node_id = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                rank,
-            );
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2477,7 +2468,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2515,12 +2505,7 @@ pub mod test {
             let parent: &Block = block_chain.last().unwrap().as_ref();
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
-            let node_id = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                rank,
-            );
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2556,7 +2541,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2593,12 +2577,8 @@ pub mod test {
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
 
             let mut test_block = pool.make_next_block();
-            test_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                Rank(0),
-            );
+            test_block.signature.signer =
+                pool.get_block_maker_by_rank(test_block.height(), Rank(0));
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.content.as_mut().rank = Rank(0);
@@ -2614,12 +2594,7 @@ pub mod test {
 
             let rank = Rank(0);
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
-            next_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                next_block.height(),
-                rank,
-            );
+            next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), rank);
             next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             next_block.content.as_mut().context.certified_height = Height::from(1);
             next_block.content.as_mut().rank = rank;
@@ -2645,7 +2620,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2678,7 +2652,7 @@ pub mod test {
 
             registry_client.update_to_latest_version();
 
-            let mut parent_block = make_next_block(&pool, membership.as_ref());
+            let mut parent_block = make_next_block(&pool);
             parent_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
             parent_block.content.as_mut().context.certified_height = Height::from(1);
             parent_block.update_content();
@@ -2686,7 +2660,7 @@ pub mod test {
 
             // Construct a block with a higher registry version but lower certified height
             // (which will be considered invalid)
-            let mut test_block = make_next_block(&pool, membership.as_ref());
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
             test_block.content.as_mut().context.certified_height = Height::from(0);
             test_block.update_content();
@@ -2698,7 +2672,7 @@ pub mod test {
 
             // Construct a block with a registry version that is higher than any we
             // currently recognize. This should yield an empty change set
-            let mut test_block = make_next_block(&pool, membership.borrow());
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(2000);
             test_block.update_content();
             pool.insert_unvalidated(test_block);
@@ -2706,33 +2680,9 @@ pub mod test {
         })
     }
 
-    // utility function to determine the identity of the block maker with the
-    // specified rank at a given height. Panics if this rank does not exist.
-    fn get_block_maker_by_rank(
-        membership: &Membership,
-        pool_reader: &PoolReader,
-        height: Height,
-        rank: Rank,
-    ) -> NodeId {
-        *membership
-            .get_nodes(height)
-            .unwrap()
-            .iter()
-            .find(|node| {
-                let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
-                membership.get_block_maker_rank(height, &prev_beacon, **node) == Ok(Some(rank))
-            })
-            .unwrap()
-    }
-
-    fn make_next_block(pool: &TestConsensusPool, membership: &Membership) -> BlockProposal {
+    fn make_next_block(pool: &TestConsensusPool) -> BlockProposal {
         let mut next_block = pool.make_next_block();
-        next_block.signature.signer = get_block_maker_by_rank(
-            membership,
-            &PoolReader::new(pool),
-            next_block.height(),
-            Rank(0),
-        );
+        next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), Rank(0));
         next_block.content.as_mut().rank = Rank(0);
         next_block.update_content();
         next_block
@@ -2746,7 +2696,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 time_source,
@@ -2779,7 +2728,7 @@ pub mod test {
             // because state_manager will return certified height 0 the first time,
             // indicating that the replicated state at height 1 is not certified
             // yet).
-            let mut test_block = make_next_block(&pool, membership.as_ref());
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
@@ -2808,7 +2757,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 time_source,
@@ -2833,7 +2781,7 @@ pub mod test {
 
             // We construct a block with a time greater than the current consensus time.
             // It should not be validated yet.
-            let mut test_block = make_next_block(&pool, membership.as_ref());
+            let mut test_block = make_next_block(&pool);
             let block_time = test_block.content.as_mut().context.time;
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
@@ -2857,7 +2805,7 @@ pub mod test {
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
 
-            let mut test_block = make_next_block(&pool, membership.as_ref());
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.time =
                 block_time.checked_sub(Duration::from_nanos(1)).unwrap();
             test_block.update_content();
@@ -3155,7 +3103,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 registry_client,
                 mut pool,
@@ -3193,7 +3140,7 @@ pub mod test {
             // The current time is the time at which we inserted, notarized and finalized
             // the current tip of the chain (i.e. the parent of test_block).
             let parent_time = time_source.get_relative_time();
-            let mut test_block = make_next_block(&pool, membership.as_ref());
+            let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
@@ -3207,12 +3154,7 @@ pub mod test {
             .unwrap();
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                rank,
-            );
+            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3249,7 +3191,7 @@ pub mod test {
             pool.insert_validated(pool.make_next_beacon());
 
             // Continue stalling the clock, and validate a rank > 0 block.
-            let mut test_block = make_next_block(&pool, membership.as_ref());
+            let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
@@ -3263,12 +3205,7 @@ pub mod test {
             .unwrap();
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                rank,
-            );
+            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3296,7 +3233,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 ..
@@ -3323,12 +3259,7 @@ pub mod test {
             let parent_block = pool.make_next_block();
             let rank = Rank(0);
             let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
-            block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                block.height(),
-                rank,
-            );
+            block.signature.signer = pool.get_block_maker_by_rank(block.height(), rank);
 
             block.update_content();
             let content = NotarizationContent::new(
@@ -3369,7 +3300,6 @@ pub mod test {
         let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
         let ValidatorAndDependencies {
             validator,
-            membership,
             mut pool,
             replica_config,
             ..
@@ -3380,12 +3310,7 @@ pub mod test {
 
         let original = pool.make_next_block();
         let mut block = original.clone();
-        let correct_signer = get_block_maker_by_rank(
-            membership.borrow(),
-            &PoolReader::new(&pool),
-            block.height(),
-            Rank(0),
-        );
+        let correct_signer = pool.get_block_maker_by_rank(block.height(), Rank(0));
 
         // Create two different blocks from the same block maker
         let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
