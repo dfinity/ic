@@ -277,9 +277,7 @@ symlink_dirs(
         "//rs/universal_canister/impl:universal_canister.wasm.gz": "test-data",
         "//rs/tests:wabt-tests": "test-data",
     },
-    visibility = [
-        "//rs/pocket_ic_server:__pkg__",
-    ],
+    visibility = ["//rs/pocket_ic_server:__pkg__"],
 )
 
 copy_file(

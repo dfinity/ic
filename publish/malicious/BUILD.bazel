@@ -4,7 +4,5 @@ malicious_binary(
     name = "replica",
     testonly = True,
     binary = "//rs/replica:malicious_replica",
-    visibility = [
-        "//ic-os/guestos/envs/dev-malicious:__pkg__",
-    ],
+    visibility = ["//rs:ic-os-pkg"],
 )

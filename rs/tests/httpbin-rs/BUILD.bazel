@@ -23,9 +23,7 @@ rust_binary(
     name = "httpbin",
     srcs = ["src/main.rs"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    visibility = [
-        "//rs/pocket_ic_server:__pkg__",
-    ],
+    visibility = ["//rs/pocket_ic_server:__pkg__"],
     deps = DEPENDENCIES,
 )
 
