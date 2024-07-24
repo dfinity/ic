@@ -2,7 +2,7 @@ use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    registry::RegistryClientError, replica_version::ReplicaVersionParseError, NodeId,
+    registry::RegistryClientError, replica_version::ReplicaVersionParseError, Height, NodeId,
     RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{

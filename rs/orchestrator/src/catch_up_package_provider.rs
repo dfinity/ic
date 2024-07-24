@@ -46,7 +46,7 @@ use ic_types::{
         HasHeight,
     },
     crypto::*,
-    NodeId, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
 };
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
