@@ -202,10 +202,11 @@ impl EthRpcClient {
         use crate::eth_rpc::GetBlockByNumberParams;
 
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            let result = evm_rpc_client
+            return evm_rpc_client
                 .eth_get_block_by_number(into_evm_block_tag(block))
-                .await;
-            return ReducedResult::from(result).into();
+                .await
+                .reduce()
+                .into();
         }
 
         let expected_block_size = match self.chain {
@@ -223,7 +224,7 @@ impl EthRpcClient {
                 ResponseSizeEstimate::new(expected_block_size),
             )
             .await;
-        results.reduce_with_equality()
+        results.reduce().into()
     }
 
     pub async fn eth_get_transaction_receipt(
@@ -558,9 +559,16 @@ impl<T> From<ReducedResult<T>> for Result<T, MultiCallError<T>> {
     }
 }
 
-impl From<EvmMultiRpcResult<EvmBlock>> for ReducedResult<Block> {
-    fn from(value: EvmMultiRpcResult<EvmBlock>) -> Self {
-        ReducedResult::from_internal(value).map_reduce(
+trait Reduce {
+    type Item;
+    fn reduce(self) -> ReducedResult<Self::Item>;
+}
+
+impl Reduce for EvmMultiRpcResult<EvmBlock> {
+    type Item = Block;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        ReducedResult::from_internal(self).map_reduce(
             &|block: EvmBlock| {
                 Ok::<Block, String>(Block {
                     number: BlockNumber::try_from(block.number)?,
@@ -572,9 +580,12 @@ impl From<EvmMultiRpcResult<EvmBlock>> for ReducedResult<Block> {
     }
 }
 
-trait Reduce {
-    type Item;
-    fn reduce(self) -> ReducedResult<Self::Item>;
+impl Reduce for MultiCallResults<Block> {
+    type Item = Block;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        self.reduce_with_equality().into()
+    }
 }
 
 impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {

@@ -665,7 +665,7 @@ mod evm_rpc_conversion {
     use crate::eth_rpc_client::tests::{ANKR, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
         providers::RpcNodeProvider, Block, FeeHistory, HttpOutcallError, MultiCallError,
-        MultiCallResults, Reduce, ReducedResult, SingleCallError,
+        MultiCallResults, Reduce, SingleCallError,
     };
     use crate::numeric::{BlockNumber, Wei};
     use crate::test_fixtures::arb::{arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio};
@@ -686,7 +686,7 @@ mod evm_rpc_conversion {
         let block = evm_rpc_block();
         let evm_result = EvmMultiRpcResult::Consistent(Ok(block.clone()));
 
-        let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+        let reduced_block: Result<_, _> = evm_result.reduce().into();
 
         assert_eq!(
             reduced_block,
@@ -716,7 +716,7 @@ mod evm_rpc_conversion {
             ),
         ]);
 
-        let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+        let reduced_block: Result<_, _> = evm_result.reduce().into();
 
         assert_eq!(
             reduced_block,
@@ -764,7 +764,7 @@ mod evm_rpc_conversion {
             ),
         ]);
 
-        let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+        let reduced_block: Result<_, _> = evm_result.reduce().into();
 
         assert_eq!(
             reduced_block,
@@ -794,7 +794,7 @@ mod evm_rpc_conversion {
             },
         ] {
             let evm_result = EvmMultiRpcResult::Consistent(Ok(invalid_block));
-            let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+            let reduced_block: Result<_, _> = evm_result.reduce().into();
 
             assert_matches!(
                 reduced_block,
