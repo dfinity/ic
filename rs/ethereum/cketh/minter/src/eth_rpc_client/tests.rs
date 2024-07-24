@@ -906,7 +906,7 @@ mod evm_rpc_conversion {
             }
 
             // 3 errors
-            let evm_result = EvmMultiRpcResult::Inconsistent(
+            let evm_result: EvmMultiRpcResult<Option<EvmFeeHistory>> = EvmMultiRpcResult::Inconsistent(
                 vec![
                     (ankr_evm_rpc_provider.clone(), Err(first_error.clone())),
                     (public_node_evm_rpc_provider.clone(), Err(second_error.clone())),

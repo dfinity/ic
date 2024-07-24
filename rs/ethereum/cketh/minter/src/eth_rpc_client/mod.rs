@@ -173,15 +173,16 @@ impl EthRpcClient {
         params: GetLogsParam,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            let result = evm_rpc_client
+            return evm_rpc_client
                 .eth_get_logs(EvmGetLogsArgs {
                     from_block: Some(into_evm_block_tag(params.from_block)),
                     to_block: Some(into_evm_block_tag(params.to_block)),
                     addresses: params.address.into_iter().map(|a| a.to_string()).collect(),
                     topics: Some(into_evm_topic(params.topics)),
                 })
-                .await;
-            return ReducedResult::from(result).into();
+                .await
+                .reduce()
+                .into();
         }
 
         let results: MultiCallResults<Vec<LogEntry>> = self
@@ -191,7 +192,7 @@ impl EthRpcClient {
                 ResponseSizeEstimate::new(ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE),
             )
             .await;
-        results.reduce_with_equality()
+        results.reduce().into()
     }
 
     pub async fn eth_get_block_by_number(
@@ -255,10 +256,10 @@ impl EthRpcClient {
                 .into();
         }
         // A typical response is slightly above 300 bytes.
-        self.parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
-            .await
-            .reduce()
-            .into()
+        let results: MultiCallResults<FeeHistory> = self
+            .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
+            .await;
+        results.reduce().into()
     }
 
     pub async fn eth_send_raw_transaction(
@@ -571,8 +572,15 @@ impl From<EvmMultiRpcResult<EvmBlock>> for ReducedResult<Block> {
     }
 }
 
-impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> {
-    fn from(value: EvmMultiRpcResult<Vec<EvmLogEntry>>) -> Self {
+trait Reduce {
+    type Item;
+    fn reduce(self) -> ReducedResult<Self::Item>;
+}
+
+impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
+    type Item = Vec<LogEntry>;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
         fn map_logs(logs: Vec<EvmLogEntry>) -> Result<Vec<LogEntry>, String> {
             logs.into_iter().map(map_single_log).collect()
         }
@@ -602,14 +610,17 @@ impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> 
             })
         }
 
-        ReducedResult::from_internal(value)
+        ReducedResult::from_internal(self)
             .map_reduce(&map_logs, MultiCallResults::reduce_with_equality)
     }
 }
 
-trait Reduce {
-    type Item;
-    fn reduce(self) -> ReducedResult<Self::Item>;
+impl Reduce for MultiCallResults<Vec<LogEntry>> {
+    type Item = Vec<LogEntry>;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        self.reduce_with_equality().into()
+    }
 }
 
 impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
