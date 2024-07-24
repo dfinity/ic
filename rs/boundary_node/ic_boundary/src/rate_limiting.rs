@@ -45,11 +45,10 @@ impl KeyExtractor for SubnetRateToken {
 
     fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, GovernorError> {
         // This should always work, because we extract the subnet id after preprocess_request puts it there.
-        Ok(req
-            .extensions()
+        req.extensions()
             .get::<Arc<RouteSubnet>>()
-            .ok_or(GovernorError::UnableToExtractKey)?
-            .id)
+            .map(|x| x.id)
+            .ok_or(GovernorError::UnableToExtractKey)
     }
 }
 
