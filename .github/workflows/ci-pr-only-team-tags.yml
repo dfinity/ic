@@ -46,7 +46,7 @@ jobs:
         run: |
           set -x
           for TEAM in ${{ env.requested_teams }}; do
-            gh pr edit ${{ github.event.pull_request.number }} --add-label "\@${TEAM}"
+            gh pr edit ${{ github.event.pull_request.number }} --add-label "$TEAM"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
