@@ -27,6 +27,7 @@ jobs:
         shell: bash
         run: |
           set -x
+          gh pr view $PR_NUMBER
           gh pr view $PR_NUMBER --json reviewRequests
           TEAMS=$(gh pr view $PR_NUMBER --json reviewRequests --jq '.reviewRequests[].name' | tr '\n' ' ')
           if [ -z "$TEAMS" ]; then
