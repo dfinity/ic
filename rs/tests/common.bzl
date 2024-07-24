@@ -49,7 +49,6 @@ DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
     "//rs/phantom_newtype",
-    "//rs/prep",
     "//rs/protobuf",
     "//rs/recovery",
     "//rs/recovery/subnet_splitting:subnet_splitting",

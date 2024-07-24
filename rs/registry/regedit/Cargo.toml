@@ -29,7 +29,6 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-ic-prep = { path = "../../prep" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
 tempfile = { workspace = true }
 

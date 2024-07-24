@@ -30,7 +30,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/prep",
     "//rs/registry/provisional_whitelist",
     "@crate_index//:tempfile",
 ]

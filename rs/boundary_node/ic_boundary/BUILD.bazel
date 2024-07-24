@@ -105,17 +105,34 @@ MACRO_DEV_DEPENDENCIES = [
     "@crate_index//:indoc",
 ]
 
-ALIASES = {}
-
 VERSION = "0.1.0"
+
+rust_library(
+    name = "ic_boundary_lib",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = VERSION,
+    deps = DEPENDENCIES,
+)
 
 rust_binary(
     name = "ic-boundary",
+    srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = VERSION,
+    deps = DEPENDENCIES + [":ic_boundary_lib"],
+)
+
+rust_library(
+    name = "ic_boundary_tls_lib",
     srcs = glob(
         ["src/**"],
-        exclude = ["src/lib.rs"],
+        exclude = ["src/main.rs"],
     ),
-    aliases = ALIASES,
+    crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES,
@@ -123,22 +140,16 @@ rust_binary(
 
 rust_binary(
     name = "ic-boundary-tls",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["src/lib.rs"],
-    ),
-    aliases = ALIASES,
+    srcs = ["src/main.rs"],
     crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = VERSION,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":ic_boundary_tls_lib"],
 )
 
 rust_test(
-    name = "ic_boundary_test",
-    aliases = ALIASES,
-    crate = ":ic-boundary",
-    crate_features = ["tls"],
+    name = "ic_boundary_tls_test",
+    crate = ":ic_boundary_tls_lib",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -150,7 +161,6 @@ rust_library(
         ["src/**"],
         exclude = ["src/main.rs"],
     ),
-    aliases = ALIASES,
     crate_features = [
         "tls",
         "bench",
@@ -163,7 +173,6 @@ rust_library(
 rust_bench(
     name = "ic_boundary_bench",
     srcs = ["benches/perf.rs"],
-    aliases = ALIASES,
     pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary_testonly_lib"],

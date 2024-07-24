@@ -27,7 +27,6 @@ ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-machine-tests = { path = "../state_machine_tests" }

@@ -2,29 +2,7 @@ use anyhow::Error;
 use clap::Parser;
 use jemallocator::Jemalloc;
 
-use crate::cli::Cli;
-
-mod acme;
-mod bouncer;
-mod cache;
-mod check;
-mod cli;
-mod core;
-mod dns;
-mod firewall;
-mod geoip;
-mod http;
-mod log;
-mod metrics;
-mod persist;
-mod rate_limiting;
-mod retry;
-mod routes;
-mod snapshot;
-mod socket;
-#[cfg(any(test, feature = "bench"))]
-pub mod test_utils;
-mod tls_verify;
+use ic_boundary_lib::cli::Cli;
 
 #[cfg(feature = "tls")]
 mod configuration;
@@ -38,6 +16,6 @@ static GLOBAL: Jemalloc = Jemalloc;
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
-    log::setup_logging(&cli)?;
-    core::main(cli).await
+    ic_boundary_lib::log::setup_logging(&cli)?;
+    ic_boundary_lib::core::main(cli).await
 }
