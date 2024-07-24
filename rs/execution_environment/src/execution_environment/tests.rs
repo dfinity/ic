@@ -3577,12 +3577,12 @@ fn test_fetch_canister_logs_should_accept_ingress_message() {
         FetchCanisterLogsRequest::new(canister_id).encode(),
     );
     // Assert.
-    // Expect error since `should_accept_ingress_message` is only called in replicated mode which is not supported.
+    // Expect error since `fetch_canister_logs` can not be called via ingress messages.
     assert_eq!(
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "fetch_canister_logs API is only accessible in non-replicated mode"
+            "ic00 method fetch_canister_logs can be not be called via ingress messages"
         ))
     );
 }
