@@ -20,7 +20,7 @@ openssh-keys = "0.5.0"
 rand = { workspace = true }
 registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
-rsa = { version = "0.9.2", features = ["sha2"] }
+rsa = { version = "0.9.6", features = ["sha2"] }
 slog = { workspace = true }
 ssh2 = "0.9.4"
 tokio = { workspace = true }
