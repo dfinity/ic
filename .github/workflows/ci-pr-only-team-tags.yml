@@ -17,7 +17,7 @@ env:
 jobs:
   set-team-tags:
     name: Set Team Tags
-    # if: ${{ github.event.pull_request.draft == false }}
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,7 +27,7 @@ jobs:
         id: requested_reviewers
         shell: bash
         run: |
-          set -x
+          set -exuo pipefail
           REVIEWERS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                         -H "Accept: application/vnd.github.v3+json" \
                         "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
@@ -42,7 +42,9 @@ jobs:
 
       - name: Check or Create Labels
         if: env.requested_teams != 'none'
+        shell: bash
         run: |
+          set -exuo pipefail
           for TEAM in ${{ env.requested_teams }}; do
             if ! gh label list | grep -w "$TEAM"; then
               echo "Creating label: $TEAM"
@@ -58,7 +60,7 @@ jobs:
         if: env.requested_teams != 'none'
         shell: bash
         run: |
-          set -x
+          set -exuo pipefail
           for TEAM in ${{ env.requested_teams }}; do
             gh pr edit ${{ github.event.pull_request.number }} --add-label "$TEAM"
           done
