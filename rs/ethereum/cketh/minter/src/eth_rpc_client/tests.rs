@@ -668,7 +668,9 @@ mod evm_rpc_conversion {
         MultiCallResults, Reduce, SingleCallError,
     };
     use crate::numeric::{BlockNumber, Wei};
-    use crate::test_fixtures::arb::{arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio};
+    use crate::test_fixtures::arb::{
+        arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_nat_256,
+    };
     use assert_matches::assert_matches;
     use candid::Nat;
     use evm_rpc_client::types::candid::{
@@ -677,7 +679,7 @@ mod evm_rpc_conversion {
         RpcApi as EvmRpcApi, RpcError as EvmRpcError, RpcService as EvmRpcService,
     };
     use num_bigint::BigUint;
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{prelude::Strategy, prop_assert_eq, proptest};
     use std::collections::BTreeSet;
     use std::fmt::Debug;
 
@@ -836,6 +838,20 @@ mod evm_rpc_conversion {
                 }
                 _ => (),
             };
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_be_consistent_block_between_minter_and_evm_rpc
+        (
+            blocks in minter_and_evm_rpc_blocks(),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let (minter_block, evm_rpc_block) = blocks;
+            test_consistency_between_minter_and_evm_rpc(minter_block, evm_rpc_block, first_error, second_error, third_error)?;
         }
     }
 
@@ -1022,6 +1038,56 @@ mod evm_rpc_conversion {
             },
         }
         Ok(())
+    }
+
+    pub fn minter_and_evm_rpc_blocks() -> impl Strategy<Value = (Block, EvmBlock)> {
+        use proptest::prelude::Just;
+        arb_block().prop_flat_map(|minter_block| {
+            (Just(minter_block.clone()), arb_evm_rpc_block(minter_block))
+        })
+    }
+
+    pub fn arb_evm_rpc_block(minter_block: Block) -> impl Strategy<Value = EvmBlock> {
+        use proptest::{array, collection::vec};
+        //prop_map is limited to tuple of at most 11 elements, so we group the Nat and String fields
+        (
+            array::uniform7(arb_nat_256()),
+            array::uniform9(".*"),
+            vec(".*", 0..10),
+            proptest::option::of(".*"),
+            vec(".*", 0..10),
+        )
+            .prop_map(
+                move |(
+                    [difficulty, gas_limit, gas_used, nonce, size, timestamp, total_difficulty],
+                    [extra_data, hash, logs_bloom, miner, mix_hash, parent_hash, receipts_root, sha3_uncles, state_root],
+                    transactions,
+                    transactions_root,
+                    uncles,
+                )| EvmBlock {
+                    base_fee_per_gas: Nat::from(minter_block.base_fee_per_gas),
+                    number: Nat::from(minter_block.number),
+                    difficulty,
+                    extra_data,
+                    gas_limit,
+                    gas_used,
+                    hash,
+                    logs_bloom,
+                    miner,
+                    mix_hash,
+                    nonce,
+                    parent_hash,
+                    receipts_root,
+                    sha3_uncles,
+                    size,
+                    state_root,
+                    timestamp,
+                    total_difficulty,
+                    transactions,
+                    transactions_root,
+                    uncles,
+                },
+            )
     }
 
     pub fn evm_rpc_fee_history(

@@ -26,7 +26,8 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
-    use crate::eth_rpc::FeeHistory;
+    use crate::eth_rpc::{Block, FeeHistory};
+    use candid::Nat;
     use evm_rpc_client::types::candid::{
         HttpOutcallError as EvmHttpOutcallError, JsonRpcError as EvmJsonRpcError,
         ProviderError as EvmProviderError, RpcError as EvmRpcError,
@@ -43,6 +44,20 @@ pub mod arb {
         use proptest::arbitrary::any;
         use proptest::array::uniform32;
         uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
+    }
+
+    pub fn arb_nat_256() -> impl Strategy<Value = Nat> {
+        arb_checked_amount_of()
+            .prop_map(|checked_amount: CheckedAmountOf<()>| Nat::from(checked_amount))
+    }
+
+    pub fn arb_block() -> impl Strategy<Value = Block> {
+        (arb_checked_amount_of(), arb_checked_amount_of()).prop_map(|(number, base_fee_per_gas)| {
+            Block {
+                number,
+                base_fee_per_gas,
+            }
+        })
     }
 
     pub fn arb_fee_history() -> impl Strategy<Value = FeeHistory> {
