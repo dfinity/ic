@@ -152,8 +152,8 @@ rust_library(
     ),
     aliases = ALIASES,
     crate_features = [
-        "bench",
         "tls",
+        "bench",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = VERSION,
