@@ -99,11 +99,13 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
-    let app_subnet = env
-        .topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::Application)
-        .unwrap();
+    env.sync_with_prometheus();
+
+    // let app_subnet = env
+    //     .topology_snapshot()
+    //     .subnets()
+    //     .find(|s| s.subnet_type() == SubnetType::Application)
+    //     .unwrap();
 
     // println!("Setting topologies.");
     // simulate_network(app_subnet, &NETWORK_SIMULATION);
