@@ -26,7 +26,7 @@ use evm_rpc_client::{
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use serde::{de::DeserializeOwned, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
 
@@ -408,28 +408,21 @@ impl<T: PartialEq> MultiCallResults<T> {
     }
 
     fn expect_error(self) -> MultiCallError<T> {
-        let mut errors_iter = self.errors.into_iter();
-        let (first_provider, first_error) = errors_iter
-            .next()
-            .expect("BUG: expect errors should be non-empty");
-        for (provider, error) in errors_iter {
-            if first_error != error {
-                return MultiCallError::InconsistentResults(MultiCallResults::from_iter(vec![
-                    (first_provider, Err(first_error)),
-                    (provider, Err(error)),
-                ]));
-            }
-        }
-        match first_error {
-            SingleCallError::HttpOutcallError(error) => {
-                MultiCallError::ConsistentHttpOutcallError(error)
-            }
-            SingleCallError::JsonRpcError { code, message } => {
-                MultiCallError::ConsistentJsonRpcError { code, message }
-            }
-            SingleCallError::EvmRpcError(error) => {
-                MultiCallError::ConsistentEvmRpcCanisterError(error)
-            }
+        let distinct_errors: BTreeSet<_> = self.errors.values().collect();
+        match distinct_errors.len() {
+            0 => panic!("BUG: expect errors should be non-empty"),
+            1 => match distinct_errors.into_iter().next().unwrap().clone() {
+                SingleCallError::HttpOutcallError(error) => {
+                    MultiCallError::ConsistentHttpOutcallError(error)
+                }
+                SingleCallError::JsonRpcError { code, message } => {
+                    MultiCallError::ConsistentJsonRpcError { code, message }
+                }
+                SingleCallError::EvmRpcError(error) => {
+                    MultiCallError::ConsistentEvmRpcCanisterError(error)
+                }
+            },
+            _ => MultiCallError::InconsistentResults(self),
         }
     }
 }
