@@ -278,7 +278,6 @@ symlink_dirs(
         "//rs/tests:wabt-tests": "test-data",
     },
     visibility = [
-        "//rs:system-tests-pkg",
         "//rs/pocket_ic_server:__pkg__",
     ],
 )

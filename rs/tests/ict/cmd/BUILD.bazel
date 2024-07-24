@@ -12,7 +12,6 @@ go_library(
         "testnetListCmd.go",
     ],
     importpath = "github.com/dfinity/ic/rs/tests/ict/cmd",
-    visibility = ["//visibility:public"],
     deps = [
         # Keep sorted.
         "@com_github_fatih_color//:color",
