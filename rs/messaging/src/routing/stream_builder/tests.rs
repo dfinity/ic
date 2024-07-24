@@ -1056,9 +1056,11 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
 
         match msg {
             RequestOrResponse::Request(req) => {
-                // Create a matching callback, so that enqueuing any reject response will succeed.
                 let callback_id =
                     register_callback(canister_state, req.sender, req.receiver, req.deadline);
+                // Check the implicit assumption that the test messages were generated with a
+                // `sender_reply_callback` that is consistent with the callback IDs that the
+                // `CallContextManager` generates and registers.
                 assert_eq!(req.sender_reply_callback, callback_id);
 
                 canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
