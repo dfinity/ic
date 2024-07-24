@@ -468,7 +468,7 @@ impl ParseIngressError {
             ParseIngressError::SubnetMethodNotAllowed => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "ic00 method {} can be not be called via ingress messages",
+                    "ic00 method {} can not be called via ingress messages",
                     method_name
                 ),
             ),

@@ -379,7 +379,7 @@ pub fn node_metrics_history_ingress_update_fails(env: TestEnv) {
             assert_reject_msg(
                 result,
                 RejectCode::CanisterReject,
-                "ic00 method node_metrics_history can be not be called via ingress messages",
+                "ic00 method node_metrics_history can not be called via ingress messages",
             );
         }
     })
