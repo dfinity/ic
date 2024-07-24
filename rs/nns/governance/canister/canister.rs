@@ -694,9 +694,7 @@ fn list_neurons() {
 
 #[candid_method(query, rename = "list_neurons")]
 fn list_neurons_(req: ListNeurons) -> ListNeuronsResponse {
-    governance()
-        .list_neurons_by_principal(&(req.into()), &caller())
-        .into()
+    governance().list_neurons(&(req.into()), caller()).into()
 }
 
 #[export_name = "canister_query get_metrics"]

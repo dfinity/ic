@@ -2084,10 +2084,10 @@ impl Governance {
     }
 
     /// See `ListNeurons`.
-    pub fn list_neurons_by_principal(
+    pub fn list_neurons(
         &self,
         list_neurons: &ListNeurons,
-        caller: &PrincipalId,
+        caller: PrincipalId,
     ) -> ListNeuronsResponse {
         let now = self.env.now();
 
@@ -2118,10 +2118,10 @@ impl Governance {
         //        NeuronManagement topic.
         let mut implicitly_requested_neuron_ids = if *include_neurons_readable_by_caller {
             if include_empty_neurons_readable_by_caller {
-                self.get_neuron_ids_by_principal(caller)
+                self.get_neuron_ids_by_principal(&caller)
             } else {
                 self.neuron_store
-                    .get_non_empty_neuron_ids_readable_by_caller(*caller)
+                    .get_non_empty_neuron_ids_readable_by_caller(caller)
             }
         } else {
             Vec::new()
@@ -2148,8 +2148,8 @@ impl Governance {
                 // Populate full_neurons.
                 let let_caller_read_full_neuron =
                     // (Caller can vote with neuron if it is the controller or a hotkey of the neuron.)
-                    neuron.is_authorized_to_vote(caller)
-                        || self.neuron_store.can_principal_vote_on_proposals_that_target_neuron(*caller, neuron)
+                    neuron.is_authorized_to_vote(&caller)
+                        || self.neuron_store.can_principal_vote_on_proposals_that_target_neuron(caller, neuron)
                         // neuron is public, and the caller requested that
                         // public neurons be included (in full_neurons).
                         || (include_public_neurons_in_full_neurons
