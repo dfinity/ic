@@ -14,7 +14,10 @@ pub enum LayoutError {
 
     /// The state root doesn't have the expected layout.  It's either wrong or
     /// was corrupted.
-    CorruptedLayout { path: PathBuf, message: String },
+    CorruptedLayout {
+        path: PathBuf,
+        message: String,
+    },
 
     /// Checkpoint at the specified height already exists.
     AlreadyExists(Height),
@@ -24,6 +27,8 @@ pub enum LayoutError {
 
     /// Trying to remove the latest checkpoint.
     LatestCheckpoint(Height),
+
+    CheckpointUnverified(Height),
 }
 
 impl fmt::Display for LayoutError {
@@ -57,6 +62,9 @@ impl fmt::Display for LayoutError {
                 "Trying to remove the latest checkpoint at height @{}",
                 height
             ),
+            Self::CheckpointUnverified(height) => {
+                write!(f, "Checkpoint @{} is not verified", height)
+            }
         }
     }
 }

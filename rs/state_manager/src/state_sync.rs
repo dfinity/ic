@@ -74,20 +74,20 @@ impl StateSync {
         meta_manifest: Arc<MetaManifest>,
     ) {
         info!(self.log, "Received state {} at height", height);
-        let ro_layout = self
+        let cp = self
             .state_manager
             .state_layout
-            .checkpoint(height)
+            .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
         let state = crate::checkpoint::load_checkpoint_parallel(
-            &ro_layout,
+            &cp,
             self.state_manager.own_subnet_type,
             &self.state_manager.metrics.checkpoint_metrics,
             self.state_manager.get_fd_factory(),
         )
         .expect("failed to recover checkpoint");
 
-        if let Err(err) = ro_layout.remove_unverified_checkpoint_marker() {
+        if let Err(err) = cp.remove_unverified_checkpoint_marker() {
             fatal!(
                 self.log,
                 "Failed to remove the unverified checkpoint marker @height {}: {}",
@@ -96,13 +96,14 @@ impl StateSync {
             );
         }
 
-        self.state_manager.on_synced_checkpoint(
-            state,
-            ro_layout,
-            manifest,
-            meta_manifest,
-            root_hash,
-        );
+        let cp = self
+            .state_manager
+            .state_layout
+            .checkpoint_verified(height)
+            .expect("failed to create checkpoint layout");
+
+        self.state_manager
+            .on_synced_checkpoint(state, cp, manifest, meta_manifest, root_hash);
 
         let height = self.state_manager.states.read().last_advertised;
         let ids = self.get_all_validated_ids_by_height(height);

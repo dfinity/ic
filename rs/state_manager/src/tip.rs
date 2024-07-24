@@ -26,7 +26,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
-    RwPolicy, StateLayout, TipHandler,
+    RwPolicy, StateLayout, TipHandler, Verification,
 };
 use ic_sys::fs::defrag_file_partially;
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
@@ -77,7 +77,7 @@ pub(crate) enum TipRequest {
     /// State: Serialized(height) -> Empty
     TipToCheckpoint {
         height: Height,
-        sender: Sender<Result<(CheckpointLayout<ReadOnly>, HasDowngrade), LayoutError>>,
+        sender: Sender<Result<(CheckpointLayout<Verification>, HasDowngrade), LayoutError>>,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
     /// State: !Empty

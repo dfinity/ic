@@ -71,6 +71,8 @@ pub struct RwPolicy<'a, Owner> {
     lifetime_tag: PhantomData<&'a Owner>,
 }
 
+pub enum Verification {}
+
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
     /// directory while reading/writing a checkpoint.
@@ -87,10 +89,14 @@ pub trait ReadPolicy: AccessPolicy {}
 pub trait WritePolicy: AccessPolicy {}
 pub trait ReadWritePolicy: ReadPolicy + WritePolicy {}
 
+pub trait LoadingPolicy: ReadPolicy {}
+
 impl<T> ReadWritePolicy for T where T: ReadPolicy + WritePolicy {}
 
 impl AccessPolicy for ReadOnly {}
 impl ReadPolicy for ReadOnly {}
+
+impl LoadingPolicy for ReadOnly {}
 
 impl AccessPolicy for WriteOnly {
     /// For `WriteOnly` mode we want to ensure the directory exists
@@ -115,6 +121,10 @@ impl<'a, T> AccessPolicy for RwPolicy<'a, T> {
 
 impl<'a, T> ReadPolicy for RwPolicy<'a, T> {}
 impl<'a, T> WritePolicy for RwPolicy<'a, T> {}
+
+impl AccessPolicy for Verification {}
+impl ReadPolicy for Verification {}
+impl LoadingPolicy for Verification {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
@@ -503,7 +513,7 @@ impl StateLayout {
         thread_pool: &mut Option<scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
-            let path = self.checkpoint(height)?.raw_path().to_path_buf();
+            let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
             sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
                 .map_err(|err| LayoutError::IoError {
                     path,
@@ -624,7 +634,7 @@ impl StateLayout {
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<Verification>, LayoutError> {
         debug_assert_eq!(height, layout.height);
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
@@ -655,7 +665,7 @@ impl StateLayout {
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        self.checkpoint(height)
+        self.checkpoint_in_verification(height)
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
@@ -678,7 +688,10 @@ impl StateLayout {
 
     /// Returns the layout of the checkpoint with the given height (if
     /// there is one).
-    pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    pub fn checkpoint<P>(&self, height: Height) -> Result<CheckpointLayout<P>, LayoutError>
+    where
+        P: LoadingPolicy,
+    {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -707,7 +720,26 @@ impl StateLayout {
                 }
             }
         }
-        CheckpointLayout::new(path, height, self.clone())
+        CheckpointLayout::<P>::new(path, height, self.clone())
+    }
+
+    pub fn checkpoint_verified(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let cp = self.checkpoint::<ReadOnly>(height)?;
+        // TODO: move this check to the checkpoint layout constructor.
+        if !cp.is_checkpoint_verified() {
+            return Err(LayoutError::CheckpointUnverified(height));
+        };
+        Ok(cp)
+    }
+
+    pub fn checkpoint_in_verification(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<Verification>, LayoutError> {
+        self.checkpoint::<Verification>(height)
     }
 
     pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {
@@ -1437,7 +1469,12 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     pub fn is_checkpoint_verified(&self) -> bool {
         !self.unverified_checkpoint_marker().exists()
     }
+}
 
+impl<P> CheckpointLayout<P>
+where
+    P: WritePolicy,
+{
     /// Creates the unverified checkpoint marker.
     /// If the marker already exists, this function does nothing and returns `Ok(())`.
     pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
@@ -1452,7 +1489,9 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             io_err: err,
         })
     }
+}
 
+impl CheckpointLayout<Verification> {
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {

@@ -2419,7 +2419,7 @@ impl StateManagerImpl {
 
                 let checkpointed_state = self
                     .state_layout
-                    .checkpoint(height)
+                    .checkpoint_in_verification(height)
                     .map_err(CheckpointError::from)
                     .and_then(|layout| {
                         let _timer = self
@@ -3651,7 +3651,10 @@ pub enum CheckpointError {
         io_err: String,
     },
     /// The layout of state root on disk is corrupted.
-    CorruptedLayout { path: PathBuf, message: String },
+    CorruptedLayout {
+        path: PathBuf,
+        message: String,
+    },
     /// Wraps a stringified `ic_protobuf::proxy::ProxyDecodeError`, a field and
     /// the path of the affected file.
     ProtoError {
@@ -3667,6 +3670,7 @@ pub enum CheckpointError {
     Persistence(PersistenceError),
     /// Trying to remove the last checkpoint.
     LatestCheckpoint(Height),
+    CheckpointUnverified(Height),
 }
 
 impl std::error::Error for CheckpointError {
@@ -3720,6 +3724,9 @@ impl std::fmt::Display for CheckpointError {
                 "Trying to remove the latest checkpoint at height @{}",
                 height
             ),
+            CheckpointError::CheckpointUnverified(height) => {
+                write!(f, "Checkpoint at height @{} is unverified", height)
+            }
         }
     }
 }
@@ -3748,6 +3755,7 @@ impl From<LayoutError> for CheckpointError {
             LayoutError::NotFound(h) => CheckpointError::NotFound(h),
             LayoutError::AlreadyExists(h) => CheckpointError::AlreadyExists(h),
             LayoutError::LatestCheckpoint(h) => CheckpointError::LatestCheckpoint(h),
+            LayoutError::CheckpointUnverified(h) => CheckpointError::CheckpointUnverified(h),
         }
     }
 }

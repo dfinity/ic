@@ -14,7 +14,9 @@ use ic_replicated_state::{
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
-use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly};
+use ic_state_layout::{
+    CanisterLayout, CanisterStateBits, CheckpointLayout, LoadingPolicy, ReadOnly,
+};
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::parallel_map;
@@ -138,8 +140,8 @@ pub(crate) fn make_checkpoint(
 
 /// Calls [load_checkpoint] with a newly created thread pool.
 /// See [load_checkpoint] for further details.
-pub fn load_checkpoint_parallel(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+pub fn load_checkpoint_parallel<T: LoadingPolicy>(
+    checkpoint_layout: &CheckpointLayout<T>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -157,8 +159,8 @@ pub fn load_checkpoint_parallel(
 
 /// Loads the node state heighted with `height` using the specified
 /// directory layout.
-pub fn load_checkpoint(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+pub fn load_checkpoint<T: LoadingPolicy>(
+    checkpoint_layout: &CheckpointLayout<T>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
