@@ -4,6 +4,7 @@ go_library(
     name = "ict_lib",
     srcs = ["main.go"],
     importpath = "github.com/dfinity/ic/rs/tests/ict",
+    visibility = ["//visibility:private"],
     deps = [
         # Keep sorted.
         "//rs/tests/ict/cmd",
@@ -15,4 +16,5 @@ go_library(
 go_binary(
     name = "ict",
     embed = [":ict_lib"],
+    visibility = ["//visibility:public"],
 )
