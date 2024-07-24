@@ -124,7 +124,7 @@ pub(crate) fn setup_nested_vm(env: TestEnv, from: &NestedVersionTarget, name: &s
         &group_name,
         &nns_url,
         &nns_public_key,
-        &from,
+        from,
     )
     .expect("Unable to setup nested VMs.");
 }
