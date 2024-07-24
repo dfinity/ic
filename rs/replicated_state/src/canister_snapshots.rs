@@ -286,7 +286,7 @@ impl CanisterSnapshot {
 /// Errors that can occur when trying to create a `CanisterSnapshot` from a canister.
 #[derive(Debug)]
 pub enum CanisterSnapshotError {
-    ///  The canister is missing the execution state because is empty (newly created or uninstalled).
+    ///  The canister is missing the execution state because it's empty (newly created or uninstalled).
     EmptyExecutionState(CanisterId),
 }
 

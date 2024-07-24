@@ -1932,7 +1932,7 @@ impl CanisterManager {
 
         // Create new snapshot.
         let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
-            .map_err(|err| CanisterManagerError::from(err))?;
+            .map_err(CanisterManagerError::from)?;
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
@@ -2643,7 +2643,7 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
         match err {
             CanisterSnapshotError::EmptyExecutionState(canister_id) => {
                 CanisterManagerError::CanisterSnapshotExecutionStateNotFound {
-                    canister_id: canister_id,
+                    canister_id,
                 }
             }
         }
