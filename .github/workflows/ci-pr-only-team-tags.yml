@@ -20,8 +20,23 @@ jobs:
 
       - name: Get Requested Reviewers
         id: requested_reviewers
+        shell: bash
         run: |
+          set -x
           TEAMS=$(gh pr view $PR_NUMBER --json reviewRequests --jq '.reviewRequests[].name' | tr '\n' ' ')
+          if [ -z "$TEAMS" ]; then
+            echo "No teams requested for review."
+            TEAMS="none"
+          fi
           echo "requested_teams=$TEAMS" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag PR with Teams
+        if: env.requested_teams != 'none'
+        shell: bash
+        run: |
+          set -x
+          for TEAM in ${{ env.requested_teams }}; do
+            gh pr edit ${{ github.event.pull_request.number }} --add-label "$TEAM"
+          done
