@@ -82,8 +82,6 @@ TESTONLY_BINARIES = [
     "e2e-test-driver",
     "ic-admin",
     "ic-backup",
-    "ic-boundary",
-    "ic-boundary-tls",
     "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",

@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/ed25519",
     "//rs/crypto/tree_hash",
@@ -95,6 +94,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/certification/test-utils",
     "@crate_index//:criterion",
     "@crate_index//:tempfile",
     "@crate_index//:wiremock",
@@ -116,6 +116,8 @@ rust_binary(
         exclude = ["src/lib.rs"],
     ),
     aliases = ALIASES,
+    # TODO: dedup ic-boundary and ic-boundary-tls since they compile to the same thing
+    crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES,
@@ -150,10 +152,20 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     aliases = ALIASES,
-    crate_features = [
-        "tls",
-        "bench",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    version = VERSION,
+    deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "ic_boundary_bench_lib",
+    testonly = True,
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["bench"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
@@ -161,16 +173,9 @@ rust_library(
 
 rust_bench(
     name = "ic_boundary_bench",
-    srcs = glob(
-        [
-            "benches/**",
-            "src/**",
-        ],
-        exclude = ["src/main.rs"],
-    ),
+    srcs = ["benches/perf.rs"],
     aliases = ALIASES,
-    crate_root = "benches/perf.rs",
     pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary_bench_lib"],
 )
