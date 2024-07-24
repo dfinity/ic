@@ -165,7 +165,7 @@ pub(crate) async fn canister_read_state(
         RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
     // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
-    match tokio::task::spawn_blocking(move || {
+    let response = tokio::task::spawn_blocking(move || {
         let targets =
             match validator.validate_request(&request_c, current_time(), &root_of_trust_provider) {
                 Ok(targets) => targets,
@@ -222,12 +222,10 @@ pub(crate) async fn canister_read_state(
         };
         Cbor(res).into_response()
     })
-    .await
-    {
+    .await;
+    match response {
         Ok(res) => res,
-        Err(_) => {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

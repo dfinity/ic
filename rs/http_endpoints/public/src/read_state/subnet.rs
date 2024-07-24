@@ -87,7 +87,7 @@ pub(crate) async fn read_state_subnet(
         }
     };
     let read_state = request.content().clone();
-    match tokio::task::spawn_blocking(move || {
+    let response = tokio::task::spawn_blocking(move || {
         let certified_state_reader = match state_reader.get_certified_state_snapshot() {
             Some(reader) => reader,
             None => return make_service_unavailable_response(),
@@ -131,12 +131,10 @@ pub(crate) async fn read_state_subnet(
         })
         .into_response()
     })
-    .await
-    {
+    .await;
+    match response {
         Ok(res) => res,
-        Err(_) => {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
