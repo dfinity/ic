@@ -99,10 +99,10 @@ mod common {
         num_canisters: usize,
     ) -> Vec<Canister> {
         let logger = env.logger();
-        let wasm =
-            Wasm::from_file(env.get_dependency_path(
-                "rs/rust_canisters/statesync_test/statesync_test_canister.wasm",
-            ));
+        let wasm = Wasm::from_file(
+            env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+                .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+        );
         let mut futures: Vec<_> = Vec::new();
         for canister_idx in 0..num_canisters {
             let new_wasm = wasm.clone();
