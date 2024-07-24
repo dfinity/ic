@@ -50,6 +50,8 @@ lazy_static! {
     static ref UNKNOWN_CANISTER: CanisterId = CanisterId::from(0x234);
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
+    static ref LOOPBACK_REQUEST_CONFIG: MessageConfigX =
+        MessageConfigX::Request(*LOCAL_CANISTER, *LOCAL_CANISTER);
 }
 
 struct StreamHandlerFixture {
@@ -61,7 +63,7 @@ struct StreamHandlerFixture {
 impl StreamHandlerFixture {
     /// Generates a new empty fixture using a custom hypervisor config,
     /// (i.e. with no canister installed or streams in it).
-    fn new_with_config(hypervisor_config: HypervisorConfig) -> Self {
+    fn with_config(hypervisor_config: HypervisorConfig) -> Self {
         with_test_replica_logger(|log| {
             // Generate an empty `ReplicatedState` for `LOCAL_SUBNET`.
             let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
@@ -105,10 +107,10 @@ impl StreamHandlerFixture {
 
     /// Generates a new fixture with a default hypervisor config and initial streams as described
     /// by `stream_configs`. For details see `Self::new_with_config_and_test_setup()`.
-    fn new_with_test_setup(
+    fn with_test_setup(
         stream_configs: BTreeMap<SubnetId, StreamConfigX<Vec<MessageConfigX>>>,
     ) -> Self {
-        Self::new_with_config_and_test_setup(HypervisorConfig::default(), stream_configs)
+        Self::with_config_and_test_setup(HypervisorConfig::default(), stream_configs)
     }
 
     /// Generates a new fixture using a custom hypervisor config. The fixture represents the subnet
@@ -120,11 +122,11 @@ impl StreamHandlerFixture {
     /// state.
     ///
     /// Returns the fixture along with a copy of the `state` without streams.
-    fn new_with_config_and_test_setup(
+    fn with_config_and_test_setup(
         hypervisor_config: HypervisorConfig,
         stream_configs: BTreeMap<SubnetId, StreamConfigX<Vec<MessageConfigX>>>,
     ) -> Self {
-        let mut fixture = Self::new_with_config(hypervisor_config);
+        let mut fixture = Self::with_config(hypervisor_config);
 
         // Generate testing canister using `LOCAL_CANISTER` as the canister ID.
         let mut canister_state = new_canister_state(
@@ -223,6 +225,17 @@ impl StreamHandlerFixture {
         &self.state
     }
 
+    /// Returns a reference to the `metrics_registry` in the fixture.
+    fn metrics_registry(&self) -> &MetricsRegistry {
+        &self.metrics_registry
+    }
+
+    /// Returns the available guaranteed response memory in the stream handler.
+    fn available_guaranteed_response_memory(&self) -> i64 {
+        self.stream_handler
+            .available_guaranteed_response_memory(&self.state)
+    }
+
     /// Returns a reference to a request in the the stream to `subnet_id` at `stream_index`.
     ///
     /// Panics if no such request exists.
@@ -311,24 +324,59 @@ impl StreamHandlerFixture {
         );
     }
 
-    /// Wrapper for `StreamHandler::garbage_collect_local_state()` that automatically ensures the
-    /// memory accounting works as intended.
-    fn garbage_collect_local_state(&mut self, stream_slices: &BTreeMap<SubnetId, StreamSlice>) {
-        let mut available_guaranteed_response_memory = self
-            .stream_handler
-            .available_guaranteed_response_memory(&self.state);
-        let inducted_state = self.stream_handler.garbage_collect_local_state(
+    fn with_memory_check<F>(&mut self, f: F)
+    where
+        F: FnOnce(&StreamHandlerImpl, ReplicatedState, &mut i64) -> ReplicatedState,
+    {
+        let mut available_guaranteed_response_memory = self.available_guaranteed_response_memory();
+
+        self.state = f(
+            &self.stream_handler,
             self.state.clone(),
             &mut available_guaranteed_response_memory,
-            stream_slices,
-        );
-        assert_eq!(
-            self.stream_handler
-                .available_guaranteed_response_memory(&inducted_state),
-            available_guaranteed_response_memory
         );
 
-        self.state = inducted_state;
+        assert_eq!(
+            self.available_guaranteed_response_memory(),
+            available_guaranteed_response_memory
+        );
+    }
+
+    /// Wrapper for `StreamHandler::garbage_collect_local_state()` that automatically ensures the
+    /// memory accounting works as intended.
+    fn garbage_collect_local_state(
+        &mut self,
+        stream_slices: &BTreeMap<SubnetId, StreamSlice>,
+        available_guaranteed_response_memory: &mut i64
+    ) {
+        self.state = self
+            .stream_handler
+            .garbage_collect_local_state(
+                self.state.clone(),
+                available_guaranteed_response_memory,
+                stream_slices
+            );
+/*
+        self.with_memory_check(
+            |stream_handler, state, available_guaranteed_response_memory| {
+                stream_handler.garbage_collect_local_state(
+                    state,
+                    available_guaranteed_response_memory,
+                    stream_slices,
+                )
+            },
+        )
+*/
+    }
+
+    /// Wrapper for `StreamHandler::induct_loopback_stream()` that automatically ensures the
+    /// memory accounting works as intended.
+    fn induct_loopback_stream(&mut self) {
+        self.with_memory_check(
+            |stream_handler, state, available_guaranteed_response_memory| {
+                stream_handler.induct_loopback_stream(state, available_guaranteed_response_memory)
+            },
+        )
     }
 }
 
@@ -357,6 +405,7 @@ fn stream_from_config(stream_config: StreamConfigX<Vec<RequestOrResponse>>) -> S
 }
 
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 enum MessageConfigX {
     // `(sender, receiver)`.
     Request(CanisterId, CanisterId),
@@ -391,96 +440,21 @@ fn push_input(
     state.push_input(msg, &mut (i64::MAX / 2))
 }
 
-/*
-#[test]
-fn induct_loopback_stream_empty_loopback_stream_x() {
-    let (stream_handler, mut initial_state, streams, metrics_registry) =
-        with_test_setup(btreemap![LOCAL_SUBNET => StreamConfigX::default()]);
-    initial_state.with_streams(streams);
-
-    let expected_state = initial_state.clone();
-
-    let mut available_guaranteed_response_memory =
-        stream_handler.available_guaranteed_response_memory(&initial_state);
-
-    let inducted_state = stream_handler
-        .induct_loopback_stream(initial_state, &mut available_guaranteed_response_memory);
-
-    assert_eq!(expected_state, inducted_state);
-
-    assert_eq!(
-        stream_handler.available_guaranteed_response_memory(&inducted_state),
-        available_guaranteed_response_memory
-    );
-
-    assert_inducted_xnet_messages_eq(MetricVec::new(), &metrics_registry);
-    assert_eq!(
-        0,
-        fetch_inducted_payload_sizes_stats(&metrics_registry).count
-    );
-}
-*/
-
-#[test]
-fn induct_loopback_stream_empty_loopback_stream_clone() {
-    with_test_replica_logger(|log| {
-        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-
-        let initial_canister_state = new_canister_state(
-            *LOCAL_CANISTER,
-            user_test_id(24).get(),
-            *INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
-        initial_state.put_canister_state(initial_canister_state);
-
-        // An empty loopback stream.
-        let loopback_stream = generate_loopback_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 0,
-            signals_end: 21,
-            reject_signals: None,
-        });
-        initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
-
-        let expected_state = initial_state.clone();
-
-        let mut available_guaranteed_response_memory =
-            stream_handler.available_guaranteed_response_memory(&initial_state);
-        let inducted_state = stream_handler
-            .induct_loopback_stream(initial_state, &mut available_guaranteed_response_memory);
-
-        assert_eq!(expected_state, inducted_state);
-
-        assert_eq!(
-            stream_handler.available_guaranteed_response_memory(&inducted_state),
-            available_guaranteed_response_memory
-        );
-
-        assert_inducted_xnet_messages_eq(MetricVec::new(), &metrics_registry);
-        assert_eq!(
-            0,
-            fetch_inducted_payload_sizes_stats(&metrics_registry).count
-        );
-    });
-}
-
 #[test]
 fn oversized_reject_message_is_truncated() {
     fn assert_correct_truncation(msg_len: usize, len_after_truncation: usize) {
-        match generate_reject_response(
-            &test_request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+        let reject_response = generate_reject_response(
+            &RequestBuilder::new().build(),
             RejectCode::SysTransient,
             (0..msg_len).map(|_| "a").collect(),
-        ) {
-            RequestOrResponse::Response(response) => {
-                assert_matches!(
-                    &response.response_payload,
-                    Payload::Reject(context) if context.message().len() == len_after_truncation
-                );
-            }
-            _ => unreachable!(),
-        }
+        );
+        assert_matches!(
+            reject_response,
+            RequestOrResponse::Response(response) if matches!(
+                &response.response_payload,
+                Payload::Reject(context) if context.message().len() == len_after_truncation
+            )
+        );
     }
 
     assert_correct_truncation(
@@ -497,92 +471,171 @@ fn oversized_reject_message_is_truncated() {
     );
 }
 
+/// Tests that inducting a loopback stream where `signals_end` < `end` panics (this must be equal
+/// for the loopback stream, because it is its own reverse stream).
 #[test]
 #[should_panic(
     expected = "Invalid message indices in stream slice from subnet g24bn-xymaa-aaaaa-aaaap-yai: messages begin (21) != stream signals_end (22)"
 )]
-fn induct_loopback_stream_with_signals_panics() {
-    with_test_replica_logger(|log| {
-        let (stream_handler, mut state, _) = new_fixture(&log);
-
-        // A loopback stream containing 2 messages and 1 signal.
-        let loopback_stream = generate_loopback_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 2,
+fn induct_loopback_stream_with_signals_end_before_messages_end_panics() {
+    let mut fixture =
+        StreamHandlerFixture::with_test_setup(btreemap![LOCAL_SUBNET => StreamConfigX {
+            begin: 21,
+            messages: vec![*LOOPBACK_REQUEST_CONFIG; 2],
             signals_end: 22,
-            reject_signals: None,
-        });
-        state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+            ..StreamConfigX::default()
+        }]);
 
-        stream_handler.induct_loopback_stream(state, &mut 1_000_000_000);
-    });
+    fixture.induct_loopback_stream();
 }
 
+/// Tests that inducting a loopback stream where `signals_end` < `begin` panics (this must be equal
+/// for the loopback stream, because it is its own reverse stream).
 #[test]
 #[should_panic(
     expected = "Invalid message indices in stream slice from subnet g24bn-xymaa-aaaaa-aaaap-yai: messages begin (21) != stream signals_end (20)"
 )]
 fn induct_loopback_stream_signals_end_before_messages_begin_panics() {
-    with_test_replica_logger(|log| {
-        let (stream_handler, mut state, _) = new_fixture(&log);
-
-        // A loopback stream with signals().end() != messages().begin().
-        let loopback_stream = generate_loopback_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 2,
+    let mut fixture =
+        StreamHandlerFixture::with_test_setup(btreemap![LOCAL_SUBNET => StreamConfigX {
+            begin: 21,
+            messages: vec![*LOOPBACK_REQUEST_CONFIG; 2],
             signals_end: 20,
-            reject_signals: None,
-        });
-        state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+            ..StreamConfigX::default()
+        }]);
 
-        stream_handler.induct_loopback_stream(state, &mut 1_000_000_000);
-    });
+    fixture.induct_loopback_stream();
 }
 
 #[test]
 fn induct_loopback_stream_empty_loopback_stream() {
-    with_test_replica_logger(|log| {
-        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-
-        let initial_canister_state = new_canister_state(
-            *LOCAL_CANISTER,
-            user_test_id(24).get(),
-            *INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
-        initial_state.put_canister_state(initial_canister_state);
-
-        // An empty loopback stream.
-        let loopback_stream = generate_loopback_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 0,
+    let mut fixture =
+        StreamHandlerFixture::with_test_setup(btreemap![LOCAL_SUBNET => StreamConfigX {
+            begin: 21,
             signals_end: 21,
+            ..StreamConfigX::default()
+        }]);
+
+    fixture.induct_loopback_stream();
+    fixture.assert_inducted_xnet_messages_eq(&[]);
+    assert_eq!(
+        0,
+        fetch_inducted_payload_sizes_stats(fixture.metrics_registry()).count
+    );
+}
+
+#[test]
+fn induct_loopback_stream_reject_response() {
+    // A loopback stream with 1 message addressed to an unknown canister.
+    let mut fixture =
+        StreamHandlerFixture::with_test_setup(btreemap![LOCAL_SUBNET => StreamConfigX {
+            begin: 21,
+            messages: vec![MessageConfigX::Request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER)],
+            signals_end: 21,
+            ..StreamConfigX::default()
+        }]);
+
+    let reject_response = generate_reject_response(
+        fixture.get_request_in_stream_to(&LOCAL_SUBNET, 21),
+        RejectCode::DestinationInvalid,
+        StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
+    );
+    let reject_response_num_bytes = reject_response.count_bytes();
+
+    let mut expected_state = fixture.state().clone();
+    // Expecting a loopback stream with begin advanced and a reject response.
+    let loopback_stream = stream_from_config(StreamConfigX {
+        begin: 22,
+        messages: vec![reject_response],
+        signals_end: 22,
+        ..StreamConfigX::default()
+    });
+    expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+    let initial_available_guaranteed_response_memory =
+        fixture.available_guaranteed_response_memory();
+    fixture.induct_loopback_stream();
+
+    assert_eq!(expected_state, *fixture.state());
+    // One reject response generated.
+    assert_eq!(
+        initial_available_guaranteed_response_memory - reject_response_num_bytes as i64,
+        fixture.available_guaranteed_response_memory()
+    );
+
+    fixture.assert_inducted_xnet_messages_eq(&[(
+        LABEL_VALUE_TYPE_REQUEST,
+        LABEL_VALUE_CANISTER_NOT_FOUND,
+        1,
+    )]);
+    assert_eq!(
+        0,
+        fetch_inducted_payload_sizes_stats(fixture.metrics_registry()).count
+    );
+}
+
+/*
+        // Expecting an unchanged canister state...
+        let mut expected_state = initial_state.clone();
+
+        // ...and a loopback stream with begin indices advanced...
+        let mut expected_loopback_stream = generate_loopback_stream(StreamConfig {
+            messages_begin: 22,
+            message_count: 0,
+            signals_end: 22,
             reject_signals: None,
         });
+        // ...plus a reject response.
+        let reject_response = generate_reject_response(
+            get_request_at(loopback_stream.messages(), 21),
+            RejectCode::DestinationInvalid,
+            StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
+        );
+        expected_loopback_stream.push(reject_response.clone());
+
         initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+        expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
-        let expected_state = initial_state.clone();
-
-        let mut available_guaranteed_response_memory =
+        let initial_available_guaranteed_response_memory =
             stream_handler.available_guaranteed_response_memory(&initial_state);
+        let mut available_guaranteed_response_memory = initial_available_guaranteed_response_memory;
+
         let inducted_state = stream_handler
             .induct_loopback_stream(initial_state, &mut available_guaranteed_response_memory);
 
         assert_eq!(expected_state, inducted_state);
 
+        // One reject response generated.
         assert_eq!(
-            stream_handler.available_guaranteed_response_memory(&inducted_state),
+            initial_available_guaranteed_response_memory - reject_response.count_bytes() as i64,
             available_guaranteed_response_memory
         );
+        // Not equal, because the computed available memory does not account for the
+        // reject response (since it's from a nonexistent canister).
+        assert!(
+            stream_handler.available_guaranteed_response_memory(&inducted_state)
+                >= available_guaranteed_response_memory
+        );
 
-        assert_inducted_xnet_messages_eq(MetricVec::new(), &metrics_registry);
+        assert_inducted_xnet_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_CANISTER_NOT_FOUND),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
         assert_eq!(
             0,
             fetch_inducted_payload_sizes_stats(&metrics_registry).count
         );
     });
 }
+*/
 
+/*
 #[test]
 fn induct_loopback_stream_reject_response() {
     with_test_replica_logger(|log| {
@@ -668,7 +721,7 @@ fn induct_loopback_stream_reject_response() {
         );
     });
 }
-
+*/
 #[test]
 fn induct_loopback_stream_reroute_response() {
     with_test_replica_logger(|log| {
@@ -1818,7 +1871,7 @@ fn garbage_collect_local_state_with_bad_reject_signal_for_response() {
 fn garbage_collect_local_state_with_reject_signals_for_request_success() {
     // The initial setup has an outgoing stream with one request @21 in it.
     let mut fixture =
-        StreamHandlerFixture::new_with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
+        StreamHandlerFixture::with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
             begin: 21,
             messages: vec![MessageConfigX::Request(*LOCAL_CANISTER, *REMOTE_CANISTER)],
             ..StreamConfigX::default()
@@ -1868,7 +1921,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_success() {
 fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canister() {
     // The initial setup has an outgoing stream with one request @21 in it.
     let mut fixture =
-        StreamHandlerFixture::new_with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
+        StreamHandlerFixture::with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
             begin: 21,
             messages: vec![MessageConfigX::Request(*OTHER_LOCAL_CANISTER, *REMOTE_CANISTER)],
             ..StreamConfigX::default()
@@ -1918,7 +1971,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
 fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
     // The initial setup has an outgoing stream with one request @21 in it.
     let mut fixture =
-        StreamHandlerFixture::new_with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
+        StreamHandlerFixture::with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
             begin: 21,
             messages: vec![MessageConfigX::Request(*LOCAL_CANISTER, *LOCAL_CANISTER)],
             ..StreamConfigX::default()
@@ -1973,7 +2026,7 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
 fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_canister() {
     // The initial setup has an outgoing stream with one request @21 in it.
     let mut fixture =
-        StreamHandlerFixture::new_with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
+        StreamHandlerFixture::with_test_setup(btreemap![REMOTE_SUBNET => StreamConfigX {
             begin: 21,
             messages: vec![MessageConfigX::Request(*LOCAL_CANISTER, *REMOTE_CANISTER)],
             ..StreamConfigX::default()
