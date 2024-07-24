@@ -347,7 +347,7 @@ impl CatchUpPackageProvider {
     }
 }
 
-// Returns the height of the CUP with converting the protobuf
+// Returns the height of the CUP without converting the protobuf
 fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
     pb::CatchUpContent::decode(cup.content.as_slice())
         .ok()
