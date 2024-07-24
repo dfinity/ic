@@ -76,7 +76,7 @@ async fn priority_from_stash_to_fetch() {
 }
 
 #[tokio::test]
-async fn fetch_to_stashi_to_fetch() {
+async fn fetch_to_stash_to_fetch() {
     // Abort process if a thread panics. This catches detached tokio tasks that panic.
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
