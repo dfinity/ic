@@ -56,7 +56,7 @@ fn test_upgrade_after_state_shrink() {
             .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
             .await
             .unwrap();
-        install_governance_canister(&mut canister, governance_proto).await;
+        install_governance_canister(&mut canister, governance_proto.into()).await;
 
         // First let's do a self-upgrade
         canister.stop().await.unwrap();
