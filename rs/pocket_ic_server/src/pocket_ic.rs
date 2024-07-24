@@ -6,9 +6,11 @@ use crate::{copy_dir, BlobStore};
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Response as AxumResponse},
 };
 use candid::Decode;
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
@@ -80,7 +82,6 @@ use std::{
 };
 use tempfile::TempDir;
 use tokio::{runtime::Runtime, sync::mpsc};
-use tokio_util::sync::CancellationToken;
 use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
@@ -92,13 +93,26 @@ use tower::{
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
+/// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
+pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
+
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 
-/// The interval that pocket-ic should try to execute rounds on all subnets,
-/// when running synchronous update calls for the [`CallRequest`] operation.
-const EXECUTE_ROUND_INTERVAL: Duration = Duration::from_millis(50);
+async fn into_api_response(resp: AxumResponse) -> (u16, BTreeMap<String, Vec<u8>>, Vec<u8>) {
+    (
+        resp.status().into(),
+        resp.headers()
+            .iter()
+            .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+            .collect(),
+        axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+}
 
 fn compute_subnet_seed(
     ranges: Vec<CanisterIdRange>,
@@ -278,7 +292,6 @@ impl PocketIc {
             .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
-            .with_use_cost_scaling_flag(true)
     }
 
     pub(crate) fn new(
@@ -1382,17 +1395,8 @@ impl Operation for DashboardRequest {
                 .into_response(),
         };
 
-        OpOut::RawResponse((
-            resp.status().into(),
-            resp.headers()
-                .iter()
-                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                .collect(),
-            pic.runtime
-                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                .unwrap()
-                .to_vec(),
-        ))
+        let fut: ApiResponse = Box::pin(into_api_response(resp));
+        OpOut::RawResponse(fut.shared())
     }
 
     fn retry_if_busy(&self) -> bool {
@@ -1481,17 +1485,8 @@ impl Operation for StatusRequest {
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
 
-        OpOut::RawResponse((
-            resp.status().into(),
-            resp.headers()
-                .iter()
-                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                .collect(),
-            pic.runtime
-                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                .unwrap()
-                .to_vec(),
-        ))
+        let fut: ApiResponse = Box::pin(into_api_response(resp));
+        OpOut::RawResponse(fut.shared())
     }
 
     fn retry_if_busy(&self) -> bool {
@@ -1572,13 +1567,12 @@ impl Operation for CallRequest {
                 )
                 .build();
 
-                let subnet_clone = subnet.clone();
-
                 // Task that waits for call service to submit the ingress message, and
                 // forwards it to the state machine. The task will automatically terminate
                 // once it submits an ingress message received from the call service to the
                 // `StateMachine`, or if the call service is dropped (in which case `r.recv().await` returns `None`).
-                pic.runtime.spawn(async move {
+                let subnet_clone = subnet.clone();
+                let ingress_proxy_task = pic.runtime.spawn(async move {
                     if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
                         r.recv().await
                     {
@@ -1621,43 +1615,20 @@ impl Operation for CallRequest {
                     .body(self.bytes.clone().into())
                     .unwrap();
 
-                let cancellation_token = CancellationToken::new();
-                let cancellation_token_clone = cancellation_token.clone();
-
-                // TODO: Allow parallel execution of V3 ingress messages.
-                //
-                // We are blocking the pic here, when in the CallRequest operation.
-                // This won't let us execute V3 ingress messages concurrently.
-                let resp = std::thread::scope(|s| {
-                    // We have to execute rounds for V3 calls, since the endpoint
-                    // waits for message to be executed and certified.
-                    if let CallRequestVersion::V3 = self.version {
-                        s.spawn(|| {
-                            while !cancellation_token_clone.is_cancelled() {
-                                for subnet in pic.subnets.read().unwrap().values() {
-                                    subnet.execute_round();
-                                }
-                                std::thread::sleep(EXECUTE_ROUND_INTERVAL);
-                            }
-                        });
-                    }
-
-                    let response = pic.runtime.block_on(svc.oneshot(request)).unwrap();
-                    cancellation_token.cancel();
-                    response
+                let fut: ApiResponse = Box::pin(async {
+                    let resp = svc.oneshot(request).await.unwrap();
+                    into_api_response(resp).await
                 });
+                let api_resp = fut.shared();
+                let service_task = pic.runtime.spawn(api_resp.clone());
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                // For the sake of determinism, we need to wait until one of
+                // `service_task` or `ingress_proxy_task` terminates:
+                // then all the state modifications have been performed
+                // and we can return from the operation.
+                while !service_task.is_finished() && !ingress_proxy_task.is_finished() {}
+
+                OpOut::RawResponse(api_resp)
             }
         }
     }
@@ -1739,17 +1710,8 @@ impl Operation for QueryRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
+                OpOut::RawResponse(fut.shared())
             }
         }
     }
@@ -1802,17 +1764,8 @@ impl Operation for ReadStateRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
+                OpOut::RawResponse(fut.shared())
             }
         }
     }
@@ -2404,10 +2357,12 @@ mod tests {
         let unix_time_ns = 1640995200000000000; // 1st Jan 2022
         let time = Time::from_nanos_since_unix_epoch(unix_time_ns);
         compute_assert_state_change(&mut pic, SetTime { time });
-        let expected_time = OpOut::Time(unix_time_ns);
         let actual_time = compute_assert_state_immutable(&mut pic, GetTime {});
 
-        assert_eq!(expected_time, actual_time);
+        match actual_time {
+            OpOut::Time(actual_time_ns) => assert_eq!(unix_time_ns, actual_time_ns),
+            _ => panic!("Unexpected OpOut: {:?}", actual_time),
+        };
     }
 
     #[test]

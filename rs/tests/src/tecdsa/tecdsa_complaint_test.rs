@@ -17,8 +17,7 @@ use ic_types::Height;
 use slog::info;
 
 pub fn config(env: TestEnv) {
-    let malicious_behaviour =
-        MaliciousBehaviour::new(true).set_maliciously_corrupt_ecdsa_dealings();
+    let malicious_behaviour = MaliciousBehaviour::new(true).set_maliciously_corrupt_idkg_dealings();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -79,6 +78,6 @@ pub fn test(env: TestEnv) {
     });
 
     info!(logger, "Checking for malicious logs...");
-    assert_malicious_from_topo(&topology, vec!["maliciously_corrupt_ecdsa_dealings: true"]);
+    assert_malicious_from_topo(&topology, vec!["maliciously_corrupt_idkg_dealings: true"]);
     info!(logger, "Malicious log check succeeded.");
 }

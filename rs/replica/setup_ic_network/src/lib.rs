@@ -453,7 +453,7 @@ fn start_consensus(
             chain_key_config,
             finalized.payload.as_ref().dkg_interval_start_height(),
             finalized.payload.as_ref().is_summary(),
-            finalized.payload.as_ref().as_ecdsa().is_some(),
+            finalized.payload.as_ref().as_idkg().is_some(),
         );
 
         let idkg_gossip = Arc::new(idkg::IDkgGossipImpl::new(

@@ -508,6 +508,7 @@ hyper-socks2 = { version = "0.8.0", default-features = false, features = [
     "rustls",
 ] }
 ic-agent = { version = "0.35.0", features = ["hyper"] }
+# TODO: [NET-1734] Delete this once the feature is merged to master.
 ic-agent-call-v3 = { package = "ic-agent", git = "https://github.com/dfinity/agent-rs", rev = "9e45b314fc7496d48065590fac90790e0bdc6eed", features = [
     "sync_call",
 ] }

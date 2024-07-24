@@ -57,9 +57,6 @@ use slog::info;
 use std::sync::atomic::{AtomicU64, Ordering};
 use url::Url;
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
-
 fn make_user_ed25519(seed: u64) -> (ic_canister_client_sender::Ed25519KeyPair, PrincipalId) {
     let mut rng = StdRng::seed_from_u64(seed);
     let kp = ic_canister_client_sender::Ed25519KeyPair::generate(&mut rng);
@@ -97,15 +94,9 @@ pub fn config_with_multiple_app_subnets(env: TestEnv) {
     });
 }
 
-// TODO(EXC-1168): cleanup after cost scaling is fully implemented.
 fn scale_cycles(cycles: Cycles) -> Cycles {
-    match USE_COST_SCALING_FLAG {
-        false => cycles,
-        true => {
-            let subnet_size: usize = 1; // Subnet has only a single node, see usage of `add_fast_single_node_subnet` in `config()`.
-            (cycles * subnet_size) / SMALL_APP_SUBNET_MAX_SIZE
-        }
-    }
+    let subnet_size: usize = 1; // Subnet has only a single node, see usage of `add_fast_single_node_subnet` in `config()`.
+    (cycles * subnet_size) / SMALL_APP_SUBNET_MAX_SIZE
 }
 
 pub fn test(env: TestEnv) {
