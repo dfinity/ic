@@ -9,7 +9,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criteri
 use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
 use rand::prelude::*;
 
-use ic_boundary_bench_lib::test_utils::setup_test_router;
+use ic_boundary_testonly_lib::test_utils::setup_test_router;
 
 fn gen_request(cli: &reqwest::Client, addr: &SocketAddr, bytes_size: usize) -> reqwest::Request {
     let mut rng = rand::thread_rng();
