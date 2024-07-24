@@ -1,7 +1,7 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
@@ -39,6 +39,7 @@ pub struct TestConsensusPool {
     time_source: Arc<dyn TimeSource>,
     dkg_payload_builder:
         Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload>,
+    membership: Membership,
 }
 
 pub struct Round<'a> {
@@ -196,12 +197,14 @@ impl TestConsensusPool {
             no_op_logger(),
             time_source.clone(),
         );
+        let membership = Membership::new(pool.get_cache(), registry_client.clone(), subnet_id);
         TestConsensusPool {
             subnet_id,
             registry_client,
             pool,
             time_source,
             dkg_payload_builder,
+            membership,
         }
     }
 
@@ -235,6 +238,19 @@ impl TestConsensusPool {
         block.context.registry_version = registry_version;
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
+
+        let height = block.height();
+        let pool_reader = PoolReader::new(&self.pool);
+        let nodes = self.membership.get_nodes(height).unwrap();
+        let signer = nodes
+            .iter()
+            .find(|node| {
+                let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
+                self.membership
+                    .get_block_maker_rank(height, &prev_beacon, **node)
+                    == Ok(Some(rank))
+            })
+            .expect("rank should exist for the current membership");
         BlockProposal::fake(block, node_test_id(0))
     }
 
@@ -246,6 +262,43 @@ impl TestConsensusPool {
     pub fn make_next_tape(&self) -> RandomTape {
         let finalized_height = self.validated().finalization().max_height().unwrap();
         RandomTape::fake(RandomTapeContent::new(finalized_height))
+    }
+
+    /// Creates an equivocation proof for the given height and rank. Make sure
+    /// The proof
+    /// can only be validated if the node was actually a block maker of that height.
+    pub fn make_equivocation_proof(
+        &self,
+        rank: Rank,
+        height: Height,
+        membership: &Membership,
+    ) -> EquivocationProof {
+        let pool_reader = PoolReader::new(self);
+        let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
+        let signer = *membership
+            .get_nodes(height)
+            .unwrap()
+            .iter()
+            .find(|node| {
+                membership.get_block_maker_rank(height, &prev_beacon, **node) == Ok(Some(rank))
+            })
+            .expect("rank should exist for the current membership");
+
+        EquivocationProof {
+            signer,
+            version: self
+                .pool
+                .validated()
+                .highest_catch_up_package()
+                .content
+                .version,
+            height,
+            subnet_id: self.subnet_id,
+            hash1: CryptoHashOf::new(CryptoHash(vec![1, 2, 3])),
+            signature1: BasicSigOf::new(BasicSig(vec![])),
+            hash2: CryptoHashOf::new(CryptoHash(vec![4, 5, 6])),
+            signature2: BasicSigOf::new(BasicSig(vec![])),
+        }
     }
 
     pub fn make_catch_up_package(&self, height: Height) -> CatchUpPackage {
