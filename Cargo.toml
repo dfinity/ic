@@ -185,6 +185,8 @@ members = [
     "rs/nns/common/protobuf_generator",
     "rs/nns/cmc",
     "rs/nns/governance",
+    "rs/nns/governance/api",
+    "rs/nns/governance/init",
     "rs/nns/governance/protobuf_generator",
     "rs/nns/handlers/lifeline/impl",
     "rs/nns/handlers/lifeline/interface",
