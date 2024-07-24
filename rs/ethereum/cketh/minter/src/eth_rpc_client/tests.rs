@@ -841,85 +841,129 @@ mod evm_rpc_conversion {
 
     proptest! {
         #[test]
-        fn should_be_consistent_fee_history_between_evm_rpc_and_minter(
+        fn should_be_consistent_fee_history_between_minter_and_evm_rpc(
             minter_fee_history in arb_fee_history(),
             gas_used_ratio in arb_gas_used_ratio(),
             first_error in arb_evm_rpc_error(),
             second_error in arb_evm_rpc_error(),
             third_error in arb_evm_rpc_error(),
         ) {
-            let ankr_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {url: "ankr".to_string(),headers: None});
-            let public_node_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {url: "public_node".to_string(),headers: None});
-            let llama_nodes_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {url: "llama".to_string(),headers: None});
-
             let evm_fee_history = evm_rpc_fee_history(minter_fee_history.clone(), gas_used_ratio);
+            test_consistency_between_minter_and_evm_rpc(minter_fee_history, Some(evm_fee_history), first_error, second_error, third_error)?;
+        }
+    }
 
-            // 0 error
-            let evm_result = EvmMultiRpcResult::Consistent(Ok(Some(evm_fee_history.clone())));
-            let minter_result: MultiCallResults<FeeHistory> = MultiCallResults::from_iter(vec![
-                (ANKR, Ok(minter_fee_history.clone())),
-                (PUBLIC_NODE, Ok(minter_fee_history.clone())),
-                (LLAMA_NODES, Ok(minter_fee_history.clone())),
-            ]);
+    fn test_consistency_between_minter_and_evm_rpc<R, M, E>(
+        minter_ok: M,
+        evm_rpc_ok: E,
+        first_error: EvmRpcError,
+        second_error: EvmRpcError,
+        third_error: EvmRpcError,
+    ) -> Result<(), proptest::prelude::TestCaseError>
+    where
+        R: Debug + PartialEq + serde::Serialize,
+        M: Clone,
+        E: Clone,
+        MultiCallResults<M>: Reduce<Item = R>,
+        EvmMultiRpcResult<E>: Reduce<Item = R>,
+    {
+        let ankr_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "ankr".to_string(),
+            headers: None,
+        });
+        let public_node_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "public_node".to_string(),
+            headers: None,
+        });
+        let llama_nodes_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "llama".to_string(),
+            headers: None,
+        });
+
+        // 0 error
+        let evm_result = EvmMultiRpcResult::Consistent(Ok(evm_rpc_ok.clone()));
+        let minter_result: MultiCallResults<M> = MultiCallResults::from_iter(vec![
+            (ANKR, Ok(minter_ok.clone())),
+            (PUBLIC_NODE, Ok(minter_ok.clone())),
+            (LLAMA_NODES, Ok(minter_ok.clone())),
+        ]);
+        prop_assert_eq!(evm_result.reduce(), minter_result.reduce());
+
+        // 1 error
+        for first_error_index in 0..3_usize {
+            let mut evm_results = vec![
+                (ankr_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
+                (public_node_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
+                (llama_nodes_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
+            ];
+            evm_results.get_mut(first_error_index).unwrap().1 = Err(first_error.clone());
+            let evm_result = EvmMultiRpcResult::Inconsistent(evm_results);
+
+            let mut minter_results = vec![
+                (ANKR, Ok(minter_ok.clone())),
+                (PUBLIC_NODE, Ok(minter_ok.clone())),
+                (LLAMA_NODES, Ok(minter_ok.clone())),
+            ];
+            minter_results.get_mut(first_error_index).unwrap().1 =
+                Err(SingleCallError::from(first_error.clone()));
+            let minter_result: MultiCallResults<M> = MultiCallResults::from_iter(minter_results);
+
             prop_assert_eq!(evm_result.reduce(), minter_result.reduce());
+        }
 
-            // 1 error
-            for first_error_index in 0..3_usize {
-                let mut evm_results = vec![
-                    (ankr_evm_rpc_provider.clone(), Ok(Some(evm_fee_history.clone()))),
-                    (public_node_evm_rpc_provider.clone(), Ok(Some(evm_fee_history.clone()))),
-                    (llama_nodes_evm_rpc_provider.clone(), Ok(Some(evm_fee_history.clone()))),
-                ];
-                evm_results.get_mut(first_error_index).unwrap().1 = Err(first_error.clone());
-                let evm_result = EvmMultiRpcResult::Inconsistent(evm_results);
+        // 2 errors
+        for ok_index in 0..3_usize {
+            let mut evm_results = vec![
+                (ankr_evm_rpc_provider.clone(), Err(first_error.clone())),
+                (
+                    public_node_evm_rpc_provider.clone(),
+                    Err(second_error.clone()),
+                ),
+                (
+                    llama_nodes_evm_rpc_provider.clone(),
+                    Err(third_error.clone()),
+                ),
+            ];
+            evm_results.get_mut(ok_index).unwrap().1 = Ok(evm_rpc_ok.clone());
+            let evm_result = EvmMultiRpcResult::Inconsistent(evm_results);
 
-                let mut minter_results = vec![
-                    (ANKR, Ok(minter_fee_history.clone())),
-                    (PUBLIC_NODE, Ok(minter_fee_history.clone())),
-                    (LLAMA_NODES, Ok(minter_fee_history.clone())),
-                ];
-                minter_results.get_mut(first_error_index).unwrap().1 = Err(SingleCallError::from(first_error.clone()));
-                let minter_result: MultiCallResults<FeeHistory> = MultiCallResults::from_iter(minter_results);
+            let mut minter_results = vec![
+                (ANKR, Err(SingleCallError::from(first_error.clone()))),
+                (
+                    PUBLIC_NODE,
+                    Err(SingleCallError::from(second_error.clone())),
+                ),
+                (LLAMA_NODES, Err(SingleCallError::from(third_error.clone()))),
+            ];
+            minter_results.get_mut(ok_index).unwrap().1 = Ok(minter_ok.clone());
+            let minter_result: MultiCallResults<M> = MultiCallResults::from_iter(minter_results);
 
-                prop_assert_eq!(evm_result.reduce(), minter_result.reduce());
-            }
-
-            // 2 errors
-            for ok_index in 0..3_usize {
-                let mut evm_results = vec![
-                    (ankr_evm_rpc_provider.clone(), Err(first_error.clone())),
-                    (public_node_evm_rpc_provider.clone(), Err(second_error.clone())),
-                    (llama_nodes_evm_rpc_provider.clone(), Err(third_error.clone())),
-                ];
-                evm_results.get_mut(ok_index).unwrap().1 = Ok(Some(evm_fee_history.clone()));
-                let evm_result = EvmMultiRpcResult::Inconsistent(evm_results);
-
-                let mut minter_results = vec![
-                    (ANKR, Err(SingleCallError::from(first_error.clone()))),
-                    (PUBLIC_NODE, Err(SingleCallError::from(second_error.clone()))),
-                    (LLAMA_NODES, Err(SingleCallError::from(third_error.clone()))),
-                ];
-                minter_results.get_mut(ok_index).unwrap().1 = Ok(minter_fee_history.clone());
-                let minter_result: MultiCallResults<FeeHistory> = MultiCallResults::from_iter(minter_results);
-
-                prop_assert_eq_ignoring_provider(evm_result.reduce(), minter_result.reduce())?;
-            }
-
-            // 3 errors
-            let evm_result: EvmMultiRpcResult<Option<EvmFeeHistory>> = EvmMultiRpcResult::Inconsistent(
-                vec![
-                    (ankr_evm_rpc_provider.clone(), Err(first_error.clone())),
-                    (public_node_evm_rpc_provider.clone(), Err(second_error.clone())),
-                    (llama_nodes_evm_rpc_provider.clone(), Err(third_error.clone())),
-                ]
-            );
-            let minter_result: MultiCallResults<FeeHistory> = MultiCallResults::from_iter(vec![
-                    (ANKR, Err(SingleCallError::from(first_error.clone()))),
-                    (PUBLIC_NODE, Err(SingleCallError::from(second_error.clone()))),
-                    (LLAMA_NODES, Err(SingleCallError::from(third_error.clone()))),
-                ]);
             prop_assert_eq_ignoring_provider(evm_result.reduce(), minter_result.reduce())?;
         }
+
+        // 3 errors
+        let evm_result: EvmMultiRpcResult<E> = EvmMultiRpcResult::Inconsistent(vec![
+            (ankr_evm_rpc_provider.clone(), Err(first_error.clone())),
+            (
+                public_node_evm_rpc_provider.clone(),
+                Err(second_error.clone()),
+            ),
+            (
+                llama_nodes_evm_rpc_provider.clone(),
+                Err(third_error.clone()),
+            ),
+        ]);
+        let minter_result: MultiCallResults<M> = MultiCallResults::from_iter(vec![
+            (ANKR, Err(SingleCallError::from(first_error.clone()))),
+            (
+                PUBLIC_NODE,
+                Err(SingleCallError::from(second_error.clone())),
+            ),
+            (LLAMA_NODES, Err(SingleCallError::from(third_error.clone()))),
+        ]);
+        prop_assert_eq_ignoring_provider(evm_result.reduce(), minter_result.reduce())?;
+
+        Ok(())
     }
 
     fn prop_assert_eq_ignoring_provider<
