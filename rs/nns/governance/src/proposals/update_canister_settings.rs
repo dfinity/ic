@@ -39,7 +39,7 @@ impl UpdateCanisterSettings {
         topic_to_manage_canister(&canister_id)
     }
 
-    pub fn valid_canister_settings(&self) -> Result<CanisterSettings, GovernanceError> {
+    fn valid_canister_settings(&self) -> Result<CanisterSettings, GovernanceError> {
         let settings = self
             .settings
             .as_ref()
