@@ -85,8 +85,8 @@ pub fn setup(env: TestEnv) {
 
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(48)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(128 * 1024 * 1024)), // <- 128 GB
+        vcpus: Some(NrOfVCPUs::new(32)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(64 * 1024 * 1024)), // <- 128 GB
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
 
@@ -105,10 +105,10 @@ pub fn setup(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
 
-    println!("Setting topologies.");
-    simulate_network(app_subnet, &NETWORK_SIMULATION);
-    println!("Topologies set.");
+    // println!("Setting topologies.");
+    // simulate_network(app_subnet, &NETWORK_SIMULATION);
+    // println!("Topologies set.");
 
-    std::thread::sleep(DOWNLOAD_PROMETHEUS_WAIT_TIME);
-    env.download_prometheus_data_dir_if_exists();
+    // std::thread::sleep(DOWNLOAD_PROMETHEUS_WAIT_TIME);
+    // env.download_prometheus_data_dir_if_exists();
 }
