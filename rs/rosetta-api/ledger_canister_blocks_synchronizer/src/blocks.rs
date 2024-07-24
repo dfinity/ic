@@ -1592,37 +1592,23 @@ impl Blocks {
         })
     }
 
-    pub fn get_highest_rosetta_block_index(&self) -> Result<u64, BlockStoreError> {
+    pub fn get_highest_rosetta_block_index(&self) -> Result<Option<u64>, BlockStoreError> {
         let connection = self
             .connection
             .lock()
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-        let block_idx = connection
+        let block_idx = match connection
             .prepare_cached(
                 "SELECT rosetta_block_idx FROM rosetta_blocks ORDER BY rosetta_block_idx DESC LIMIT 1",
             )
             .map_err(|e| format!("Unable to prepare query: {e:?}"))?.query_map(params![], |row| {
                 let rosetta_block_index: BlockIndex = row.get(0)?;
                 Ok(rosetta_block_index)
-            }).map_err(|e| BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}")))?.next().ok_or(BlockStoreError::NotFound(0))?.map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        Ok(block_idx)
-    }
-
-    pub fn get_lowest_rosetta_block_index(&self) -> Result<u64, BlockStoreError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-        let block_idx = connection
-            .prepare_cached(
-                "SELECT rosetta_block_idx FROM rosetta_blocks ORDER BY rosetta_block_idx ASC LIMIT 1",
-            )
-            .map_err(|e| format!("Unable to prepare query: {e:?}"))?
-            .query_map(params![], |row| {
-                let rosetta_block_index: BlockIndex = row.get(0)?;
-                Ok(rosetta_block_index)
-            })
-            .map_err(|e| BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}")))?.next().ok_or(BlockStoreError::NotFound(0))?.map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            }).map_err(|e| BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}")))?.next(){
+                Some(Ok(block_idx)) => Some(block_idx),
+                Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
+                None =>  None,
+            };
         Ok(block_idx)
     }
 

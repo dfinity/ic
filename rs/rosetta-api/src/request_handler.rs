@@ -334,7 +334,8 @@ impl RosettaRequestHandler {
                     let blocks = self.ledger.read_blocks().await;
                     let highest_block_index = blocks
                         .get_highest_rosetta_block_index()
-                        .map_err(ApiError::from)?;
+                        .map_err(ApiError::from)?
+                        .ok_or_else(|| ApiError::BlockchainEmpty(false, Default::default()))?;
                     self.get_rosetta_block_by_index(highest_block_index).await
                 } else {
                     self.get_latest_verified_block().await
@@ -351,6 +352,7 @@ impl RosettaRequestHandler {
         let parent_block_index = block_index.saturating_sub(1);
         let blocks = self.ledger.read_blocks().await;
         if self.is_a_rosetta_block_index(parent_block_index).await {
+            info!("Parent block is a rosetta block");
             let parent_block = blocks.get_rosetta_block(parent_block_index)?;
             Ok(BlockIdentifier {
                 index: parent_block_index,
@@ -368,7 +370,9 @@ impl RosettaRequestHandler {
         &self,
         block: HashedBlock,
     ) -> Result<rosetta_core::objects::Block, ApiError> {
+        info!("Converting block to rosetta core block");
         let parent_block_id = self.create_parent_block_id(block.index).await?;
+        info!("Parent block id: {:?}", parent_block_id);
         let token_symbol = self.ledger.token_symbol();
         hashed_block_to_rosetta_core_block(block, parent_block_id, token_symbol)
     }
@@ -565,58 +569,59 @@ impl RosettaRequestHandler {
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
-        let (first_block, tip_block) = match self.is_rosetta_blocks_mode_enabled().await {
-            true => {
-                let first_idx = blocks.get_lowest_rosetta_block_index()?;
-                let tip_idx = blocks.get_highest_rosetta_block_index()?;
-                let rosetta_block_with_lowest_block_idx =
-                    self.get_rosetta_block_by_index(first_idx).await?;
-                let rosetta_block_with_highest_block_idx =
-                    self.get_rosetta_block_by_index(tip_idx).await?;
-                (
-                    rosetta_block_with_lowest_block_idx,
-                    rosetta_block_with_highest_block_idx,
-                )
-            }
-            false => {
-                let first_verified_block = blocks.get_first_verified_hashed_block()?;
+        let tip_block = match blocks.rosetta_blocks_mode {
+            // If rosetta mode is not enabled we simply fetched the latest verified block
+            RosettaBlocksMode::Disabled => {
                 let tip_verified_block = blocks.get_latest_verified_hashed_block()?;
-                (
-                    self.hashed_block_to_rosetta_core_block(first_verified_block)
-                        .await?,
-                    self.hashed_block_to_rosetta_core_block(tip_verified_block)
-                        .await?,
-                )
+                self.hashed_block_to_rosetta_core_block(tip_verified_block)
+                    .await?
+            }
+            RosettaBlocksMode::Enabled {
+                first_rosetta_block_index,
+            } => {
+                // If rosetta blocks mode is enabled we have to check whether the rosetta blocks table has been populated
+                match blocks.get_highest_rosetta_block_index()? {
+                    // If it has been populated we ca return the highest rosetta block
+                    Some(highest_rosetta_block_index) => {
+                        info!("Fetching highest rosetta block");
+                        self.get_rosetta_block_by_index(highest_rosetta_block_index)
+                            .await?
+                    }
+                    // If no rosetta block has been written to the database we return the first verified icp block that will go into the first rosetta block
+                    None => {
+                        info!("No rosetta blocks found, returning the first verified icp block: {}", first_rosetta_block_index);
+                        let tip_verified_block =
+                            blocks.get_hashed_block(&first_rosetta_block_index)?;
+                        info!("Returning the first verified icp block");
+                        self.hashed_block_to_rosetta_core_block(tip_verified_block)
+                            .await?
+                    }
+                }
             }
         };
-
+        info!("Fetching genesis block");
+        // The genesis block is always an ICP block
         let genesis_block = self
-            .get_block(Some(PartialBlockIdentifier {
-                index: Some(0),
-                hash: None,
-            }))
+            .hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
             .await?;
-        let peers = vec![];
-        let oldest_block_id = if first_block.block_identifier.index != 0 {
-            Some(first_block.block_identifier)
+        info!("Fetching oldest block");
+        let first_verified_block = self
+            .hashed_block_to_rosetta_core_block(blocks.get_first_verified_hashed_block()?)
+            .await?;
+        let oldest_block_id = if first_verified_block.block_identifier.index != 0 {
+            Some(first_verified_block.block_identifier)
         } else {
             None
         };
 
-        let mut sync_status = SyncStatus::new(tip_block.block_identifier.index as i64, None);
-        let target = crate::rosetta_server::TARGET_HEIGHT.get();
-        if target != 0 {
-            sync_status.target_index = Some(crate::rosetta_server::TARGET_HEIGHT.get());
-        }
-
-        Ok(NetworkStatusResponse::new(
-            tip_block.block_identifier,
-            tip_block.timestamp,
-            genesis_block.block_identifier,
-            oldest_block_id,
-            sync_status,
-            peers,
-        ))
+        Ok(NetworkStatusResponse {
+            current_block_identifier: tip_block.block_identifier,
+            current_block_timestamp: tip_block.timestamp,
+            genesis_block_identifier: genesis_block.block_identifier,
+            oldest_block_identifier: oldest_block_id,
+            sync_status: None,
+            peers: vec![],
+        })
     }
 
     async fn get_blocks_range(
