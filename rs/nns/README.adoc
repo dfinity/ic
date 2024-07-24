@@ -1,4 +1,4 @@
-# Network Nervous System (NNS)
+# Ze Network Nervous System (NNS)
 
 This directory is intended to contain the various canisters, and possibly command-line tools, used for decentralized control of the Internet Computer.
 
