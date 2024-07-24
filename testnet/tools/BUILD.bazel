@@ -1,5 +1,6 @@
 genrule(
     name = "icos_deploy",
+    testonly = True,
     srcs = [
         "//ic-os/guestos/envs/dev:version.txt",
         "//ic-os/guestos/envs/dev:upload_disk-img",

@@ -38,8 +38,6 @@ pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
 pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Maximum payload size of a management call to update_settings
@@ -76,7 +74,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
 /// This struct maintains an invariant that `usage <= capacity` and
 /// `threshold <= capacity`.  There are no constraints between `usage` and
 /// `threshold`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct ResourceSaturation {
     usage: u64,
     threshold: u64,
@@ -174,9 +172,6 @@ pub struct CyclesAccountManager {
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
-
-    /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
-    use_cost_scaling_flag: bool,
 }
 
 impl CyclesAccountManager {
@@ -193,18 +188,7 @@ impl CyclesAccountManager {
             own_subnet_type,
             own_subnet_id,
             config,
-            use_cost_scaling_flag: USE_COST_SCALING_FLAG,
         }
-    }
-
-    /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
-    pub fn set_using_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
-        self.use_cost_scaling_flag = use_cost_scaling_flag;
-    }
-
-    /// [EXC-1168] Helper function to read the flag to enable cost scaling according to subnet size.
-    pub fn use_cost_scaling(&self) -> bool {
-        self.use_cost_scaling_flag
     }
 
     /// Returns the subnet type of this [`CyclesAccountManager`].
@@ -219,10 +203,7 @@ impl CyclesAccountManager {
 
     // Scale cycles cost according to a subnet size.
     fn scale_cost(&self, cycles: Cycles, subnet_size: usize) -> Cycles {
-        match self.use_cost_scaling_flag {
-            false => cycles,
-            true => (cycles * subnet_size) / self.config.reference_subnet_size,
-        }
+        (cycles * subnet_size) / self.config.reference_subnet_size
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -1169,7 +1150,6 @@ mod tests {
             own_subnet_type: SubnetType::Application,
             own_subnet_id: subnet_test_id(0),
             config,
-            use_cost_scaling_flag: true,
         }
     }
 

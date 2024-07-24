@@ -1,6 +1,8 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 
+package(default_visibility = ["//ic-os/guestos:__subpackages__"])
+
 # The macro contains several targets.
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples
@@ -12,5 +14,4 @@ icos_build(
     image_deps_func = image_deps,
     tags = ["manual"],
     upload_prefix = None,  # Do not upload locally built base images
-    visibility = ["//visibility:public"],
 )

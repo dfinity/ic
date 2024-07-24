@@ -3,6 +3,8 @@ mod common;
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::http_transport::ReqwestTransport;
+use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::common::rest::{HttpsConfig, InstanceConfig, SubnetConfigSet};
 use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
@@ -579,6 +581,13 @@ fn canister_state_dir() {
         .with_application_subnet()
         .build();
 
+    // Check the registry version.
+    // The registry version should be 2 as we have two subnets on the PocketIC instance
+    // and every subnet creation bumps the registry version.
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
+    assert_eq!(registry_data_provider.latest_version(), 2.into());
+
     // Retrieve the NNS and app subnets from the topology.
     let topology = pic.topology();
     let nns_subnet = topology.get_nns().unwrap();
@@ -638,7 +647,7 @@ fn canister_state_dir() {
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_state_dir(state_dir_path_buf)
+        .with_state_dir(state_dir_path_buf.clone())
         .build();
 
     // Check that the topology has been properly restored.
@@ -684,4 +693,69 @@ fn canister_state_dir() {
     // Bump the counter on the NNS subnet.
     pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
         .unwrap();
+
+    // Check the registry version.
+    // The registry version should be 3 as we have three subnets on the PocketIC instance now
+    // and every subnet creation bumps the registry version.
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
+    assert_eq!(registry_data_provider.latest_version(), 3.into());
+}
+
+/// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
+#[test]
+fn test_specified_id_call_v3() {
+    use ic_agent_call_v3::agent::CallResponse;
+
+    // Create live PocketIc instance.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let endpoint = pic.make_live(None);
+
+    // retrieve the first canister ID on the application subnet
+    // which will be the effective canister ID for canister creation
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+    let effective_canister_id =
+        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        let agent = ic_agent_call_v3::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let arg = ProvisionalCreateCanisterWithCyclesArgs {
+            amount: None,
+            settings: None,
+            specified_id: None,
+            sender_canister_version: None,
+        };
+        let bytes = candid::Encode!(&arg).unwrap();
+
+        // Submit a call to the `/api/v3/.../call` endpoint.
+        // Note that this might be flaky if it takes more than 10 seconds to process the update call
+        // (then `CallResponse::Poll` would be returned and this test would panic).
+        agent
+            .update(
+                &Principal::management_canister(),
+                "provisional_create_canister_with_cycles",
+            )
+            .with_arg(bytes)
+            .with_effective_canister_id(effective_canister_id.into())
+            .call()
+            .await
+            .map(|response| match response {
+                CallResponse::Poll(_) => panic!("Expected a reply"),
+                CallResponse::Response(..) => {}
+            })
+            .unwrap();
+    })
 }

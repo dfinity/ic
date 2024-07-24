@@ -195,6 +195,21 @@ message BallotInfo {
   Vote vote = 2;
 }
 
+// Controls how much information non-controller and non-hot-key principals can
+// see about this neuron. Currently, if a neuron is private, recent_ballots and
+// joined_community_fund_timestamp_seconds are redacted when being read by an
+// unprivileged principal.
+//
+// https://forum.dfinity.org/t/request-for-comments-api-changes-for-public-private-neurons/33360
+//
+// As of Jul 19, this is not yet enforced, but will be once the plan described
+// above is fully executed.
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PRIVATE = 1;
+  VISIBILITY_PUBLIC = 2;
+}
+
 // The result of querying for the state of a single neuron.
 message NeuronInfo {
   // The exact time at which this data was computed. This means, for
@@ -229,6 +244,8 @@ message NeuronInfo {
   // The type of the Neuron. See [NeuronType] for a description
   // of the different states.
   optional NeuronType neuron_type = 11;
+  // See the Visibility enum.
+  optional Visibility visibility = 12;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -409,6 +426,9 @@ message Neuron {
   // The type of the Neuron. See [NeuronType] for a description
   // of the different states.
   optional NeuronType neuron_type = 22;
+
+  // See the Visibility enum.
+  optional Visibility visibility = 23;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -433,6 +453,7 @@ message AbridgedNeuron {
   bool not_for_profit = 16;
   optional uint64 joined_community_fund_timestamp_seconds = 17;
   optional NeuronType neuron_type = 22;
+  optional Visibility visibility = 23;
 
   reserved 1;
   reserved "id";
@@ -852,6 +873,10 @@ message Proposal {
     OpenSnsTokenSwap open_sns_token_swap = 23 [deprecated = true];
     // Create a new SNS.
     CreateServiceNervousSystem create_service_nervous_system = 24;
+    // Calls install_code for a canister (install, reinstall, or upgrade).
+    InstallCode install_code = 25;
+    // Stops or starts a canister controlled by Root.
+    StopOrStartCanister stop_or_start_canister = 26;
   }
 }
 
@@ -918,6 +943,9 @@ message ManageNeuron {
   message ChangeAutoStakeMaturity {
     bool requested_setting_for_auto_stake_maturity = 1;
   }
+  message SetVisibility {
+    optional Visibility visibility = 1;
+  }
   // Commands that only configure a given neuron, but do not interact
   // with the outside world. They all require the caller to be the
   // controller of the neuron.
@@ -932,6 +960,7 @@ message ManageNeuron {
       JoinCommunityFund join_community_fund = 7;
       LeaveCommunityFund leave_community_fund = 8;
       ChangeAutoStakeMaturity change_auto_stake_maturity = 9;
+      SetVisibility set_visibility = 10;
     }
   }
   // Disburse this neuron's stake: transfer the staked ICP to the
@@ -1517,7 +1546,7 @@ message NeuronsFundSnapshot {
     // participation constraints.
     optional bool is_capped = 5;
 
-    // The principal that can manage this neuron.
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
 
     // The principals that can vote, propose, and follow on behalf of this neuron.
@@ -2024,6 +2053,41 @@ message CreateServiceNervousSystem {
   }
 
   GovernanceParameters governance_parameters = 10;
+}
+
+message InstallCode {
+  // The target canister ID to call install_code on. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  enum CanisterInstallMode {
+    CANISTER_INSTALL_MODE_UNSPECIFIED = 0;
+    CANISTER_INSTALL_MODE_INSTALL = 1;
+    CANISTER_INSTALL_MODE_REINSTALL = 2;
+    CANISTER_INSTALL_MODE_UPGRADE = 3;
+  }
+  // The install mode. Either install, reinstall, or upgrade. Required.
+  optional CanisterInstallMode install_mode = 2;
+
+  // The wasm module to install. required.
+  optional bytes wasm_module = 3;
+  // The arg to pass to the canister. Optional.
+  optional bytes arg = 4;
+  // Whether to skip stopping the canister before installing. Optional. Default is false.
+  optional bool skip_stopping_before_installing = 5;
+}
+
+message StopOrStartCanister {
+  // The target canister ID to call stop_canister or start_canister on. The canister must be
+  // controlled by NNS Root, and it cannot be NNS Governance or Lifeline. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // The action to take on the canister. Required.
+  enum CanisterAction {
+    CANISTER_ACTION_UNSPECIFIED = 0;
+    CANISTER_ACTION_STOP = 1;
+    CANISTER_ACTION_START = 2;
+  }
+  optional CanisterAction action = 2;
 }
 
 // This represents the whole NNS governance system. It contains all
@@ -2583,12 +2647,6 @@ message SettleNeuronsFundParticipationRequest {
   message Aborted {}
 }
 
-// A list of principals.
-// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
-message Principals {
-  repeated ic_base_types.pb.v1.PrincipalId principals = 7;
-}
-
 // Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 // thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 // a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -2608,10 +2666,10 @@ message SettleNeuronsFundParticipationResponse {
     optional uint64 nns_neuron_id = 1;
     // The amount of Neurons' Fund participation associated with this neuron.
     optional uint64 amount_icp_e8s = 2;
-    // The principal that can manage this neuron.
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
     // The principals that can vote, propose, and follow on behalf of this neuron.
-    optional Principals hotkeys = 7;
+    optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
 
     // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
     // has been capped to reflect the maximum participation amount for this SNS swap.
