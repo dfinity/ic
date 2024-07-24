@@ -116,8 +116,6 @@ rust_binary(
         exclude = ["src/lib.rs"],
     ),
     aliases = ALIASES,
-    # TODO: dedup ic-boundary and ic-boundary-tls since they compile to the same thing
-    crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES,
