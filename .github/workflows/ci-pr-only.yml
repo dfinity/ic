@@ -64,7 +64,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ secrets.PUSH_TO_PR_TEST }}
       - name: Before script
         id: before-script
         shell: bash
