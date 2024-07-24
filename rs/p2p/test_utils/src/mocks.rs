@@ -1,15 +1,18 @@
 use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
-use ic_consensus_manager::Peers;
 use ic_interfaces::p2p::{
-    consensus::{PriorityFn, PriorityFnFactory, ValidatedPoolReader},
+    consensus::{
+        Aborted, ArtifactAssembler, Peers, PriorityFn, PriorityFnFactory, ValidatedPoolReader,
+    },
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::IdentifiableArtifact;
 use ic_types::NodeId;
 use mockall::mock;
+
+use crate::consensus::U64Artifact;
 
 mock! {
     pub StateSync<T: Send> {}
@@ -84,5 +87,24 @@ mock! {
 
     impl Peers for Peers {
         fn peers(&self) -> Vec<NodeId>;
+    }
+}
+
+mock! {
+    pub ArtifactAssembler {}
+
+    impl Clone for ArtifactAssembler {
+        fn clone(&self) -> Self;
+    }
+
+    impl ArtifactAssembler<U64Artifact, U64Artifact> for ArtifactAssembler {
+        fn disassemble_message(&self, msg: U64Artifact) -> U64Artifact;
+        fn assemble_message<P: Peers + Send + 'static>(
+            &self,
+            id: u64,
+            attr: (),
+            artifact: Option<(U64Artifact, NodeId)>,
+            peer_rx: P,
+        ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;
     }
 }

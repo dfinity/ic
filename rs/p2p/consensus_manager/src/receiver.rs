@@ -7,7 +7,7 @@ use crate::{
         ConsensusManagerMetrics, ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED,
         ASSEMBLE_TASK_RESULT_COMPLETED, ASSEMBLE_TASK_RESULT_DROP,
     },
-    uri_prefix, Aborted, ArtifactAssembler, CommitId, Peers, SlotNumber, SlotUpdate, Update,
+    uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
 };
 use axum::{
     extract::{DefaultBodyLimit, State},
@@ -17,6 +17,7 @@ use axum::{
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
+use ic_interfaces::p2p::consensus::{Aborted, ArtifactAssembler, Peers};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::p2p::v1 as pb;
 use ic_quic_transport::{ConnId, SubnetTopology};
@@ -553,14 +554,12 @@ mod tests {
     use axum::{body::Body, http::Request};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::consensus::U64Artifact;
+    use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockArtifactAssembler};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
     use tower::util::ServiceExt;
-
-    use crate::mocks::MockArtifactAssembler;
 
     use super::*;
 

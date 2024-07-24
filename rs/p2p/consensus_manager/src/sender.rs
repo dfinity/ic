@@ -12,7 +12,10 @@ use axum::http::Request;
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::{artifact_manager::ArtifactProcessorEvent, consensus::ArtifactWithOpt};
+use ic_interfaces::p2p::{
+    artifact_manager::ArtifactProcessorEvent,
+    consensus::{ArtifactAssembler, ArtifactWithOpt},
+};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Shutdown, Transport};
@@ -28,9 +31,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::{
-    metrics::ConsensusManagerMetrics, uri_prefix, ArtifactAssembler, CommitId, SlotNumber,
-};
+use crate::{metrics::ConsensusManagerMetrics, uri_prefix, CommitId, SlotNumber};
 
 use self::available_slot_set::{AvailableSlot, AvailableSlotSet};
 
@@ -416,7 +417,7 @@ mod tests {
     use mockall::Sequence;
     use tokio::{runtime::Handle, time::timeout};
 
-    use crate::{Aborted, Peers};
+    use ic_interfaces::p2p::consensus::{Aborted, Peers};
 
     use super::*;
 

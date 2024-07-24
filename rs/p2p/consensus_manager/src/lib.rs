@@ -7,7 +7,7 @@ use crate::{
 };
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::artifact_manager::ArtifactProcessorEvent;
+use ic_interfaces::p2p::{artifact_manager::ArtifactProcessorEvent, consensus::ArtifactAssembler};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
@@ -170,48 +170,3 @@ pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
 pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Aborted;
-
-pub trait Peers {
-    fn peers(&self) -> Vec<NodeId>;
-}
-
-pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
-    Send + Clone + 'static
-{
-    fn disassemble_message(&self, msg: A1) -> A2;
-    fn assemble_message<P: Peers + Send + 'static>(
-        &self,
-        id: <A2 as IdentifiableArtifact>::Id,
-        attr: <A2 as IdentifiableArtifact>::Attribute,
-        artifact: Option<(A2, NodeId)>,
-        peer_rx: P,
-    ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
-}
-
-#[cfg(test)]
-pub mod mocks {
-    use super::*;
-    use ic_p2p_test_utils::consensus::U64Artifact;
-
-    mockall::mock! {
-        pub ArtifactAssembler {}
-
-        impl Clone for ArtifactAssembler {
-            fn clone(&self) -> Self;
-        }
-
-        impl ArtifactAssembler<U64Artifact, U64Artifact> for ArtifactAssembler {
-            fn disassemble_message(&self, msg: U64Artifact) -> U64Artifact;
-            fn assemble_message<P: Peers + Send + 'static>(
-                &self,
-                id: u64,
-                attr: (),
-                artifact: Option<(U64Artifact, NodeId)>,
-                peer_rx: P,
-            ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;
-        }
-    }
-}

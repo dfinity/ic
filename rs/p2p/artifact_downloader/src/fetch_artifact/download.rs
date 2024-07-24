@@ -12,8 +12,9 @@ use axum::{
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_consensus_manager::{uri_prefix, Aborted, ArtifactAssembler, Peers};
-use ic_interfaces::p2p::consensus::{Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader};
+use ic_interfaces::p2p::consensus::{
+    Aborted, ArtifactAssembler, Peers, Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader,
+};
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProtoProxy;
@@ -35,6 +36,10 @@ const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
+
+pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
+    Artifact::NAME.to_lowercase()
+}
 
 #[allow(unused)]
 fn build_axum_router<Artifact: PbArtifact>(pool: ValidatedPoolReaderRef<Artifact>) -> Router {

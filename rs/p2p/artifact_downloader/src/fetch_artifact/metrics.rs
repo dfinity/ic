@@ -1,7 +1,8 @@
-use ic_consensus_manager::uri_prefix;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::artifact::PbArtifact;
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter};
+
+use super::download::uri_prefix;
 
 #[derive(Clone)]
 pub(crate) struct FetchArtifactMetrics {
