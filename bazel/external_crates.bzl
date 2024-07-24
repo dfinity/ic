@@ -592,7 +592,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.1",
             ),
             "ic-cbor": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-cdk": crate.spec(
                 version = "^0.13.1",
@@ -607,10 +607,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-http-certification": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -623,7 +623,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.5",
             ),
             "ic-response-verification": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
