@@ -12,62 +12,14 @@ env:
 jobs:
   set-team-tags:
     name: Set Team Tags
-    if: ${{ github.event.pull_request.draft == false }}
+    # if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '14'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Determine teams to tag
-        id: determine_teams
+      - name: Get Requested Reviewers
+        id: requested_reviewers
         run: |
-          CHANGED_FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
-
-          TEAM_TAGS=""
-          for FILE in $CHANGED_FILES; do
-            TEAMS=$(grep -E "^.* $FILE" .github/CODEOWNERS | awk '{print $NF}')
-            for TEAM in $TEAMS; do
-              TEAM_TAGS="$TEAM_TAGS team-$TEAM"
-            done
-          done
-          TEAM_TAGS=$(echo $TEAM_TAGS | tr ' ' '\n' | sort -u | tr '\n' ' ')
-          echo "TEAM_TAGS=$TEAM_TAGS" >> $GITHUB_ENV
+          TEAMS=$(gh pr view $PR_NUMBER --json reviewRequests --jq '.reviewRequests.teams[].slug' | sed 's/^/@/')
+          echo "requested_teams=$TEAMS" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get current PR labels
-        id: get_labels
-        run: |
-          CURRENT_LABELS=$(gh pr view $PR_NUMBER --json labels --jq '.labels[].name')
-          echo "CURRENT_LABELS=$CURRENT_LABELS" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Add new labels
-        if: steps.determine_teams.outputs.TEAM_TAGS != ''
-        run: |
-          for TAG in $TEAM_TAGS; do
-            if [[ ! " $CURRENT_LABELS " =~ " $TAG " ]]; then
-              gh pr edit $PR_NUMBER --add-label "$TAG"
-            fi
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Remove obsolete labels
-        run: |
-          for LABEL in $CURRENT_LABELS; do
-            if [[ $LABEL == team-* ]] && [[ ! " $TEAM_TAGS " =~ " $LABEL " ]]; then
-              gh pr edit $PR_NUMBER --remove-label "$LABEL"
-            fi
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
