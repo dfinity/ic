@@ -11,7 +11,7 @@ use ic_replicated_state::{
 };
 use ic_types::{messages::Request, CanisterId};
 
-/// Handles a `bitcoin_get_successors` request.
+/// Handles a `bitcoin_get_successors` request!
 /// Returns Ok if the request has been accepted, and an error otherwise.
 pub fn get_successors(
     privileged_access: &[CanisterId],
