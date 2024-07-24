@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//rs:tools-pkg"])
+package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
@@ -74,10 +74,6 @@ rust_binary(
     srcs = ["src/bin/prep.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = [
-        "//rs:release-pkg",
-        "//rs:system-tests-pkg",
-    ],
     deps = DEPENDENCIES + [":prep"],
 )
 

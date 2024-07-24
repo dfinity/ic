@@ -42,10 +42,9 @@ package_group(
 # Can depend on: TODO: explain when replica-pkg is added
 # Dependants: //rs:system-tests-pkg and //rs:release-pkg.
 package_group(
-    name = "ic-tools-pkg",
+    name = "tools-pkg",
     packages = [
         "//rs/backup/...",
-        "//rs/prep/...",
         "//rs/recovery/...",
         "//rs/registry/regedit/...",
         "//rs/replay/...",
