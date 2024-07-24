@@ -58,28 +58,28 @@ import IC.Utils
 import Numeric.Natural
 import Test.Tasty.HUnit
 
-ic_create_with_sender_canister_version :: (HasCallStack, HasAgentConfig, PartialSettings r) => IC00 -> Blob -> Maybe W.Word64 -> Rec r -> IO Blob
+ic_create_with_sender_canister_version :: (HasCallStack, HasAgentConfig) => IC00 -> Blob -> Maybe W.Word64 -> Settings -> IO Blob
 ic_create_with_sender_canister_version ic00 ecid sender_canister_version ps = do
   r <-
     callIC ic00 ecid #create_canister $
       empty
         .+ #settings
-        .== Just (fromPartialSettings ps)
+        .== Just ps
         .+ #sender_canister_version
         .== sender_canister_version
   return (rawPrincipal (r .! #canister_id))
 
-ic_create :: (HasCallStack, HasAgentConfig, PartialSettings r) => IC00 -> Blob -> Rec r -> IO Blob
+ic_create :: (HasCallStack, HasAgentConfig) => IC00 -> Blob -> Settings -> IO Blob
 ic_create ic00 ecid ps = ic_create_with_sender_canister_version ic00 ecid Nothing ps
 
 ic_provisional_create_with_sender_canister_version ::
-  (HasCallStack, HasAgentConfig, PartialSettings r) =>
+  (HasCallStack, HasAgentConfig) =>
   IC00 ->
   Blob ->
   Maybe Principal ->
   Maybe Natural ->
   Maybe W.Word64 ->
-  Rec r ->
+  Settings ->
   IO Blob
 ic_provisional_create_with_sender_canister_version ic00 ecid specified_id cycles sender_canister_version ps = do
   r <-
@@ -88,7 +88,7 @@ ic_provisional_create_with_sender_canister_version ic00 ecid specified_id cycles
         .+ #amount
         .== cycles
         .+ #settings
-        .== Just (fromPartialSettings ps)
+        .== Just ps
         .+ #specified_id
         .== specified_id
         .+ #sender_canister_version
@@ -96,12 +96,12 @@ ic_provisional_create_with_sender_canister_version ic00 ecid specified_id cycles
   return (rawPrincipal (r .! #canister_id))
 
 ic_provisional_create ::
-  (HasCallStack, HasAgentConfig, PartialSettings r) =>
+  (HasCallStack, HasAgentConfig) =>
   IC00 ->
   Blob ->
   Maybe Principal ->
   Maybe Natural ->
-  Rec r ->
+  Settings ->
   IO Blob
 ic_provisional_create ic00 ecid specified_id cycles ps = ic_provisional_create_with_sender_canister_version ic00 ecid specified_id cycles Nothing ps
 
@@ -135,7 +135,7 @@ ic_uninstall_with_sender_canister_version ic00 canister_id sender_canister_versi
 ic_uninstall :: (HasCallStack, HasAgentConfig) => IC00 -> Blob -> IO ()
 ic_uninstall ic00 canister_id = ic_uninstall_with_sender_canister_version ic00 canister_id Nothing
 
-ic_update_settings_with_sender_canister_version :: (HasAgentConfig, PartialSettings r) => IC00 -> Blob -> Maybe W.Word64 -> Rec r -> IO ()
+ic_update_settings_with_sender_canister_version :: (HasAgentConfig) => IC00 -> Blob -> Maybe W.Word64 -> Settings -> IO ()
 ic_update_settings_with_sender_canister_version ic00 canister_id sender_canister_version r = do
   callIC ic00 canister_id #update_settings $
     empty
@@ -146,7 +146,7 @@ ic_update_settings_with_sender_canister_version ic00 canister_id sender_canister
       .+ #sender_canister_version
       .== sender_canister_version
 
-ic_update_settings :: (HasAgentConfig, PartialSettings r) => IC00 -> Blob -> Rec r -> IO ()
+ic_update_settings :: (HasAgentConfig) => IC00 -> Blob -> Settings -> IO ()
 ic_update_settings ic00 canister_id r = ic_update_settings_with_sender_canister_version ic00 canister_id Nothing r
 
 ic_set_controllers_with_sender_canister_version :: (HasAgentConfig) => IC00 -> Blob -> Maybe W.Word64 -> [Blob] -> IO ()
@@ -235,7 +235,6 @@ ic_raw_rand ic00 ecid =
 
 ic_http_get_request ::
   forall a b.
-  ((a -> IO b) ~ (ICManagement IO .! "http_request")) =>
   (HasAgentConfig) =>
   IC00WithCycles ->
   TestSubnetConfig ->
@@ -244,7 +243,7 @@ ic_http_get_request ::
   Maybe W.Word64 ->
   Maybe (String, Blob) ->
   Blob ->
-  IO b
+  IO HttpResponse
 ic_http_get_request ic00 (_, subnet_type, subnet_nodes, _, _) proto path max_response_bytes transform canister_id =
   callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where
@@ -265,7 +264,6 @@ ic_http_get_request ic00 (_, subnet_type, subnet_nodes, _, _) proto path max_res
 
 ic_http_post_request ::
   (HasAgentConfig) =>
-  ((a -> IO b) ~ (ICManagement IO .! "http_request")) =>
   IC00WithCycles ->
   TestSubnetConfig ->
   String ->
@@ -275,7 +273,7 @@ ic_http_post_request ::
   Vec.Vector HttpHeader ->
   Maybe (String, Blob) ->
   Blob ->
-  IO b
+  IO HttpResponse
 ic_http_post_request ic00 (_, subnet_type, subnet_nodes, _, _) proto path max_response_bytes body headers transform canister_id =
   callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where
@@ -296,7 +294,6 @@ ic_http_post_request ic00 (_, subnet_type, subnet_nodes, _, _) proto path max_re
 
 ic_http_head_request ::
   (HasAgentConfig) =>
-  ((a -> IO b) ~ (ICManagement IO .! "http_request")) =>
   IC00WithCycles ->
   TestSubnetConfig ->
   String ->
@@ -306,7 +303,7 @@ ic_http_head_request ::
   Vec.Vector HttpHeader ->
   Maybe (String, Blob) ->
   Blob ->
-  IO b
+  IO HttpResponse
 ic_http_head_request ic00 (_, subnet_type, subnet_nodes, _, _) proto path max_response_bytes body headers transform canister_id =
   callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where
@@ -328,14 +325,13 @@ ic_http_head_request ic00 (_, subnet_type, subnet_nodes, _, _) proto path max_re
 ic_long_url_http_request ::
   (HasAgentConfig) =>
   forall a b.
-  ((a -> IO b) ~ (ICManagement IO .! "http_request")) =>
   IC00WithCycles ->
   TestSubnetConfig ->
   String ->
   W.Word64 ->
   Maybe (String, Blob) ->
   Blob ->
-  IO b
+  IO HttpResponse
 ic_long_url_http_request ic00 (_, subnet_type, subnet_nodes, _, _) proto len transform canister_id =
   callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where

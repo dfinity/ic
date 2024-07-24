@@ -53,36 +53,36 @@ import Numeric.Natural
 import Test.Tasty.HUnit
 
 ic_create_with_sender_canister_version' ::
-  (HasCallStack, HasAgentConfig, PartialSettings r) =>
+  (HasCallStack, HasAgentConfig) =>
   IC00 ->
   Blob ->
   Maybe W.Word64 ->
-  Rec r ->
+  Settings ->
   IO ReqResponse
 ic_create_with_sender_canister_version' ic00 ecid sender_canister_version ps = do
   callIC' ic00 ecid #create_canister $
     empty
       .+ #settings
-      .== Just (fromPartialSettings ps)
+      .== Just ps
       .+ #sender_canister_version
       .== sender_canister_version
 
 ic_create' ::
-  (HasCallStack, HasAgentConfig, PartialSettings r) =>
+  (HasCallStack, HasAgentConfig) =>
   IC00 ->
   Blob ->
-  Rec r ->
+  Settings ->
   IO ReqResponse
 ic_create' ic00 ecid ps = ic_create_with_sender_canister_version' ic00 ecid Nothing ps
 
 ic_provisional_create_with_sender_canister_version' ::
-  (HasCallStack, HasAgentConfig, PartialSettings r) =>
+  (HasCallStack, HasAgentConfig) =>
   IC00 ->
   Blob ->
   Maybe Principal ->
   Maybe Natural ->
   Maybe W.Word64 ->
-  Rec r ->
+  Settings ->
   IO ReqResponse
 ic_provisional_create_with_sender_canister_version' ic00 ecid specified_id cycles sender_canister_version ps = do
   callIC' ic00 ecid #provisional_create_canister_with_cycles $
@@ -90,19 +90,19 @@ ic_provisional_create_with_sender_canister_version' ic00 ecid specified_id cycle
       .+ #amount
       .== cycles
       .+ #settings
-      .== Just (fromPartialSettings ps)
+      .== Just ps
       .+ #specified_id
       .== specified_id
       .+ #sender_canister_version
       .== sender_canister_version
 
 ic_provisional_create' ::
-  (HasCallStack, HasAgentConfig, PartialSettings r) =>
+  (HasCallStack, HasAgentConfig) =>
   IC00 ->
   Blob ->
   Maybe Principal ->
   Maybe Natural ->
-  Rec r ->
+  Settings ->
   IO ReqResponse
 ic_provisional_create' ic00 ecid specified_id cycles ps = ic_provisional_create_with_sender_canister_version' ic00 ecid specified_id cycles Nothing ps
 
@@ -124,7 +124,7 @@ ic_install_with_sender_canister_version' ic00 mode canister_id wasm_module arg s
 ic_install' :: (HasAgentConfig) => IC00 -> InstallMode -> Blob -> Blob -> Blob -> IO ReqResponse
 ic_install' ic00 mode canister_id wasm_module arg = ic_install_with_sender_canister_version' ic00 mode canister_id wasm_module arg Nothing
 
-ic_update_settings_with_sender_canister_version' :: (HasAgentConfig, PartialSettings r) => IC00 -> Blob -> Maybe W.Word64 -> Rec r -> IO ReqResponse
+ic_update_settings_with_sender_canister_version' :: (HasAgentConfig) => IC00 -> Blob -> Maybe W.Word64 -> Settings -> IO ReqResponse
 ic_update_settings_with_sender_canister_version' ic00 canister_id sender_canister_version r = do
   callIC' ic00 canister_id #update_settings $
     empty
@@ -135,7 +135,7 @@ ic_update_settings_with_sender_canister_version' ic00 canister_id sender_caniste
       .+ #sender_canister_version
       .== sender_canister_version
 
-ic_update_settings' :: (HasAgentConfig, PartialSettings r) => IC00 -> Blob -> Rec r -> IO ReqResponse
+ic_update_settings' :: (HasAgentConfig) => IC00 -> Blob -> Settings -> IO ReqResponse
 ic_update_settings' ic00 canister_id r = ic_update_settings_with_sender_canister_version' ic00 canister_id Nothing r
 
 ic_set_controllers_with_sender_canister_version' :: (HasAgentConfig) => IC00 -> Blob -> Maybe W.Word64 -> [Blob] -> IO ReqResponse
