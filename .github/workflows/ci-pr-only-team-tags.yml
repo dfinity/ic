@@ -28,17 +28,31 @@ jobs:
         shell: bash
         run: |
           set -x
-          REVIEWERS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          REVIEWERS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                         -H "Accept: application/vnd.github.v3+json" \
                         "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
-                        | jq -r '.teams[].slug' | tr '\n' ' ')
+                        | jq -r '.teams[].slug' | sed 's/^/@/' | tr '\n' ' ')
           if [ -z "$REVIEWERS" ]; then
             echo "No teams requested for review."
             REVIEWERS="none"
           fi
           echo "requested_teams=$REVIEWERS" >> $GITHUB_ENV
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check or Create Labels
+        if: env.requested_teams != 'none'
+        run: |
+          for TEAM in ${{ env.requested_teams }}; do
+            if ! gh label list | grep -w "$TEAM"; then
+              echo "Creating label: $TEAM"
+              gh label create "$TEAM" --color "d4af37"
+            else
+              echo "Label $TEAM already exists."
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag PR with Teams
         if: env.requested_teams != 'none'
