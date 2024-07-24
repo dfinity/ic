@@ -8,7 +8,10 @@ rust_library(
     srcs = ["spec_compliance.rs"],
     crate_name = "spec_compliance",
     target_compatible_with = ["@platforms//os:linux"],
-    visibility = ["//rs/pocket_ic_server:__pkg__"],
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs/pocket_ic_server:__pkg__",
+    ],
     deps = [
         # Keep sorted.
         "//rs/registry/routing_table",
