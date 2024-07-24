@@ -433,7 +433,7 @@ mod tests {
             _id: <U64Artifact as IdentifiableArtifact>::Id,
             _attr: <U64Artifact as IdentifiableArtifact>::Attribute,
             _artifact: Option<(U64Artifact, NodeId)>,
-            _peer_rx: P,
+            _peers: P,
         ) -> Result<(U64Artifact, NodeId), Aborted> {
             todo!()
         }

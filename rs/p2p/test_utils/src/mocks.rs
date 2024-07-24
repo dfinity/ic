@@ -104,7 +104,7 @@ mock! {
             id: u64,
             attr: (),
             artifact: Option<(U64Artifact, NodeId)>,
-            peer_rx: P,
+            peers: P,
         ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;
     }
 }

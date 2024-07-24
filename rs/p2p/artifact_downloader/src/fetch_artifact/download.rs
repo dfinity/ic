@@ -101,14 +101,14 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
         id: <Artifact as IdentifiableArtifact>::Id,
         attr: <Artifact as IdentifiableArtifact>::Attribute,
         artifact: Option<(Artifact, NodeId)>,
-        peer_rx: P,
+        peers: P,
     ) -> Result<(Artifact, NodeId), Aborted> {
         Self::download_artifact(
             self.log.clone(),
             id,
             attr,
             artifact,
-            peer_rx,
+            peers,
             self.priority_fn.clone(),
             self.transport.clone(),
             self.metrics.clone(),
@@ -221,7 +221,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         )
         .await?;
 
-        let mut artifact_download_timeout = ExponentialBackoffBuilder::new()
+        let mut artifact_download_backoff = ExponentialBackoffBuilder::new()
             .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
             .with_max_interval(MAX_ARTIFACT_RPC_TIMEOUT)
             .with_max_elapsed_time(None)
@@ -241,7 +241,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
                 let result = loop {
                     let next_request_at = Instant::now()
-                        + artifact_download_timeout
+                        + artifact_download_backoff
                             .next_backoff()
                             .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
                     if let Some(peer) = peer_rx.peers().into_iter().choose(&mut rng) {
@@ -250,11 +250,6 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                             .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
                             .body(bytes)
                             .unwrap();
-
-                        // TODO: do we need this?
-                        // if peer_rx.has_changed().unwrap_or(false) {
-                        //     artifact_download_timeout.reset();
-                        // }
 
                         match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
                             Ok(Ok(response)) if response.status() == StatusCode::OK => {

@@ -123,12 +123,16 @@ pub trait Peers {
 pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     Send + Clone + 'static
 {
+    /// Transform message before sending on the wire. Wire artifact type A2
+    /// needs to define protobuf conversions for serialization.
     fn disassemble_message(&self, msg: A1) -> A2;
+    /// Reconstruct message A1 from wire message. `peers` is the set of peers that
+    /// have the message. Note that it is possible that the peer set changes over time.
     fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
         attr: <A2 as IdentifiableArtifact>::Attribute,
         artifact: Option<(A2, NodeId)>,
-        peer_rx: P,
+        peers: P,
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
 }
