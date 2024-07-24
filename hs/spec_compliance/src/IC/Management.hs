@@ -17,8 +17,11 @@ import Data.Row ((.+), (.==))
 import qualified Data.Row as R
 import qualified Data.Row.Internal as R
 import qualified Data.Row.Variants as V
+import qualified Data.Text as T
 import qualified Data.Vector as Vec
+import qualified Data.Word as W
 import IC.Types
+import Numeric.Natural
 
 -- This needs cleaning up
 principalToEntityId :: Principal -> EntityId
@@ -27,69 +30,45 @@ principalToEntityId = EntityId . rawPrincipal
 entityIdToPrincipal :: EntityId -> Principal
 entityIdToPrincipal = Principal . rawEntityId
 
-type SenderCanisterVersion =
-  [candidType|
-    record {
-      sender_canister_version : opt nat64;
-    }
-  |]
+type SenderCanisterVersion = R.Rec (R.R '["sender_canister_version" R.:-> W.Word64])
 
-type InstallMode =
-  [candidType|
-    variant {
-      install : null; 
-      reinstall : null; 
-      upgrade : opt record {
-        skip_pre_upgrade : opt bool;
-        wasm_memory_persistence : opt variant {
-          keep;
-          replace;
-        };
-      };
-    }
-  |]
+type WasmMemoryPersistence = V.Var (R.R '["keep" R.:-> (), "replace" R.:-> ()])
 
-type RunState =
-  [candidType|
-    variant { running; stopping; stopped }
-  |]
+type UpgradeArgs = R.Rec (R.R '["skip_pre_upgrade" R.:-> Maybe Bool, "wasm_memory_persistence" R.:-> Maybe WasmMemoryPersistence])
 
-type Settings =
-  [candidType|
-    record {
-      controllers : opt vec principal;
-      compute_allocation : opt nat;
-      memory_allocation : opt nat;
-      freezing_threshold : opt nat;
-    }
-  |]
+type InstallMode = V.Var (R.R '["install" R.:-> (), "reinstall" R.:-> (), "upgrade" R.:-> Maybe UpgradeArgs])
 
-type HttpHeader =
-  [candidType|
-    record { name: text; value: text }
-  |]
+type RunState = V.Var (R.R '["running" R.:-> (), "stopping" R.:-> (), "stopped" R.:-> ()])
 
-type HttpResponse =
-  [candidType|
-    record {
-      status: nat;
-      headers: vec record { name : text; value : text };
-      body: blob;
-    }
-  |]
+type Settings = R.Rec (R.R '["controllers" R.:-> Maybe (Vec.Vector Principal), "compute_allocation" R.:-> Maybe Natural, "memory_allocation" R.:-> Maybe Natural, "freezing_threshold" R.:-> Maybe Natural])
 
-type CandidChangeOrigin =
-  [candidType|
-    variant {
-      from_user : record {
-        user_id : principal;
-      };
-      from_canister : record {
-        canister_id : principal;
-        canister_version : opt nat64;
-      };
-    }
-  |]
+type HttpMethod = V.Var (R.R '["get" R.:-> (), "head" R.:-> (), "post" R.:-> ()])
+
+type HttpHeader = R.Rec (R.R '["name" R.:-> T.Text, "value" R.:-> T.Text])
+
+type HttpTransformArgs = R.Rec (R.R '["response" R.:-> HttpResponse, "context" R.:-> Blob])
+
+type HttpTransform = R.Rec (R.R '["function" R.:-> FuncRef (HttpTransformArgs, Unary HttpResponse, AnnTrue, AnnFalse, AnnFalse), "context" R.:-> Blob])
+
+type HttpRequest = R.Rec (R.R '["url" R.:-> T.Text, "max_response_bytes" R.:-> Maybe W.Word64, "method" R.:-> HttpMethod, "headers" R.:-> Vec.Vector HttpHeader, "body" R.:-> Maybe Blob, "transform" R.:-> Maybe HttpTransform])
+
+type HttpResponse = R.Rec (R.R '["status" R.:-> Natural, "headers" R.:-> Vec.Vector HttpHeader, "body" R.:-> Blob])
+
+type CandidChangeFromUser = R.Rec (R.R '["user_id" R.:-> Principal])
+
+type CandidChangeFromCanister = R.Rec (R.R '["canister_id" R.:-> Principal, "canister_version" R.:-> Maybe W.Word64])
+
+type CandidChangeOrigin = V.Var (R.R '["from_user" R.:-> CandidChangeFromUser, "from_canister" R.:-> CandidChangeFromCanister])
+
+type CandidChangeCreation = R.Rec (R.R '["controllers" R.:-> Vec.Vector Principal])
+
+type CandidChangeCodeDeploymentMode = V.Var (R.R '["install" R.:-> (), "reinstall" R.:-> (), "upgrade" R.:-> ()])
+
+type CandidChangeCodeDeployment = R.Rec (R.R '["mode" R.:-> CandidChangeCodeDeploymentMode, "module_hash" R.:-> Blob])
+
+type CandidChangeControllersChange = R.Rec (R.R '["controllers" R.:-> Vec.Vector Principal])
+
+type CandidChangeDetails = V.Var (R.R '["creation" R.:-> CandidChangeCreation, "code_uninstall" R.:-> (), "code_deployment" R.:-> CandidChangeCodeDeployment, "controllers_change" R.:-> CandidChangeControllersChange])
 
 mapChangeOrigin :: ChangeOrigin -> CandidChangeOrigin
 mapChangeOrigin (ChangeFromUser user_id) =
@@ -104,23 +83,6 @@ mapChangeOrigin (ChangeFromCanister canister_id canister_version) =
       .== entityIdToPrincipal canister_id
       .+ #canister_version
       .== canister_version
-
-type CandidChangeDetails =
-  [candidType|
-    variant {
-        creation : record {
-        controllers : vec principal;
-      };
-      code_uninstall;
-      code_deployment : record {
-        mode : variant {install; reinstall; upgrade};
-        module_hash : blob;
-      };
-      controllers_change : record {
-        controllers : vec principal;
-      };
-    }
-  |]
 
 mapChangeDetails :: ChangeDetails -> CandidChangeDetails
 mapChangeDetails (Creation controllers) =
@@ -145,8 +107,3 @@ mapChangeDetails (ControllersChange controllers) =
     R.empty
       .+ #controllers
       .== Vec.fromList (map entityIdToPrincipal controllers)
-
-type ICManagement m = [candidFile|hs/spec_compliance/ic.did|]
-
-managementMethods :: [String]
-managementMethods = R.labels @(ICManagement IO) @R.Unconstrained1
