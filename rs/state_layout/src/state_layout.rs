@@ -48,6 +48,8 @@ mod tests;
 // State layout directory and file names.
 pub const CHECKPOINTS_DIR: &str = "checkpoints";
 pub const CANISTER_STATES_DIR: &str = "canister_states";
+pub const SNAPSHOTS_DIR: &str = "snapshots";
+pub const SNAPSHOT_FILE: &str = "snapshot.pbuf";
 pub const QUEUES_FILE: &str = "queues.pbuf";
 pub const CANISTER_FILE: &str = "canister.pbuf";
 pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
@@ -373,10 +375,12 @@ impl TipHandler {
                 CopyInstruction::Skip
             } else if path.extension() == Some(OsStr::new("bin"))
                 && lsmt_storage == FlagStatus::Disabled
+                && !path.starts_with(cp.root.join(SNAPSHOTS_DIR))
             {
                 // PageMap files need to be modified in the tip,
                 // but only with non-LSMT storage layer that modifies these files.
                 // With LSMT we always write additional overlay files instead.
+                // PageMap files that belong to snapshots are not modified even without LSMT.
                 CopyInstruction::ReadWrite
             } else {
                 // Everything else should be readonly.
@@ -1198,50 +1202,66 @@ fn is_already_exists_err(err: &std::io::Error) -> bool {
     err.kind() == std::io::ErrorKind::AlreadyExists || err.raw_os_error() == Some(libc::ENOTEMPTY)
 }
 
-/// Iterates over all the direct children of the specified directory, applies
+/// Iterates over all the children at exact `depth` of the specified directory, applies
 /// the provided transformation to each, collects them into a vector and sorts
 /// them.
-fn collect_subdirs<F, T>(dir: &Path, transform: F) -> Result<Vec<T>, LayoutError>
+fn collect_subdirs<F, T>(dir: &Path, depth: u64, transform: F) -> Result<Vec<T>, LayoutError>
 where
     F: Fn(&str) -> Result<T, String>,
     T: Ord,
 {
-    let mut ids = Vec::new();
+    fn collect_subdirs_recursive<F, T>(
+        dir: &Path,
+        depth: u64,
+        transform: &F,
+        result: &mut Vec<T>,
+    ) -> Result<(), LayoutError>
+    where
+        F: Fn(&str) -> Result<T, String>,
+    {
+        if !dir.exists() {
+            return Ok(());
+        }
 
-    if !dir.exists() {
-        return Ok(ids);
-    }
-
-    let entries = dir.read_dir().map_err(|err| LayoutError::IoError {
-        path: dir.to_path_buf(),
-        message: "Failed to read directory".to_string(),
-        io_err: err,
-    })?;
-
-    for entry in entries {
-        let dir = entry.map_err(|err| LayoutError::IoError {
+        let entries = dir.read_dir().map_err(|err| LayoutError::IoError {
             path: dir.to_path_buf(),
-            message: "Failed to get dir entry".to_string(),
+            message: "Failed to read directory".to_string(),
             io_err: err,
         })?;
 
-        match dir.file_name().to_str() {
-            Some(file_name) => {
-                ids.push(
-                    transform(file_name).map_err(|err| LayoutError::CorruptedLayout {
+        for entry in entries {
+            let dir = entry.map_err(|err| LayoutError::IoError {
+                path: dir.to_path_buf(),
+                message: "Failed to get dir entry".to_string(),
+                io_err: err,
+            })?;
+
+            match dir.file_name().to_str() {
+                Some(file_name) => {
+                    if depth == 0 {
+                        result.push(transform(file_name).map_err(|err| {
+                            LayoutError::CorruptedLayout {
+                                path: dir.path(),
+                                message: err,
+                            }
+                        })?)
+                    } else {
+                        collect_subdirs_recursive(&dir.path(), depth - 1, transform, result)?;
+                    }
+                }
+                None => {
+                    return Err(LayoutError::CorruptedLayout {
                         path: dir.path(),
-                        message: err,
-                    })?,
-                )
-            }
-            None => {
-                return Err(LayoutError::CorruptedLayout {
-                    path: dir.path(),
-                    message: "not UTF-8".into(),
-                })
+                        message: "not UTF-8".into(),
+                    })
+                }
             }
         }
+        Ok(())
     }
+
+    let mut ids = Vec::new();
+    collect_subdirs_recursive(dir, depth, &transform, &mut ids)?;
     ids.sort();
     Ok(ids)
 }
@@ -1262,13 +1282,29 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
     ))
 }
 
-/// Parses the canister ID from a relative path, if it is the path of a canister
+/// Helper for parsing hex representations of snapshot IDs, used for the
+/// directory names under `snapshots`).
+fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
+    let blob = hex::decode(hex).map_err(|err| {
+        format!(
+            "failed to convert directory name {} into a snapshot ID: {}",
+            hex, err
+        )
+    })?;
+
+    SnapshotId::try_from(&blob).map_err(|err| format!("failed to parse snapshot ID: {}", err))
+}
+
+/// Parses the canister ID from a relative path, if it is the path of a canister or snapshot
 /// state file (e.g. `canister_states/00000000000000010101/queues.pbuf`).
-/// Returns `None` if the path is not under `canister_states`; or if parsing
+/// Returns `None` if the path is not under `canister_states` or `snapshots`; or if parsing
 /// fails.
 pub fn canister_id_from_path(path: &Path) -> Option<CanisterId> {
     let mut path = path.iter();
-    if path.next() == Some(OsStr::new(CANISTER_STATES_DIR)) {
+    let top_level = path.next();
+    if top_level == Some(OsStr::new(CANISTER_STATES_DIR))
+        || top_level == Some(OsStr::new(SNAPSHOTS_DIR))
+    {
         if let Some(hex) = path.next() {
             return parse_canister_id(hex.to_str()?).ok();
         }
@@ -1395,7 +1431,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {
         let states_dir = self.root.join(CANISTER_STATES_DIR);
         Permissions::check_dir(&states_dir)?;
-        collect_subdirs(states_dir.as_path(), parse_canister_id)
+        collect_subdirs(states_dir.as_path(), 0, parse_canister_id)
     }
 
     pub fn canister(
@@ -1409,6 +1445,30 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
+    /// List of all snapshots in the checkpoint.
+    pub fn snapshot_ids(&self) -> Result<Vec<SnapshotId>, LayoutError> {
+        let snapshots_dir = self.root.join(SNAPSHOTS_DIR);
+        Permissions::check_dir(&snapshots_dir)?;
+        collect_subdirs(snapshots_dir.as_path(), 1, parse_snapshot_id)
+    }
+
+    /// Directory where the snapshot for `snapshot_id` is stored.
+    /// Note that we store them by canister. This means we have the canister id in the path, which is
+    /// necessary in the context of subnet splitting. Also see [`canister_id_from_path`].
+    pub fn snapshot(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<SnapshotLayout<Permissions>, LayoutError> {
+        SnapshotLayout::new(
+            self.root
+                .join(SNAPSHOTS_DIR)
+                .join(hex::encode(
+                    snapshot_id.get_canister_id().get_ref().as_slice(),
+                ))
+                .join(hex::encode(snapshot_id.as_slice())),
+        )
+    }
+
     pub fn height(&self) -> Height {
         self.height
     }
@@ -1419,7 +1479,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 }
 
 pub struct PageMapLayout<Permissions: AccessPolicy> {
-    canister_root: PathBuf,
+    root: PathBuf,
     name_stem: String,
     permissions_tag: PhantomData<Permissions>,
 }
@@ -1464,14 +1524,14 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
     /// this function, calling it on a `dyn StorageLayout` will call the trait function. This simplifies error propagation.
     pub fn existing_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
         let map_error = |err| LayoutError::IoError {
-            path: self.canister_root.clone(),
+            path: self.root.clone(),
             message: "Failed list overlays".to_string(),
             io_err: err,
         };
 
         let name_end = format!("_{}.overlay", self.name_stem);
 
-        let files = std::fs::read_dir(&self.canister_root).map_err(map_error)?;
+        let files = std::fs::read_dir(&self.root).map_err(map_error)?;
         let mut result = Vec::default();
         for file in files {
             let path = file.map_err(map_error)?.path();
@@ -1491,12 +1551,12 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
 impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     // The path to the base file.
     fn base(&self) -> PathBuf {
-        self.canister_root.join(format!("{}.bin", self.name_stem))
+        self.root.join(format!("{}.bin", self.name_stem))
     }
 
     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
-        self.canister_root.join(format!(
+        self.root.join(format!(
             "{:016x}_{:04x}_{}.overlay",
             height.get(),
             shard.get(),
@@ -1604,7 +1664,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
-            canister_root: self.canister_root.clone(),
+            root: self.canister_root.clone(),
             name_stem: "vmemory_0".into(),
             permissions_tag: PhantomData,
         }
@@ -1612,7 +1672,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 
     pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
-            canister_root: self.canister_root.clone(),
+            root: self.canister_root.clone(),
             name_stem: "stable_memory".into(),
             permissions_tag: PhantomData,
         }
@@ -1620,10 +1680,89 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 
     pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
-            canister_root: self.canister_root.clone(),
+            root: self.canister_root.clone(),
             name_stem: "wasm_chunk_store".into(),
             permissions_tag: PhantomData,
         }
+    }
+}
+
+pub struct SnapshotLayout<Permissions: AccessPolicy> {
+    snapshot_root: PathBuf,
+    permissions_tag: PhantomData<Permissions>,
+}
+
+impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
+    pub fn new(snapshot_root: PathBuf) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&snapshot_root)?;
+        Ok(Self {
+            snapshot_root,
+            permissions_tag: PhantomData,
+        })
+    }
+
+    pub fn raw_path(&self) -> PathBuf {
+        self.snapshot_root.clone()
+    }
+
+    pub fn wasm(&self) -> WasmFile<Permissions> {
+        self.snapshot_root.join(WASM_FILE).into()
+    }
+
+    pub fn snapshot(
+        &self,
+    ) -> ProtoFileWith<pb_canister_snapshot_bits::CanisterSnapshotBits, Permissions> {
+        self.snapshot_root.join(SNAPSHOT_FILE).into()
+    }
+
+    pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.snapshot_root.clone(),
+            name_stem: "vmemory_0".into(),
+            permissions_tag: PhantomData,
+        }
+    }
+
+    pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.snapshot_root.clone(),
+            name_stem: "stable_memory".into(),
+            permissions_tag: PhantomData,
+        }
+    }
+
+    pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.snapshot_root.clone(),
+            name_stem: "wasm_chunk_store".into(),
+            permissions_tag: PhantomData,
+        }
+    }
+}
+
+impl<P> SnapshotLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Remove the entire directory for the snapshot.
+    pub fn delete_dir(&self) -> Result<(), LayoutError> {
+        let map_error = |err| LayoutError::IoError {
+            path: self.raw_path(),
+            message: "Cannot remove snapshot.".to_string(),
+            io_err: err,
+        };
+
+        std::fs::remove_dir_all(self.raw_path()).map_err(map_error)?;
+
+        // Remove the parent directory named after the canister if this was the last snapshot of that canister.
+        // Unwrap is safe as snapshots are not at located at `/`.
+        let parent = self.raw_path().parent().unwrap().to_owned();
+
+        if parent.read_dir().map_err(map_error)?.next().is_none() {
+            std::fs::remove_dir(&parent).map_err(map_error)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -1807,11 +1946,6 @@ impl<T> WasmFile<T> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
-
-    /// Removes the file if it exists, else does nothing.
-    pub fn try_remove_file(&self) -> Result<(), LayoutError> {
-        try_remove_file(&self.path)
-    }
 }
 
 impl<T> WasmFile<T>
@@ -1838,7 +1972,7 @@ where
 {
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
         // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
-        self.try_remove_file()?;
+        self.try_delete_file()?;
 
         let mut file = create_for_write(&self.path)?;
         file.write_all(wasm.as_slice())
@@ -2242,7 +2376,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum FilePermissions {
+pub enum FilePermissions {
     ReadOnly,
     ReadWrite,
 }
@@ -2381,14 +2515,7 @@ where
             });
             results.into_iter().try_for_each(identity)?;
             let results = parallel_map(thread_pool, copy_plan.copy_and_sync_file.iter(), |op| {
-                copy_file_and_set_permissions(
-                    log,
-                    metrics,
-                    &op.src,
-                    &op.dst,
-                    op.dst_permissions,
-                    fsync,
-                )
+                copy_checkpoint_file(log, metrics, &op.src, &op.dst, op.dst_permissions, fsync)
             });
             results.into_iter().try_for_each(identity)?;
             if let FSync::Yes = fsync {
@@ -2404,14 +2531,7 @@ where
                 std::fs::create_dir_all(&op.dst)?;
             }
             for op in copy_plan.copy_and_sync_file.into_iter() {
-                copy_file_and_set_permissions(
-                    log,
-                    metrics,
-                    &op.src,
-                    &op.dst,
-                    op.dst_permissions,
-                    fsync,
-                )?;
+                copy_checkpoint_file(log, metrics, &op.src, &op.dst, op.dst_permissions, fsync)?;
             }
             if let FSync::Yes = fsync {
                 for op in copy_plan.create_and_sync_dir.iter() {
@@ -2425,8 +2545,10 @@ where
 
 /// Copies the given file and ensures that the `read/write` permission of the
 /// target file match the given permission.
+/// This function is used for files inside checkpoints, so the `src` file is intended to be
+/// marked readonly.
 /// Syncs the target file if `fsync` is true.
-fn copy_file_and_set_permissions(
+fn copy_checkpoint_file(
     log: &ReplicaLogger,
     metrics: &StateLayoutMetrics,
     src: &Path,
@@ -2444,6 +2566,25 @@ fn copy_file_and_set_permissions(
         debug_assert!(false);
     }
 
+    copy_file_and_set_permissions(log, src, dst, dst_permissions)?;
+
+    // We keep the directory writable though to make sure we can rename
+    // them or delete the files.
+
+    match fsync {
+        FSync::Yes => sync_path(dst),
+        FSync::No => Ok(()),
+    }
+}
+
+/// Copies the given file and ensures that the `read/write` permission of the
+/// target file match the given permission.
+fn copy_file_and_set_permissions(
+    log: &ReplicaLogger,
+    src: &Path,
+    dst: &Path,
+    dst_permissions: FilePermissions,
+) -> Result<(), Error> {
     if src.metadata()?.permissions().readonly() && dst_permissions == FilePermissions::ReadOnly {
         std::fs::hard_link(src, dst)?
     } else {
@@ -2472,14 +2613,7 @@ fn copy_file_and_set_permissions(
         }
         std::fs::set_permissions(dst, permissions)?;
     }
-
-    // We keep the directory writable though to make sure we can rename
-    // them or delete the files.
-
-    match fsync {
-        FSync::Yes => sync_path(dst),
-        FSync::No => Ok(()),
-    }
+    Ok(())
 }
 
 // Describes how to copy one directory to another.
