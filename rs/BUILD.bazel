@@ -5,7 +5,7 @@
 # all the dependency rules between package groups will be more strictly enforced.
 
 # The system tests package group contains all code related to system testing.
-# Can depend on: on any other package.
+# Can depend on: any other package.
 # Dependants: none.
 # Exceptions:
 #   //rs/ic_os/launch-single-vm:__pkg__ depends on rs/tests/driver:ic-system-test-driver
