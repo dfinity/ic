@@ -144,26 +144,17 @@ rust_test(
 )
 
 rust_library(
-    name = "ic_boundary",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["src/main.rs"],
-    ),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    version = VERSION,
-    deps = DEPENDENCIES,
-)
-
-rust_library(
-    name = "ic_boundary_bench_lib",
+    name = "ic_boundary_testonly_lib",
     testonly = True,
     srcs = glob(
         ["src/**"],
         exclude = ["src/main.rs"],
     ),
     aliases = ALIASES,
-    crate_features = ["bench"],
+    crate_features = [
+        "bench",
+        "tls",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
@@ -175,5 +166,5 @@ rust_bench(
     aliases = ALIASES,
     pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary_bench_lib"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary_testonly_lib"],
 )
