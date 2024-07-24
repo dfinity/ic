@@ -136,9 +136,17 @@ impl Upgrade {
     pub(crate) async fn check(&mut self) -> OrchestratorResult<Option<SubnetId>> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
-        let (subnet_id, local_cup_proto, local_cup) =
-            if let Some(proto) = self.cup_provider.get_local_cup_proto() {
-                let cup = CatchUpPackage::try_from(&proto).expect("deserializing CUP failed");
+        let (subnet_id, local_cup_proto, local_cup) = {
+            let maybe_proto = self.cup_provider.get_local_cup_proto();
+            let maybe_cup = maybe_proto.as_ref().and_then(|proto| {
+                CatchUpPackage::try_from(proto)
+                    .map_err(|err| {
+                        error!(self.logger, "Failed to deserialize CatchUpPackage: {}", err);
+                    })
+                    .ok()
+            });
+
+            if let Some(cup) = maybe_cup {
                 let subnet_id =
                     get_subnet_id(&*self.registry.registry_client, &cup).map_err(|err| {
                         OrchestratorError::UpgradeError(format!(
@@ -146,13 +154,19 @@ impl Upgrade {
                             err
                         ))
                     })?;
-                (subnet_id, Some(proto), Some(cup))
+                (subnet_id, maybe_proto, Some(cup))
             } else {
-                // No local CUP found, check registry
+                // No local CUP found, check registry.
+                // Note that if we ended up here because we could not deserialize the local CUP,
+                // checking the registry to determine membership is technically wrong, as the
+                // source of truth should be the latest CUP (which we can't deserialize).
+                // However, the only way to recover from a CUP that cannot be deserialized is
+                // subnet recovery, which resets the subnet's membership to the latest registry
+                // version.
                 match self.registry.get_subnet_id(latest_registry_version) {
                     Ok(subnet_id) => {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
-                        (subnet_id, None, None)
+                        (subnet_id, maybe_proto, None)
                     }
                     // If no subnet is assigned to the node id, we're unassigned.
                     _ => {
@@ -160,7 +174,8 @@ impl Upgrade {
                         return Ok(None);
                     }
                 }
-            };
+            }
+        };
 
         // When we arrived here, we are an assigned node.
         let old_cup_height = local_cup.as_ref().map(HasHeight::height);
@@ -381,7 +396,7 @@ impl Upgrade {
         old_cup_height: Option<Height>,
     ) {
         let new_height = cup.content.height();
-        if !cup.is_signed() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
+        if !cup.is_signed() && Some(new_height) > old_cup_height {
             info!(
                 self.logger,
                 "Found higher unsigned CUP, restarting replica for subnet recovery..."
