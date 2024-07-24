@@ -22,7 +22,10 @@ rust_library(
     ),
     crate_name = "deterministic_ips",
     version = "0.1.0",
-    visibility = ["//rs:system-tests-pkg"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
