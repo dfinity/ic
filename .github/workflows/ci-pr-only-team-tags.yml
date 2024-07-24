@@ -21,7 +21,7 @@ jobs:
       - name: Get Requested Reviewers
         id: requested_reviewers
         run: |
-          TEAMS=$(gh pr view $PR_NUMBER --json reviewRequests --jq '.reviewRequests.teams[].slug' | sed 's/^/@/')
+          TEAMS=$(gh pr view $PR_NUMBER --json reviewRequests --jq '.reviewRequests[].name' | tr '\n' ' ')
           echo "requested_teams=$TEAMS" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
