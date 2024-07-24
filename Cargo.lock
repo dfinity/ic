@@ -9860,7 +9860,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-local-store",
  "ic-registry-proto-data-provider",
