@@ -1364,7 +1364,7 @@ impl<Permissions: AccessPolicy> Drop for CheckpointLayout<Permissions> {
     }
 }
 
-impl Clone for CheckpointLayout<ReadOnly> {
+impl<P: LoadingPolicy> Clone for CheckpointLayout<P> {
     fn clone(&self) -> Self {
         let result = Self {
             root: self.root.clone(),

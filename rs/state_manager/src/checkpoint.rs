@@ -15,7 +15,7 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    CanisterLayout, CanisterStateBits, CheckpointLayout, LoadingPolicy, ReadOnly,
+    CanisterLayout, CanisterStateBits, CheckpointLayout, LoadingPolicy, ReadOnly, StateLayout,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -54,6 +54,7 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 pub(crate) fn make_checkpoint(
     state: &ReplicatedState,
     height: Height,
+    state_layout: &StateLayout,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
@@ -135,12 +136,14 @@ pub(crate) fn make_checkpoint(
 
     cp.remove_unverified_checkpoint_marker()?;
 
+    let cp = state_layout.checkpoint_verified(height)?;
+
     Ok((cp, state, has_downgrade))
 }
 
 /// Calls [load_checkpoint] with a newly created thread pool.
 /// See [load_checkpoint] for further details.
-pub fn load_checkpoint_parallel<T: LoadingPolicy>(
+pub fn load_checkpoint_parallel<T: LoadingPolicy + Sync>(
     checkpoint_layout: &CheckpointLayout<T>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
@@ -159,7 +162,7 @@ pub fn load_checkpoint_parallel<T: LoadingPolicy>(
 
 /// Loads the node state heighted with `height` using the specified
 /// directory layout.
-pub fn load_checkpoint<T: LoadingPolicy>(
+pub fn load_checkpoint<T: LoadingPolicy + Sync>(
     checkpoint_layout: &CheckpointLayout<T>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
@@ -298,8 +301,8 @@ impl LoadCanisterMetrics {
     }
 }
 
-pub fn load_canister_state(
-    canister_layout: &CanisterLayout<ReadOnly>,
+pub fn load_canister_state<T: LoadingPolicy>(
+    canister_layout: &CanisterLayout<T>,
     canister_id: &CanisterId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -448,8 +451,8 @@ pub fn load_canister_state(
     Ok((canister_state, metrics))
 }
 
-fn load_canister_state_from_checkpoint(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+fn load_canister_state_from_checkpoint<T: LoadingPolicy>(
+    checkpoint_layout: &CheckpointLayout<T>,
     canister_id: &CanisterId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &CheckpointMetrics,

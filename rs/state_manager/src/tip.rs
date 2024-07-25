@@ -25,8 +25,8 @@ use ic_replicated_state::{
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
-    RwPolicy, StateLayout, TipHandler, Verification,
+    error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, LoadingPolicy,
+    ReadOnly, RwPolicy, StateLayout, TipHandler, Verification,
 };
 use ic_sys::fs::defrag_file_partially;
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};

@@ -2402,6 +2402,7 @@ impl StateManagerImpl {
             checkpoint::make_checkpoint(
                 state,
                 height,
+                &self.state_layout,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
