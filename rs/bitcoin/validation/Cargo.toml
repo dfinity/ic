@@ -2,17 +2,11 @@
 name = "ic-btc-validation"
 version = "0.1.0"
 edition = "2021"
-description = "Validation for Bitcoin Headers"
-homepage = "https://docs.rs/ic-btc-validation"
-documentation = "https://docs.rs/ic-btc-validation"
-license = "Apache-2.0"
-include = ["src", "Cargo.toml", "../LICENSE"]
-repository = "https://github.com/dfinity/bitcoin-canister"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitcoin = { workspace = true }
+bitcoin = "0.28.1"
 
 [dev-dependencies]
 csv = "1.1"
-hex = { workspace = true }
-proptest = "0.9.4"
