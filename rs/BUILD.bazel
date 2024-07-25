@@ -3,17 +3,18 @@
 # The relationship between package_groups is also defined here.
 #
 #               vm-system-tests  ----
-#               |     \              |
-#               |     vm-ic-os       |
-#               |           \        |
+#               |    \               |
+#               |    vm-ic-os        |
+#               |          \         |
 #               |         release    |
 #               |          |     \   |
-#               |          |      tools
+#               |          |     tools ( + integrations)
 #               |          |         |
 #               |          |         |
 #               |          |         |
-#               ic-protocol (TODO split it into BN, replica and dapps)
-#
+#               ======ic-protocol=====
+#               |          |         |
+#               BN     replica   dapps
 #
 #
 # In the future when upgrade to bazel >7, package groups will be moved into bazel modules so
