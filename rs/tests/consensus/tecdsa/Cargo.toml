@@ -39,48 +39,48 @@ path = "tecdsa_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
-path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
+path = "tecdsa_add_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-tschnorr-message-sizes"
-path = "consensus/tecdsa/tschnorr_message_sizes_test.rs"
+path = "tschnorr_message_sizes_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-key-rotation"
-# path = "consensus/tecdsa/tecdsa_key_rotation_test.rs"
+# path = "tecdsa_key_rotation_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-remove-nodes"
-path = "consensus/tecdsa/tecdsa_remove_nodes_test.rs"
+path = "tecdsa_remove_nodes_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-signature-life-cycle"
-# path = "consensus/tecdsa/tecdsa_signature_life_cycle_test.rs"
+# path = "tecdsa_signature_life_cycle_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-signature-fails-without-cycles"
-# path = "consensus/tecdsa/tecdsa_signature_fails_without_cycles_test.rs"
+# path = "tecdsa_signature_fails_without_cycles_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-signature-from-nns-without-cycles"
-# path = "consensus/tecdsa/tecdsa_signature_from_nns_without_cycles_test.rs"
+# path = "tecdsa_signature_from_nns_without_cycles_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-signature-from-other-subnet"
-# path = "consensus/tecdsa/tecdsa_signature_from_other_subnet_test.rs"
+# path = "tecdsa_signature_from_other_subnet_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-signature-same-subnet"
-# path = "consensus/tecdsa/tecdsa_signature_same_subnet_test.rs"
+# path = "tecdsa_signature_same_subnet_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-signature-timeout"
-# path = "consensus/tecdsa/tecdsa_signature_timeout_test.rs"
+# path = "tecdsa_signature_timeout_test.rs"
 
 # [[bin]]
 # name = "ic-systest-tecdsa-two-signing-subnets"
-# path = "consensus/tecdsa/tecdsa_two_signing_subnets_test.rs"
+# path = "tecdsa_two_signing_subnets_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-complaint-test"
-path = "consensus/tecdsa/tecdsa_complaint_test.rs"
+path = "tecdsa_complaint_test.rs"
