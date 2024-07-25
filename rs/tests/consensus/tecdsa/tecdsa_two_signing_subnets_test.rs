@@ -21,7 +21,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use canister_test::Canister;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -151,7 +151,7 @@ fn wait_until_subnet_mr_version(
     .expect("The subnet did not reach the specified registry version in time")
 }
 
-pub fn test(env: TestEnv) {
+fn test(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
