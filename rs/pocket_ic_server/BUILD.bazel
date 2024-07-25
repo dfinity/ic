@@ -2,8 +2,6 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//rs:tools-pkg"])
-
 BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
