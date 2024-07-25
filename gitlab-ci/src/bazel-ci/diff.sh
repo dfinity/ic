@@ -58,17 +58,12 @@ fi
 # workflows and should be a space-separated list of bazel targets. If it's not
 # defined the universe defaults to all targets, i.e.: //...
 UNIVERSE="$(echo ${BAZEL_TARGETS:-//...} | sed 's/ /+/')"
-EXCEPT=""
-if [[ "$(uname)" == "Darwin" ]]; then
-    EXCEPT_LINUX="except attr(compatible_with, @platforms//os:linux, //...)"
-fi
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(${UNIVERSE}, set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query \
-      "(kind(test, rdeps(${UNIVERSE}, set(${files[*]})))
+    TARGETS=$(bazel query --skip_incompatible_explicit_targets \
+      "kind(test, rdeps(${UNIVERSE}, set(${files[*]})))
          except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...))
-         ${EXCEPT_LINUX}")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1
