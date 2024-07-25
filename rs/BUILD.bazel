@@ -64,7 +64,7 @@ package_group(
 )
 
 # Tools useful for local dev., operational tasks, debugging, etc.
-# Can depend on: TODO: explain when replica-pkg is added
+# Can depend on: ic-protocol package groups
 # Dependants: //rs:system-tests-pkg and //rs:release-pkg.
 package_group(
     name = "tools-pkg",
