@@ -11,13 +11,11 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::{
-    pb::v1::{
-        manage_neuron::{self, NeuronIdOrSubaccount},
-        manage_neuron_response::{self, MakeProposalResponse},
-        ManageNeuron, ManageNeuronResponse, Proposal,
-    },
-    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
+use ic_nns_governance::proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal;
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::{self, NeuronIdOrSubaccount},
+    manage_neuron_response::{self, MakeProposalResponse},
+    ManageNeuron, ManageNeuronResponse, Proposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
