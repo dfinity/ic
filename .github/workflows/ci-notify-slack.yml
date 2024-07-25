@@ -28,12 +28,12 @@ jobs:
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
         env:
           MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
-      # - name: Post to a Slack channel
-      #   if: steps.get-reviewers.outputs.result != '""' && steps.lookup.channel != 'null'
-      #   id: slack
-      #   uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
-      #   with:
-      #     channel-id: ${{ steps.lookup.outputs.channel }}
-      #     slack-message: "${{ steps.lookup.outputs.message }}"
-      #   env:
-      #     SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+      - name: Post to a Slack channel
+        if: steps.get-reviewers.outputs.result != '""' && steps.lookup.channel != 'null'
+        id: slack
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          channel-id: ${{ steps.lookup.outputs.channel }}
+          slack-message: "${{ steps.lookup.outputs.message }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
