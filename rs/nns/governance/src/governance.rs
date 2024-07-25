@@ -62,7 +62,6 @@ use crate::{
         call_canister::CallCanister,
         create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
     },
-    storage::with_np_rewards_log,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};

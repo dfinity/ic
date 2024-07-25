@@ -26,8 +26,7 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
         if len == 0 {
             return None;
         }
-        let rewards = log.get(len - 1);
-        rewards
+        log.get(len - 1)
     })
 }
 
