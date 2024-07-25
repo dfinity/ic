@@ -1859,7 +1859,7 @@ impl SetupBuilder {
         let mut mock_vault = MockLocalCspVault::new();
 
         if let Some(csp_pks_and_sks_contains_result) = self.csp_pks_and_sks_contains_result {
-            mock_csp
+            mock_vault
                 .expect_pks_and_sks_contains()
                 .times(1)
                 .return_const(csp_pks_and_sks_contains_result);

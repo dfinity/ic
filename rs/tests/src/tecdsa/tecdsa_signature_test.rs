@@ -17,11 +17,6 @@ end::catalog[] */
 use std::collections::{BTreeMap, HashSet};
 use std::time::Duration;
 
-use crate::tecdsa::{
-    create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
-    execute_update_subnet_proposal, get_public_key_with_retries, make_bip340_key_id,
-    make_ecdsa_key_id, make_eddsa_key_id, scale_cycles, DKG_INTERVAL, NUMBER_OF_NODES,
-};
 use anyhow::bail;
 use canister_test::{Canister, Cycles};
 use ic_agent::{
@@ -29,6 +24,14 @@ use ic_agent::{
     AgentError,
 };
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_consensus_threshold_sig_system_test_utils::{
+    create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
+    enable_chain_key_signing_with_timeout,
+    enable_chain_key_signing_with_timeout_and_rotation_period, execute_update_subnet_proposal,
+    get_public_key_and_test_signature, get_public_key_with_logger, get_public_key_with_retries,
+    get_signature_with_logger, make_bip340_key_id, make_ecdsa_key_id, make_eddsa_key_id,
+    make_key_ids_for_all_schemes, scale_cycles, DKG_INTERVAL, NUMBER_OF_NODES,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -44,12 +47,6 @@ use ic_types::Height;
 use itertools::Itertools;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;
-
-use super::{
-    enable_chain_key_signing_with_timeout,
-    enable_chain_key_signing_with_timeout_and_rotation_period, get_public_key_and_test_signature,
-    get_public_key_with_logger, get_signature_with_logger, make_key_ids_for_all_schemes,
-};
 
 const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
 const IDKG_PAYLOAD_METRICS: &str = "idkg_payload_metrics";
