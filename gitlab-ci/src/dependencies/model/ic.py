@@ -28,7 +28,7 @@ def get_ic_repo_for_trivy() -> List[Repository] :
                     ),
                     Project(
                         name="guestos",
-                        path="ic/ic-os/guestos/envs/prod",
+                        path="ic-private/ic-os/guestos/envs/prod",
                         link="https://github.com/dfinity/ic-private/tree/master-private/ic-os/guestos/context",
                         owner=Team.NODE_TEAM,
                     ),
