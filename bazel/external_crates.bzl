@@ -67,18 +67,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "ic-wasm": [crate.annotation(
             gen_binaries = True,
         )],
-        "librocksdb-sys": [crate.annotation(
-            build_script_env = {
-                # Bazel executors assign only one core when executing
-                # the build script, making rocksdb compilation
-                # extremely slow. Bazel doesn't provide any way to
-                # override this settings so we cheat by starting more
-                # processes in parallel.
-                #
-                # See IDX-2406.
-                "NUM_JOBS": "8",
-            },
-        )],
         "pprof": [crate.annotation(
             build_script_data = [
                 "@com_google_protobuf//:protoc",
