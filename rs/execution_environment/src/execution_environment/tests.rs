@@ -3582,7 +3582,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "ic00 method fetch_canister_logs can be not be called via ingress messages"
+            "ic00 method fetch_canister_logs can not be called via ingress messages"
         ))
     );
 }

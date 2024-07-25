@@ -125,7 +125,7 @@ fn test_fetch_canister_logs_via_submit_ingress() {
         result,
         Err(SubmitIngressError::UserError(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "ic00 method fetch_canister_logs can be not be called via ingress messages",
+            "ic00 method fetch_canister_logs can not be called via ingress messages",
         )))
     );
 }
