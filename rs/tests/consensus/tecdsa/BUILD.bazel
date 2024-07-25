@@ -237,6 +237,7 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/sys",
         "//rs/tests",
+        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/management_canister_types",
