@@ -5295,6 +5295,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-artifact-downloader"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.7.5",
+ "backoff",
+ "bytes",
+ "futures",
+ "ic-base-types",
+ "ic-consensus-manager",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-p2p-test-utils",
+ "ic-protobuf",
+ "ic-quic-transport",
+ "ic-test-utilities-logger",
+ "ic-types",
+ "ic-types-test-utils",
+ "mockall",
+ "phantom_newtype",
+ "prometheus",
+ "prost",
+ "rand 0.8.5",
+ "slog",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
@@ -10071,6 +10101,7 @@ dependencies = [
  "bytes",
  "either",
  "futures",
+ "ic-artifact-downloader",
  "ic-artifact-manager",
  "ic-base-types",
  "ic-consensus-manager",
@@ -10731,6 +10762,7 @@ name = "ic-replica-setup-ic-network"
 version = "0.9.0"
 dependencies = [
  "either",
+ "ic-artifact-downloader",
  "ic-artifact-manager",
  "ic-artifact-pool",
  "ic-config",
