@@ -10,7 +10,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{
