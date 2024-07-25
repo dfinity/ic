@@ -11,6 +11,7 @@ bytes = { workspace = true }
 either = "1.6.0"
 futures = { workspace = true }
 ic-artifact-manager = { path = "../../p2p/artifact_manager" }
+ic-artifact-downloader = { path = "../../p2p/artifact_downloader" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-consensus-manager = { path = "../consensus_manager" }

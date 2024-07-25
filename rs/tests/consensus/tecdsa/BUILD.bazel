@@ -1,7 +1,7 @@
 load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "tecdsa_complaint_test",
@@ -172,6 +172,10 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

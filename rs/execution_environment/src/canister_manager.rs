@@ -118,7 +118,6 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_controllers: usize,
     pub(crate) max_canister_memory_size: NumBytes,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
-    pub(crate) wasm_chunk_store: FlagStatus,
     rate_limiting_of_heap_delta: FlagStatus,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
@@ -138,7 +137,6 @@ impl CanisterMgrConfig {
         max_canister_memory_size: NumBytes,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
-        wasm_chunk_store: FlagStatus,
         rate_limiting_of_heap_delta: FlagStatus,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
@@ -155,7 +153,6 @@ impl CanisterMgrConfig {
                 as u64,
             max_canister_memory_size,
             rate_limiting_of_instructions,
-            wasm_chunk_store,
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
@@ -489,29 +486,11 @@ impl CanisterManager {
             | Ok(Ic00Method::InstallChunkedCode)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::LoadCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
             | Ok(Ic00Method::DeleteCanisterSnapshot) => {
-                // Reject large install methods if the flag is not enabled, or
-                // they are not implemented.
-                match method {
-                    Ok(Ic00Method::UploadChunk)
-                    | Ok(Ic00Method::ClearChunkStore)
-                    | Ok(Ic00Method::InstallChunkedCode)
-                    | Ok(Ic00Method::StoredChunks) if self.config.wasm_chunk_store == FlagStatus::Enabled => {}
-                    Ok(Ic00Method::UploadChunk)
-                    | Ok(Ic00Method::StoredChunks)
-                    | Ok(Ic00Method::DeleteChunks)
-                    | Ok(Ic00Method::ClearChunkStore)
-                    | Ok(Ic00Method::InstallChunkedCode) => return Err(UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        "Chunked upload API is not yet implemented"
-                    )),
-                    _ => {}
-                };
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
@@ -597,11 +576,6 @@ impl CanisterManager {
         canister: &mut CanisterState,
     ) {
         // Note: At this point, the settings are validated.
-        if let Some(controller) = settings.controller() {
-            // Remove all the other controllers and add the new one.
-            canister.system_state.controllers.clear();
-            canister.system_state.controllers.insert(controller);
-        }
         if let Some(controllers) = settings.controllers() {
             canister.system_state.controllers.clear();
             for principal in controllers {
@@ -684,8 +658,7 @@ impl CanisterManager {
             canister.system_state.reserved_balance_limit(),
         )?;
 
-        let is_controllers_change =
-            validated_settings.controller().is_some() || validated_settings.controllers().is_some();
+        let is_controllers_change = validated_settings.controllers().is_some();
 
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
@@ -1578,12 +1551,6 @@ impl CanisterManager {
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
     ) -> Result<UploadChunkResult, CanisterManagerError> {
-        if self.config.wasm_chunk_store == FlagStatus::Disabled {
-            return Err(CanisterManagerError::WasmChunkStoreError {
-                message: "Wasm chunk store not enabled".to_string(),
-            });
-        }
-
         // Allow the canister itself to perform this operation.
         if sender != canister.system_state.canister_id.into() {
             validate_controller(canister, &sender)?
@@ -1759,12 +1726,6 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
     ) -> Result<(), CanisterManagerError> {
-        if self.config.wasm_chunk_store == FlagStatus::Disabled {
-            return Err(CanisterManagerError::WasmChunkStoreError {
-                message: "Wasm chunk store not enabled".to_string(),
-            });
-        }
-
         // Allow the canister itself to perform this operation.
         if sender != canister.system_state.canister_id.into() {
             validate_controller(canister, &sender)?
@@ -1778,11 +1739,6 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &CanisterState,
     ) -> Result<StoredChunksReply, CanisterManagerError> {
-        if self.config.wasm_chunk_store == FlagStatus::Disabled {
-            return Err(CanisterManagerError::WasmChunkStoreError {
-                message: "Wasm chunk store not enabled".to_string(),
-            });
-        }
         // Allow the canister itself to perform this operation.
         if sender != canister.system_state.canister_id.into() {
             validate_controller(canister, &sender)?

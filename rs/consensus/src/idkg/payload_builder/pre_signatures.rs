@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
-/// - gathering ready results (new transcripts) from ecdsa pool;
+/// - gathering ready results (new transcripts) from idkg pool;
 /// - moving completed pre-signatures from "in creation" to "available".
 /// Returns the newly created transcripts.
 pub(super) fn update_pre_signatures_in_creation(
@@ -43,7 +43,7 @@ pub(super) fn update_pre_signatures_in_creation(
             error!(
                 every_n_seconds => 30,
                 log,
-                "The ECDSA payload is missing a key transcript with key_id: {}",
+                "The IDKG payload is missing a key transcript with key_id: {}",
                 pre_signature.key_id());
 
             continue;
@@ -307,7 +307,7 @@ pub(super) fn purge_old_key_pre_signatures(
 
 /// Creating new pre-signatures if necessary by updating pre_signatures_in_creation,
 /// considering currently available pre-signatures, pre-signatures in creation, and
-/// ecdsa configs.
+/// chain key configs.
 pub(super) fn make_new_pre_signatures_if_needed(
     chain_key_config: &ChainKeyConfig,
     idkg_payload: &mut idkg::IDkgPayload,

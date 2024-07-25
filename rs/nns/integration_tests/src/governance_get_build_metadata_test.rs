@@ -33,6 +33,7 @@ fn get_build_metadata_test() {
                     not_for_profit: true,
                     ..Default::default()
                 }
+                .into()
             ),
             None,
             "There is more than one neuron with the same id."

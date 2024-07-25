@@ -35,7 +35,7 @@ slog = { workspace = true }
 slog-scope = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 wat = "1.0.52"
 
 [[bin]]

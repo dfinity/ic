@@ -5,8 +5,9 @@ use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
     UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
@@ -177,11 +178,30 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::DeleteChunks)
-            | Ok(Method::TakeCanisterSnapshot)
-            | Ok(Method::LoadCanisterSnapshot)
-            | Ok(Method::ListCanisterSnapshots)
-            | Ok(Method::DeleteCanisterSnapshot) => None,
+            Ok(Method::TakeCanisterSnapshot) => {
+                match TakeCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::LoadCanisterSnapshot) => {
+                match LoadCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ListCanisterSnapshots) => {
+                match ListCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::DeleteCanisterSnapshot) => {
+                match DeleteCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)

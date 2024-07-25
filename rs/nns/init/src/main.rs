@@ -4,7 +4,7 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::{Agent, HttpClientConfig, Sender};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::pb::v1::Governance as GovernanceProto;
+use ic_nns_governance_api::pb::v1::Governance as GovernanceProto;
 use ic_nns_init::{make_hsm_sender, set_up_env_vars_for_all_canisters};
 use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},

@@ -255,7 +255,6 @@ impl SystemStateChanges {
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
@@ -1232,12 +1231,10 @@ impl SandboxSafeSystemState {
     }
 
     /// Appends a log record to the system state changes.
-    pub fn append_canister_log(&mut self, is_enabled: bool, time: &Time, content: Vec<u8>) {
-        self.system_state_changes.canister_log.add_record(
-            is_enabled,
-            time.as_nanos_since_unix_epoch(),
-            content,
-        );
+    pub fn append_canister_log(&mut self, time: &Time, content: Vec<u8>) {
+        self.system_state_changes
+            .canister_log
+            .add_record(time.as_nanos_since_unix_epoch(), content);
     }
 
     /// Takes collected canister log records.
