@@ -27,8 +27,8 @@ import gitlab_config
 
 def target_branch() -> str:
     default_branch = os.getenv("CI_DEFAULT_BRANCH", "master")
-    return os.getenv("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", default_branch)
-
+    target_branch = os.getenv("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "")
+    return target_branch if target_branch != '' else default_branch
 
 def git_fetch_target_branch(git_repo, max_attempts=10):
     exc = None

@@ -68,7 +68,6 @@ def setup_repo(tmpdir, testcase, branch="feature_branch"):
     if "CI_COMMIT_REF_NAME" in os.environ:
         del os.environ["CI_COMMIT_REF_NAME"]
 
-
 @pytest.mark.fails_on_merge_train
 def test_change_one_file(tmpdir):
     """Tests that a commit has changed one crate."""
@@ -116,3 +115,17 @@ def test_changed_ci_cfg_gitlab_ci_config_yml(tmpdir):
     setup_repo(tmpdir, "ci_cfg_gitlab-ci-config-yml")
 
     assert git_changes.ci_config_changes(tmpdir)
+
+@pytest.fixture
+def setup_env():
+    os.environ['CI_DEFAULT_BRANCH'] = ''
+    yield
+    del os.environ['CI_DEFAULT_BRANCH']  # Unset the environment variable after the test
+
+
+def test_target_branch_CI_DEFAULT_BRANCH_is_empty(tmpdir):
+    """Tests that the target branch is empty."""
+    setup_repo(tmpdir, "change_one_file", branch="master")
+
+
+    assert git_changes.target_branch(tmpdir) == ""
