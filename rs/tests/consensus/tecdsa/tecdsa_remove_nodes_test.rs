@@ -48,7 +48,7 @@ const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
 // Seed for a random generator
 const RND_SEED: u64 = 42;
 
-pub fn config(env: TestEnv) {
+fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -64,7 +64,7 @@ pub fn config(env: TestEnv) {
     });
 }
 
-pub fn test(env: TestEnv) {
+fn test(env: TestEnv) {
     let log = env.logger();
     let nns_subnet = env.topology_snapshot().root_subnet();
     let mut nns_nodes: Vec<_> = nns_subnet.nodes().collect();

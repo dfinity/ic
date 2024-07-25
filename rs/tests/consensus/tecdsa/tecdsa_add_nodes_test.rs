@@ -55,7 +55,7 @@ const UNASSIGNED_NODES_COUNT: usize = 3;
 
 const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
 
-pub fn config(env: TestEnv) {
+fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -78,7 +78,7 @@ pub fn config(env: TestEnv) {
     });
 }
 
-pub fn test(env: TestEnv) {
+fn test(env: TestEnv) {
     let log = env.logger();
     let topology_snapshot = env.topology_snapshot();
     let (nns_subnet, nns_node, unassigned_node_ids) = {

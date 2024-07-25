@@ -19,7 +19,7 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;
 
-pub fn config(env: TestEnv) {
+fn config(env: TestEnv) {
     let malicious_behaviour = MaliciousBehaviour::new(true).set_maliciously_corrupt_idkg_dealings();
     InternetComputer::new()
         .add_subnet(
@@ -35,7 +35,7 @@ pub fn config(env: TestEnv) {
 /// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` is responded with a signature
 /// that is verifiable with the result from `ecdsa_public_key`/`schnorr_public_key`. This is done
 /// in the presence of corrupted dealings/complaints.
-pub fn test(env: TestEnv) {
+fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
     info!(log, "Checking readiness of all nodes after the IC setup...");

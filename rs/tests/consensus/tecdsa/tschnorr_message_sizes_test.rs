@@ -55,7 +55,7 @@ fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
 }
 
 /// Creates one system subnet and two application subnets, the first one with schnorr keys enabled.
-pub fn config(env: TestEnv) {
+fn config(env: TestEnv) {
     use ic_system_test_driver::driver::test_env_api::*;
     let size_limit: u64 = (2 * LOCAL_LIMIT).try_into().unwrap();
     InternetComputer::new()
@@ -173,7 +173,7 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: usize, log: &Logger) {
     }
 }
 
-pub fn test_xnet_limit(env: TestEnv) {
+fn test_xnet_limit(env: TestEnv) {
     let log = env.logger();
     let topology_snapshot = env.topology_snapshot();
     let mut subnets = topology_snapshot.subnets().skip(2);
@@ -183,7 +183,7 @@ pub fn test_xnet_limit(env: TestEnv) {
     test_message_sizes(app_subnet, XNET_LIMIT, &log);
 }
 
-pub fn test_local_limit(env: TestEnv) {
+fn test_local_limit(env: TestEnv) {
     let log = env.logger();
     let topology_snapshot = env.topology_snapshot();
     let mut subnets = topology_snapshot.subnets().skip(1);
