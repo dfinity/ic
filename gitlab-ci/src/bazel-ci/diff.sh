@@ -63,7 +63,7 @@ if [ "${BAZEL_COMMAND:-}" == "build" ]; then
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
     TARGETS=$(bazel query --skip_incompatible_explicit_targets \
       "kind(test, rdeps(${UNIVERSE}, set(${files[*]})))
-         except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...))
+         except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1
