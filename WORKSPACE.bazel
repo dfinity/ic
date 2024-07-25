@@ -228,6 +228,13 @@ container_pull(
 )
 
 container_pull(
+    name = "non-existing",
+    digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    registry = "docker.io",
+    repository = "foo/bar",
+)
+
+container_pull(
     name = "jaeger",
     digest = "sha256:f421219dbd77248301fc42ac6e8ba5026f4bada9448ab33ac89061e21cfe3fea",
     registry = "docker.io",
