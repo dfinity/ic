@@ -7,12 +7,22 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
+use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
+use crate::errors::{ApiError, Details};
 use crate::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
+use crate::ledger_client::LedgerAccess;
+use crate::models::amount::tokens_to_amount;
 use crate::models::{
     AccountBalanceMetadata, CallResponse, NetworkIdentifier, QueryBlockRangeRequest,
     QueryBlockRangeResponse,
+};
+use crate::models::{
+    AccountBalanceRequest, AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier,
+    BlockResponse, BlockTransaction, BlockTransactionResponse, Error, NetworkOptionsResponse,
+    NetworkStatusResponse, NeuronInfoResponse, NeuronState, NeuronSubaccountComponents,
+    OperationStatus, Operator, PartialBlockIdentifier, SearchTransactionsResponse, Version,
 };
 use crate::request_types::GetProposalInfo;
 use crate::transaction_id::TransactionIdentifier;
@@ -22,30 +32,16 @@ use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_ledger_canister_blocks_synchronizer::rosetta_block::RosettaBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
-use rosetta_core::objects::ObjectMap;
-use tracing::info;
-
-use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
-use crate::errors::{ApiError, Details};
-use crate::ledger_client::LedgerAccess;
-use crate::models::amount::tokens_to_amount;
-use crate::models::{
-    AccountBalanceRequest, AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier,
-    BlockResponse, BlockTransaction, BlockTransactionResponse, Error, NetworkOptionsResponse,
-    NetworkStatusResponse, NeuronInfoResponse, NeuronState, NeuronSubaccountComponents,
-    OperationStatus, Operator, PartialBlockIdentifier, SearchTransactionsResponse, SyncStatus,
-    Version,
-};
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use ic_types::CanisterId;
 use icp_ledger::{Block, BlockIndex};
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::NetworkListResponse;
 use rosetta_core::response_types::{MempoolResponse, MempoolTransactionResponse};
 use std::convert::{TryFrom, TryInto};
-use std::num::TryFromIntError;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -220,7 +216,6 @@ impl RosettaRequestHandler {
                     if storage.contains_block(&lowest_index).map_err(|err| {
                         ApiError::InvalidBlockId(false, format!("{:?}", err).into())
                     })? {
-                        info!("Querying verified blocks");
                         // TODO: Use block range with rosetta blocks
                         for hb in storage
                             .get_hashed_block_range(
@@ -352,7 +347,6 @@ impl RosettaRequestHandler {
         let parent_block_index = block_index.saturating_sub(1);
         let blocks = self.ledger.read_blocks().await;
         if self.is_a_rosetta_block_index(parent_block_index).await {
-            info!("Parent block is a rosetta block");
             let parent_block = blocks.get_rosetta_block(parent_block_index)?;
             Ok(BlockIdentifier {
                 index: parent_block_index,
@@ -370,9 +364,8 @@ impl RosettaRequestHandler {
         &self,
         block: HashedBlock,
     ) -> Result<rosetta_core::objects::Block, ApiError> {
-        info!("Converting block to rosetta core block");
         let parent_block_id = self.create_parent_block_id(block.index).await?;
-        info!("Parent block id: {:?}", parent_block_id);
+
         let token_symbol = self.ledger.token_symbol();
         hashed_block_to_rosetta_core_block(block, parent_block_id, token_symbol)
     }
@@ -569,12 +562,20 @@ impl RosettaRequestHandler {
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
-        let tip_block = match blocks.rosetta_blocks_mode {
+        let (tip_block, genesis_block, first_verified_block) = match blocks.rosetta_blocks_mode {
             // If rosetta mode is not enabled we simply fetched the latest verified block
             RosettaBlocksMode::Disabled => {
                 let tip_verified_block = blocks.get_latest_verified_hashed_block()?;
-                self.hashed_block_to_rosetta_core_block(tip_verified_block)
-                    .await?
+                (
+                    self.hashed_block_to_rosetta_core_block(tip_verified_block)
+                        .await?,
+                    self.hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
+                        .await?,
+                    self.hashed_block_to_rosetta_core_block(
+                        blocks.get_first_verified_hashed_block()?,
+                    )
+                    .await?,
+                )
             }
             RosettaBlocksMode::Enabled {
                 first_rosetta_block_index,
@@ -583,31 +584,59 @@ impl RosettaRequestHandler {
                 match blocks.get_highest_rosetta_block_index()? {
                     // If it has been populated we ca return the highest rosetta block
                     Some(highest_rosetta_block_index) => {
-                        info!("Fetching highest rosetta block");
-                        self.get_rosetta_block_by_index(highest_rosetta_block_index)
-                            .await?
+                        let highest_rosetta_block = self
+                            .get_rosetta_block_by_index(highest_rosetta_block_index)
+                            .await?;
+                        // If Rosetta Blocks started only after a certain index then the genesis block as well as the first verified block will be the first icp block
+                        if first_rosetta_block_index > 0 {
+                            (
+                                highest_rosetta_block,
+                                self.hashed_block_to_rosetta_core_block(
+                                    blocks.get_hashed_block(&0)?,
+                                )
+                                .await?,
+                                self.hashed_block_to_rosetta_core_block(
+                                    blocks.get_first_verified_hashed_block()?,
+                                )
+                                .await?,
+                            )
+                        } else {
+                            (
+                                highest_rosetta_block,
+                                self.get_rosetta_block_by_index(0).await?,
+                                self.get_rosetta_block_by_index(first_rosetta_block_index)
+                                    .await?,
+                            )
+                        }
                     }
                     // If no rosetta block has been written to the database we return the first verified icp block that will go into the first rosetta block
                     None => {
-                        info!("No rosetta blocks found, returning the first verified icp block: {}", first_rosetta_block_index);
-                        let tip_verified_block =
-                            blocks.get_hashed_block(&first_rosetta_block_index)?;
-                        info!("Returning the first verified icp block");
-                        self.hashed_block_to_rosetta_core_block(tip_verified_block)
-                            .await?
+                        let icp_block_idx = if blocks.contains_block(&first_rosetta_block_index)? {
+                            // We already have a rosetta block populated and the first rosetta block is pointing to the first icp block
+                            first_rosetta_block_index
+                        } else {
+                            // We do not yet have any rosetta blocks populated and the first rosetta block is pointing to the next icp block
+                            // This means that the first icp block index which exists in the database is the first rosetta block index minus one
+                            first_rosetta_block_index.saturating_sub(1)
+                        };
+
+                        (
+                            self.hashed_block_to_rosetta_core_block(
+                                blocks.get_hashed_block(&icp_block_idx)?,
+                            )
+                            .await?,
+                            self.hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
+                                .await?,
+                            self.hashed_block_to_rosetta_core_block(
+                                blocks.get_first_verified_hashed_block()?,
+                            )
+                            .await?,
+                        )
                     }
                 }
             }
         };
-        info!("Fetching genesis block");
-        // The genesis block is always an ICP block
-        let genesis_block = self
-            .hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
-            .await?;
-        info!("Fetching oldest block");
-        let first_verified_block = self
-            .hashed_block_to_rosetta_core_block(blocks.get_first_verified_hashed_block()?)
-            .await?;
+
         let oldest_block_id = if first_verified_block.block_identifier.index != 0 {
             Some(first_verified_block.block_identifier)
         } else {

@@ -102,14 +102,12 @@ struct RosettaTestingClient {
 }
 
 impl RosettaTestingClient {
-    async fn block_or_panic(&self, id: PartialBlockIdentifier) -> rosetta_core::objects::Block {
+    async fn block(
+        &self,
+        id: PartialBlockIdentifier,
+    ) -> Result<rosetta_core::response_types::BlockResponse, Error> {
         let network = self.network_or_panic().await;
-        self.rosetta_client
-            .block(network, id.clone())
-            .await
-            .expect("Unable to call /block")
-            .block
-            .unwrap_or_else(|| panic!("Block with id {id:?} not found"))
+        self.rosetta_client.block(network, id.clone()).await
     }
 
     async fn block_transaction(
@@ -221,6 +219,7 @@ impl TestEnv {
         ledger_canister_id: Principal,
         rosetta_state_directory: PathBuf,
         enable_rosetta_blocks: bool,
+        persistent_storage: bool,
     ) -> (RosettaClient, RosettaContext) {
         let (rosetta_client, rosetta_context) = start_rosetta(
             &get_rosetta_path(),
@@ -228,6 +227,7 @@ impl TestEnv {
             ledger_canister_id,
             Some(rosetta_state_directory),
             enable_rosetta_blocks,
+            persistent_storage,
         )
         .await;
 
@@ -270,7 +270,7 @@ impl TestEnv {
         (rosetta_client, rosetta_context)
     }
 
-    async fn setup_or_panic(enable_rosetta_blocks: bool) -> Self {
+    async fn setup_or_panic(enable_rosetta_blocks: bool, persistent_storage: bool) -> Self {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
         let sender_canister_id = pocket_ic.create_canister().await;
@@ -318,6 +318,7 @@ impl TestEnv {
             ledger_canister_id,
             rosetta_state_directory.path().to_owned(),
             enable_rosetta_blocks,
+            persistent_storage,
         )
         .await;
 
@@ -336,7 +337,11 @@ impl TestEnv {
         env
     }
 
-    async fn restart_rosetta_node(&mut self, enable_rosetta_blocks: bool) {
+    async fn restart_rosetta_node(
+        &mut self,
+        enable_rosetta_blocks: bool,
+        persistent_storage: bool,
+    ) {
         let rosetta_state_directory;
         if let Some(rosetta_context) = std::mem::take(&mut self.rosetta_context) {
             rosetta_state_directory = rosetta_context.state_directory.clone();
@@ -356,6 +361,7 @@ impl TestEnv {
             ledger_canister_id,
             rosetta_state_directory,
             enable_rosetta_blocks,
+            persistent_storage,
         )
         .await;
         self.rosetta = RosettaTestingClient { rosetta_client };
@@ -392,19 +398,21 @@ impl TestEnv {
 }
 
 fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error) -> bool {
-    error.code == 700
+    (error.code == 700 || error.code == 712)
         && error.details.is_some()
         && error
             .details
             .as_ref()
             .unwrap()
             .get("error_message")
-            .map_or(false, |e| e == "Blockchain is empty")
+            .map_or(false, |e| {
+                e == "Blockchain is empty" || e == "Block not found: 0"
+            })
 }
 
 #[tokio::test]
 async fn test_rosetta_blocks_mode_enabled() {
-    let mut env = TestEnv::setup_or_panic(false).await;
+    let mut env = TestEnv::setup_or_panic(false, true).await;
     // Check that by default the rosetta blocks mode is not enabled
     assert_eq!(
         env.rosetta.status_or_panic().await.rosetta_blocks_mode,
@@ -413,14 +421,14 @@ async fn test_rosetta_blocks_mode_enabled() {
 
     // Check that restarting Rosetta doesn't enable the
     // rosetta blocks mode
-    env.restart_rosetta_node(false).await;
+    env.restart_rosetta_node(false, true).await;
     assert_eq!(
         env.rosetta.status_or_panic().await.rosetta_blocks_mode,
         RosettaBlocksMode::Disabled
     );
     // Check that restarting Rosetta doesn't enable the
     // rosetta blocks mode
-    env.restart_rosetta_node(false).await;
+    env.restart_rosetta_node(false, true).await;
     assert_eq!(
         env.rosetta.status_or_panic().await.rosetta_blocks_mode,
         RosettaBlocksMode::Disabled
@@ -438,7 +446,7 @@ async fn test_rosetta_blocks_mode_enabled() {
         .current_block_identifier
         .index
         + 1;
-    env.restart_rosetta_node(true).await;
+    env.restart_rosetta_node(true, true).await;
     assert_eq!(
         env.rosetta.status_or_panic().await.rosetta_blocks_mode,
         RosettaBlocksMode::Enabled {
@@ -454,7 +462,7 @@ async fn test_rosetta_blocks_mode_enabled() {
         .current_block_identifier
         .index
         + 1;
-    env.restart_rosetta_node(true).await;
+    env.restart_rosetta_node(true, true).await;
     assert_eq!(
         env.rosetta.status_or_panic().await.rosetta_blocks_mode,
         RosettaBlocksMode::Enabled {
@@ -465,7 +473,7 @@ async fn test_rosetta_blocks_mode_enabled() {
     // Check that once rosetta blocks mode is enabled then
     // it will be enabled every time Rosetta restarts even
     // without passing --enable-rosetta-blocks
-    env.restart_rosetta_node(false).await;
+    env.restart_rosetta_node(false, true).await;
     assert_eq!(
         env.rosetta.status_or_panic().await.rosetta_blocks_mode,
         RosettaBlocksMode::Enabled {
@@ -493,12 +501,10 @@ impl UnwrapCandid for WasmResult {
 
 #[tokio::test]
 async fn test_rosetta_blocks_enabled_after_first_block() {
-    let mut env = TestEnv::setup_or_panic(false).await;
-
+    let mut env = TestEnv::setup_or_panic(false, true).await;
     // enable rosetta blocks mode
-    env.restart_rosetta_node(true).await;
+    env.restart_rosetta_node(true, true).await;
     env.pocket_ic.stop_progress().await;
-
     env.icrc1_transfers(vec![
         // create block 1 and Rosetta Block 1
         TransferArg {
@@ -529,40 +535,51 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
 
     let old_block0 = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(0),
             hash: None,
         })
-        .await;
-
-    env.rosetta.wait_or_panic_until_synced_up_to(2).await;
-
+        .await
+        .unwrap()
+        .block
+        .unwrap();
+    env.rosetta.wait_or_panic_until_synced_up_to(1).await;
+    println!("synced up to 2");
     // Enabling Rosetta Blocks Mode should not change blocks before
     // the first rosetta index, in this case block 0
     let block0 = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(0),
             hash: None,
         })
-        .await;
+        .await
+        .unwrap()
+        .block
+        .unwrap();
     assert_eq!(old_block0, block0);
 
     // Block 1 must be a Rosetta block with 2 transactions
     let block1_hash = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(1),
             hash: None,
         })
         .await
+        .unwrap()
+        .block
+        .unwrap()
         .block_identifier
         .hash;
     for (index, hash) in [(Some(1), None), (Some(1), Some(block1_hash.clone()))] {
         let block1 = env
             .rosetta
-            .block_or_panic(PartialBlockIdentifier { index, hash })
-            .await;
+            .block(PartialBlockIdentifier { index, hash })
+            .await
+            .unwrap()
+            .block
+            .unwrap();
         assert_eq!(block1.block_identifier.index, 1);
         assert_eq!(block1.block_identifier.hash, block1_hash);
         assert_eq!(block1.parent_block_identifier, block0.block_identifier);
@@ -620,7 +637,7 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
 
 #[tokio::test]
 async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
-    let env = TestEnv::setup_or_panic(true).await;
+    let env = TestEnv::setup_or_panic(true, true).await;
 
     // Rosetta block 0 contains transaction 0
     env.pocket_ic.stop_progress().await;
@@ -675,23 +692,29 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
 
     env.pocket_ic.auto_progress().await;
 
-    env.rosetta.wait_or_panic_until_synced_up_to(4).await;
+    env.rosetta.wait_or_panic_until_synced_up_to(3).await;
 
     // check block 1
     let block0 = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(0),
             hash: None,
         })
-        .await;
+        .await
+        .unwrap()
+        .block
+        .unwrap();
     let block1 = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(1),
             hash: None,
         })
-        .await;
+        .await
+        .unwrap()
+        .block
+        .unwrap();
     assert_eq!(block1.block_identifier.index, 1);
     assert_eq!(block1.parent_block_identifier, block0.block_identifier);
     assert_eq!(block1.timestamp, rosetta_block1_expected_time_millis);
@@ -721,11 +744,14 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     // check block 2
     let block2 = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(2),
             hash: None,
         })
-        .await;
+        .await
+        .unwrap()
+        .block
+        .unwrap();
     assert_eq!(block2.block_identifier.index, 2);
     assert_eq!(block2.parent_block_identifier, block1.block_identifier);
     assert_eq!(block2.timestamp, rosetta_block1_expected_time_millis);
@@ -775,11 +801,14 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     // check block 3
     let block3 = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(3),
             hash: None,
         })
-        .await;
+        .await
+        .unwrap()
+        .block
+        .unwrap();
     assert_eq!(block3.block_identifier.index, 3);
     assert_eq!(block3.parent_block_identifier, block2.block_identifier);
     assert_eq!(block3.timestamp, rosetta_block1_expected_time_millis);
@@ -809,7 +838,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
 
 #[tokio::test]
 async fn test_query_block_range() {
-    let env = TestEnv::setup_or_panic(false).await;
+    let env = TestEnv::setup_or_panic(false, true).await;
     env.pocket_ic.auto_progress().await;
 
     let minter = test_identity()
@@ -860,7 +889,7 @@ async fn test_query_block_range() {
 
 #[tokio::test]
 async fn test_block_transaction() {
-    let env = TestEnv::setup_or_panic(true).await;
+    let env = TestEnv::setup_or_panic(true, true).await;
     env.pocket_ic.stop_progress().await;
     assert!(env
         .rosetta
@@ -916,7 +945,8 @@ async fn test_block_transaction() {
     ])
     .await;
     env.pocket_ic.auto_progress().await;
-    env.rosetta.wait_or_panic_until_synced_up_to(4).await;
+    // ALl the previous transactions are stored in a single rosetta block so we wait until rosetta block 1 is finished
+    env.rosetta.wait_or_panic_until_synced_up_to(1).await;
 
     // We try to fetch the RosettaBlock we just created earlier
     let rosetta_core::objects::Block {
@@ -925,11 +955,14 @@ async fn test_block_transaction() {
         ..
     } = env
         .rosetta
-        .block_or_panic(PartialBlockIdentifier {
+        .block(PartialBlockIdentifier {
             index: Some(1),
             hash: None,
         })
-        .await;
+        .await
+        .unwrap()
+        .block
+        .unwrap();
 
     let transaction = env
         .rosetta
@@ -966,4 +999,189 @@ async fn test_block_transaction() {
         .0
         .message
         .contains("Invalid transaction id"));
+}
+
+#[tokio::test]
+async fn test_network_status() {
+    // We start of by testing the case with no rosetta blocks enabled
+    let mut env = TestEnv::setup_or_panic(false, false).await;
+    let network_status = env.rosetta.network_status_or_panic().await;
+    let genesis_block = env
+        .rosetta
+        .block(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await
+        .unwrap()
+        .block
+        .unwrap();
+
+    // We expect the genesis block to be present and be in the network status
+    assert_eq!(
+        network_status.current_block_identifier,
+        genesis_block.block_identifier
+    );
+    assert_eq!(
+        network_status.current_block_timestamp,
+        genesis_block.timestamp
+    );
+    assert_eq!(
+        network_status.genesis_block_identifier,
+        genesis_block.block_identifier
+    );
+    // If only the genesis block exists than the oldest block identifier is expected to be None
+    assert_eq!(network_status.oldest_block_identifier, None);
+
+    // Now we restart rosetta with rosetta blocks enabled
+    // We need to restart it into memory or otherwise we will trigger the rosetta block mode detection from earlier restarts
+    env.restart_rosetta_node(true, false).await;
+    let network_status = env.rosetta.network_status_or_panic().await;
+    let genesis_block = env
+        .rosetta
+        .block(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await
+        .unwrap()
+        .block
+        .unwrap();
+
+    // We still expect the same network status since no additional blocks have been produced and the first rosetta block is identical to the genesis block
+    assert_eq!(
+        network_status.current_block_identifier,
+        genesis_block.block_identifier
+    );
+    assert_eq!(
+        network_status.current_block_timestamp,
+        genesis_block.timestamp
+    );
+    assert_eq!(
+        network_status.genesis_block_identifier,
+        genesis_block.block_identifier
+    );
+    // If only the genesis block exists than the oldest block identifier is expected to be None
+    assert_eq!(network_status.oldest_block_identifier, None);
+
+    // Now we test the case where we have produced some blocks
+    env.restart_rosetta_node(false, false).await;
+    // After this call we should have 4 icp blocks, genesis and three transfers. The maximum block idx should be 3
+    env.pocket_ic.stop_progress().await;
+    env.icrc1_transfers(vec![
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(1u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(2u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(2u64),
+        },
+    ])
+    .await;
+    env.pocket_ic.auto_progress().await;
+    env.rosetta.wait_or_panic_until_synced_up_to(3).await;
+
+    let network_status = env.rosetta.network_status_or_panic().await;
+    let genesis_block = env
+        .rosetta
+        .block(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await
+        .unwrap()
+        .block
+        .unwrap();
+    let current_block = env
+        .rosetta
+        .block(PartialBlockIdentifier {
+            index: Some(3),
+            hash: None,
+        })
+        .await
+        .unwrap()
+        .block
+        .unwrap();
+    assert_eq!(
+        network_status.current_block_identifier,
+        current_block.block_identifier
+    );
+    assert_eq!(
+        network_status.current_block_timestamp,
+        current_block.timestamp
+    );
+    assert_eq!(
+        network_status.genesis_block_identifier,
+        genesis_block.block_identifier.clone()
+    );
+    // Genesis block is verified so there is no need for the oldest block identifier
+    assert_eq!(network_status.oldest_block_identifier, None);
+
+    // If we restart rosetta now we have 3 icp blocks to sync out of which the first two will go into the rosetta block
+    env.restart_rosetta_node(true, false).await;
+    // Now we have 3 rosetta blocks, the genesis block and the first transfer go into rosetta block 0, the second and third transfer each go into a separate rosetta block. The maximum block idx is thus 2
+    env.rosetta.wait_or_panic_until_synced_up_to(2).await;
+    let network_status = env.rosetta.network_status_or_panic().await;
+    let current_block = env
+        .rosetta
+        .block(PartialBlockIdentifier {
+            index: Some(2),
+            hash: None,
+        })
+        .await
+        .unwrap()
+        .block
+        .unwrap();
+    let genesis_block = env
+        .rosetta
+        .block(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await
+        .unwrap()
+        .block
+        .unwrap();
+    assert_eq!(
+        network_status.current_block_identifier,
+        current_block.block_identifier
+    );
+    assert_eq!(
+        network_status.current_block_timestamp,
+        current_block.timestamp
+    );
+    assert_eq!(
+        network_status.genesis_block_identifier,
+        genesis_block.block_identifier
+    );
+    assert_eq!(network_status.oldest_block_identifier, None);
+    // We should not be able to call block with block index 3 at this point
+    assert!(env
+        .rosetta
+        .block(PartialBlockIdentifier {
+            index: Some(3),
+            hash: None,
+        })
+        .await
+        .unwrap_err()
+        .0
+        .message
+        .contains("Block not found"));
 }
