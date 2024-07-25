@@ -36,6 +36,7 @@ use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
     convert::Into,
+    fs,
     fs::File,
     io,
     io::Write,
@@ -600,25 +601,26 @@ pub fn configure_setupos_image(
     nns_public_key: &str,
     to: &NestedVersionTarget,
 ) -> anyhow::Result<PathBuf> {
-    let tmp_dir = tempfile::tempdir().unwrap();
+    let tmp_dir = env.get_path("setupos");
+    fs::create_dir_all(&tmp_dir)?;
 
     let setupos_image = match to {
         NestedVersionTarget::Branch(false) => {
             env.get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst")
         }
         NestedVersionTarget::Branch(true) => {
-            env.get_dependency_path("ic-os/setupos/envs/dev/disk-img-test.tar.zst")
+            bail!("Starting nested VMs from `-test` versions is unsupported.");
         }
         NestedVersionTarget::Mainnet => {
-            let url = env.get_mainnet_setupos_img_url().unwrap();
+            let url = env.get_mainnet_setupos_img_url()?;
 
-            download_setupos_image(tmp_dir.path(), &url, None)?
+            download_setupos_image(&tmp_dir, &url, None)?
         }
         NestedVersionTarget::Published {
             version: _,
             url,
             sha256,
-        } => download_setupos_image(tmp_dir.path(), url, Some(sha256.to_owned()))?,
+        } => download_setupos_image(&tmp_dir, url, Some(sha256.to_owned()))?,
     };
 
     let setupos_inject_configs = env
@@ -650,13 +652,13 @@ pub fn configure_setupos_image(
         segments[0], segments[1], segments[2], segments[3]
     );
 
-    let uncompressed_image = tmp_dir.path().join("disk.img");
+    let uncompressed_image = tmp_dir.join("disk.img");
 
     let output = Command::new("tar")
         .arg("xaf")
         .arg(&setupos_image)
         .arg("-C")
-        .arg(tmp_dir.path())
+        .arg(tmp_dir)
         .output()?;
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
@@ -711,7 +713,7 @@ pub fn configure_setupos_image(
         bail!("could not inject configs into image");
     }
 
-    let configured_image = nested_vm.get_configured_setupos_image_path().unwrap();
+    let configured_image = nested_vm.get_configured_setupos_image_path()?;
 
     let mut img_file = File::open(&uncompressed_image)?;
     let configured_image_file = File::create(configured_image.clone())?;
@@ -728,8 +730,9 @@ fn download_setupos_image(
     url: &Url,
     hash: Option<String>,
 ) -> anyhow::Result<PathBuf> {
+    let output = tmp_dir.join("setupos_image");
     let file_downloader = FileDownloader::new(None);
-    block_on(file_downloader.download_and_extract_tar_gz(url.as_str(), tmp_dir, hash))?;
+    block_on(file_downloader.download_file(url.as_str(), &output, hash))?;
 
-    Ok(tmp_dir.join("disk.img"))
+    Ok(output)
 }
