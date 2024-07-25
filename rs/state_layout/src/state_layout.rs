@@ -71,7 +71,7 @@ pub struct RwPolicy<'a, Owner> {
     lifetime_tag: PhantomData<&'a Owner>,
 }
 
-pub enum Verification {}
+pub enum InVerification {}
 
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
@@ -122,9 +122,9 @@ impl<'a, T> AccessPolicy for RwPolicy<'a, T> {
 impl<'a, T> ReadPolicy for RwPolicy<'a, T> {}
 impl<'a, T> WritePolicy for RwPolicy<'a, T> {}
 
-impl AccessPolicy for Verification {}
-impl ReadPolicy for Verification {}
-impl LoadingPolicy for Verification {}
+impl AccessPolicy for InVerification {}
+impl ReadPolicy for InVerification {}
+impl LoadingPolicy for InVerification {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
@@ -634,7 +634,7 @@ impl StateLayout {
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<CheckpointLayout<Verification>, LayoutError> {
+    ) -> Result<CheckpointLayout<InVerification>, LayoutError> {
         debug_assert_eq!(height, layout.height);
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
@@ -739,8 +739,8 @@ impl StateLayout {
     pub fn checkpoint_in_verification(
         &self,
         height: Height,
-    ) -> Result<CheckpointLayout<Verification>, LayoutError> {
-        self.checkpoint::<Verification>(height)
+    ) -> Result<CheckpointLayout<InVerification>, LayoutError> {
+        self.checkpoint::<InVerification>(height)
     }
 
     pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {
@@ -1492,7 +1492,7 @@ where
     }
 }
 
-impl CheckpointLayout<Verification> {
+impl CheckpointLayout<InVerification> {
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     pub fn remove_unverified_checkpoint_marker(
