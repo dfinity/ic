@@ -13023,6 +13023,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "canister-test",
  "ed25519-dalek",
  "ic-agent 0.35.0",
  "ic-base-types",
