@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/monitoring/metrics",
     "//rs/monitoring/tracing",
+    "//rs/prep",
     "//rs/protobuf",
     "//rs/registry/fake",
     "//rs/registry/keys",
