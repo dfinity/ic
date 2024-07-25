@@ -116,16 +116,35 @@ def test_changed_ci_cfg_gitlab_ci_config_yml(tmpdir):
 
     assert git_changes.ci_config_changes(tmpdir)
 
-@pytest.fixture
-def setup_env():
-    os.environ['CI_DEFAULT_BRANCH'] = ''
-    yield
-    del os.environ['CI_DEFAULT_BRANCH']  # Unset the environment variable after the test
-
-
-def test_target_branch_CI_DEFAULT_BRANCH_is_empty(tmpdir):
+def test_target_branch_CI_DEFAULT_BRANCH_is_unset(tmpdir):
     """Tests that the target branch is empty."""
     setup_repo(tmpdir, "change_one_file", branch="master")
 
+    assert git_changes.target_branch(tmpdir) == "master"
 
-    assert git_changes.target_branch(tmpdir) == ""
+def test_target_branch_CI_DEFAULT_BRANCH_is_set(tmpdir):
+    """Tests that the target branch is empty."""
+    setup_repo(tmpdir, "change_one_file", branch="default-branch")
+    os.environ["CI_DEFAULT_BRANCH"] = "default-branch"
+
+    assert git_changes.target_branch(tmpdir) == "default-branch"
+
+def test_target_branch_CI_MERGE_REQUEST_TARGET_BRANCH_NAME_is_unset(tmpdir):
+    """Tests that the target branch is empty."""
+    setup_repo(tmpdir, "change_one_file", branch="master")
+    os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"] = ""
+
+    assert git_changes.target_branch(tmpdir) == "master"
+
+def test_target_branch_CI_MERGE_REQUEST_TARGET_BRANCH_NAME_is_set(tmpdir):
+    """Tests that the target branch is empty."""
+    setup_repo(tmpdir, "change_one_file", branch="master")
+    os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"] = "target-branch"
+
+    assert git_changes.target_branch(tmpdir) == "target-branch"
+
+def test_target_branch_no_env_vars_set(tmpdir):
+    """Tests that the target branch is empty."""
+    setup_repo(tmpdir, "change_one_file", branch="master")
+
+    assert git_changes.target_branch(tmpdir) == "master"
