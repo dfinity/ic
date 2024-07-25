@@ -26,10 +26,7 @@ ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-sys = { path = "../../../sys" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
-<<<<<<< HEAD
 itertools = { workspace = true }
-=======
->>>>>>> master
 registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
 rand = { workspace = true }
