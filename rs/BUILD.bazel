@@ -4,9 +4,9 @@
 #
 #               vm-system-tests  ----
 #               |     \              |
-#               |      ic-os         |
+#               |     vm-ic-os       |
 #               |           \        |
-#               |          release   |
+#               |         release    |
 #               |          |     \   |
 #               |          |      tools
 #               |          |         |
