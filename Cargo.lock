@@ -12926,7 +12926,7 @@ dependencies = [
  "candid",
  "canister-test",
  "ed25519-dalek",
- "ic-agent 0.35.0",
+ "ic-agent",
  "ic-base-types",
  "ic-canister-client",
  "ic-config",
