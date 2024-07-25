@@ -7,6 +7,8 @@ name: Sytem Tests K8s
 #   --field jobs="32"
 
 on:
+  schedule:
+    - cron: "0 3 * * *"
   pull_request:
     paths:
       - '.github/workflows/system-tests-k8s.yml'
@@ -22,8 +24,14 @@ on:
         default: '32'
 
 env:
-  TARGETS: "${{ github.event.inputs.targets || '//rs/tests/testing_verification:basic_health_test' }}"
-  JOBS: "${{ github.event.inputs.jobs || '32' }}"
+  TARGETS: |
+    ${{ github.event_name == 'schedule' && '//...' ||
+    github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
+    '//rs/tests/testing_verification:basic_health_test' }}
+  JOBS: |
+    ${{ github.event_name == 'schedule' && '9' ||
+    github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
+    '32' }}
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}

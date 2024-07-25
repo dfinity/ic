@@ -28,7 +28,6 @@ Success::
 end::catalog[] */
 
 use crate::orchestrator::utils::subnet_recovery::*;
-use crate::tecdsa::make_key_ids_for_all_schemes;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     rw_message::{
@@ -37,6 +36,7 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
 };
+use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
 use ic_recovery::{file_sync_helper, get_node_metrics};
@@ -60,7 +60,7 @@ const UNASSIGNED_NODES: usize = 3;
 
 const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
-const APP_NODES_LARGE: usize = 34;
+const APP_NODES_LARGE: usize = 37;
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
