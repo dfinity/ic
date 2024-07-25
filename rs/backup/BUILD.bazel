@@ -43,7 +43,6 @@ rust_library(
     version = "1.0.2",
     visibility = [
         "//rs:system-tests-pkg",
-        "//rs:tools-pkg",
     ],
     deps = DEPENDENCIES,
 )
