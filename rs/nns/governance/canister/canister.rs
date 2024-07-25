@@ -855,7 +855,7 @@ fn claim_or_refresh_neuron_from_account_pb() {
 #[export_name = "canister_query list_proposals_pb"]
 fn list_proposals_pb() {
     debug_log("list_proposals_pb");
-    over(protobuf, list_proposals_)
+    panic!("Method removed.  Please use list_proposals instead.")
 }
 
 #[export_name = "canister_query list_neurons_pb"]
