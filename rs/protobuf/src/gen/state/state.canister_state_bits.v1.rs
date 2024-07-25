@@ -819,6 +819,7 @@ pub enum LogVisibility {
     Unspecified = 0,
     Controllers = 1,
     Public = 2,
+    AllowList = 3,
 }
 impl LogVisibility {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -830,6 +831,7 @@ impl LogVisibility {
             LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
             LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
             LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+            LogVisibility::AllowList => "LOG_VISIBILITY_ALLOW_LIST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -838,6 +840,7 @@ impl LogVisibility {
             "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
             "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
             "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+            "LOG_VISIBILITY_ALLOW_LIST" => Some(Self::AllowList),
             _ => None,
         }
     }

@@ -796,6 +796,7 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
         match item {
             LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
             LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
+            LogVisibility::AllowList => pb_canister_state_bits::LogVisibility::AllowList,
         }
     }
 }
@@ -806,6 +807,7 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
             pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
             pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
             pb_canister_state_bits::LogVisibility::Public => Self::Public,
+            pb_canister_state_bits::LogVisibility::AllowList => Self::AllowList,
         }
     }
 }
