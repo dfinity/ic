@@ -148,3 +148,4 @@ def test_target_branch_no_env_vars_set(tmpdir):
     setup_repo(tmpdir, "change_one_file", branch="master")
 
     assert git_changes.target_branch(tmpdir) == "master"
+

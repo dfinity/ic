@@ -63,6 +63,7 @@ fn test_merge_neurons_and_simulate_merge_neurons() {
                     not_for_profit: true,
                     ..Default::default()
                 }
+                .into()
             ),
             None,
             "There is more than one neuron with the same id."
@@ -178,6 +179,7 @@ fn test_spawn_neuron() {
                     maturity_e8s_equivalent: 1_000_000_000, // Equivalent to 10 ICP
                     ..Default::default()
                 }
+                .into()
             ),
             None,
             "There is more than one neuron with the same id."

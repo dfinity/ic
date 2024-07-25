@@ -98,8 +98,3 @@ test_suite(
     tags = ["manual"],
     tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
 )
-
-alias(
-    name = "deterministic-ips",
-    actual = "//rs/ic_os/deterministic_ips:deterministic-ips",
-)

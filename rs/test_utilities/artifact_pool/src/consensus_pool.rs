@@ -1,7 +1,7 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
@@ -39,6 +39,7 @@ pub struct TestConsensusPool {
     time_source: Arc<dyn TimeSource>,
     dkg_payload_builder:
         Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload>,
+    membership: Membership,
 }
 
 pub struct Round<'a> {
@@ -196,13 +197,33 @@ impl TestConsensusPool {
             no_op_logger(),
             time_source.clone(),
         );
+        let membership = Membership::new(pool.get_cache(), registry_client.clone(), subnet_id);
         TestConsensusPool {
             subnet_id,
             registry_client,
             pool,
             time_source,
             dkg_payload_builder,
+            membership,
         }
+    }
+
+    /// Utility function to determine the identity of the block maker with the
+    /// specified rank at a given height. Panics if this rank does not exist.
+    pub fn get_block_maker_by_rank(&self, height: Height, rank: Rank) -> NodeId {
+        let pool_reader = PoolReader::new(&self.pool);
+        let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
+        *self
+            .membership
+            .get_nodes(height)
+            .unwrap()
+            .iter()
+            .find(|node| {
+                self.membership
+                    .get_block_maker_rank(height, &prev_beacon, **node)
+                    == Ok(Some(rank))
+            })
+            .unwrap()
     }
 
     pub fn make_next_block(&self) -> BlockProposal {
