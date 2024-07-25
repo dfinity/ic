@@ -2,6 +2,8 @@ load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
+package(default_visibility = ["//rs:ic-os-pkg"])
+
 LINUX_ONLY = [
     "metrics-proxy",
     "vsock_guest",
@@ -144,12 +146,7 @@ LIBRARIES = {
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [
-            "//ic-os/boundary-guestos/envs:__subpackages__",
-            "//ic-os/guestos/envs:__subpackages__",
-            "//ic-os/hostos/envs:__subpackages__",
-            "//ic-os/setupos/envs:__subpackages__",
-        ],
+        visibility = ["//rs:ic-os-pkg"],
     )
     for name in BINARIES
     if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
@@ -167,12 +164,6 @@ genrule(
         "@platforms//os:osx": "cp $< $@",
     }),
     executable = True,
-    visibility = [
-        "//ic-os/boundary-guestos/envs:__subpackages__",
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-        "//ic-os/setupos/envs:__subpackages__",
-    ],
 )
 
 [
@@ -186,12 +177,6 @@ genrule(
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [
-            "//ic-os/boundary-guestos/envs:__subpackages__",
-            "//ic-os/guestos/envs:__subpackages__",
-            "//ic-os/hostos/envs:__subpackages__",
-            "//ic-os/setupos/envs:__subpackages__",
-        ],
     )
     for name in TEST_BINARIES
 ]
@@ -206,13 +191,6 @@ genrule(
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [
-            "//ic-os/boundary-api-guestos/envs:__subpackages__",
-            "//ic-os/boundary-guestos/envs:__subpackages__",
-            "//ic-os/guestos/envs:__subpackages__",
-            "//ic-os/hostos/envs:__subpackages__",
-            "//ic-os/setupos/envs:__subpackages__",
-        ],
     )
     for name in LIBRARIES
 ]
