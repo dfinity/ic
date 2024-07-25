@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+<<<<<<<< HEAD:rs/tests/consensus/tecdsa/utils/src/lib.rs
+=======
+>>>>>>> master
 use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
@@ -18,6 +22,7 @@ use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
+<<<<<<< HEAD
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::ic::Subnet;
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -26,12 +31,17 @@ use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
 use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
 use ic_system_test_driver::driver::test_env_api::NnsInstallationBuilder;
 use ic_system_test_driver::util::block_on;
+=======
+>>>>>>> master
 use ic_system_test_driver::{
     canister_api::{CallMode, Request},
     nns::vote_and_execute_proposal,
     util::MessageCanister,
 };
+<<<<<<< HEAD
 use ic_types::Height;
+=======
+>>>>>>> master
 use ic_types::{PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
@@ -88,6 +98,7 @@ pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     ]
 }
 
+<<<<<<< HEAD
 /// Creates one system subnet without signing enabled and one application subnet
 /// with signing enabled.
 pub fn setup_without_ecdsa_on_nns(test_env: TestEnv) {
@@ -172,6 +183,8 @@ pub fn setup(test_env: TestEnv) {
         .expect("Failed to install NNS canisters");
 }
 
+=======
+>>>>>>> master
 pub fn empty_subnet_update() -> UpdateSubnetPayload {
     UpdateSubnetPayload {
         subnet_id: subnet_test_id(0),
@@ -214,6 +227,7 @@ pub fn scale_cycles(cycles: Cycles) -> Cycles {
     (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
 }
 
+<<<<<<< HEAD
 /// The signature test consists of getting the given canister's Chain key, comparing it to the existing key
 /// to ensure it hasn't changed, sending a sign request, and verifying the signature
 pub fn run_chain_key_signature_test(
@@ -257,6 +271,8 @@ pub fn get_master_public_key(
     public_key
 }
 
+=======
+>>>>>>> master
 pub async fn get_public_key_and_test_signature(
     key_id: &MasterPublicKeyId,
     message_canister: &MessageCanister<'_>,
@@ -913,3 +929,10 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
         })
     }
 }
+<<<<<<< HEAD
+========
+pub mod tecdsa_signature_test;
+pub mod tecdsa_two_signing_subnets_test;
+>>>>>>>> master:rs/tests/src/tecdsa/mod.rs
+=======
+>>>>>>> master
