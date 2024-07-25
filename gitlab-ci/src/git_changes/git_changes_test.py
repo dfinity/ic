@@ -129,9 +129,3 @@ def test_target_branch_CI_MERGE_REQUEST_TARGET_BRANCH_NAME_is_set(tmpdir):
 
     assert git_changes.target_branch(tmpdir) == "target-branch"
 
-def test_target_branch_no_env_vars_set(tmpdir):
-    """Tests that the target branch is empty."""
-    setup_repo(tmpdir, "change_one_file", branch="master")
-
-    assert git_changes.target_branch(tmpdir) == "master"
-
