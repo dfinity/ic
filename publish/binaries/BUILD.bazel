@@ -146,7 +146,6 @@ LIBRARIES = {
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = ["//rs:ic-os-pkg"],
     )
     for name in BINARIES
     if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
