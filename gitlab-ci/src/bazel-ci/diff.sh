@@ -52,10 +52,11 @@ if [ ${#files[@]} -eq 0 ]; then
     exit 0
 fi
 
+UNIVERSE="$(echo ${BAZEL_TARGETS} | sed 's/ /+/')"
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
-    TARGETS=$(bazel query "rdeps(//..., set(${files[*]}))")
+    TARGETS=$(bazel query "rdeps(${UNIVERSE}, set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
+    TARGETS=$(bazel query "kind(test, rdeps(${UNIVERSE}, set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1
