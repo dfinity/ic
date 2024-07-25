@@ -54,7 +54,7 @@ package_group(
 
 # Targets for preparing release artifacts (e.g. stripping binaries, compressiong wasms, etc).
 #
-# Can depend on: all targets excluding the //rs:system-tests-pkg package group.
+# Can depend on: all targets excluding the //rs:system-tests-pkg and //rs:ic-os-pkg package groups.
 #
 # Dependants: //rs:ic-os-pkg
 package_group(
