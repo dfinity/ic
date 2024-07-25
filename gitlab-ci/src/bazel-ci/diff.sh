@@ -58,19 +58,12 @@ fi
 # workflows and should be a space-separated list of bazel targets. If it's not
 # defined the universe defaults to all targets, i.e.: //...
 UNIVERSE="$(echo ${BAZEL_TARGETS:-//...} | sed 's/ /+/')"
-cat << EOF > filter.cquery
-def format(target):
-  if "IncompatiblePlatformProvider" not in providers(target):
-    return target.label
-  return ""
-EOF
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
-    TARGETS=$(bazel cquery "rdeps(${UNIVERSE}, set(${files[*]}))" --starlark:file=filter.cquery)
+    TARGETS=$(bazel query "rdeps(${UNIVERSE}, set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel cquery \
+    TARGETS=$(bazel query \
       "kind(test, rdeps(${UNIVERSE}, set(${files[*]})))
-         except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)" \
-         --starlark:file=filter.cquery)
+         except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1
