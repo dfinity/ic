@@ -377,10 +377,11 @@ mod tests {
     }
 
     #[test]
-    fn validate_dealings_payload_when_wrong_height_fails_test() {
+    fn validate_dealings_payload_when_wrong_dkg_id_fails_test() {
         let content = DealingContent::new(
             NiDkgDealing::dummy_dealing_for_tests(0),
             NiDkgId {
+                // Make the id invalid by changing the height
                 start_block_height: Height::from(1),
                 dealer_subnet: subnet_test_id(0),
                 dkg_tag: NiDkgTag::HighThreshold,
@@ -482,6 +483,13 @@ mod tests {
         );
     }
 
+    /// Configures all the dependencies and calls [`validate_dealings_payload`] with
+    /// `dealings_to_validate` and `max_dealings_per_payload` as arguments.
+    ///
+    /// Assumptions:
+    /// 1. subnet_id = subnet_test_id(0),
+    /// 2. nodes = [node_test_id(0)]
+    /// 3. last summary height = 0
     fn test_validate_dealings_payload(
         dealings_to_validate: &[Message],
         parent_dealings: Vec<Message>,
@@ -493,7 +501,7 @@ mod tests {
                 pool,
                 dkg_pool,
                 ..
-            } = dependencies(pool_config, 1);
+            } = dependencies(pool_config, /*nodes_count=*/ 1);
 
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
