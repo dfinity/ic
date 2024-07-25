@@ -250,7 +250,7 @@ jobs:
           cd gitlab-ci/src
           pytest --ignore=gitlab_config/ -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
-            --cov-report=term-missing --cov-report=html --cov-branch"
+            --cov-report=term-missing --cov-report=html --cov-branch
   build-ic:
     name: Build IC
     runs-on:
