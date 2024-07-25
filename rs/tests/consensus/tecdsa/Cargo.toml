@@ -24,6 +24,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-sys = { path = "../../../sys" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
