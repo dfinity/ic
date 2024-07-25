@@ -36,7 +36,9 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
 };
-use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
+use ic_consensus_threshold_sig_system_test_utils::{
+    make_key_ids_for_all_schemes, run_chain_key_signature_test,
+};
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
 use ic_recovery::{file_sync_helper, get_node_metrics};

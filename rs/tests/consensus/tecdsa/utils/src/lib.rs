@@ -18,12 +18,19 @@ use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::ic::Subnet;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
+use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
+use ic_system_test_driver::driver::test_env_api::NnsInstallationBuilder;
 use ic_system_test_driver::{
     canister_api::{CallMode, Request},
     nns::vote_and_execute_proposal,
-    util::MessageCanister,
+    util::{block_on, MessageCanister},
 };
-use ic_types::{PrincipalId, ReplicaVersion};
+use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
@@ -79,6 +86,90 @@ pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     ]
 }
 
+/// Creates one system subnet without signing enabled and one application subnet
+/// with signing enabled.
+pub fn setup_without_ecdsa_on_nns(test_env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(19))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .with_unassigned_nodes(NUMBER_OF_NODES)
+        .setup_and_start(&test_env)
+        .expect("Could not start IC!");
+    test_env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    test_env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
+
+    // Currently, we make the assumption that the first subnets is the root
+    // subnet. This might not hold in the future.
+    let nns_node = test_env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &test_env)
+        .expect("Failed to install NNS canisters");
+}
+
+/// Creates one system subnet and two application subnets.
+pub fn setup(test_env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .with_unassigned_nodes(NUMBER_OF_NODES)
+        .setup_and_start(&test_env)
+        .expect("Could not start IC!");
+    test_env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    test_env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
+
+    // Currently, we make the assumption that the first subnets is the root
+    // subnet. This might not hold in the future.
+    let nns_node = test_env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &test_env)
+        .expect("Failed to install NNS canisters");
+}
+
 pub fn empty_subnet_update() -> UpdateSubnetPayload {
     UpdateSubnetPayload {
         subnet_id: subnet_test_id(0),
@@ -119,6 +210,49 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
 pub fn scale_cycles(cycles: Cycles) -> Cycles {
     // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
     (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
+}
+
+/// The signature test consists of getting the given canister's Chain key, comparing it to the existing key
+/// to ensure it hasn't changed, sending a sign request, and verifying the signature
+pub fn run_chain_key_signature_test(
+    canister: &MessageCanister,
+    logger: &Logger,
+    key_id: &MasterPublicKeyId,
+    existing_key: Vec<u8>,
+) {
+    info!(logger, "Run through Chain key signature test.");
+    let message_hash = vec![0xabu8; 32];
+    block_on(async {
+        let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
+            .await
+            .unwrap();
+        assert_eq!(existing_key, public_key);
+        let signature = get_signature_with_logger(
+            message_hash.clone(),
+            ECDSA_SIGNATURE_FEE,
+            key_id,
+            canister,
+            logger,
+        )
+        .await
+        .unwrap();
+        verify_signature(key_id, &message_hash, &public_key, &signature);
+    });
+}
+
+/// Get the threshold public key of the given canister
+pub fn get_master_public_key(
+    canister: &MessageCanister,
+    key_id: &MasterPublicKeyId,
+    logger: &Logger,
+) -> Vec<u8> {
+    info!(
+        logger,
+        "Getting threshold public key for key id: {}.", key_id
+    );
+    let public_key = block_on(get_public_key_with_retries(key_id, canister, logger, 100)).unwrap();
+    info!(logger, "Got public key {:?}", public_key);
+    public_key
 }
 
 pub async fn get_public_key_and_test_signature(
