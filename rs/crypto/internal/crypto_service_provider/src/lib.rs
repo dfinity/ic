@@ -16,7 +16,6 @@ pub mod public_key_store;
 pub mod secret_key_store;
 mod signer;
 pub mod threshold;
-pub mod tls;
 pub mod types;
 pub mod vault;
 
@@ -26,8 +25,7 @@ pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 pub use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
-    CspPublicKeyStore, CspSigVerifier, CspSigner, CspTlsHandshakeSignerProvider, NiDkgCspClient,
-    ThresholdSignatureCspClient,
+    CspPublicKeyStore, CspSigVerifier, CspSigner, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
@@ -47,12 +45,7 @@ mod tests;
 /// Describes the interface of the crypto service provider (CSP), e.g. for
 /// signing and key generation. The Csp struct implements this trait.
 pub trait CryptoServiceProvider:
-    CspSigner
-    + CspSigVerifier
-    + ThresholdSignatureCspClient
-    + NiDkgCspClient
-    + CspTlsHandshakeSignerProvider
-    + CspPublicKeyStore
+    CspSigner + CspSigVerifier + ThresholdSignatureCspClient + NiDkgCspClient + CspPublicKeyStore
 {
 }
 
@@ -61,7 +54,6 @@ impl<T> CryptoServiceProvider for T where
         + CspSigVerifier
         + ThresholdSignatureCspClient
         + NiDkgCspClient
-        + CspTlsHandshakeSignerProvider
         + CspPublicKeyStore
 {
 }

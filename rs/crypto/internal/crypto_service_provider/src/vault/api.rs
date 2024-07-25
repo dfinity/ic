@@ -392,11 +392,13 @@ pub trait CspVault:
     + PublicAndSecretKeyStoreCspVault
     + PublicKeyStoreCspVault
 {
+    fn upcast_to_tls_handshake_vault(&self) -> &dyn TlsHandshakeCspVault;
 }
 
 // Blanket implementation of `CspVault` for all types that fulfill the
 // requirements.
-impl<T> CspVault for T where
+impl<T> CspVault for T
+where
     T: BasicSignatureCspVault
         + MultiSignatureCspVault
         + ThresholdSignatureCspVault
@@ -408,8 +410,11 @@ impl<T> CspVault for T where
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
         + PublicAndSecretKeyStoreCspVault
-        + PublicKeyStoreCspVault
+        + PublicKeyStoreCspVault,
 {
+    fn upcast_to_tls_handshake_vault(&self) -> &dyn TlsHandshakeCspVault {
+        self
+    }
 }
 
 /// Operations of `CspVault` related to basic signatures

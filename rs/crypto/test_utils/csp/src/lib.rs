@@ -1,11 +1,10 @@
 use ic_crypto_internal_csp::api::{
-    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdSignError,
-    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
+    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdSignError, NiDkgCspClient,
+    ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
-use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateReshareDealingError, CspDkgCreateReshareTranscriptError,
     CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError,
@@ -21,7 +20,6 @@ use ic_types::{NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 mock! {
     pub AllCryptoServiceProvider {}
@@ -204,9 +202,5 @@ mock! {
         fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
         fn current_node_public_keys_with_timestamps(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
         fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError>;
-    }
-
-    impl CspTlsHandshakeSignerProvider for AllCryptoServiceProvider {
-        fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault>;
     }
 }
