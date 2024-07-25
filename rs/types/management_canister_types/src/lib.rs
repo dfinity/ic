@@ -787,6 +787,8 @@ pub enum LogVisibility {
     Controllers = 1,
     #[serde(rename = "public")]
     Public = 2,
+    #[serde(rename = "allow_list")]
+    AllowList = 3,
 }
 
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
