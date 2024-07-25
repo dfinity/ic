@@ -78,6 +78,7 @@ fn current_binary_path() -> Option<PathBuf> {
     std::env::args().next().map(PathBuf::from)
 }
 
+/// Some bogus comment to trigger a build
 fn main() {
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
