@@ -9716,21 +9716,21 @@ fn test_neuron_set_visibility() {
 
     // Step 2: Call the code under test.
 
-    let set_visibility = SetVisibility {
-        visibility: Some(Visibility::Public as i32),
-    };
-
     let typical_configure_response = configure_neuron(
         controller,
         typical_neuron.id.unwrap(),
-        set_visibility.clone(),
+        SetVisibility {
+            visibility: Some(Visibility::Public as i32),
+        },
         &mut governance,
     );
 
     let known_neuron_configure_response = configure_neuron(
         controller,
         known_neuron.id.unwrap(),
-        set_visibility,
+        SetVisibility {
+            visibility: Some(Visibility::Private as i32),
+        },
         &mut governance,
     );
 
@@ -9773,7 +9773,7 @@ fn test_neuron_set_visibility() {
 
     assert_neuron_visibility(typical_neuron.id.unwrap(), Some(Visibility::Public));
 
-    assert_neuron_visibility(known_neuron.id.unwrap(), None);
+    assert_neuron_visibility(known_neuron.id.unwrap(), Some(Visibility::Public));
 }
 
 #[test]
