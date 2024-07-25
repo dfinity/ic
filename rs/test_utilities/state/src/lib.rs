@@ -767,15 +767,14 @@ pub fn register_callback(
     canister_state: &mut CanisterState,
     originator: CanisterId,
     respondent: CanisterId,
-    callback_id: CallbackId,
     deadline: CoarseTime,
-) {
+) -> CallbackId {
     let call_context_manager = canister_state
         .system_state
         .call_context_manager_mut()
         .unwrap();
     let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(originator, callback_id, deadline),
+        CallOrigin::SystemTask,
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         RequestMetadata::new(0, UNIX_EPOCH),
@@ -792,7 +791,7 @@ pub fn register_callback(
         WasmClosure::new(0, 2),
         None,
         deadline,
-    ));
+    ))
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.

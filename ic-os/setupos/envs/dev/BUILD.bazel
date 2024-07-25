@@ -12,7 +12,10 @@ icos_build(
     image_deps_func = image_deps,
     upgrades = False,
     upload_prefix = "setup-os",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     vuln_scan = False,
 )
 

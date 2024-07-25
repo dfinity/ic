@@ -752,6 +752,13 @@ pub mod manage_neuron {
         #[prost(bool, tag = "1")]
         pub requested_setting_for_auto_stake_maturity: bool,
     }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct SetVisibility {
+        #[prost(enumeration = "super::Visibility", optional, tag = "1")]
+        pub visibility: ::core::option::Option<i32>,
+    }
     /// Commands that only configure a given neuron, but do not interact
     /// with the outside world. They all require the caller to be the
     /// controller of the neuron.
@@ -759,7 +766,7 @@ pub mod manage_neuron {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Configure {
-        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9")]
+        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10")]
         pub operation: ::core::option::Option<configure::Operation>,
     }
     /// Nested message and enum types in `Configure`.
@@ -788,6 +795,8 @@ pub mod manage_neuron {
             LeaveCommunityFund(super::LeaveCommunityFund),
             #[prost(message, tag = "9")]
             ChangeAutoStakeMaturity(super::ChangeAutoStakeMaturity),
+            #[prost(message, tag = "10")]
+            SetVisibility(super::SetVisibility),
         }
     }
     /// Disburse this neuron's stake: transfer the staked ICP to the

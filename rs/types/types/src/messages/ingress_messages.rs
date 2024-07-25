@@ -12,9 +12,10 @@ use crate::{
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method, Payload, StoredChunksArgs, UpdateSettingsArgs, UploadChunkArgs,
-    IC_00,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -468,7 +469,7 @@ impl ParseIngressError {
             ParseIngressError::SubnetMethodNotAllowed => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "ic00 method {} can be not be called via ingress messages",
+                    "ic00 method {} can not be called via ingress messages",
                     method_name
                 ),
             ),
@@ -531,10 +532,26 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
-        Ok(Method::TakeCanisterSnapshot)
-        | Ok(Method::LoadCanisterSnapshot)
-        | Ok(Method::ListCanisterSnapshots)
-        | Ok(Method::DeleteCanisterSnapshot) => Err(ParseIngressError::UnknownSubnetMethod),
+        Ok(Method::TakeCanisterSnapshot) => match TakeCanisterSnapshotArgs::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::LoadCanisterSnapshot) => match LoadCanisterSnapshotArgs::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::ListCanisterSnapshots) => {
+            match ListCanisterSnapshotArgs::decode(ingress.arg()) {
+                Ok(record) => Ok(Some(record.get_canister_id())),
+                Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+            }
+        }
+        Ok(Method::DeleteCanisterSnapshot) => {
+            match DeleteCanisterSnapshotArgs::decode(ingress.arg()) {
+                Ok(record) => Ok(Some(record.get_canister_id())),
+                Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+            }
+        }
 
         Ok(Method::CreateCanister)
         | Ok(Method::SetupInitialDKG)
