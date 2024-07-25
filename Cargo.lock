@@ -2307,7 +2307,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "futures",
- "ic-agent 0.35.0",
+ "ic-agent",
  "ic-base-types",
  "ic-config",
  "ic-constants",
