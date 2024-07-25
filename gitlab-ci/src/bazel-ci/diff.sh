@@ -65,7 +65,7 @@ fi
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(${UNIVERSE}, set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query
+    TARGETS=$(bazel query \
       "(kind(test, rdeps(${UNIVERSE}, set(${files[*]})))
          except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...))
          ${EXCEPT_LINUX}")
