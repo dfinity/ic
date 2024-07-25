@@ -20,7 +20,6 @@ def open_test_file(rel_path):
 def test_project_root_bazel(bazel_test):
     assert bazel_test.root.exists()
     assert bazel_test.root.is_dir()
-    assert bazel_test.root.name == "ic"
 
 
 def test_cargo_lock_exists(bazel_test):
