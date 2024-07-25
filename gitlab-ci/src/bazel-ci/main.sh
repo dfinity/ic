@@ -5,7 +5,7 @@
 # e.g. follow the buildfarm link -> details -> explicit command line.
 
 set -eufo pipefail
-
+set -x
 ic_version_rc_only="0000000000000000000000000000000000000000"
 if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
