@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+pub fn doc_ref(section: &str) -> String {
+    format!(
+        "http://internetcomputer.org/docs/current/references/execution-errors#{}",
+        section
+    )
+}
 pub enum ErrorHelp {
     UserError {
         suggestion: String,
@@ -185,13 +191,31 @@ impl AsErrorHelp for WasmValidationError {
             | WasmValidationError::InvalidGlobalSection(_)
             | WasmValidationError::UnsupportedWasmInstruction { .. }
             | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
-            WasmValidationError::UserInvalidExportSection(_)
-            | WasmValidationError::TooManyFunctions { .. }
-            | WasmValidationError::TooManyGlobals { .. }
-            | WasmValidationError::FunctionComplexityTooHigh { .. }
-            | WasmValidationError::FunctionTooLarge { .. }
-            | WasmValidationError::CodeSectionTooLarge { .. }
-            | WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
+            WasmValidationError::UserInvalidExportSection(_) => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            WasmValidationError::TooManyGlobals { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            WasmValidationError::FunctionComplexityTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            WasmValidationError::FunctionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
                 doc_link: "".to_string(),
             },
