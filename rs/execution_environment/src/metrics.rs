@@ -137,7 +137,6 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
-    pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
     pub query_critical_error: IntCounter,
     /// The total number of tracked System API calls invoked during the query execution.
@@ -195,31 +194,6 @@ impl QueryHandlerMetrics {
                 messages: messages_histogram(
                     "execution_query_initial_call_messages",
                     "The number of messages executed in the initial call in \
-                    query handling",
-                    metrics_registry,
-                ),
-            },
-            query_retry_call: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_query_retry_call_duration_seconds",
-                    "The duration of the retry call in query handling",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_query_retry_call_instructions",
-                    "The number of instructions executed in the retry call \
-                    in query handling",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_query_retry_call_slices",
-                    "The number of slices executed in the retry call in \
-                    query handling",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_query_retry_call_messages",
-                    "The number of messages executed in the retry call in \
                     query handling",
                     metrics_registry,
                 ),

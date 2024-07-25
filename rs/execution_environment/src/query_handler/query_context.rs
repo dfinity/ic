@@ -210,7 +210,7 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        let (mut canister, mut result) = {
+        let (mut canister, result) = {
             let measurement_scope =
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
@@ -221,34 +221,6 @@ impl<'a> QueryContext<'a> {
                 &measurement_scope,
             )
         };
-
-        // An attempt to call another query will result in `ContractViolation`.
-        // If that's the case then retry query execution as `Stateful` if the
-        // legacy ICQC is enabled.
-
-        let legacy_icqc_enabled = self.own_subnet_type == SubnetType::System
-            || self.own_subnet_type == SubnetType::VerifiedApplication;
-
-        if let WasmMethod::Query(_) = &method {
-            if let Err(err) = &result {
-                if err.code() == ErrorCode::CanisterContractViolation && legacy_icqc_enabled {
-                    let measurement_scope =
-                        MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
-                    let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-                    let (new_canister, new_result) = self.execute_query(
-                        old_canister.clone(),
-                        method,
-                        &query.method_payload,
-                        NonReplicatedQueryKind::Stateful {
-                            call_origin: call_origin.clone(),
-                        },
-                        &measurement_scope,
-                    );
-                    canister = new_canister;
-                    result = new_result;
-                }
-            };
-        }
 
         match result {
             // If the canister produced a result or if execution failed then it
