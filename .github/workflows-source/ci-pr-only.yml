@@ -118,6 +118,7 @@ jobs:
     <<: *dind-small-setup
     timeout-minutes: 60
     permissions:
+      contents: read
       pull-requests: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
