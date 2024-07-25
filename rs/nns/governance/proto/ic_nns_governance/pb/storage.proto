@@ -17,5 +17,4 @@ message ArchivedMonthlyNodeProviderRewards {
   message V1 {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
-
 }
