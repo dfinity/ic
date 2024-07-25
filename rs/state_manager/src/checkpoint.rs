@@ -98,6 +98,10 @@ pub(crate) fn make_checkpoint(
         if lsmt_storage == FlagStatus::Disabled {
             tip_channel
                 .send(TipRequest::ResetTipAndMerge {
+                    // TODO: there is no simple workaround for provide a CheckpointLayout<ReadOnly> here
+                    // because with LSTM disabled, the checkpoint is still in verification status and we cannot
+                    // obtain a CheckpointLayout<ReadOnly> as the marker file is present.
+                    // Will revisit this after we clean up the legacy code for non-LSMT.
                     checkpoint_layout: cp.clone(),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
                     is_initializing_tip: false,
