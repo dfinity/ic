@@ -44,10 +44,7 @@ rust_library(
     crate_name = "ic_regedit",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    visibility = [
-        "//rs:system-tests-pkg",
-        "//rs:tools-pkg",
-    ],
+    visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
 
