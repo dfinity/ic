@@ -4,8 +4,8 @@ mod tests;
 pub mod types;
 
 use crate::types::candid::{
-    Block, BlockTag, GetLogsArgs, LogEntry, MultiRpcResult, ProviderError, RpcConfig, RpcError,
-    RpcServices,
+    Block, BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, LogEntry, MultiRpcResult,
+    ProviderError, RpcConfig, RpcError, RpcServices,
 };
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
@@ -44,6 +44,7 @@ pub struct EvmRpcClient<R: Runtime, L: Sink> {
 pub struct OverrideRpcConfig {
     pub eth_get_block_by_number: Option<RpcConfig>,
     pub eth_get_logs: Option<RpcConfig>,
+    pub eth_fee_history: Option<RpcConfig>,
 }
 
 impl<L: Sink> EvmRpcClient<IcRuntime, L> {
@@ -70,6 +71,18 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
         self.call_internal(
             "eth_getLogs",
             self.override_rpc_config.eth_get_logs.clone(),
+            args,
+        )
+        .await
+    }
+
+    pub async fn eth_fee_history(
+        &self,
+        args: FeeHistoryArgs,
+    ) -> MultiRpcResult<Option<FeeHistory>> {
+        self.call_internal(
+            "eth_feeHistory",
+            self.override_rpc_config.eth_fee_history.clone(),
             args,
         )
         .await

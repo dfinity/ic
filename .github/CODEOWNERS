@@ -50,6 +50,7 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-types/         @dfinity/finint
 /packages/ic-ledger-hash-of/         @dfinity/finint
 /packages/pocket-ic/                 @dfinity/pocket-ic
+/packages/ic-signature-verification/ @dfinity/crypto-team
 /packages/ic-vetkd-utils/            @dfinity/crypto-team
 
 # [IC-OS]
@@ -121,7 +122,7 @@ go_deps.bzl               @dfinity/idx
 /rs/cycles_account_manager/                             @dfinity/execution
 /rs/depcheck/                                           @dfinity/ic-interface-owners
 /rs/determinism_test/                                   @dfinity/execution
-/rs/drun/                                               @dfinity/execution
+/rs/drun/                                               @dfinity/languages
 /rs/embedders/                                          @dfinity/runtime
 /rs/ethereum/                                           @dfinity/cross-chain-team
 /rs/execution_environment/                              @dfinity/execution @dfinity/runtime
