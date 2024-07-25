@@ -2,16 +2,16 @@
 # There is a 1-to-1 mapping between each package and a package group defined in this file.
 # The relationship between package_groups is also defined here.
 #
-#              vm-system-tests  ----
+#               vm-system-tests  ----
 #               |     \              |
 #               |      ic-os         |
 #               |           \        |
 #               |         release    |
 #               |          |     \   |
 #               |          |      tools
-#               |          |        |
-#               |          |        |
-#               |          |        |
+#               |          |         |
+#               |          |         |
+#               |          |         |
 #               ic-protocol (TODO split it into BN, replica and dapps)
 #
 #
