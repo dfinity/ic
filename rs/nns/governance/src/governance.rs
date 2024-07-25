@@ -18,6 +18,7 @@ use crate::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
     },
+    node_provider_rewards::record_node_provider_rewards,
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::LedgerParameters,
@@ -4258,9 +4259,7 @@ impl Governance {
         &mut self,
         most_recent_rewards: MonthlyNodeProviderRewards,
     ) {
-        with_np_rewards_log(|log| {
-            log.push(most_recent_rewards.clone());
-        });
+        record_node_provider_rewards(most_recent_rewards.clone());
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
