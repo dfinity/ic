@@ -183,7 +183,7 @@ impl BalancesStore for ClientBalancesStore {
         self.acc_to_hist
             .get(k)
             .and_then(|hist| hist.get_last_ref())
-            .copied()
+            .cloned()
     }
 
     // In here, ledger removes zero amount accounts from it's map,
