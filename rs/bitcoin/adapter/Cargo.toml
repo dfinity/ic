@@ -16,7 +16,7 @@ http = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-btc-service = { path = "../service" }
-ic-btc-validation = { workspace = true }
+ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
