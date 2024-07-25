@@ -60,10 +60,6 @@ else
     exit 1
 fi
 
-GITLAB_TOKEN="${HOME}/.gitlab/api_token"
-mkdir -p "$(dirname "${GITLAB_TOKEN}")"
-echo "${GITLAB_API_TOKEN:-}" >"${GITLAB_TOKEN}"
-
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
 fi
