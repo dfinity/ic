@@ -2642,9 +2642,7 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
     fn from(err: CanisterSnapshotError) -> Self {
         match err {
             CanisterSnapshotError::EmptyExecutionState(canister_id) => {
-                CanisterManagerError::CanisterSnapshotExecutionStateNotFound {
-                    canister_id,
-                }
+                CanisterManagerError::CanisterSnapshotExecutionStateNotFound { canister_id }
             }
         }
     }
