@@ -52,7 +52,7 @@ if [ ${#files[@]} -eq 0 ]; then
     exit 0
 fi
 
-UNIVERSE="$(echo ${BAZEL_TARGETS} | sed 's/ /+/')"
+UNIVERSE="$(echo ${BAZEL_TARGETS:-//...} | sed 's/ /+/')"
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(${UNIVERSE}, set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
