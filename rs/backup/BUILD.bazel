@@ -41,6 +41,10 @@ rust_library(
     crate_name = "ic_backup",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.2",
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs:tools-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 

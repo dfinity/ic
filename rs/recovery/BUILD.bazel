@@ -67,6 +67,10 @@ rust_library(
     data = ["ic_public_key.pem"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs:tools-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 

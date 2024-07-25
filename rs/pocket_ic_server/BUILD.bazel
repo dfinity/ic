@@ -119,7 +119,7 @@ rust_binary(
     testonly = True,
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//rs:release-pkg"],
+    visibility = ["//visibility:public"],
     deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
 )
 
