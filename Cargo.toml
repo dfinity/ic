@@ -185,6 +185,8 @@ members = [
     "rs/nns/common/protobuf_generator",
     "rs/nns/cmc",
     "rs/nns/governance",
+    "rs/nns/governance/api",
+    "rs/nns/governance/init",
     "rs/nns/governance/protobuf_generator",
     "rs/nns/handlers/lifeline/impl",
     "rs/nns/handlers/lifeline/interface",
@@ -515,7 +517,7 @@ ic-cdk = "0.13.2"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
 ic_principal = { version = "0.1.1", default-features = false }
-ic-response-verification = "2.3.0"
+ic-response-verification = "2.6.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
