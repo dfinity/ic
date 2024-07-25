@@ -466,6 +466,7 @@ pub fn start_server(
 
             tokio::spawn(async move {
                 metrics.connections_total.inc();
+
                 let timer = Instant::now();
                 // Set `NODELAY`
                 if stream.set_nodelay(true).is_err() {
@@ -481,6 +482,7 @@ pub fn start_server(
                             .connection_setup_duration
                             .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
                             .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
                         return;
                     }
                     Err(_) => {
@@ -488,6 +490,7 @@ pub fn start_server(
                             .connection_setup_duration
                             .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
                             .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
                         return;
                     }
                 }
@@ -506,6 +509,7 @@ pub fn start_server(
                         Ok(c) => c,
                         Err(err) => {
                             warn!(log, "Failed to get server config from crypto {err}");
+                            metrics.closed_connections_total.inc();
                             return;
                         }
                     };
@@ -546,6 +550,8 @@ pub fn start_server(
                         warn!(log, "failed to serve connection: {err}");
                     }
                 };
+
+                metrics.closed_connections_total.inc();
             });
         }
     });

@@ -7,7 +7,7 @@ mod threshold;
 mod tls;
 
 pub use canister_threshold::CspCreateMEGaKeyError;
-pub use keygen::{CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore};
+pub use keygen::CspPublicKeyStore;
 pub use sign::{CspSigVerifier, CspSigner};
 pub use threshold::{
     threshold_sign_error::CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,

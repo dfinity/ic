@@ -41,7 +41,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                 // If retrieval of public keys from the registry was successful, check to make sure
                 // we have the public keys, and the corresponding secret keys locally
                 let pks_and_sks_contains_result =
-                    self.csp.pks_and_sks_contains(registry_public_keys);
+                    self.vault.pks_and_sks_contains(registry_public_keys);
                 match pks_and_sks_contains_result {
                     Ok(()) => {
                         self.observe_all_key_counts(

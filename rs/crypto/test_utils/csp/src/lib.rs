@@ -1,14 +1,10 @@
 use ic_crypto_internal_csp::api::{
-    CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore, CspSigVerifier, CspSigner,
-    CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
-    ThresholdSignatureCspClient,
+    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdSignError,
+    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
-use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
-use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateReshareDealingError, CspDkgCreateReshareTranscriptError,
@@ -19,7 +15,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
 use ic_types::{NodeIndex, NumberOfNodes};
@@ -203,15 +198,6 @@ mock! {
         fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch);
 
         fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
-    }
-
-    impl CspPublicAndSecretKeyStoreChecker for AllCryptoServiceProvider {
-        fn pks_and_sks_contains(
-            &self,
-            registry_public_keys: ExternalPublicKeys,
-        ) -> Result<(), PksAndSksContainsErrors>;
-
-        fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError>;
     }
 
     impl CspPublicKeyStore for AllCryptoServiceProvider {

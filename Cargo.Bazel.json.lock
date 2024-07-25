@@ -1,5 +1,5 @@
 {
-  "checksum": "4c9bf48f66e240354f058554292e9dda3cb7bc4ad5fb71923fe11a089938c6b6",
+  "checksum": "d3248b566ee289315a656ae1956d3e9d550277d311404936e52875914eaa607f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17286,7 +17286,7 @@
               "target": "ic_canister_sig_creation"
             },
             {
-              "id": "ic-cbor 2.3.0",
+              "id": "ic-cbor 2.6.0",
               "target": "ic_cbor"
             },
             {
@@ -17298,7 +17298,7 @@
               "target": "ic_cdk_timers"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
@@ -17306,7 +17306,7 @@
               "target": "ic_certified_map"
             },
             {
-              "id": "ic-http-certification 2.3.0",
+              "id": "ic-http-certification 2.6.0",
               "target": "ic_http_certification"
             },
             {
@@ -17314,7 +17314,7 @@
               "target": "ic_metrics_encoder"
             },
             {
-              "id": "ic-response-verification 2.3.0",
+              "id": "ic-response-verification 2.6.0",
               "target": "ic_response_verification"
             },
             {
@@ -27516,7 +27516,7 @@
               "target": "hyper"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
@@ -27731,7 +27731,7 @@
               "target": "http_body"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
@@ -28086,11 +28086,11 @@
               "target": "ic_cdk"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
-              "id": "ic-representation-independent-hash 2.5.0",
+              "id": "ic-representation-independent-hash 2.6.0",
               "target": "ic_representation_independent_hash"
             },
             {
@@ -28129,14 +28129,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cbor 2.3.0": {
+    "ic-cbor 2.6.0": {
       "name": "ic-cbor",
-      "version": "2.3.0",
+      "version": "2.6.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cbor/2.3.0/download",
-          "sha256": "027916ece94814fc7eebad43f91d691988ac8294121f54e8f22f4611c7d17f17"
+          "url": "https://static.crates.io/crates/ic-cbor/2.6.0/download",
+          "sha256": "02b0e48b4166c891e79d624f3a184b4a7c145d307576872d9a46dedb8c73ea8f"
         }
       },
       "targets": [
@@ -28165,7 +28165,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
@@ -28184,7 +28184,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.3.0"
+        "version": "2.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28731,14 +28731,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-certificate-verification 2.3.0": {
+    "ic-certificate-verification 2.6.0": {
       "name": "ic-certificate-verification",
-      "version": "2.3.0",
+      "version": "2.6.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-certificate-verification/2.3.0/download",
-          "sha256": "74807b58655db518e68de1d65e1734da76af43949569b752aa27237e206bd4ad"
+          "url": "https://static.crates.io/crates/ic-certificate-verification/2.6.0/download",
+          "sha256": "586e09b06a93d930f6a33f5f909bb11d2e4a06be3635dd5da1eb0e6554b7dae4"
         }
       },
       "targets": [
@@ -28771,11 +28771,11 @@
               "target": "candid"
             },
             {
-              "id": "ic-cbor 2.3.0",
+              "id": "ic-cbor 2.6.0",
               "target": "ic_cbor"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
@@ -28810,7 +28810,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.3.0"
+        "version": "2.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28818,14 +28818,14 @@
       ],
       "license_file": null
     },
-    "ic-certification 2.5.0": {
+    "ic-certification 2.6.0": {
       "name": "ic-certification",
-      "version": "2.5.0",
+      "version": "2.6.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-certification/2.5.0/download",
-          "sha256": "20052ce9255fbe2de7041a4f6996fddd095ba1f31ae83b6c0ccdee5be6e7bbcf"
+          "url": "https://static.crates.io/crates/ic-certification/2.6.0/download",
+          "sha256": "e64ee3d8b6e81b51f245716d3e0badb63c283c00f3c9fb5d5219afc30b5bf821"
         }
       },
       "targets": [
@@ -28877,7 +28877,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.0"
+        "version": "2.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28940,14 +28940,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-http-certification 2.3.0": {
+    "ic-http-certification 2.6.0": {
       "name": "ic-http-certification",
-      "version": "2.3.0",
+      "version": "2.6.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-http-certification/2.3.0/download",
-          "sha256": "1920329afced339a770ca2a56b00fb8229a63ab0dcf1bb119bdeb54b5b70dbfd"
+          "url": "https://static.crates.io/crates/ic-http-certification/2.6.0/download",
+          "sha256": "ff0b97e949845039149dc5e7ea6a7c12ee4333bb402e37bc507904643c7b3e41"
         }
       },
       "targets": [
@@ -28980,11 +28980,11 @@
               "target": "http"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
-              "id": "ic-representation-independent-hash 2.5.0",
+              "id": "ic-representation-independent-hash 2.6.0",
               "target": "ic_representation_independent_hash"
             },
             {
@@ -29003,7 +29003,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.3.0"
+        "version": "2.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -29049,14 +29049,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-representation-independent-hash 2.5.0": {
+    "ic-representation-independent-hash 2.6.0": {
       "name": "ic-representation-independent-hash",
-      "version": "2.5.0",
+      "version": "2.6.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-representation-independent-hash/2.5.0/download",
-          "sha256": "b4d9c969c80e9b445255341da79772680f503ef856b95b3ddf162b41d096df1f"
+          "url": "https://static.crates.io/crates/ic-representation-independent-hash/2.6.0/download",
+          "sha256": "08ae59483e377cd9aad94ec339ed1d2583b0d5929cab989328dac2d853b2f570"
         }
       },
       "targets": [
@@ -29092,7 +29092,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.0"
+        "version": "2.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -29100,14 +29100,14 @@
       ],
       "license_file": null
     },
-    "ic-response-verification 2.3.0": {
+    "ic-response-verification 2.6.0": {
       "name": "ic-response-verification",
-      "version": "2.3.0",
+      "version": "2.6.0",
       "package_url": "https://github.com/dfinity/response-verification",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-response-verification/2.3.0/download",
-          "sha256": "dd4b20dcd2bc7b1098c79dd545fa9ff7cb8cdca4345e2a823ffa73ebaf542b2b"
+          "url": "https://static.crates.io/crates/ic-response-verification/2.6.0/download",
+          "sha256": "2bef02ef84189d61a7d39889b7e9a3ae212d45c3df293513f7b2568027fd08a8"
         }
       },
       "targets": [
@@ -29152,23 +29152,23 @@
               "target": "http"
             },
             {
-              "id": "ic-cbor 2.3.0",
+              "id": "ic-cbor 2.6.0",
               "target": "ic_cbor"
             },
             {
-              "id": "ic-certificate-verification 2.3.0",
+              "id": "ic-certificate-verification 2.6.0",
               "target": "ic_certificate_verification"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
-              "id": "ic-http-certification 2.3.0",
+              "id": "ic-http-certification 2.6.0",
               "target": "ic_http_certification"
             },
             {
-              "id": "ic-representation-independent-hash 2.5.0",
+              "id": "ic-representation-independent-hash 2.6.0",
               "target": "ic_representation_independent_hash"
             },
             {
@@ -29199,7 +29199,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.3.0"
+        "version": "2.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -29353,7 +29353,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
@@ -29440,7 +29440,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-certification 2.5.0",
+              "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
             {
@@ -79196,15 +79196,15 @@
     "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
-    "ic-cbor 2.3.0",
+    "ic-cbor 2.6.0",
     "ic-cdk 0.13.2",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
-    "ic-certification 2.5.0",
+    "ic-certification 2.6.0",
     "ic-certified-map 0.3.4",
-    "ic-http-certification 2.3.0",
+    "ic-http-certification 2.6.0",
     "ic-metrics-encoder 1.1.1",
-    "ic-response-verification 2.3.0",
+    "ic-response-verification 2.6.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.35.0",

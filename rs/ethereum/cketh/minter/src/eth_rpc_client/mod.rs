@@ -11,12 +11,13 @@ use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
 use evm_rpc_client::types::candid::RpcConfig;
 use evm_rpc_client::{
     types::candid::{
-        Block as EvmBlock, BlockTag as EvmBlockTag, GetLogsArgs as EvmGetLogsArgs,
+        Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
+        FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
         LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, RpcError as EvmRpcError,
         RpcResult as EvmRpcResult,
     },
@@ -242,6 +243,16 @@ impl EthRpcClient {
         &self,
         params: FeeHistoryParams,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
+        if let Some(evm_rpc_client) = &self.evm_rpc_client {
+            let result = evm_rpc_client
+                .eth_fee_history(EvmFeeHistoryArgs {
+                    block_count: params.block_count.as_u128(),
+                    newest_block: into_evm_block_tag(params.highest_block),
+                    reward_percentiles: Some(params.reward_percentiles),
+                })
+                .await;
+            return ReducedResult::from(result).into();
+        }
         // A typical response is slightly above 300 bytes.
         let results: MultiCallResults<FeeHistory> = self
             .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
@@ -593,6 +604,31 @@ impl From<EvmMultiRpcResult<Vec<EvmLogEntry>>> for ReducedResult<Vec<LogEntry>> 
 
         ReducedResult::from_internal(value)
             .map_reduce(&map_logs, MultiCallResults::reduce_with_equality)
+    }
+}
+
+impl From<EvmMultiRpcResult<Option<EvmFeeHistory>>> for ReducedResult<FeeHistory> {
+    fn from(value: EvmMultiRpcResult<Option<EvmFeeHistory>>) -> Self {
+        fn map_fee_history(fee_history: Option<EvmFeeHistory>) -> Result<FeeHistory, String> {
+            let fee_history = fee_history.ok_or("No fee history available")?;
+            Ok(FeeHistory {
+                oldest_block: BlockNumber::try_from(fee_history.oldest_block)?,
+                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas)?,
+                reward: fee_history
+                    .reward
+                    .into_iter()
+                    .map(wei_per_gas_iter)
+                    .collect::<Result<_, _>>()?,
+            })
+        }
+
+        fn wei_per_gas_iter(values: Vec<candid::Nat>) -> Result<Vec<WeiPerGas>, String> {
+            values.into_iter().map(WeiPerGas::try_from).collect()
+        }
+
+        ReducedResult::from_internal(value).map_reduce(&map_fee_history, |results| {
+            results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
+        })
     }
 }
 
