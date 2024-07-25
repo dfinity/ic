@@ -113,7 +113,17 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test(
@@ -127,7 +137,19 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "//rs/config",
+        "//rs/types/management_canister_types",
+        "@crate_index//:ic-agent",
+    ],
 )
 
 system_test(
@@ -141,7 +163,15 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
@@ -155,7 +185,16 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:itertools",
+    ],
 )
 
 system_test(
@@ -169,7 +208,22 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "//rs/config",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/registry/canister",
+    ],
 )
 
 system_test(
@@ -182,7 +236,22 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "//rs/config",
+        "//rs/types/management_canister_types",
+        "@crate_index//:ic-agent",
+        "//rs/registry/canister",
+        "//rs/registry/nns_data_provider",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test(
@@ -196,7 +265,15 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
@@ -208,7 +285,17 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "//rs/config",
+        "@crate_index//:ic-agent",
+    ],
 )
 
 system_test(
