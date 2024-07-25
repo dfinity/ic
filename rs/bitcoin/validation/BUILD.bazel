@@ -33,6 +33,10 @@ rust_library(
 rust_test(
     name = "validation_test",
     crate = ":validation",
+    data = [
+        # Keep sorted.
+        "tests/data/headers.csv",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -42,9 +46,7 @@ rust_test_suite(
     aliases = ALIASES,
     data = [
         # Keep sorted.
-        "data/headers.csv",
-        "data/block_headers_mainnet.csv",
-        "data/block_headers_testnet.csv",
+        "tests/data/headers.csv",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":validation"] + DEPENDENCIES + DEV_DEPENDENCIES,
