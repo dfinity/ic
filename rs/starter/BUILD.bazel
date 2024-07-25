@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
+package(default_visibility = ["//rs:tools-pkg"])
+
 LIB_DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",

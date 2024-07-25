@@ -51,7 +51,6 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//visibility:public"],
     visibility = [
         "//rs:release-pkg",
         "//rs:system-tests-pkg",

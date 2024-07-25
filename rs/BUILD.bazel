@@ -57,6 +57,7 @@ package_group(
         "//rs/recovery/...",
         "//rs/registry/regedit/...",
         "//rs/replay/...",
+	    "//rs/pocket_ic_server/...",
         "//rs/starter/...",
         "//rs/state_tool/...",
     ],
