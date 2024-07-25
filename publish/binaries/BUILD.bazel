@@ -71,11 +71,15 @@ BINARIES = {
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
+    # still needed for release qulifcation
+    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
+    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
 }
 
 # test binaries or binaries using test utils
 TESTONLY_BINARIES = [
     "drun",
+    "e2e-test-driver",
     "ic-admin",
     "ic-backup",
     "ic-boundary",
