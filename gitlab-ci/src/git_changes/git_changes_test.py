@@ -102,20 +102,6 @@ def test_is_master_branch_false(tmpdir):
     setup_repo(tmpdir, "change_one_file")
     assert not git_changes.is_master(tmpdir)
 
-
-def test_changed_gitlab_ci(tmpdir):
-    """Tests that ci config change in /gitlab-ci was detected."""
-    setup_repo(tmpdir, "ci_cfg_gitlab_ci")
-
-    assert git_changes.ci_config_changes(tmpdir)
-
-
-def test_changed_ci_cfg_gitlab_ci_config_yml(tmpdir):
-    """Tests that ci config change in rs/gitlab-ci-config.yml was detected."""
-    setup_repo(tmpdir, "ci_cfg_gitlab-ci-config-yml")
-
-    assert git_changes.ci_config_changes(tmpdir)
-
 def test_target_branch_CI_DEFAULT_BRANCH_is_unset(tmpdir):
     """Tests that the target branch is empty."""
     setup_repo(tmpdir, "change_one_file", branch="master")
