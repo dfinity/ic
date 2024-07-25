@@ -48,7 +48,7 @@ const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
 // Seed for a random generator
 const RND_SEED: u64 = 42;
 
-fn config(env: TestEnv) {
+fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -140,7 +140,7 @@ fn test(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())

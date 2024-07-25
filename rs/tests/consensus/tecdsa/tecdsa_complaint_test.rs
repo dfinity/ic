@@ -19,7 +19,7 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;
 
-fn config(env: TestEnv) {
+fn setup(env: TestEnv) {
     let malicious_behaviour = MaliciousBehaviour::new(true).set_maliciously_corrupt_idkg_dealings();
     InternetComputer::new()
         .add_subnet(
@@ -87,7 +87,7 @@ fn test(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())

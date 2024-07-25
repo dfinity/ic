@@ -55,7 +55,7 @@ const UNASSIGNED_NODES_COUNT: usize = 3;
 
 const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
 
-fn config(env: TestEnv) {
+fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -226,7 +226,7 @@ async fn assert_metric_sum(
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())

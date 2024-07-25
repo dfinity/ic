@@ -55,7 +55,7 @@ fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
 }
 
 /// Creates one system subnet and two application subnets, the first one with schnorr keys enabled.
-fn config(env: TestEnv) {
+fn setup(env: TestEnv) {
     use ic_system_test_driver::driver::test_env_api::*;
     let size_limit: u64 = (2 * LOCAL_LIMIT).try_into().unwrap();
     InternetComputer::new()
@@ -195,7 +195,7 @@ fn test_local_limit(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test_xnet_limit))
         .add_test(systest!(test_local_limit))
         .execute_from_args()?;
