@@ -42,17 +42,22 @@ use ic_nns_governance::{
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
 use ic_nns_governance_api::pb::v1::{
+    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::{GovernanceCachedMetrics, Migrations},
     governance_error::ErrorType,
-    manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
-    ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
-    ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
-    NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-    RewardNodeProvider, RewardNodeProviders, SettleCommunityFundParticipation,
-    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-    UpdateNodeProvider, Vote,
+    manage_neuron::{
+        claim_or_refresh::{By, MemoAndController},
+        ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
+    },
+    manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
+    ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
+    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
+    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
+    ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
+    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
@@ -427,10 +432,45 @@ fn neuron_stake_transfer_notification_pb() {
     panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
 
+// DEPRECATED: Please use ManageNeuron::ClaimOrRefresh.
 #[export_name = "canister_update claim_or_refresh_neuron_from_account"]
 fn claim_or_refresh_neuron_from_account() {
     debug_log("claim_or_refresh_neuron_from_account");
-    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
+    over_async(candid_one, claim_or_refresh_neuron_from_account_)
+}
+
+// DEPRECATED: Please use ManageNeuron::ClaimOrRefresh.
+//
+// Just redirects to ManageNeuron.
+#[candid_method(update, rename = "claim_or_refresh_neuron_from_account")]
+async fn claim_or_refresh_neuron_from_account_(
+    claim_or_refresh: ClaimOrRefreshNeuronFromAccount,
+) -> ClaimOrRefreshNeuronFromAccountResponse {
+    let manage_neuron_response = manage_neuron_(ManageNeuron {
+        id: None,
+        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+            by: Some(By::MemoAndController(MemoAndController {
+                memo: claim_or_refresh.memo,
+                controller: claim_or_refresh.controller,
+            })),
+        })),
+        neuron_id_or_subaccount: None,
+    })
+    .await;
+
+    match manage_neuron_response.command.unwrap() {
+        manage_neuron_response::Command::Error(error) => ClaimOrRefreshNeuronFromAccountResponse {
+            result: Some(ClaimOrRefreshNeuronFromAccountResponseResult::Error(error)),
+        },
+        manage_neuron_response::Command::ClaimOrRefresh(response) => {
+            ClaimOrRefreshNeuronFromAccountResponse {
+                result: Some(ClaimOrRefreshNeuronFromAccountResponseResult::NeuronId(
+                    response.refreshed_neuron_id.unwrap(),
+                )),
+            }
+        }
+        _ => panic!("Invalid command response"),
+    }
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
