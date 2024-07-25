@@ -87,23 +87,25 @@ impl StateSync {
         )
         .expect("failed to recover checkpoint");
 
-        if let Err(err) = cp.remove_unverified_checkpoint_marker() {
-            fatal!(
-                self.log,
-                "Failed to remove the unverified checkpoint marker @height {}: {}",
-                height,
-                err
-            );
-        }
+        let cp_verified = match cp.remove_unverified_checkpoint_marker() {
+            Ok(cp_verified) => cp_verified,
+            Err(err) => {
+                fatal!(
+                    self.log,
+                    "Failed to remove the unverified checkpoint marker @height {}: {}",
+                    height,
+                    err
+                );
+            }
+        };
 
-        let cp = self
-            .state_manager
-            .state_layout
-            .checkpoint_verified(height)
-            .expect("failed to create checkpoint layout");
-
-        self.state_manager
-            .on_synced_checkpoint(state, cp, manifest, meta_manifest, root_hash);
+        self.state_manager.on_synced_checkpoint(
+            state,
+            cp_verified,
+            manifest,
+            meta_manifest,
+            root_hash,
+        );
 
         let height = self.state_manager.states.read().last_advertised;
         let ids = self.get_all_validated_ids_by_height(height);

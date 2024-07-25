@@ -1495,10 +1495,17 @@ where
 impl CheckpointLayout<Verification> {
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
-    pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+    pub fn remove_unverified_checkpoint_marker(
+        self,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if !marker.exists() {
-            return Ok(());
+            return Ok(CheckpointLayout::<ReadOnly> {
+                root: self.root.clone(),
+                height: self.height,
+                state_layout: self.state_layout.clone(),
+                permissions_tag: PhantomData,
+            });
         }
         match std::fs::remove_file(&marker) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
@@ -1517,7 +1524,15 @@ impl CheckpointLayout<Verification> {
             path: self.root.clone(),
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
             io_err: err,
-        })
+        })?;
+
+        let cp_verified = CheckpointLayout::<ReadOnly> {
+            root: self.root.clone(),
+            height: self.height,
+            state_layout: self.state_layout.clone(),
+            permissions_tag: PhantomData,
+        };
+        Ok(cp_verified)
     }
 }
 

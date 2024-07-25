@@ -15,7 +15,7 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    CanisterLayout, CanisterStateBits, CheckpointLayout, LoadingPolicy, ReadOnly, StateLayout,
+    CanisterLayout, CanisterStateBits, CheckpointLayout, LoadingPolicy, ReadOnly,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -54,7 +54,6 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 pub(crate) fn make_checkpoint(
     state: &ReplicatedState,
     height: Height,
-    state_layout: &StateLayout,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
@@ -134,11 +133,9 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
-    cp.remove_unverified_checkpoint_marker()?;
+    let cp_verified = cp.remove_unverified_checkpoint_marker()?;
 
-    let cp = state_layout.checkpoint_verified(height)?;
-
-    Ok((cp, state, has_downgrade))
+    Ok((cp_verified, state, has_downgrade))
 }
 
 /// Calls [load_checkpoint] with a newly created thread pool.

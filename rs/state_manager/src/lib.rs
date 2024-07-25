@@ -2402,7 +2402,6 @@ impl StateManagerImpl {
             checkpoint::make_checkpoint(
                 state,
                 height,
-                &self.state_layout,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
@@ -2420,7 +2419,7 @@ impl StateManagerImpl {
                     height
                 );
 
-                let checkpointed_state = self
+                let (cp_verified, checkpointed_state) = self
                     .state_layout
                     .checkpoint_in_verification(height)
                     .map_err(CheckpointError::from)
@@ -2437,10 +2436,10 @@ impl StateManagerImpl {
                             &self.metrics.checkpoint_metrics,
                             self.get_fd_factory(),
                         )?;
-                        layout
+                        let cp_verified = layout
                             .remove_unverified_checkpoint_marker()
                             .map_err(CheckpointError::from)?;
-                        Ok(state)
+                        Ok((cp_verified, state))
                     })
                     .unwrap_or_else(|err| {
                         fatal!(
@@ -2451,7 +2450,7 @@ impl StateManagerImpl {
                         )
                     });
                 (
-                    self.state_layout.checkpoint(height).unwrap(),
+                    cp_verified,
                     checkpointed_state,
                     // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
                     HasDowngrade::Yes,
