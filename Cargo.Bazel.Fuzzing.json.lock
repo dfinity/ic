@@ -1,5 +1,5 @@
 {
-  "checksum": "773915905c997d7f70038547d66103d89b0eea281231c781fab5711c5c521d66",
+  "checksum": "fa0ca41ff92e6a9a34f1e163679cfc6d076e4f83fc2f8301bdb31a5b95888e0c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -35757,12 +35757,6 @@
               "target": "glob"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "NUM_JOBS": "8"
-          },
           "selects": {}
         },
         "links": "rocksdb"
