@@ -62,6 +62,7 @@ use crate::{
         call_canister::CallCanister,
         create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
     },
+    storage::with_np_rewards_log,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -77,8 +78,7 @@ use ic_nervous_system_common::{
     ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
-use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
-use ic_nervous_system_proto::pb::v1::Principals;
+use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -4258,6 +4258,9 @@ impl Governance {
         &mut self,
         most_recent_rewards: MonthlyNodeProviderRewards,
     ) {
+        with_np_rewards_log(|log| {
+            log.push(most_recent_rewards.clone());
+        });
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 

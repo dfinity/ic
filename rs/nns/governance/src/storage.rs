@@ -1,5 +1,6 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
+use crate::pb::storage::ArchivedMonthlyNodeProviderRewards;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_stable_structures::{
@@ -26,6 +27,9 @@ const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
 const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
 const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
 
+const NP_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
+const NP_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
+
 pub mod neuron_indexes;
 pub mod neurons;
 
@@ -50,6 +54,8 @@ struct State {
 
     // Neuron indexes stored in stable storage.
     stable_neuron_indexes: neuron_indexes::StableNeuronIndexes<VM>,
+
+    np_rewards_log: StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>,
 }
 
 impl State {
@@ -62,7 +68,7 @@ impl State {
                 memory_manager.get(AUDIT_EVENTS_INDEX_MEMORY_ID),
                 memory_manager.get(AUDIT_EVENTS_DATA_MEMORY_ID),
             )
-            .expect("Failed to initialize stable log")
+            .expect("Failed to initialize stable log for Audit Events")
         });
         let stable_neuron_store = MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
@@ -93,11 +99,21 @@ impl State {
             .build()
         });
 
+        let np_rewards_log = MEMORY_MANAGER.with(|memory_manager| {
+            let memory_manager = memory_manager.borrow();
+            StableLog::init(
+                memory_manager.get(NP_REWARDS_LOG_INDEX_MEMORY_ID),
+                memory_manager.get(NP_REWARDS_LOG_DATA_MEMORY_ID),
+            )
+            .expect("Failed to initialize stable log for NP Rewards")
+        });
+
         Self {
             upgrades_memory,
             audit_events_log,
             stable_neuron_store,
             stable_neuron_indexes,
+            np_rewards_log,
         }
     }
 
@@ -156,6 +172,15 @@ pub(crate) fn with_stable_neuron_indexes_mut<R>(
     STATE.with(|state| {
         let stable_neuron_indexes = &mut state.borrow_mut().stable_neuron_indexes;
         f(stable_neuron_indexes)
+    })
+}
+
+pub(crate) fn with_np_rewards_log<R>(
+    f: impl FnOnce(&StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>) -> R,
+) -> R {
+    STATE.with(|state| {
+        let np_rewards_log = &state.borrow().np_rewards_log;
+        f(np_rewards_log)
     })
 }
 

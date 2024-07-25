@@ -161,6 +161,7 @@ mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
 pub mod neurons_fund;
+mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
 mod reward;
