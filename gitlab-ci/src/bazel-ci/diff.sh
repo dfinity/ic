@@ -52,6 +52,11 @@ if [ ${#files[@]} -eq 0 ]; then
     exit 0
 fi
 
+# To calculate the bazel targets to build or test we find the reverse dependencies
+# of the set of changed files in the "universe". The universe is defined as the
+# union of the specified $BAZEL_TARGETS. Note that this variable is defined in
+# workflows and should be a space-separated list of bazel targets. If it's not
+# defined the universe defaults to all targets, i.e.: //...
 UNIVERSE="$(echo ${BAZEL_TARGETS:-//...} | sed 's/ /+/')"
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(${UNIVERSE}, set(${files[*]}))")
