@@ -2317,15 +2317,25 @@ name = "consensus-tecdsa-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "canister-test",
  "chrono",
  "futures",
+ "ic-base-types",
+ "ic-config",
+ "ic-constants",
  "ic-management-canister-types",
+ "ic-nns-constants",
+ "ic-nns-governance",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-sys",
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "registry-canister",
  "reqwest 0.12.5",
  "serde_json",
  "slog",
@@ -13009,6 +13019,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_consensus_threshold_sig_system_test_utils"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "ed25519-dalek",
+ "ic-agent 0.35.0",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-config",
+ "ic-constants",
+ "ic-management-canister-types",
+ "ic-message",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-governance",
+ "ic-nns-test-utils",
+ "ic-prep",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-types-test-utils",
+ "k256",
+ "registry-canister",
+ "schnorr_fun",
+ "serde",
+ "sha2 0.10.8",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19633,6 +19677,7 @@ dependencies = [
  "ic-utils 0.35.0",
  "ic-wasm-types",
  "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
