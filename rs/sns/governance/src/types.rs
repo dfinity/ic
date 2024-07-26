@@ -369,10 +369,10 @@ impl NervousSystemParameters {
     /// hosting the SNS.
     pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING: u64 = 15;
 
-    /// This is a lower bound for `max_dissolve_delay_seconds`.
-    /// Decreasing it below this number is problematic because other canisters
-    /// assumes that there are allowed to be at least 5 principals per neuron
-    /// when setting up the neurons from the swap.
+    /// This is a lower bound for `max_number_of_principals_per_neuron`.
+    /// Decreasing it below this number is problematic because SNS Swap assumes
+    /// that there are allowed to be at least 5 principals per
+    /// neuron during ClaimSwapNeuronsRequest.
     pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR: u64 = 5;
 
     /// This is an upper bound for `max_dissolve_delay_bonus_percentage`. High values
