@@ -1,11 +1,11 @@
 //! IDKG artifact pool implementation.
 //!
 //! 1. IDkgPoolImpl implements the artifact pool. It is made of
-//! two IDkgPoolSection, one each for the validated/unvalidated
-//! sections.
+//!    two IDkgPoolSection, one each for the validated/unvalidated
+//!    sections.
 //! 2. InMemoryIDkgPoolSection is the in memory implementation of
-//! IDkgPoolSection. This is a collection of individual IDkgObjectPools,
-//! one for every type of IDkgMessage (dealing, dealing support, etc)
+//!    IDkgPoolSection. This is a collection of individual IDkgObjectPools,
+//!    one for every type of IDkgMessage (dealing, dealing support, etc)
 
 use crate::{
     metrics::{IDkgPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},

@@ -27,8 +27,9 @@ pub use tree_hash::*;
 /// - If you have a single [`Label`], use `Path::from(Label)`.
 ///
 /// - If you have an iterator that contains [`Label`] or `&Label` use
-/// `Path::from_iter(iterator)`.
-// Implemented as a newtype to allow implementation of traits like
+///   `Path::from_iter(iterator)`.
+///
+// Implemented as a new type to allow implementation of traits like
 // `fmt::Display`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct Path(Vec<Label>);
