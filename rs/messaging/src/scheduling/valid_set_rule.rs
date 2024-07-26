@@ -250,11 +250,13 @@ impl ValidSetRuleImpl {
         let effective_canister_id =
             match extract_effective_canister_id(&msg, state.metadata.own_subnet_id) {
                 Ok(effective_canister_id) => effective_canister_id,
-                Err(
-                    ParseIngressError::UnknownSubnetMethod
-                    | ParseIngressError::SubnetMethodNotAllowed,
-                ) => {
+                Err(ParseIngressError::UnknownSubnetMethod) => {
                     return Err(IngressInductionError::CanisterMethodNotFound(
+                        msg.method_name().to_string(),
+                    ))
+                }
+                Err(ParseIngressError::SubnetMethodNotAllowed) => {
+                    return Err(IngressInductionError::SubnetMethodNotAllowed(
                         msg.method_name().to_string(),
                     ))
                 }
