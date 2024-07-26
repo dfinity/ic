@@ -462,7 +462,6 @@ impl ManageNeuronResponse {
         !self.is_err()
     }
 
-    #[cfg(test)]
     pub fn panic_if_error(self, msg: &str) -> Self {
         if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
             panic!("{}: {:?}", msg, err);

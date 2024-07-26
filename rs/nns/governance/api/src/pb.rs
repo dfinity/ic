@@ -1,6 +1,7 @@
 use crate::pb::v1::{
-    governance_error::ErrorType, GovernanceError, NetworkEconomics, NeuronsFundEconomics,
-    NeuronsFundMatchedFundingCurveCoefficients, XdrConversionRate,
+    governance_error::ErrorType, manage_neuron_response, GovernanceError, ManageNeuronResponse,
+    NetworkEconomics, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
+    XdrConversionRate,
 };
 use ic_nervous_system_proto::pb::v1::{Decimal, Percentage};
 use icp_ledger::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
@@ -13,6 +14,15 @@ pub mod v1;
 const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
 // TODO get this from nervous_system/common/consts after we migrate consts out of nervous_system/common
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+
+impl ManageNeuronResponse {
+    pub fn panic_if_error(self, msg: &str) -> Self {
+        if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
+            panic!("{}: {:?}", msg, err);
+        }
+        self
+    }
+}
 
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
