@@ -9,7 +9,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ChangeSet, ValidatedConsensusArtifact},
-    p2p::consensus::{MutablePool, UnvalidatedArtifact},
+    p2p::consensus::MutablePool,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -17,7 +17,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
         BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
-        HasHeight, Notarization, RandomBeacon, RandomTape,
+        HasHeight, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId,
@@ -390,7 +390,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         artifacts.push(rt.into_message());
 
         // Insert the finalized notarization.
-        if let Some(file_name) in height_artifacts.notarizations.first() {
+        if let Some(file_name) = height_artifacts.notarizations.first() {
             let file = path.join(file_name);
             let not = read_artifact_if_correct_height::<Notarization, pb::Notarization>(
                 &file,
