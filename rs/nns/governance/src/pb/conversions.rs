@@ -600,6 +600,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::StopOrStartCanister(v) => {
                 pb_api::proposal::Action::StopOrStartCanister(v.into())
             }
+            pb::proposal::Action::UpdateCanisterSettings(v) => {
+                pb_api::proposal::Action::UpdateCanisterSettings(v.into())
+            }
         }
     }
 }
@@ -646,6 +649,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::InstallCode(v) => pb::proposal::Action::InstallCode(v.into()),
             pb_api::proposal::Action::StopOrStartCanister(v) => {
                 pb::proposal::Action::StopOrStartCanister(v.into())
+            }
+            pb_api::proposal::Action::UpdateCanisterSettings(v) => {
+                pb::proposal::Action::UpdateCanisterSettings(v.into())
             }
         }
     }
@@ -2890,6 +2896,110 @@ impl From<pb_api::stop_or_start_canister::CanisterAction>
     }
 }
 
+impl From<pb::UpdateCanisterSettings> for pb_api::UpdateCanisterSettings {
+    fn from(item: pb::UpdateCanisterSettings) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            settings: item.settings.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb_api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
+    fn from(item: pb_api::UpdateCanisterSettings) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            settings: item.settings.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::CanisterSettings>
+    for pb_api::update_canister_settings::CanisterSettings
+{
+    fn from(item: pb::update_canister_settings::CanisterSettings) -> Self {
+        Self {
+            controllers: item.controllers.map(|x| x.into()),
+            compute_allocation: item.compute_allocation,
+            memory_allocation: item.memory_allocation,
+            freezing_threshold: item.freezing_threshold,
+            log_visibility: item.log_visibility,
+            wasm_memory_limit: item.wasm_memory_limit,
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::CanisterSettings>
+    for pb::update_canister_settings::CanisterSettings
+{
+    fn from(item: pb_api::update_canister_settings::CanisterSettings) -> Self {
+        Self {
+            controllers: item.controllers.map(|x| x.into()),
+            compute_allocation: item.compute_allocation,
+            memory_allocation: item.memory_allocation,
+            freezing_threshold: item.freezing_threshold,
+            log_visibility: item.log_visibility,
+            wasm_memory_limit: item.wasm_memory_limit,
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::Controllers>
+    for pb_api::update_canister_settings::Controllers
+{
+    fn from(item: pb::update_canister_settings::Controllers) -> Self {
+        Self {
+            controllers: item.controllers,
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::Controllers>
+    for pb::update_canister_settings::Controllers
+{
+    fn from(item: pb_api::update_canister_settings::Controllers) -> Self {
+        Self {
+            controllers: item.controllers,
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::LogVisibility>
+    for pb_api::update_canister_settings::LogVisibility
+{
+    fn from(item: pb::update_canister_settings::LogVisibility) -> Self {
+        match item {
+            pb::update_canister_settings::LogVisibility::Unspecified => {
+                pb_api::update_canister_settings::LogVisibility::Unspecified
+            }
+            pb::update_canister_settings::LogVisibility::Controllers => {
+                pb_api::update_canister_settings::LogVisibility::Controllers
+            }
+            pb::update_canister_settings::LogVisibility::Public => {
+                pb_api::update_canister_settings::LogVisibility::Public
+            }
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::LogVisibility>
+    for pb::update_canister_settings::LogVisibility
+{
+    fn from(item: pb_api::update_canister_settings::LogVisibility) -> Self {
+        match item {
+            pb_api::update_canister_settings::LogVisibility::Unspecified => {
+                pb::update_canister_settings::LogVisibility::Unspecified
+            }
+            pb_api::update_canister_settings::LogVisibility::Controllers => {
+                pb::update_canister_settings::LogVisibility::Controllers
+            }
+            pb_api::update_canister_settings::LogVisibility::Public => {
+                pb::update_canister_settings::LogVisibility::Public
+            }
+        }
+    }
+}
+
 impl From<pb::Governance> for pb_api::Governance {
     fn from(item: pb::Governance) -> Self {
         Self {
@@ -3484,6 +3594,7 @@ impl From<pb::ListNeurons> for pb_api::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }
@@ -3493,6 +3604,7 @@ impl From<pb_api::ListNeurons> for pb::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }

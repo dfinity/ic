@@ -8,7 +8,6 @@ mod csp_tests {
 
     mod csp_public_key_store {
         use super::*;
-        use crate::CspPublicKeyStore;
         use ic_types::crypto::CurrentNodePublicKeys;
 
         #[test]
@@ -16,6 +15,7 @@ mod csp_tests {
             let csp = Csp::builder_for_test().build();
 
             let current_node_public_keys = csp
+                .csp_vault
                 .current_node_public_keys()
                 .expect("Failed to retrieve node public keys");
 
@@ -36,6 +36,7 @@ mod csp_tests {
             let csp = Csp::builder_for_test().build();
 
             let key_count = csp
+                .csp_vault
                 .idkg_dealing_encryption_pubkeys_count()
                 .expect("Failed to retrieve iDKG dealing encryption public keys count");
 
