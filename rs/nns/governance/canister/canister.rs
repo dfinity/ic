@@ -849,13 +849,13 @@ fn manage_neuron_pb() {
 #[export_name = "canister_update claim_or_refresh_neuron_from_account_pb"]
 fn claim_or_refresh_neuron_from_account_pb() {
     debug_log("claim_or_refresh_neuron_from_account_pb");
-    over_async(protobuf, claim_or_refresh_neuron_from_account_)
+    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
 
 #[export_name = "canister_query list_proposals_pb"]
 fn list_proposals_pb() {
     debug_log("list_proposals_pb");
-    over(protobuf, list_proposals_)
+    panic!("Method removed.  Please use list_proposals instead.")
 }
 
 #[export_name = "canister_query list_neurons_pb"]

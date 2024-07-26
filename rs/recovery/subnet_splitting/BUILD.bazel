@@ -47,7 +47,7 @@ rust_library(
     crate_name = "ic_subnet_splitting",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    visibility = ["//rs/tests:__subpackages__"],
+    visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
 
@@ -57,7 +57,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [
         ":subnet_splitting",
         "//rs/canister_sandbox:backend_lib",

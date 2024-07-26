@@ -502,6 +502,53 @@ impl Neuron {
         }
     }
 
+    /// Err is returned is in the following cases:
+    ///
+    ///     1. visibility is invalid.
+    ///
+    ///     2. This neuron is known.
+    fn set_visibility(&mut self, visibility: Option<i32>) -> Result<(), GovernanceError> {
+        // Reject visibility == None;
+        let Some(visibility) = visibility else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Visibility was not specified.".to_string(),
+            ));
+        };
+
+        // Known neurons are not allowed to set their visibility.
+        if self.known_neuron_data.is_some() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Setting the visibility of known neurons is not allowed \
+                 (they are always public).",
+            ));
+        }
+
+        // Convert from i32 to enum.
+        let visibility = Visibility::try_from(visibility).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!("{} is an invalid visibility: {:?}", visibility, err),
+            )
+        })?;
+
+        // Reject unspecified.
+        match visibility {
+            Visibility::Unspecified => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "A neuron's visibility cannot be set to unspecified.".to_string(),
+                ))
+            }
+            Visibility::Public | Visibility::Private => (),
+        }
+
+        // Everything looks good.
+        self.visibility = Some(visibility);
+        Ok(())
+    }
+
     // --- Public interface of a neuron.
 
     /// Return the age of this neuron.
@@ -664,6 +711,9 @@ impl Neuron {
                     self.auto_stake_maturity = None;
                 }
                 Ok(())
+            }
+            Operation::SetVisibility(set_visibility) => {
+                self.set_visibility(set_visibility.visibility)
             }
         }
     }
