@@ -85,7 +85,7 @@ TEST_BINARIES = [
 
 [release_nostrip_binary(
     name = name + "_bin",
-    binary = NO_STRIP_BINARIES[name],
+    binary = ALL_BINARIES[name],
 ) for name in NO_STRIP_BINARIES]
 
 [release_strip_binary(
@@ -97,7 +97,7 @@ TEST_BINARIES = [
 [release_strip_binary_test(
     name = name + "_bin",
     testonly = True,
-    binary = TEST_BINARIES[name],
+    binary = ALL_BINARIES[name],
 ) for name in TEST_BINARIES]
 
 # all targets below are tesonly because the targets violating the testonly flag
