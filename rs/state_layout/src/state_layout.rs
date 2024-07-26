@@ -359,10 +359,10 @@ impl TipHandler {
     }
 
     /// Resets "tip" to a checkpoint identified by height.
-    pub fn reset_tip_to(
+    pub fn reset_tip_to<T: LoadingPolicy>(
         &mut self,
         state_layout: &StateLayout,
-        cp: &CheckpointLayout<ReadOnly>,
+        cp: &CheckpointLayout<T>,
         lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {

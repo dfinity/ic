@@ -10,6 +10,7 @@ pub mod tip;
 pub mod tree_diff;
 pub mod tree_hash;
 
+use crate::tip::CheckpointForResettingTip;
 use crate::{
     manifest::compute_bundled_manifest,
     state_sync::{
@@ -904,7 +905,7 @@ fn initialize_tip(
 
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
-            checkpoint_layout,
+            checkpoint_layout: CheckpointForResettingTip::Verified(checkpoint_layout),
             pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
             is_initializing_tip: true,
         })
@@ -2525,7 +2526,9 @@ impl StateManagerImpl {
             // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: checkpoint_layout.clone(),
+                    checkpoint_layout: CheckpointForResettingTip::Verified(
+                        checkpoint_layout.clone(),
+                    ),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
                     is_initializing_tip: false,
                 }]

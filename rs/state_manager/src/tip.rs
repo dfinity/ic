@@ -26,7 +26,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, InVerification,
-    LoadingPolicy, ReadOnly, RwPolicy, TipHandler,
+    LoadingPolicy, ReadOnly, RwPolicy, StateLayout, TipHandler,
 };
 use ic_sys::fs::defrag_file_partially;
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
@@ -70,6 +70,11 @@ pub struct PageMapToFlush {
     pub page_map: Option<PageMap>,
 }
 
+pub(crate) enum CheckpointForResettingTip {
+    Verified(CheckpointLayout<ReadOnly>),
+    Verifying(CheckpointLayout<InVerification>),
+}
+
 /// Request for the Tip directory handling thread.
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
@@ -96,7 +101,7 @@ pub(crate) enum TipRequest {
     /// If is_initializing, we have a state with potentially different LSMT status.
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
     ResetTipAndMerge {
-        checkpoint_layout: CheckpointLayout<ReadOnly>,
+        checkpoint_layout: CheckpointForResettingTip,
         pagemaptypes_with_num_pages: Vec<(PageMapType, usize)>,
         is_initializing_tip: bool,
     },
@@ -341,22 +346,31 @@ pub(crate) fn spawn_tip_thread(
                                 );
                                 tip_downgrade = HasDowngrade::No;
                             }
-                            let height = checkpoint_layout.height();
-                            tip_handler
-                                .reset_tip_to(
-                                    &state_layout,
-                                    &checkpoint_layout,
-                                    lsmt_config.lsmt_status,
-                                    Some(&mut thread_pool),
-                                )
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to reset tip to height @{}: {}",
-                                        height,
-                                        err
-                                    );
-                                });
+
+                            let (res, height) = match checkpoint_layout {
+                                CheckpointForResettingTip::Verified(cp) => (
+                                    tip_handler.reset_tip_to(
+                                        &state_layout,
+                                        &cp,
+                                        lsmt_config.lsmt_status,
+                                        Some(&mut thread_pool),
+                                    ),
+                                    cp.height(),
+                                ),
+                                CheckpointForResettingTip::Verifying(cp) => (
+                                    tip_handler.reset_tip_to(
+                                        &state_layout,
+                                        &cp,
+                                        lsmt_config.lsmt_status,
+                                        Some(&mut thread_pool),
+                                    ),
+                                    cp.height(),
+                                ),
+                            };
+
+                            res.unwrap_or_else(|err| {
+                                fatal!(log, "Failed to reset tip to height @{}: {}", height, err);
+                            });
                             match lsmt_config.lsmt_status {
                                 FlagStatus::Enabled => merge(
                                     &mut tip_handler,
