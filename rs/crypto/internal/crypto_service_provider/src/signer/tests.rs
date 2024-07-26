@@ -488,10 +488,6 @@ mod verify_ed25519 {
 
             Self { csp, pk, sig }
         }
-
-        // pub fn new_batch<R: Rng + CryptoRng>(msg: &[u8], size: usize, rng: &mut R) -> Vec<Self> {
-        //     (0..size).map(|_| Fixture::new(msg, rng)).collect()
-        // }
     }
 }
 
@@ -799,29 +795,6 @@ mod multi {
         assert!(combination.unwrap_err().is_algorithm_not_supported());
     }
 }
-
-// mod batch {
-//     use super::*;
-
-//     #[test]
-//     fn should_verify_batch_of_single_signature_without_querying_secret_key_store() {
-//         let (_sk, pk, msg, sig) = csp_testvec(RFC8032_ED25519_1);
-//         let verifier = Csp::builder_for_test()
-//             .with_vault(
-//                 LocalCspVault::builder_for_test()
-//                     .with_mock_stores()
-//                     .with_node_secret_key_store(secret_key_store_panicking_on_usage())
-//                     .build(),
-//             )
-//             .build();
-//         let key_signature_pairs = vec![(pk, sig)];
-//         let algorithm_id = AlgorithmId::Ed25519;
-
-//         let result = verifier.verify_batch(&key_signature_pairs, &msg, algorithm_id);
-
-//         assert_matches!(result, Ok(()));
-//     }
-// }
 
 fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder<
     rand_chacha::ChaCha20Rng,
