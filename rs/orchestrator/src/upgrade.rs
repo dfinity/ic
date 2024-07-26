@@ -15,12 +15,16 @@ use ic_image_upgrader::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
+use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     consensus::{CatchUpPackage, HasHeight},
-    crypto::canister_threshold_sig::MasterPublicKey,
+    crypto::{
+        canister_threshold_sig::MasterPublicKey,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
+    },
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
@@ -146,18 +150,51 @@ impl Upgrade {
                     .ok()
             });
 
-            if let Some(cup) = maybe_cup {
-                let subnet_id =
-                    get_subnet_id(&*self.registry.registry_client, &cup).map_err(|err| {
-                        OrchestratorError::UpgradeError(format!(
-                            "Couldn't determine the subnet id: {:?}",
-                            err
-                        ))
-                    })?;
-                (subnet_id, maybe_proto, Some(cup))
-            } else {
-                // No local CUP found, check registry
-                match self.registry.get_subnet_id(latest_registry_version) {
+            match (&maybe_cup, &maybe_proto) {
+                (Some(cup), _) => {
+                    let subnet_id =
+                        get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
+                            OrchestratorError::UpgradeError(format!(
+                                "Couldn't determine the subnet id: {:?}",
+                                err
+                            ))
+                        })?;
+                    (subnet_id, maybe_proto, maybe_cup)
+                }
+                (None, Some(proto)) => {
+                    // We found a local CUP proto that we can't deserialize, which can only happen
+                    // after an upgrade, and this is the first CUP we are reading on the new version.
+                    // This means we have to be an assigned node, otherwise we would have left the
+                    // subnet and deleted the CUP before upgrading to this version.
+
+                    // Try to find the subnet ID by deserializing only the NiDkgId
+                    let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
+                        .map_err(|err| {
+                            OrchestratorError::UpgradeError(format!(
+                                "Couldn't deserialize NiDkgId to determine the subnet id: {:?}",
+                                err
+                            ))
+                        })?;
+
+                    let subnet_id = match nidkg_id.target_subnet {
+                        NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
+
+                        // If this CUP was created by a remote subnet, then it is a genesis/recovery CUP
+                        // This is the only case in the branch where we can trust the subnet ID of the
+                        // latest registry version.
+                        NiDkgTargetSubnet::Remote(_) => self
+                            .registry
+                            .get_subnet_id(latest_registry_version)
+                            .map_err(|err| {
+                                OrchestratorError::UpgradeError(format!(
+                                    "Couldn't determine the subnet id from registry: {:?}",
+                                    err
+                                ))
+                            })?,
+                    };
+                    (subnet_id, maybe_proto, None)
+                }
+                (None, None) => match self.registry.get_subnet_id(latest_registry_version) {
                     Ok(subnet_id) => {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
                         (subnet_id, maybe_proto, None)
@@ -167,7 +204,7 @@ impl Upgrade {
                         self.check_for_upgrade_as_unassigned().await?;
                         return Ok(None);
                     }
-                }
+                },
             }
         };
 
@@ -511,7 +548,6 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
     let dkg_id = cup.signature.signer;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
     // If the DKG key material was signed by the subnet itself — use it, if not, get
     // the subnet id from the registry.
     match dkg_id.target_subnet {
