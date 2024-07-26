@@ -129,20 +129,6 @@ TESTONLY_BINARIES = [
     if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
 ]
 
-# TODO: remove "ic-https-outcalls-adapter" exception
-# once transition rules are functioning as expected
-genrule(
-    name = "ic-https-outcalls-adapter_cleaned",
-    testonly = True,
-    srcs = ["ic-https-outcalls-adapter_bin"],
-    outs = ["ic-https-outcalls-adapter"],
-    cmd = select({
-        "@platforms//os:linux": "objcopy --strip-unneeded -R .comment -R .note -R .note.gnu.build-id $< $@",
-        "@platforms//os:osx": "cp $< $@",
-    }),
-    executable = True,
-)
-
 [
     genrule(
         name = name + "_cleaned",
