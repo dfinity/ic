@@ -58,13 +58,6 @@ impl BasicSigVerifierInternal {
             });
         };
 
-        let seed = vault.new_public_seed().map_err(|e| match e {
-            PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
-                CryptoError::TransientInternalError { internal_error }
-            }
-        })?;
-        let rng = &mut seed.into_rng();
-
         let message = message.as_signed_bytes();
         let mut msgs = Vec::with_capacity(signatures.signatures_map.len());
         let mut sigs = Vec::with_capacity(signatures.signatures_map.len());
@@ -93,6 +86,13 @@ impl BasicSigVerifierInternal {
             sigs.push(&signature.get_ref().0[..]);
             keys.push(pk);
         }
+
+        let seed = vault.new_public_seed().map_err(|e| match e {
+            PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
+            }
+        })?;
+        let rng = &mut seed.into_rng();
 
         ic_crypto_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
             CryptoError::SignatureVerification {
