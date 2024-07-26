@@ -9,7 +9,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ChangeSet, ValidatedConsensusArtifact},
-    p2p::consensus::MutablePool,
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -17,7 +17,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
         BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
-        HasHeight, RandomBeacon, RandomTape,
+        HasHeight, Notarization, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId,
