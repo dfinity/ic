@@ -1,13 +1,7 @@
 //! The execution environment public interface.
 mod errors;
 
-pub use errors::{
-    CanisterOutOfCyclesError, HypervisorError, IngressInductionError, TrapCode,
-    LABEL_VALUE_CANISTER_METHOD_NOT_FOUND, LABEL_VALUE_CANISTER_NOT_FOUND,
-    LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
-    LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INGRESS_HISTORY_FULL,
-    LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD, LABEL_VALUE_SUBNET_METHOD_NOT_ALLOWED,
-};
+pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types::MasterPublicKeyId;

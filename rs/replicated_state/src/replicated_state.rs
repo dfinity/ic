@@ -17,7 +17,7 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{
+use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };

@@ -3,7 +3,7 @@ use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_I
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_interfaces::execution_environment::LABEL_VALUE_CANISTER_NOT_FOUND;
+use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
