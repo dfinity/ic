@@ -26,7 +26,7 @@ Success::
 end::catalog[] */
 
 use ic_base_types::SubnetId;
-use ic_consensus_system_test_utils::subnet_recovery::assert_subnet_is_healthy;
+use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
 use ic_consensus_system_test_utils::{
     rw_message::{
         can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,

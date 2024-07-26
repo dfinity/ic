@@ -37,7 +37,7 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::execute_bash_command,
-    subnet_recovery::{
+    subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_on_new_subnet,
         enable_chain_key_signing_on_subnet,
     },

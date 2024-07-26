@@ -19,7 +19,7 @@ use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
     install_nns_and_check_progress, store_message,
 };
-use ic_consensus_system_test_utils::subnet_recovery::enable_chain_key_signing_on_subnet;
+use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
     UpdateImageType,
