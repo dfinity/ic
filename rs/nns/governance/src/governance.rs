@@ -373,18 +373,6 @@ impl ManageNeuron {
             (Some(nid), None) => Ok(Some(NeuronIdOrSubaccount::NeuronId(*nid))),
         }
     }
-
-    // TODO(NNS1-3228): Delete this.
-    fn is_set_visibility(&self) -> bool {
-        let Some(Command::Configure(ref configure)) = self.command else {
-            return false;
-        };
-
-        matches!(
-            configure.operation,
-            Some(manage_neuron::configure::Operation::SetVisibility(_)),
-        )
-    }
 }
 
 impl Command {
@@ -4762,18 +4750,6 @@ impl Governance {
         &self,
         manage_neuron: &ManageNeuron,
     ) -> Result<(), GovernanceError> {
-        // TODO(NNS1-3228): Delete this.
-        if manage_neuron.is_set_visibility() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "Setting neuron visibility via proposal is not allowed yet, \
-                 but it will be in the not too distant future. If you need \
-                 this sooner, please, start a new thread at forum.dfinity.org \
-                 and describe your use case."
-                    .to_string(),
-            ));
-        }
-
         let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
