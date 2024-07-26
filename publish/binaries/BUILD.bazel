@@ -126,8 +126,7 @@ TESTONLY_BINARIES = [
         }),
         executable = True,
     )
-    for name in BINARIES
-    if name not in TESTONLY_BINARIES
+    for name in BINARIES if name not in TESTONLY_BINARIES
 ]
 
 [
