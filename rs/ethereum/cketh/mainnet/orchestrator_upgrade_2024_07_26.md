@@ -1,4 +1,4 @@
-# Proposal to upgrade the ledger suite orchestrator canister
+# Proposal to upgrade the ledger suite orchestrator canister to add ckWSTETH
 
 Git hash: `de29a1a55b589428d173b31cdb8cec0923245657`
 
