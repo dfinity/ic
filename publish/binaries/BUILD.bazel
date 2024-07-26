@@ -118,7 +118,6 @@ TESTONLY_BINARIES = [
 [
     genrule(
         name = name + "_cleaned",
-        testonly = True,
         srcs = [name + "_bin"],
         outs = [name],
         cmd = select({
@@ -128,7 +127,7 @@ TESTONLY_BINARIES = [
         executable = True,
     )
     for name in BINARIES
-    if name not in TEST_BINARIES
+    if name not in TESTONLY_BINARIES
 ]
 
 [
@@ -143,7 +142,7 @@ TESTONLY_BINARIES = [
         }),
         executable = True,
     )
-    for name in TEST_BINARIES
+    for name in TESTONLY_BINARIES
 ]
 
 [
