@@ -4,6 +4,8 @@ load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "re
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
+# We don't strip the more complex binaries
+# in order to have some debug information available.
 NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
@@ -14,7 +16,7 @@ TEST_BINARIES = [
     "types-test",
 ]
 
-BINARIES = {
+ALL_OBJECTS = {
     "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
@@ -126,7 +128,7 @@ TESTONLY_BINARIES = [
         executable = True,
     )
     for name in BINARIES
-    if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
+    if name not in TEST_BINARIES
 ]
 
 [
