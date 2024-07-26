@@ -77,7 +77,7 @@ impl NetworkStatusResponse {
         current_block_timestamp: u64,
         genesis_block_identifier: BlockIdentifier,
         oldest_block_identifier: Option<BlockIdentifier>,
-        sync_status: SyncStatus,
+        sync_status: Option<SyncStatus>,
         peers: Vec<Peer>,
     ) -> NetworkStatusResponse {
         NetworkStatusResponse {
@@ -85,7 +85,7 @@ impl NetworkStatusResponse {
             current_block_timestamp,
             genesis_block_identifier,
             oldest_block_identifier,
-            sync_status: Some(sync_status),
+            sync_status,
             peers,
         }
     }

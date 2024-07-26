@@ -42,6 +42,7 @@ use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::NetworkListResponse;
 use rosetta_core::response_types::{MempoolResponse, MempoolTransactionResponse};
 use std::convert::{TryFrom, TryInto};
+use std::num::TryFromIntError;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -562,19 +563,37 @@ impl RosettaRequestHandler {
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
-        let (tip_block, genesis_block, first_verified_block) = match blocks.rosetta_blocks_mode {
+        let network_status = match blocks.rosetta_blocks_mode {
             // If rosetta mode is not enabled we simply fetched the latest verified block
             RosettaBlocksMode::Disabled => {
                 let tip_verified_block = blocks.get_latest_verified_hashed_block()?;
-                (
-                    self.hashed_block_to_rosetta_core_block(tip_verified_block)
-                        .await?,
-                    self.hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
-                        .await?,
-                    self.hashed_block_to_rosetta_core_block(
-                        blocks.get_first_verified_hashed_block()?,
-                    )
-                    .await?,
+                let genesis_block = blocks.get_hashed_block(&0)?;
+                let first_verified_block = blocks.get_first_verified_hashed_block()?;
+                let oldest_block_id = if first_verified_block.index != 0 {
+                    Some(convert::block_id(&first_verified_block)?)
+                } else {
+                    None
+                };
+                NetworkStatusResponse::new(
+                    convert::block_id(&tip_verified_block)?,
+                    models::timestamp::from_system_time(
+                        Block::decode(tip_verified_block.block)
+                            .unwrap()
+                            .timestamp
+                            .into(),
+                    )?
+                    .0
+                    .try_into()
+                    .map_err(|err: TryFromIntError| {
+                        ApiError::InternalError(
+                            false,
+                            Details::from(format!("Cannot convert timestamp to u64: {}", err)),
+                        )
+                    })?,
+                    convert::block_id(&genesis_block)?,
+                    oldest_block_id,
+                    None,
+                    vec![],
                 )
             }
             RosettaBlocksMode::Enabled {
@@ -588,69 +607,30 @@ impl RosettaRequestHandler {
                             .get_rosetta_block_by_index(highest_rosetta_block_index)
                             .await?;
                         // If Rosetta Blocks started only after a certain index then the genesis block as well as the first verified block will be the first icp block
-                        if first_rosetta_block_index > 0 {
-                            (
-                                highest_rosetta_block,
-                                self.hashed_block_to_rosetta_core_block(
-                                    blocks.get_hashed_block(&0)?,
-                                )
-                                .await?,
-                                self.hashed_block_to_rosetta_core_block(
-                                    blocks.get_first_verified_hashed_block()?,
-                                )
-                                .await?,
-                            )
-                        } else {
-                            (
-                                highest_rosetta_block,
-                                self.get_rosetta_block_by_index(0).await?,
-                                self.get_rosetta_block_by_index(first_rosetta_block_index)
-                                    .await?,
-                            )
-                        }
-                    }
-                    // If no rosetta block has been written to the database we return the first verified icp block that will go into the first rosetta block
-                    None => {
-                        let icp_block_idx = if blocks.contains_block(&first_rosetta_block_index)? {
-                            // We already have a rosetta block populated and the first rosetta block is pointing to the first icp block
-                            first_rosetta_block_index
-                        } else {
-                            // We do not yet have any rosetta blocks populated and the first rosetta block is pointing to the next icp block
-                            // This means that the first icp block index which exists in the database is the first rosetta block index minus one
-                            first_rosetta_block_index.saturating_sub(1)
-                        };
-
-                        (
-                            self.hashed_block_to_rosetta_core_block(
-                                blocks.get_hashed_block(&icp_block_idx)?,
-                            )
-                            .await?,
+                        let genesis_block_id = if first_rosetta_block_index > 0 {
                             self.hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
-                                .await?,
-                            self.hashed_block_to_rosetta_core_block(
-                                blocks.get_first_verified_hashed_block()?,
-                            )
-                            .await?,
+                                .await?
+                                .block_identifier
+                        } else {
+                            self.get_rosetta_block_by_index(0).await?.block_identifier
+                        };
+                        NetworkStatusResponse::new(
+                            highest_rosetta_block.block_identifier,
+                            highest_rosetta_block.timestamp,
+                            genesis_block_id,
+                            None,
+                            None,
+                            vec![],
                         )
+                    }
+                    None => {
+                        return Err(ApiError::BlockchainEmpty(false, "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database.".into()));
                     }
                 }
             }
         };
 
-        let oldest_block_id = if first_verified_block.block_identifier.index != 0 {
-            Some(first_verified_block.block_identifier)
-        } else {
-            None
-        };
-
-        Ok(NetworkStatusResponse {
-            current_block_identifier: tip_block.block_identifier,
-            current_block_timestamp: tip_block.timestamp,
-            genesis_block_identifier: genesis_block.block_identifier,
-            oldest_block_identifier: oldest_block_id,
-            sync_status: None,
-            peers: vec![],
-        })
+        Ok(network_status)
     }
 
     async fn get_blocks_range(
