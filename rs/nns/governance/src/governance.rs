@@ -4233,21 +4233,6 @@ impl Governance {
                             managed_neuron_id,
                             |managed_neuron| managed_neuron.controller(),
                         ) {
-                            // TODO(NNS1-3228): Delete this.
-                            if mgmt.is_set_visibility() {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::Unavailable,
-                                        "Setting neuron visibility via proposal is not allowed yet, \
-                                         but it will be in the not too distant future. If you need \
-                                         this sooner, please, start a new thread at forum.dfinity.org \
-                                         and describe your use case.".to_string(),
-                                    )),
-                                );
-                                return;
-                            }
-
                             let result = self.manage_neuron(&controller, &mgmt).await;
                             match result.command {
                                 Some(manage_neuron_response::Command::Error(err)) => {
@@ -4737,6 +4722,18 @@ impl Governance {
         &self,
         manage_neuron: &ManageNeuron,
     ) -> Result<(), GovernanceError> {
+        // TODO(NNS1-3228): Delete this.
+        if manage_neuron.is_set_visibility() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Setting neuron visibility via proposal is not allowed yet, \
+                 but it will be in the not too distant future. If you need \
+                 this sooner, please, start a new thread at forum.dfinity.org \
+                 and describe your use case."
+                    .to_string(),
+            ));
+        }
+
         let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
