@@ -16,7 +16,7 @@ TEST_BINARIES = [
     "types-test",
 ]
 
-ALL_OBJECTS = {
+BINARIES = {
     "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
