@@ -379,7 +379,8 @@ impl ManageNeuron {
             return false;
         };
 
-        let Some(manage_neuron::configure::Operation::SetVisibility(_)) = configure.operation else {
+        let Some(manage_neuron::configure::Operation::SetVisibility(_)) = configure.operation
+        else {
             return false;
         };
 
