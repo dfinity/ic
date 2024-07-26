@@ -8,7 +8,7 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 
 use anyhow::Result;
 
-pub fn setup(env: TestEnv) {
+fn setup(env: TestEnv) {
     let malicious_behaviour =
         MaliciousBehaviour::new(true).set_maliciously_propose_equivocating_blocks();
     InternetComputer::new()

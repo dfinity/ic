@@ -50,7 +50,7 @@ const INGRESS_MSG_SIZE: usize = 4 * 1024 * 1024 - 360;
 /// This allows us to test, that in a misconfigured setting, the specified
 /// max_block_payload_size still fits through.
 /// It also allows us to test the limit in the XNet setting properly.
-pub fn setup(env: TestEnv) {
+fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
