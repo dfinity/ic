@@ -707,7 +707,7 @@ icTests my_sub other_sub =
                                                                                                  testCase "Changing controllers" $ do
                                                                                                    let controllers = [defaultUser, otherUser]
                                                                                                    cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
-                                                                                                   ic_set_controllers ic00 ecid controllers
+                                                                                                   ic_set_controllers ic00 cid controllers
                                                                                                    universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                                    ic_install ic00 (enum #install) cid universal_wasm ""
 
