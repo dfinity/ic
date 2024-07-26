@@ -92,7 +92,7 @@ TEST_BINARIES = [
     name = name + "_bin",
     testonly = name in TESTONLY_BINARIES,
     binary = ALL_BINARIES[name],
-) for name in ALL_BINARIES if name not in NO_STRIP and name not in TEST_BINARIES]
+) for name in ALL_BINARIES if name not in NO_STRIP_BINARIES and name not in TEST_BINARIES]
 
 [release_strip_binary_test(
     name = name + "_bin",
@@ -158,7 +158,7 @@ upload_artifacts(
     visibility = ["//testnet/tools:__pkg__"],
 )
 
-BINS_TO_TEST = [":" + name for name in BINARIES]
+BINS_TO_TEST = [":" + name for name in ALL_BINARIES]
 
 sh_test(
     name = "binary-libraries-test",
