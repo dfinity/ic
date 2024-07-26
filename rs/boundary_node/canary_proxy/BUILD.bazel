@@ -40,9 +40,7 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = VERSION,
-    visibility = [
-        "//rs:release-pkg",
-    ],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )
 

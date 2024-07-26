@@ -48,9 +48,7 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    visibility = [
-        "//rs:release-pkg",
-    ],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )
 
