@@ -1,18 +1,15 @@
-use std::collections::BTreeMap;
-use std::time::Duration;
-
-use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
-use anyhow::bail;
-use candid::Principal;
-use canister_test::Canister;
-use ic_base_types::SubnetId;
-use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
-use ic_consensus_system_test_utils::{
+use crate::upgrade::assert_assigned_replica_version;
+use crate::{
     rw_message::{
         can_read_msg, can_store_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
     },
     ssh_access::execute_bash_command,
 };
+use anyhow::bail;
+use candid::Principal;
+use canister_test::Canister;
+use ic_base_types::SubnetId;
+use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     add_chain_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
     empty_subnet_update, execute_update_subnet_proposal, get_master_public_key,
@@ -32,6 +29,8 @@ use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
+use std::collections::BTreeMap;
+use std::time::Duration;
 use url::Url;
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
