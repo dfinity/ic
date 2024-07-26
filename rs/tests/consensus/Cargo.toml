@@ -14,6 +14,8 @@ futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic_consensus_system_test_utils = { path = "./utils" }
+ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
+ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
@@ -64,10 +66,6 @@ path = "max_xnet_payload_size_test.rs"
 name = "ic-systest-request-auth-malicious-replica-test"
 path = "request_auth_malicious_replica_test.rs"
 
-[lib]
-name = "ic_consensus_system_test_liveness_test_common"
-path = "liveness_test_common.rs"
-
 [[bin]]
 name = "ic-systest-liveness-with-equivocation-test"
 path = "liveness_with_equivocation_test.rs"
@@ -75,3 +73,11 @@ path = "liveness_with_equivocation_test.rs"
 [[bin]]
 name = "ic-systest-safety-test"
 path = "safety_test.rs"
+
+[[bin]]
+name = "ic-systest-catch-up-possible-test"
+path = "catch_up_possible_test.rs"
+
+[[bin]]
+name = "ic-systest-catch-up-loop-prevention-test"
+path = "catch_up_loop_prevention_test.rs"

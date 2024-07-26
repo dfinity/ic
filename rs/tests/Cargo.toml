@@ -300,14 +300,6 @@ name = "ic-systest-system-api-security-test"
 path = "execution/system_api_security_test.rs"
 
 [[bin]]
-name = "ic-systest-catch-up-possible-test"
-path = "consensus/catch_up_possible_test.rs"
-
-[[bin]]
-name = "ic-systest-catch-up-loop-prevention-test"
-path = "consensus/catch_up_loop_prevention_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 

@@ -12979,6 +12979,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_consensus_system_test_catch_up_test_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-system-test-driver",
+ "ic-types",
+ "slog",
+]
+
+[[package]]
+name = "ic_consensus_system_test_liveness_test_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-agent 0.35.0",
+ "ic-base-types",
+ "ic-system-test-driver",
+ "ic-types",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_consensus_system_test_utils"
 version = "0.9.0"
 dependencies = [
@@ -13020,6 +13047,8 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
+ "ic_consensus_system_test_catch_up_test_common",
+ "ic_consensus_system_test_liveness_test_common",
  "ic_consensus_system_test_utils",
  "k256",
  "rand 0.8.5",
