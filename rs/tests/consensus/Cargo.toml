@@ -10,6 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
+chrono = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic_consensus_system_test_utils = { path = "./utils" }
@@ -20,6 +21,8 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 registry-canister = { path = "../../registry/canister" }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

@@ -12907,6 +12907,7 @@ dependencies = [
  "anyhow",
  "candid",
  "canister-test",
+ "chrono",
  "futures",
  "ic-base-types",
  "ic-nns-constants",
@@ -12917,6 +12918,8 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "registry-canister",
+ "reqwest 0.12.5",
+ "serde_json",
  "slog",
  "tokio",
 ]
