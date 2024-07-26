@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use slog::Drain;
+use slog::{slog_o, Drain};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
