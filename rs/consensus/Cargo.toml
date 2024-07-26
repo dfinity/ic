@@ -83,3 +83,4 @@ harness = false
 [features]
 default = []
 malicious_code = []
+proptest = []

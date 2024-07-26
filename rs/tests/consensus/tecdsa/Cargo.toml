@@ -88,3 +88,6 @@ path = "tecdsa_two_signing_subnets_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-complaint-test"
 path = "tecdsa_complaint_test.rs"
+
+[features]
+upload_perf_systest_results = []

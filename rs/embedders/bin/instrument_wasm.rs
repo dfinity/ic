@@ -18,12 +18,12 @@ Usage: {} wasm_file
     );
 }
 
-#[cfg(build = "debug")]
+#[cfg(debug_assertions)]
 fn get_logger() -> slog::Logger {
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
     slog::Logger::root(slog_term::FullFormat::new(plain).build().fuse(), slog_o!())
 }
-#[cfg(not(build = "debug"))]
+#[cfg(not(debug_assertions))]
 fn get_logger() -> slog::Logger {
     use slog::slog_o;
 

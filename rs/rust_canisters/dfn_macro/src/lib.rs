@@ -1,4 +1,4 @@
-#![cfg_attr(nightly_compiler, feature(proc_macro_diagnostic))]
+#![cfg_attr(nightly, feature(proc_macro_diagnostic))]
 /*
 This is very gradually getting depreciated.
 You'll get much better error messages if you use 'dfn_core::{over, over_async}' instead
@@ -62,7 +62,7 @@ impl Errors {
         self.queue.push_back((msg.into(), s.span()));
     }
 
-    #[cfg(nightly_compiler)]
+    #[cfg(nightly)]
     fn emit(mut self) {
         match self.queue.pop_front() {
             Some((msg, span)) => {
@@ -76,7 +76,7 @@ impl Errors {
         }
     }
 
-    #[cfg(not(nightly_compiler))]
+    #[cfg(not(nightly))]
     fn emit(self) {
         if !self.queue.is_empty() {
             let errors = self

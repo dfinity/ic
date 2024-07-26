@@ -38,3 +38,6 @@ ic-test-utilities-types = { path = "../../test_utilities/types" }
 mockall = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+
+[features]
+proptest = []
