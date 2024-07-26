@@ -18,12 +18,19 @@ use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::ic::Subnet;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
+use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
+use ic_system_test_driver::driver::test_env_api::NnsInstallationBuilder;
 use ic_system_test_driver::{
     canister_api::{CallMode, Request},
     nns::vote_and_execute_proposal,
-    util::MessageCanister,
+    util::{block_on, MessageCanister},
 };
-use ic_types::{PrincipalId, ReplicaVersion};
+use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
@@ -35,22 +42,15 @@ use registry_canister::mutations::{
 use slog::{debug, info, Logger};
 use std::time::Duration;
 
-pub mod tecdsa_add_nodes_test;
-pub mod tecdsa_complaint_test;
-pub mod tecdsa_remove_nodes_test;
-pub mod tecdsa_signature_test;
-pub mod tecdsa_two_signing_subnets_test;
-pub mod tschnorr_message_sizes_test;
-
-pub(crate) const KEY_ID1: &str = "secp256k1";
+pub const KEY_ID1: &str = "secp256k1";
 
 /// The default DKG interval takes too long before the keys are created and
 /// passed to execution.
-pub(crate) const DKG_INTERVAL: u64 = 19;
+pub const DKG_INTERVAL: u64 = 19;
 
-pub(crate) const NUMBER_OF_NODES: usize = 4;
+pub const NUMBER_OF_NODES: usize = 4;
 
-pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
+pub fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: name.to_string(),
@@ -64,21 +64,21 @@ pub fn make_ecdsa_key_id() -> MasterPublicKeyId {
     })
 }
 
-pub(crate) fn make_eddsa_key_id() -> MasterPublicKeyId {
+pub fn make_eddsa_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
         name: "some_eddsa_key".to_string(),
     })
 }
 
-pub(crate) fn make_bip340_key_id() -> MasterPublicKeyId {
+pub fn make_bip340_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Bip340Secp256k1,
         name: "some_bip340_key".to_string(),
     })
 }
 
-pub(crate) fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
+pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     vec![
         make_ecdsa_key_id(),
         make_bip340_key_id(),
@@ -86,7 +86,91 @@ pub(crate) fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     ]
 }
 
-pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
+/// Creates one system subnet without signing enabled and one application subnet
+/// with signing enabled.
+pub fn setup_without_ecdsa_on_nns(test_env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(19))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .with_unassigned_nodes(NUMBER_OF_NODES)
+        .setup_and_start(&test_env)
+        .expect("Could not start IC!");
+    test_env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    test_env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
+
+    // Currently, we make the assumption that the first subnets is the root
+    // subnet. This might not hold in the future.
+    let nns_node = test_env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &test_env)
+        .expect("Failed to install NNS canisters");
+}
+
+/// Creates one system subnet and two application subnets.
+pub fn setup(test_env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NUMBER_OF_NODES),
+        )
+        .with_unassigned_nodes(NUMBER_OF_NODES)
+        .setup_and_start(&test_env)
+        .expect("Could not start IC!");
+    test_env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    test_env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
+
+    // Currently, we make the assumption that the first subnets is the root
+    // subnet. This might not hold in the future.
+    let nns_node = test_env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &test_env)
+        .expect("Failed to install NNS canisters");
+}
+
+pub fn empty_subnet_update() -> UpdateSubnetPayload {
     UpdateSubnetPayload {
         subnet_id: subnet_test_id(0),
         max_ingress_bytes_per_message: None,
@@ -123,12 +207,55 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
     }
 }
 
-pub(crate) fn scale_cycles(cycles: Cycles) -> Cycles {
+pub fn scale_cycles(cycles: Cycles) -> Cycles {
     // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
     (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
 }
 
-pub(crate) async fn get_public_key_and_test_signature(
+/// The signature test consists of getting the given canister's Chain key, comparing it to the existing key
+/// to ensure it hasn't changed, sending a sign request, and verifying the signature
+pub fn run_chain_key_signature_test(
+    canister: &MessageCanister,
+    logger: &Logger,
+    key_id: &MasterPublicKeyId,
+    existing_key: Vec<u8>,
+) {
+    info!(logger, "Run through Chain key signature test.");
+    let message_hash = vec![0xabu8; 32];
+    block_on(async {
+        let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
+            .await
+            .unwrap();
+        assert_eq!(existing_key, public_key);
+        let signature = get_signature_with_logger(
+            message_hash.clone(),
+            ECDSA_SIGNATURE_FEE,
+            key_id,
+            canister,
+            logger,
+        )
+        .await
+        .unwrap();
+        verify_signature(key_id, &message_hash, &public_key, &signature);
+    });
+}
+
+/// Get the threshold public key of the given canister
+pub fn get_master_public_key(
+    canister: &MessageCanister,
+    key_id: &MasterPublicKeyId,
+    logger: &Logger,
+) -> Vec<u8> {
+    info!(
+        logger,
+        "Getting threshold public key for key id: {}.", key_id
+    );
+    let public_key = block_on(get_public_key_with_retries(key_id, canister, logger, 100)).unwrap();
+    info!(logger, "Got public key {:?}", public_key);
+    public_key
+}
+
+pub async fn get_public_key_and_test_signature(
     key_id: &MasterPublicKeyId,
     message_canister: &MessageCanister<'_>,
     zero_cycles: bool,
@@ -161,7 +288,7 @@ pub(crate) async fn get_public_key_and_test_signature(
     Ok(public_key)
 }
 
-pub(crate) async fn get_public_key_with_retries(
+pub async fn get_public_key_with_retries(
     key_id: &MasterPublicKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
@@ -177,7 +304,7 @@ pub(crate) async fn get_public_key_with_retries(
     }
 }
 
-pub(crate) async fn get_ecdsa_public_key_with_retries(
+pub async fn get_ecdsa_public_key_with_retries(
     key_id: &EcdsaKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
@@ -228,7 +355,7 @@ pub(crate) async fn get_ecdsa_public_key_with_retries(
     Ok(public_key)
 }
 
-pub(crate) async fn get_schnorr_public_key_with_retries(
+pub async fn get_schnorr_public_key_with_retries(
     key_id: &SchnorrKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
@@ -294,7 +421,7 @@ pub(crate) async fn get_schnorr_public_key_with_retries(
     Ok(public_key)
 }
 
-pub(crate) async fn get_public_key_with_logger(
+pub async fn get_public_key_with_logger(
     key_id: &MasterPublicKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
@@ -302,7 +429,7 @@ pub(crate) async fn get_public_key_with_logger(
     get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 100).await
 }
 
-pub(crate) async fn execute_update_subnet_proposal(
+pub async fn execute_update_subnet_proposal(
     governance: &Canister<'_>,
     proposal_payload: UpdateSubnetPayload,
     title: &str,
@@ -335,7 +462,7 @@ pub(crate) async fn execute_update_subnet_proposal(
     assert_eq!(proposal_result.status(), ProposalStatus::Executed);
 }
 
-pub(crate) async fn execute_create_subnet_proposal(
+pub async fn execute_create_subnet_proposal(
     governance: &Canister<'_>,
     proposal_payload: CreateSubnetPayload,
     logger: &Logger,
@@ -364,7 +491,7 @@ pub(crate) async fn execute_create_subnet_proposal(
     assert_eq!(proposal_result.status(), ProposalStatus::Executed);
 }
 
-pub(crate) async fn get_signature_with_logger(
+pub async fn get_signature_with_logger(
     message: Vec<u8>,
     cycles: Cycles,
     key_id: &MasterPublicKeyId,
@@ -383,7 +510,7 @@ pub(crate) async fn get_signature_with_logger(
     }
 }
 
-pub(crate) async fn get_ecdsa_signature_with_logger(
+pub async fn get_ecdsa_signature_with_logger(
     message_hash: &[u8; 32],
     cycles: Cycles,
     key_id: &EcdsaKeyId,
@@ -437,7 +564,7 @@ pub(crate) async fn get_ecdsa_signature_with_logger(
     Ok(signature)
 }
 
-pub(crate) async fn get_schnorr_signature_with_logger(
+pub async fn get_schnorr_signature_with_logger(
     message: Vec<u8>,
     cycles: Cycles,
     key_id: &SchnorrKeyId,
@@ -493,7 +620,7 @@ pub(crate) async fn get_schnorr_signature_with_logger(
     Ok(signature)
 }
 
-pub(crate) async fn enable_chain_key_signing(
+pub async fn enable_chain_key_signing(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
     key_ids: Vec<MasterPublicKeyId>,
@@ -505,7 +632,7 @@ pub(crate) async fn enable_chain_key_signing(
     .await
 }
 
-pub(crate) async fn enable_chain_key_signing_with_timeout(
+pub async fn enable_chain_key_signing_with_timeout(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
     key_ids: Vec<MasterPublicKeyId>,
@@ -518,7 +645,7 @@ pub(crate) async fn enable_chain_key_signing_with_timeout(
     .await
 }
 
-pub(crate) async fn add_chain_keys_with_timeout_and_rotation_period(
+pub async fn add_chain_keys_with_timeout_and_rotation_period(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
     key_ids: Vec<MasterPublicKeyId>,
@@ -545,7 +672,7 @@ pub(crate) async fn add_chain_keys_with_timeout_and_rotation_period(
     execute_update_subnet_proposal(governance, proposal_payload, "Add Chain keys", logger).await;
 }
 
-pub(crate) async fn enable_chain_key_signing_with_timeout_and_rotation_period(
+pub async fn enable_chain_key_signing_with_timeout_and_rotation_period(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
     key_ids: Vec<MasterPublicKeyId>,
@@ -580,7 +707,7 @@ pub(crate) async fn enable_chain_key_signing_with_timeout_and_rotation_period(
     .await;
 }
 
-pub(crate) async fn create_new_subnet_with_keys(
+pub async fn create_new_subnet_with_keys(
     governance: &Canister<'_>,
     node_ids: Vec<NodeId>,
     keys: Vec<(MasterPublicKeyId, PrincipalId)>,
