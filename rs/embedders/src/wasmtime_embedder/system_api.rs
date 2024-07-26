@@ -676,22 +676,8 @@ pub(crate) fn syscalls<
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     // A valid function index should be much smaller than u32::max
-                    let reply_fun: u32 = reply_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reply function index out of bounds: {}",
-                                reply_fun
-                            ),
-                        }
-                    })?;
-                    let reject_fun: u32 = reject_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reject function index out of bounds: {}",
-                                reject_fun
-                            ),
-                        }
-                    })?;
+                    let reply_fun: u32 = reply_fun.try_into().unwrap_or(u32::MAX);
+                    let reject_fun: u32 = reject_fun.try_into().unwrap_or(u32::MAX);
                     system_api.ic0_call_new(
                         callee_src,
                         callee_size,
@@ -732,14 +718,7 @@ pub(crate) fn syscalls<
                 charge_for_cpu(&mut caller, overhead::CALL_ON_CLEANUP)?;
                 with_system_api(&mut caller, |s| {
                     // A valid function index should be much smaller than u32::max
-                    let fun: u32 = fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_on_cleanup: function index out of bounds: {}",
-                                fun
-                            ),
-                        }
-                    })?;
+                    let fun: u32 = fun.try_into().unwrap_or(u32::MAX);
                     s.ic0_call_on_cleanup(fun, env)
                 })
             }
