@@ -20,10 +20,10 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{cmc::FakeCmc, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{pb::v1::ExecuteNnsFunction, Environment, Governance, HeapGrowthPotential},
+    governance::{Environment, Governance, HeapGrowthPotential},
     pb::v1::{
-        neuron, proposal, Governance as GovernanceProto, GovernanceError, Motion, NetworkEconomics,
-        Neuron, Proposal, Topic,
+        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
+        Motion, NetworkEconomics, Neuron, Proposal, Topic,
     },
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
