@@ -26,16 +26,15 @@ pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 pub use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
-    CspPublicKeyStore, CspSigVerifier, CspSigner, CspTlsHandshakeSignerProvider, NiDkgCspClient,
+    CspSigVerifier, CspSigner, CspTlsHandshakeSignerProvider, NiDkgCspClient,
     ThresholdSignatureCspClient,
 };
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
-use crate::vault::api::{CspPublicKeyStoreError, CspVault};
+use crate::vault::api::CspVault;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{new_logger, replica_logger::no_op_logger, ReplicaLogger};
-use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
@@ -52,7 +51,6 @@ pub trait CryptoServiceProvider:
     + ThresholdSignatureCspClient
     + NiDkgCspClient
     + CspTlsHandshakeSignerProvider
-    + CspPublicKeyStore
 {
 }
 
@@ -62,7 +60,6 @@ impl<T> CryptoServiceProvider for T where
         + ThresholdSignatureCspClient
         + NiDkgCspClient
         + CspTlsHandshakeSignerProvider
-        + CspPublicKeyStore
 {
 }
 
@@ -169,21 +166,5 @@ impl Csp {
             logger,
             metrics,
         }
-    }
-}
-
-impl CspPublicKeyStore for Csp {
-    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
-        self.csp_vault.current_node_public_keys()
-    }
-
-    fn current_node_public_keys_with_timestamps(
-        &self,
-    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
-        self.csp_vault.current_node_public_keys_with_timestamps()
-    }
-
-    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
-        self.csp_vault.idkg_dealing_encryption_pubkeys_count()
     }
 }
