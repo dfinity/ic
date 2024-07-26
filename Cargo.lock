@@ -12884,6 +12884,7 @@ dependencies = [
  "futures",
  "ic-system-test-driver",
  "ic-types",
+ "ic_consensus_system_test_utils",
  "slog",
 ]
 
