@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
+package(default_visibility = ["//rs:ic-os-pkg"])
+
 DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:clap",
@@ -15,6 +17,5 @@ rust_binary(
     aliases = {},
     proc_macro_deps = [],
     version = "0.1.0",
-    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )
