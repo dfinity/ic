@@ -1493,6 +1493,20 @@ where
 }
 
 impl CheckpointLayout<InVerification> {
+    fn transit_to_verified(self) -> CheckpointLayout<ReadOnly> {
+        let verified_checkpoint = CheckpointLayout::<ReadOnly> {
+            root: self.root.clone(),
+            height: self.height,
+            state_layout: self.state_layout.clone(),
+            permissions_tag: PhantomData,
+        };
+        // Increment after result is constructed in case one of the field clone()'s
+        // panics
+        if let Some(ref state_layout) = self.state_layout {
+            state_layout.increment_checkpoint_ref_counter(self.height);
+        }
+        verified_checkpoint
+    }
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     pub fn remove_unverified_checkpoint_marker(
@@ -1500,12 +1514,7 @@ impl CheckpointLayout<InVerification> {
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if !marker.exists() {
-            return Ok(CheckpointLayout::<ReadOnly> {
-                root: self.root.clone(),
-                height: self.height,
-                state_layout: self.state_layout.clone(),
-                permissions_tag: PhantomData,
-            });
+            return Ok(self.transit_to_verified());
         }
         match std::fs::remove_file(&marker) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
@@ -1526,13 +1535,7 @@ impl CheckpointLayout<InVerification> {
             io_err: err,
         })?;
 
-        let cp_verified = CheckpointLayout::<ReadOnly> {
-            root: self.root.clone(),
-            height: self.height,
-            state_layout: self.state_layout.clone(),
-            permissions_tag: PhantomData,
-        };
-        Ok(cp_verified)
+        Ok(self.transit_to_verified())
     }
 }
 
