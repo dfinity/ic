@@ -2,6 +2,7 @@ use candid::{CandidType, Principal};
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
+use ic_stable_structures::{storable::Bound, Storable};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{de, de::Error, Deserialize, Serialize};
 use std::{
@@ -9,6 +10,8 @@ use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
+use std::io::{Cursor, Read};
+use std::borrow::Cow;
 
 use crate::{protobuf as proto, AccountIdBlob};
 
@@ -49,6 +52,33 @@ impl From<Account> for AccountIdentifier {
     fn from(account: Account) -> Self {
         Self::new(account.owner.into(), account.subaccount.map(Subaccount))
     }
+}
+
+impl Storable for AccountIdentifier {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buffer: Vec<u8> = vec![0; 28];
+
+        for i in 0..28 {
+            buffer[i] = self.hash[i];
+        }
+
+        Cow::Owned(buffer)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut cursor = Cursor::new(bytes);
+
+        let mut ai = AccountIdentifier { hash: [7; 28] };
+        cursor
+            .read_exact(&mut ai.hash)
+            .expect("Unable to read the account identifier");
+        ai
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 28,
+        is_fixed_size: true,
+    };
 }
 
 pub static SUB_ACCOUNT_ZERO: Subaccount = Subaccount([0; 32]);
