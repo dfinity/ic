@@ -13018,6 +13018,8 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "registry-canister",
  "slog",
  "tokio",

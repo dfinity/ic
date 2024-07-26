@@ -336,10 +336,6 @@ name = "ic-systest-max-xnet-payload-size-test"
 path = "consensus/max_xnet_payload_size_test.rs"
 
 [[bin]]
-name = "ic-systest-node-graceful-leaving-test"
-path = "consensus/node_graceful_leaving_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 

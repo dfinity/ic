@@ -19,6 +19,8 @@ ic-recovery = { path = "../../recovery" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 slog = { workspace = true }
 tokio = { workspace = true }
@@ -30,3 +32,7 @@ path = "consensus_performance.rs"
 [[bin]]
 name = "ic-systest-adding-nodes-to-subnet-test"
 path = "adding_nodes_to_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-node-graceful-leaving-test"
+path = "node_graceful_leaving_test.rs"
