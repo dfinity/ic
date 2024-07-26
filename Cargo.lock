@@ -2329,7 +2329,6 @@ dependencies = [
  "reqwest 0.12.5",
  "serde_json",
  "slog",
- "tests",
  "tokio",
  "url",
 ]
