@@ -66,3 +66,6 @@ scoped_threadpool = "0.1.*"
 [[bench]]
 name = "bench_allocator"
 harness = false
+
+[features]
+fuzzing_code = []

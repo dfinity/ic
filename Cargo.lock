@@ -6350,6 +6350,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-btc-replica-types",
  "ic-config",
+ "ic-consensus",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-constants",
