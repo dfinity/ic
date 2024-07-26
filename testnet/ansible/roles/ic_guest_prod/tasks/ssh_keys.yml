@@ -1,0 +1,13 @@
+- name: Set the authorized keys for the dfnadmin user
+  authorized_key:
+    user: dfnadmin
+    state: present
+    exclusive: yes
+    key: "{{ lookup('file', (inventory_file | dirname ) + '/ssh_keys_release_team') }}"
+
+- name: Set the authorized keys for the ubuntu user
+  authorized_key:
+    user: ubuntu
+    state: present
+    exclusive: yes
+    key: "{{ lookup('file', (inventory_file | dirname ) + '/ssh_keys_release_team') }}"
