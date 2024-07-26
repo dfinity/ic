@@ -189,7 +189,16 @@ system_test(
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/universal_canister/lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test(

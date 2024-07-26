@@ -300,10 +300,6 @@ name = "ic-systest-cow-safety-test"
 path = "consensus/cow_safety_test.rs"
 
 [[bin]]
-name = "ic-systest-replica-determinism-test"
-path = "consensus/replica_determinism_test.rs"
-
-[[bin]]
 name = "ic-systest-request-auth-malicious-replica-test"
 path = "consensus/request_auth_malicious_replica_test.rs"
 

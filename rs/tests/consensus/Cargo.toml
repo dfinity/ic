@@ -36,3 +36,7 @@ path = "adding_nodes_to_subnet_test.rs"
 [[bin]]
 name = "ic-systest-node-graceful-leaving-test"
 path = "node_graceful_leaving_test.rs"
+
+[[bin]]
+name = "ic-systest-replica-determinism-test"
+path = "replica_determinism_test.rs"
