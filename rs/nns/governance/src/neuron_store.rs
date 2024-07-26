@@ -567,34 +567,30 @@ impl NeuronStore {
                 }
             }
 
-            let mut result_copies = vec![];
-            let mut filter_push = |neuron, storage_location| {
-                if let Some(neuron) = neuron {
-                    result_copies.push((neuron, storage_location));
-                }
-            };
-
-            filter_push(heap_neuron, StorageLocation::Heap);
-
             let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
                 stable_neuron_store
                     .read(neuron_id, sections)
                     .ok()
                     .map(Cow::Owned)
             });
-            filter_push(stable_neuron, StorageLocation::Stable);
 
-            if result_copies.len() > 1 {
-                println!(
-                    "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
-                        we are at risk of having stale copies",
-                    LOG_PREFIX, neuron_id
-                );
-            }
+            match (stable_neuron, heap_neuron) {
+                // 1 copy cases.
+                (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
+                (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
 
-            match result_copies.pop() {
-                Some(ok) => Ok(ok),
-                None => Err(NeuronStoreError::not_found(neuron_id)),
+                // 2 copy case.
+                (Some(stable), Some(_)) => {
+                    println!(
+                        "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
+                         we are at risk of having stale copies",
+                        LOG_PREFIX, neuron_id
+                    );
+                    Ok((stable, StorageLocation::Stable))
+                }
+
+                // 0 copies case.
+                (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
             }
         };
 
