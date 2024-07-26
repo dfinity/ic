@@ -3941,23 +3941,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fees-and-limits"
-version = "0.1.0"
-dependencies = [
- "candid",
- "clap 3.2.25",
- "eyre",
- "ic-agent",
- "ic-config",
- "ic-replicated-state",
- "ic-system-api",
- "ic-types",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "ff"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13009,6 +12992,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "icp-config"
+version = "0.1.0"
+dependencies = [
+ "clap 3.2.25",
+ "eyre",
+ "ic-config",
+ "ic-replicated-state",
+ "ic-system-api",
+ "ic-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "icp-ledger"
 version = "0.9.0"
 dependencies = [
@@ -13118,7 +13115,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "assert_matches",
  "base32",
