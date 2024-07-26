@@ -46,7 +46,7 @@ const XNET_MSG_SIZE: usize = 2 * 1024 * 1024 - 20;
 /// This allows us to test, that in a misconfigured setting, the specified
 /// max_block_payload_size still fits through.
 /// It also allows us to test the limit in the XNet setting properly.
-pub fn setup(env: TestEnv) {
+fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -67,7 +67,7 @@ pub fn setup(env: TestEnv) {
 /// Tests, that a xnet message that is close to the maximum size is accepted
 /// by the block maker, whereas a message this is exactly the maximum size is
 /// not accepted.
-pub fn test(env: TestEnv) {
+fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
     info!(log, "Checking readiness of all nodes after the IC setup...");
