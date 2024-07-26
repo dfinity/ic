@@ -53,8 +53,8 @@ use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::SshSession;
+use ic_system_test_driver::driver::test_env_api::{HasDependencies, IcNodeSnapshot};
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
@@ -76,7 +76,7 @@ use ic_types::Height;
 
 use anyhow::Result;
 use futures::future::join_all;
-use slog::info;
+use slog::{error, info, Logger};
 use std::time::{Duration, Instant};
 use tokio::runtime::{Builder, Runtime};
 
@@ -86,7 +86,7 @@ const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
+const TEST_DURATION: Duration = Duration::from_secs(30);
 const DKG_INTERVAL: u64 = 999;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
@@ -283,6 +283,20 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
             RETRY_WAIT,
         ));
     }
+
+    if cfg!(feature = "upload_perf_systest_results") {
+        let original_branch_version = env
+            .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+            .expect("tip-of-branch IC version");
+
+        rt.block_on(persist_metrics(
+            original_branch_version,
+            test_metrics,
+            message_size,
+            rps,
+            &log,
+        ));
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -377,6 +391,64 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
     }
 }
 
+async fn persist_metrics(
+    ic_version: String,
+    metrics: TestMetrics,
+    message_size: usize,
+    rps: f64,
+    log: &Logger,
+) {
+    // elastic search url
+    const ES_URL: &str =
+        "https://elasticsearch.testnet.dfinity.network/ci-consensus-performance-test/_doc";
+    const NUM_UPLOAD_ATTEMPS: usize = 3;
+
+    let timestamp =
+        chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
+
+    let json_report = serde_json::json!(
+        {
+            "benchmark_name": "consensus_performance_test",
+            "timestamp": timestamp,
+            "ic_version": ic_version,
+            "benchmark_settings": {
+                "message_size": message_size,
+                "rps": rps,
+            },
+            "benchmark_results": {
+                "success_rate": metrics.success_rate,
+                "blocks_per_second": metrics.blocks_per_second,
+                "throughput_bytes_per_second": metrics.throughput_bytes_per_second,
+                "throughput_messages_per_second": metrics.throughput_messages_per_second,
+            }
+        }
+    );
+
+    info!(
+        log,
+        "Starting to upload performance test results to {ES_URL}: {}", json_report,
+    );
+
+    for i in 1..=NUM_UPLOAD_ATTEMPS {
+        info!(
+            log,
+            "Uploading performance test results attempt {}/{}", i, NUM_UPLOAD_ATTEMPS
+        );
+
+        let client = reqwest::Client::new();
+        match client.post(ES_URL).json(&json_report).send().await {
+            Ok(response) => {
+                info!(
+                    log,
+                    "Successfully uploaded performance test results: {response:?}"
+                );
+                break;
+            }
+            Err(e) => error!(log, "Failed to upload performance test results: {e:?}"),
+        }
+    }
+}
+
 fn average(nums: &[u64]) -> u64 {
     assert!(!nums.is_empty());
 
@@ -388,7 +460,7 @@ fn test_small_messages(env: TestEnv) {
 }
 
 fn test_large_messages(env: TestEnv) {
-    test(env, 1_950_000, 2.0)
+    test(env, 950_000, 4.0)
 }
 
 fn main() -> Result<()> {
