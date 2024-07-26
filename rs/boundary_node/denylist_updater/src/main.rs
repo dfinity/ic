@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     hash::{Hash, Hasher},
-    io::{ErrorKind, Write},
+    io::Write,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
@@ -32,11 +32,7 @@ use prometheus::{labels, Encoder, Registry, TextEncoder};
 use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use serde::Deserialize;
 use serde_json as json;
-use tokio::{
-    io::{self},
-    net::TcpListener,
-    task,
-};
+use tokio::{net::TcpListener, task};
 use tracing::info;
 
 mod metrics;
