@@ -1,7 +1,8 @@
 use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Block, Operation, Transaction};
-use ic_icrc1_ledger::{ChangeFeeCollector, FeatureFlags, InitArgs, LedgerArgument};
+use ic_icrc1_ledger::{ApprovalKey, ChangeFeeCollector, FeatureFlags, InitArgs, LedgerArgument};
+use ic_icrc1_ledger_sm_tests::metrics::parse_metric;
 use ic_icrc1_ledger_sm_tests::{
     get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
     BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
@@ -1027,6 +1028,60 @@ fn test_icrc3_get_blocks() {
 
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
+
+    verify_ledger_state(&env, ledger_id);
+    assert_eq!(1, 3);
+}
+
+fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
+    let blocks =
+        ic_icrc1_test_utils::statemachine::get_all_ledger_and_archive_blocks(&env, ledger_id);
+    let expected_ledger_state =
+        ic_icrc1_test_utils::in_memory_ledger::InMemoryLedger::new_from_icrc1_ledger_blocks(blocks);
+    let actual_num_approvals = parse_metric(&env, ledger_id, "ledger_num_approvals");
+    let actual_num_balances = parse_metric(&env, ledger_id, "ledger_balance_store_entries");
+    assert_eq!(
+        expected_ledger_state.balances.len() as u64,
+        actual_num_balances,
+        "Mismatch in number of balances ({} vs {})",
+        expected_ledger_state.balances.len(),
+        actual_num_balances
+    );
+    assert_eq!(
+        expected_ledger_state.allowances.len() as u64,
+        actual_num_approvals,
+        "Mismatch in number of approvals ({} vs {})",
+        expected_ledger_state.allowances.len(),
+        actual_num_approvals
+    );
+    for (account, balance) in expected_ledger_state.balances.iter() {
+        let actual_balance = balance_of(&env, ledger_id, account.clone());
+        assert_eq!(
+            balance.to_u64(),
+            actual_balance,
+            "Mismatch in balance for account {:?} ({} vs {})",
+            account,
+            balance,
+            actual_balance
+        );
+        println!("balance {:?}: {}", account, actual_balance);
+    }
+    for (approval, allowance) in expected_ledger_state.allowances.iter() {
+        let (from, spender): (Account, Account) = approval.clone().into();
+        let actual_allowance = get_allowance(&env, ledger_id, from, spender);
+        assert_eq!(
+            allowance.amount.to_u64(),
+            actual_allowance.allowance.0.to_u64().unwrap(),
+            "Mismatch in allowance for approval {:?} ({:?} vs {:?})",
+            approval,
+            allowance,
+            actual_allowance.allowance
+        );
+        println!(
+            "allowance ({:?}, {:?}): {:?}",
+            from, spender, actual_allowance
+        );
+    }
 }
 
 #[test]

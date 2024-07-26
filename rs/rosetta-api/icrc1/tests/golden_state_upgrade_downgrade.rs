@@ -1,12 +1,16 @@
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1_ledger_sm_tests::metrics::parse_metric;
+use ic_icrc1_ledger_sm_tests::{balance_of, get_allowance};
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
 use ic_nns_test_utils_golden_nns_state::{
     new_state_machine_with_golden_fiduciary_state_or_panic,
     new_state_machine_with_golden_sns_state_or_panic,
 };
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc1::account::Account;
+use num_traits::ToPrimitive;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -65,6 +69,10 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
     for canister_id_and_name in canister_ids_and_names {
+        let canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::from_str(canister_id_and_name.0).unwrap(),
+        );
+        verify_ledger_state(&state_machine, canister_id);
         upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
         upgrade_canister(
@@ -72,8 +80,13 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
             canister_id_and_name,
             bump_gzip_timestamp(&ledger_wasm),
         );
+        verify_ledger_state(&state_machine, canister_id);
     }
     for canister_id_and_name_u256 in canister_ids_and_names_u256 {
+        let canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::from_str(canister_id_and_name_u256.0).unwrap(),
+        );
+        verify_ledger_state(&state_machine, canister_id);
         upgrade_canister(
             &state_machine,
             canister_id_and_name_u256,
@@ -85,7 +98,9 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
             canister_id_and_name_u256,
             bump_gzip_timestamp(&ledger_wasm_u256),
         );
+        verify_ledger_state(&state_machine, canister_id);
     }
+    assert_eq!(4, 7);
 }
 
 #[test]
@@ -167,4 +182,57 @@ fn upgrade_ledger(state_machine: &StateMachine, wasm: Wasm, canister_id: Caniste
     state_machine
         .upgrade_canister(canister_id, wasm.bytes(), args)
         .expect("should successfully upgrade ledger canister");
+}
+
+fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
+    let blocks =
+        ic_icrc1_test_utils::statemachine::get_all_ledger_and_archive_blocks(&env, ledger_id);
+    let expected_ledger_state =
+        ic_icrc1_test_utils::in_memory_ledger::InMemoryLedger::new_from_icrc1_ledger_blocks(
+            &blocks,
+        );
+    let actual_num_approvals = parse_metric(&env, ledger_id, "ledger_num_approvals");
+    let actual_num_balances = parse_metric(&env, ledger_id, "ledger_balance_store_entries");
+    assert_eq!(
+        expected_ledger_state.balances.len() as u64,
+        actual_num_balances,
+        "Mismatch in number of balances ({} vs {})",
+        expected_ledger_state.balances.len(),
+        actual_num_balances
+    );
+    assert_eq!(
+        expected_ledger_state.allowances.len() as u64,
+        actual_num_approvals,
+        "Mismatch in number of approvals ({} vs {})",
+        expected_ledger_state.allowances.len(),
+        actual_num_approvals
+    );
+    for (account, balance) in expected_ledger_state.balances.iter() {
+        let actual_balance = balance_of(&env, ledger_id, account.clone());
+        assert_eq!(
+            balance.to_u64(),
+            actual_balance,
+            "Mismatch in balance for account {:?} ({} vs {})",
+            account,
+            balance,
+            actual_balance
+        );
+        println!("balance {:?}: {}", account, actual_balance);
+    }
+    for (approval, allowance) in expected_ledger_state.allowances.iter() {
+        let (from, spender): (Account, Account) = approval.clone().into();
+        let actual_allowance = get_allowance(&env, ledger_id, from, spender);
+        assert_eq!(
+            allowance.amount.to_u64(),
+            actual_allowance.allowance.0.to_u64().unwrap(),
+            "Mismatch in allowance for approval {:?} ({:?} vs {:?})",
+            approval,
+            allowance,
+            actual_allowance.allowance
+        );
+        println!(
+            "allowance ({:?}, {:?}): {:?}",
+            from, spender, actual_allowance
+        );
+    }
 }
