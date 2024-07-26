@@ -40,6 +40,7 @@
 
 use anyhow::Result;
 use futures::future::join_all;
+use ic_consensus_system_test_utils::subnet_recovery::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::{
     limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
 };
@@ -70,7 +71,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
-use ic_tests::orchestrator::utils::subnet_recovery::enable_chain_key_signing_on_subnet;
 use ic_types::Height;
 use slog::{error, info};
 use std::fs::create_dir_all;

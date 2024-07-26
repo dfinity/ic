@@ -35,7 +35,7 @@ use url::Url;
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
-pub(crate) fn break_subnet(
+pub fn break_subnet(
     subnet: Box<dyn Iterator<Item = IcNodeSnapshot>>,
     subnet_size: usize,
     recovery: &Recovery,
@@ -63,7 +63,7 @@ pub(crate) fn break_subnet(
 }
 
 /// Halt the subnet and wait until the given app node reports consensus 'is halted'
-pub(crate) fn halt_subnet(
+pub fn halt_subnet(
     app_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
     recovery: &Recovery,
@@ -112,12 +112,7 @@ pub(crate) fn halt_subnet(
 
 /// A subnet is considered to be broken if it still works in read mode,
 /// but doesn't in write mode
-pub(crate) fn assert_subnet_is_broken(
-    node_url: &Url,
-    can_id: Principal,
-    msg: &str,
-    logger: &Logger,
-) {
+pub fn assert_subnet_is_broken(node_url: &Url, can_id: Principal, msg: &str, logger: &Logger) {
     info!(logger, "Ensure the subnet works in read mode");
     assert!(
         can_read_msg(logger, node_url, can_id, msg),
@@ -137,7 +132,7 @@ pub(crate) fn assert_subnet_is_broken(
 
 /// A subnet is considered to be healthy if all nodes in the given vector are healthy
 /// and running the given version, canisters can be installed and messages can be written and read.
-pub(crate) fn assert_subnet_is_healthy(
+pub fn assert_subnet_is_healthy(
     subnet: &Vec<IcNodeSnapshot>,
     target_version: String,
     can_id: Principal,
@@ -191,7 +186,7 @@ pub(crate) fn assert_subnet_is_healthy(
 }
 
 /// Assert that the given node has deleted its state within the next 5 minutes.
-pub(crate) fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
+pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
     info!(
         logger,
         "Asserting that node {} has deleted its state.",
@@ -222,7 +217,7 @@ pub(crate) fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) 
 }
 
 /// Select a node with highest finalization height in the given subnet snapshot
-pub(crate) fn select_download_node(
+pub fn select_download_node(
     subnet: SubnetSnapshot,
     logger: &Logger,
 ) -> (IcNodeSnapshot, NodeMetrics) {
@@ -241,7 +236,7 @@ pub(crate) fn select_download_node(
 }
 
 /// Print ID and IP of all unassigned nodes and the first app subnet found.
-pub(crate) fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
+pub fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
     let topology_snapshot = env.topology_snapshot();
 
     info!(logger, "App nodes:");
@@ -326,7 +321,7 @@ pub fn enable_chain_key_signing_on_subnet(
 /// Disable signing on NNS and enable it on the new app subnet.
 /// Assert that the key stays the same regardless of whether signing
 /// is enabled on NNS or the app subnet. Return the public key for the given canister.
-pub(crate) fn enable_chain_key_on_new_subnet(
+pub fn enable_chain_key_on_new_subnet(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
@@ -400,7 +395,7 @@ pub(crate) fn enable_chain_key_on_new_subnet(
 }
 
 /// Disable Chain key signing on the given subnet and wait until sign requests fail.
-pub(crate) fn disable_chain_key_on_subnet(
+pub fn disable_chain_key_on_subnet(
     nns_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
     canister: &MessageCanister,

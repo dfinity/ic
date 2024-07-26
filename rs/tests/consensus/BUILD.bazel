@@ -25,7 +25,6 @@ system_test(
         "//rs/backup",
         "//rs/recovery",
         "//rs/registry/subnet_type",
-        "//rs/tests",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",

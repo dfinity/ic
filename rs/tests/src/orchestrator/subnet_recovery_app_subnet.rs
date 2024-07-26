@@ -27,7 +27,6 @@ Success::
 
 end::catalog[] */
 
-use crate::orchestrator::utils::subnet_recovery::*;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     rw_message::{
@@ -35,6 +34,12 @@ use ic_consensus_system_test_utils::{
         store_message,
     },
     set_sandbox_env_vars,
+    subnet_recovery::{
+        assert_node_is_unassigned, assert_subnet_is_broken, assert_subnet_is_healthy, break_subnet,
+        disable_chain_key_on_subnet, enable_chain_key_on_new_subnet,
+        enable_chain_key_signing_on_subnet, halt_subnet, print_app_and_unassigned_nodes,
+        select_download_node,
+    },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
     make_key_ids_for_all_schemes, run_chain_key_signature_test,
