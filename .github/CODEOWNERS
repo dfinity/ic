@@ -42,8 +42,8 @@ go_deps.bzl               @dfinity/idx
 # [DevEnv]
 .vscode/                  @dfinity/idx
 
-# [Publishing-Artifacts]
-/publish/ @dfinity/idx
+# [Public Artifacts From The IC Protocol]
+/publish/                 @dfinity/idx @dfinity/ic-interface-owners
 
 # [Packages]
 /packages/icrc-ledger-agent/         @dfinity/finint
@@ -55,14 +55,14 @@ go_deps.bzl               @dfinity/idx
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
-/ic-os/boundary-guestos/                                                @dfinity/boundary-node @dfinity/node
-/ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
-/ic-os/components/boundary-guestos.bzl                                  @dfinity/boundary-node @dfinity/node
-/ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/boundary-node @dfinity/node
+/ic-os/boundary-guestos/                                                @dfinity/node @dfinity/boundary-node
+/ic-os/components/boundary-guestos/                                     @dfinity/node @dfinity/boundary-node
+/ic-os/components/boundary-guestos.bzl                                  @dfinity/node @dfinity/boundary-node
+/ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/node @dfinity/boundary-node
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
-/ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
+/ic-os/components/monitoring/metrics-proxy/                             @dfinity/dre
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx
@@ -193,7 +193,7 @@ go_deps.bzl               @dfinity/idx
 /rs/replay/                                             @dfinity/consensus
 /rs/replica/                                            @dfinity/networking
 /rs/replica_tests/                                      @dfinity/execution
-/rs/replicated_state/                                   @dfinity/execution @dfinity/ic-message-routing-owners
+/rs/replicated_state/                                   @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/replicated_state/src/canister_state/queues.rs       @dfinity/ic-message-routing-owners
 /rs/replicated_state/src/canister_state/queues          @dfinity/ic-message-routing-owners
 /rs/replicated_state/src/page_map.rs                    @dfinity/ic-message-routing-owners @dfinity/runtime
@@ -228,22 +228,21 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
-/rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
-/rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
-/rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
-/rs/tests/execution/                                    @dfinity/execution @dfinity/idx
-/rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
-/rs/tests/gix/                                          @dfinity/idx
-/rs/tests/message_routing/                              @dfinity/ic-message-routing-owners @dfinity/idx
-/rs/tests/networking/                                   @dfinity/networking @dfinity/idx
-/rs/tests/nns/                                          @dfinity/nns-team @dfinity/idx
-/rs/tests/node/                                         @dfinity/node @dfinity/idx
-/rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus @dfinity/idx
-/rs/tests/sdk/                                          @dfinity/sdk @dfinity/idx
-/rs/tests/src/basic_health_test.rs                      @dfinity/idx
-/rs/tests/src/boundary_nodes/                           @dfinity/boundary-node @dfinity/idx
-/rs/tests/src/btc_integration/                          @dfinity/execution @dfinity/idx
-/rs/tests/src/canister_http/                            @dfinity/networking @dfinity/idx
+/rs/tests/boundary_nodes/                               @dfinity/idx @dfinity/boundary-node
+/rs/tests/consensus/                                    @dfinity/idx @dfinity/consensus @dfinity/idx
+/rs/tests/crypto/                                       @dfinity/idx @dfinity/crypto-team @dfinity/idx
+/rs/tests/execution/                                    @dfinity/idx @dfinity/execution @dfinity/idx
+/rs/tests/financial_integrations/                       @dfinity/idx @dfinity/finint @dfinity/idx
+/rs/tests/gix/                                          @dfinity/idx @dfinity/idx
+/rs/tests/message_routing/                              @dfinity/idx @dfinity/ic-message-routing-owners @dfinity/idx
+/rs/tests/networking/                                   @dfinity/idx @dfinity/networking @dfinity/idx
+/rs/tests/nns/                                          @dfinity/idx @dfinity/nns-team @dfinity/idx
+/rs/tests/node/                                         @dfinity/idx @dfinity/node @dfinity/idx
+/rs/tests/query_stats/                                  @dfinity/idx @dfinity/execution @dfinity/consensus @dfinity/idx
+/rs/tests/sdk/                                          @dfinity/idx @dfinity/sdk @dfinity/idx
+/rs/tests/src/boundary_nodes/                           @dfinity/idx @dfinity/boundary-node @dfinity/idx
+/rs/tests/src/btc_integration/                          @dfinity/idx @dfinity/execution @dfinity/idx
+/rs/tests/src/canister_http/                            @dfinity/idx @dfinity/networking @dfinity/idx
 /rs/tests/src/canister_sig_verification_cache_test/     @dfinity/crypto-team @dfinity/idx
 /rs/tests/src/certificate_orchestrator.rs               @dfinity/boundary-node @dfinity/idx
 /rs/tests/src/ckbtc/                                    @dfinity/cross-chain-team @dfinity/idx
