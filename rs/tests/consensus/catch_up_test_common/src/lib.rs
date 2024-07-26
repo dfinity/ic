@@ -1,31 +1,7 @@
-/* tag::catalog[]
-Title:: Catch Up Test
+/// Common test function for a couple of catch up tests.
 
-Goal:: Demonstrate catch up behaviour of nodes when both execution and state sync are slow.
-
-Runbook::
-. Set up a malicious (defect) node that uses delays to simulate slow execution and state sync
-. The defect node is now shut down and after a couple minutes restarted
-. Check whether the node is able to catch up
-. Additionally, we check that the artifacts are always purged below the latest CUP height (with some
-  cushion), even when we are severely lagging behind the other nodes.
-
-Success::
-. Depending on the parameters we set in this test, we either expect the node to be able to catch up or not
-
-Coverage::
-In the test, the delays are artificially introduced. However, they simulate real node behaviour
-in certain situations. The speed of state sync depends on the size of the state, while the execution speed
-depends on the number of messages in the blocks to replay.
-
-end::catalog[] */
-
-const TARGET_FR_MS: u64 = 320;
 const DKG_INTERVAL: u64 = 150;
-const DKG_INTERVAL_TIME_MS: u64 = TARGET_FR_MS * DKG_INTERVAL;
-
 const CATCH_UP_RETRIES: u64 = 40;
-
 const STATE_MANAGER_MAX_RESIDENT_HEIGHT: &str = "state_manager_max_resident_height";
 
 const CATCH_UP_PACKAGE_MAX_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"max\",type=\"catch_up_package\"}";
@@ -33,41 +9,30 @@ const CATCH_UP_PACKAGE_MIN_HEIGHT: &str = "artifact_pool_consensus_height_stat{p
 const FINALIZATION_MIN_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"min\",type=\"finalization\"}";
 const FINALIZATION_MAX_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"max\",type=\"finalization\"}";
 
-use anyhow::{anyhow, bail};
-use futures::join;
-use ic_registry_subnet_type::SubnetType;
+use ic_consensus_system_test_utils::node::{
+    await_node_certified_height, get_node_certified_height,
+};
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::{block_on, MetricsFetcher},
 };
-use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
-use slog::{info, Logger};
+use ic_types::Height;
+
+use anyhow::bail;
+use futures::join;
+use slog::info;
 use std::time::Duration;
 
 const PROMETHEUS_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 // We need to wait a bit longer than [`PROMETHEUS_SCRAPE_INTERVAL`] to make sure that the new
 // metrics have been scraped before querying them again.
 const CUP_RETRY_DELAY: Duration = PROMETHEUS_SCRAPE_INTERVAL.saturating_mul(5);
-
-// FIXME: We would expect the values for execution and state sync delay to be much smaller
-/// This configuration should not create a catch up loop.
-pub fn no_catch_up_loop(env: TestEnv) {
-    config(env, 0.8, 0.5)
-}
-
-/// Without mechanisms to prevent a catch up loop, this setting would create a catch up loop
-/// that would make it impossible for a node to catch up.
-pub fn catch_up_loop(env: TestEnv) {
-    config(env, 1.2, 0.8)
-}
 
 /// Test that a single node can catch up to the rest of the network
 pub fn test_catch_up_possible(env: TestEnv) {
@@ -77,37 +42,6 @@ pub fn test_catch_up_possible(env: TestEnv) {
 /// Test that a single node can not catch up to the rest of the network
 pub fn test_catch_up_impossible(env: TestEnv) {
     test(env, false)
-}
-
-fn config(env: TestEnv, execution_delay_factor: f64, state_sync_delay_factor: f64) {
-    let execution_delay_ms = (execution_delay_factor * TARGET_FR_MS as f64) as u64;
-    let state_sync_delay_ms = (state_sync_delay_factor * DKG_INTERVAL_TIME_MS as f64) as u64;
-
-    PrometheusVm::default()
-        .with_scrape_interval(PROMETHEUS_SCRAPE_INTERVAL)
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_unit_delay(Duration::from_millis(TARGET_FR_MS))
-                .with_initial_notary_delay(Duration::from_millis(TARGET_FR_MS))
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL - 1))
-                .add_nodes(3)
-                .add_malicious_nodes(
-                    1,
-                    MaliciousBehaviour::new(true)
-                        .set_maliciously_delay_execution(Duration::from_millis(execution_delay_ms))
-                        .set_maliciously_delay_state_sync(Duration::from_millis(
-                            state_sync_delay_ms,
-                        )),
-                ),
-        )
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-
-    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv, expect_catch_up: bool) {
@@ -135,7 +69,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
         malicious_node.malicious_behavior().unwrap()
     );
 
-    let slow_node_certified_height = get_certified_height(&malicious_node, log.clone()).get();
+    let slow_node_certified_height = get_node_certified_height(&malicious_node, log.clone()).get();
 
     let slow_node_shut_down_height = DKG_INTERVAL * (1 + slow_node_certified_height / DKG_INTERVAL);
     info!(log, "Wait one DKG interval, then shut down the slow node");
@@ -288,46 +222,4 @@ fn test(env: TestEnv, expect_catch_up: bool) {
             info!(log, "The slow node did not catch up as expected");
         }
     });
-}
-
-pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {
-    ic_system_test_driver::retry_with_msg!(
-        format!(
-            "check if node {} is at height {}",
-            node.node_id, target_height
-        ),
-        log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || {
-            node.status()
-                .and_then(|response| match response.certified_height {
-                    Some(height) if height > target_height => Ok(()),
-                    Some(height) => bail!(
-                        "Target height not yet reached, height: {}, target: {}",
-                        height,
-                        target_height
-                    ),
-                    None => bail!("Certified height not available"),
-                })
-        }
-    )
-    .expect("The node did not reach the specified height in time")
-}
-
-pub fn get_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
-    ic_system_test_driver::retry_with_msg!(
-        format!("get certified height of node {}", node.node_id),
-        log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || {
-            node.status().and_then(|response| {
-                response
-                    .certified_height
-                    .ok_or_else(|| anyhow!("Certified height not available"))
-            })
-        }
-    )
-    .expect("Should be able to retrieve the certified height")
 }
