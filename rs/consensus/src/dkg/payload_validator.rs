@@ -54,7 +54,7 @@ pub(crate) enum DkgPayloadValidationFailure {
     /// Crypto related errors.
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
-    FailedToGetMaxDealingsPerBlock(RegistryClientError),
+    FailedToGetMaxDealingsPerBlock(Option<RegistryClientError>),
 }
 
 /// Dkg errors.
@@ -161,12 +161,10 @@ pub(crate) fn validate_payload(
         if is_dkg_start_height {
             return Err(InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into());
         }
-        // FIXME(kpop): remove the unwrap
         let max_dealings_per_block = registry_client
             .get_dkg_dealings_per_block(subnet_id, registry_version)
-            .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)
-            .unwrap()
-            .unwrap();
+            .map_err(|err| DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock(Some(err)))?
+            .ok_or_else(|| DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock(None))?;
 
         validate_dealings_payload(
             crypto,
