@@ -20,14 +20,14 @@ end::catalog[] */
 use ic_agent::{Agent, AgentError};
 use ic_base_types::PrincipalId;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
+        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, TopologySnapshot},
     },
+    systest,
     util::UniversalCanister,
 };
 use ic_universal_canister::wasm;

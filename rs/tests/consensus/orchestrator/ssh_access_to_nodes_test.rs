@@ -21,9 +21,9 @@ use ic_consensus_system_test_utils::ssh_access::{
 };
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
+        group::SystemTestGroup,
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
@@ -31,6 +31,7 @@ use ic_system_test_driver::{
             SubnetSnapshot, TopologySnapshot,
         },
     },
+    systest,
     util::{block_on, get_app_subnet_and_node, get_nns_node},
 };
 use std::net::IpAddr;

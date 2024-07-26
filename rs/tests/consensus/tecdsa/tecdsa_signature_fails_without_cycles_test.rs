@@ -1,8 +1,10 @@
 use anyhow::Result;
 
 use canister_test::{Canister, Cycles};
-use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_agent::AgentError;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    AgentError,
+};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing, get_public_key_with_logger, get_signature_with_logger,

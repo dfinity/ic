@@ -20,8 +20,7 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
+use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 
 use canister_test::Canister;
 use ic_base_types::NodeId;
@@ -31,13 +30,17 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
+use ic_system_test_driver::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
+        },
+    },
+    nns::remove_nodes_via_endpoint,
+    util::*,
 };
-use ic_system_test_driver::nns::remove_nodes_via_endpoint;
-use ic_system_test_driver::util::*;
 use ic_types::Height;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;

@@ -19,17 +19,17 @@ end::catalog[] */
 
 use ic_base_types::NodeId;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 use ic_system_test_driver::{
-    driver::ic::{InternetComputer, Subnet},
     driver::{
+        group::SystemTestGroup,
+        ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
         },
     },
     nns::remove_nodes_via_endpoint,
+    systest,
     util::{
         assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, EndpointsStatus,
     },

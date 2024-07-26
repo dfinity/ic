@@ -49,28 +49,25 @@ use ic_consensus_system_test_utils::{
     limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
-use ic_system_test_driver::canister_requests;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
-use ic_system_test_driver::driver::test_env_api::SshSession;
-use ic_system_test_driver::driver::{
-    farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
-    test_env::TestEnv,
-    test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
+use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
+    canister_api::{CallMode, GenericRequest},
+    canister_requests,
+    driver::{
+        farm::HostFeature,
+        group::SystemTestGroup,
+        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        prometheus_vm::{HasPrometheus, PrometheusVm},
+        test_env::TestEnv,
+        test_env_api::{
+            HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy,
+            NnsCustomizations, SshSession,
+        },
     },
-};
-use ic_system_test_driver::generic_workload_engine;
-use ic_system_test_driver::generic_workload_engine::metrics::{
-    LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
-};
-use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{
-    assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
+    generic_workload_engine,
+    generic_workload_engine::metrics::{LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome},
+    systest,
+    util::{assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher},
 };
 use ic_types::Height;
 

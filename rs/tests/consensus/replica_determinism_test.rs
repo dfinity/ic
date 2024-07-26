@@ -14,14 +14,14 @@ Success:: The restarted node reports block finalizations.
 end::catalog[] */
 
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
+        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
+    systest,
     util::*,
 };
 use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};

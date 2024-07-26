@@ -3,8 +3,10 @@ use std::time::Duration;
 use anyhow::{bail, Result};
 
 use canister_test::Canister;
-use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_agent::AgentError;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    AgentError,
+};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
@@ -31,8 +33,7 @@ use ic_system_test_driver::{
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;
-use std::collections::BTreeMap;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 const IDKG_PAYLOAD_METRICS: &str = "idkg_payload_metrics";
 const XNET_RESHARE_AGREEMENTS: &str = "xnet_reshare_agreements";

@@ -31,15 +31,15 @@ use ic_consensus_system_test_utils::rw_message::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
+        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     nns::{add_nodes_to_subnet, change_subnet_membership, remove_nodes_via_endpoint},
+    systest,
     util::{block_on, get_app_subnet_and_node},
 };
 use ic_types::Height;

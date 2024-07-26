@@ -18,15 +18,15 @@ use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::InternetComputer;
-use ic_system_test_driver::driver::ic::Subnet;
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
-use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
-use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
-use ic_system_test_driver::driver::test_env_api::NnsInstallationBuilder;
 use ic_system_test_driver::{
     canister_api::{CallMode, Request},
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
+    },
     nns::vote_and_execute_proposal,
     util::{block_on, MessageCanister},
 };

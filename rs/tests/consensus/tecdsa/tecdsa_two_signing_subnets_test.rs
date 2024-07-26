@@ -32,15 +32,19 @@ use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-    SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+use ic_system_test_driver::{
+    driver::{
+        group::SystemTestGroup,
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot,
+            IcNodeContainer, SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        },
+    },
+    systest,
+    util::*,
 };
-use ic_system_test_driver::systest;
-use ic_system_test_driver::util::*;
 use ic_types::{Height, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};

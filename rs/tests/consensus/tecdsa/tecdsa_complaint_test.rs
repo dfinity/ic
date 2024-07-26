@@ -7,16 +7,19 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+use ic_system_test_driver::{
+    driver::{
+        group::SystemTestGroup,
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
+    },
+    systest,
+    util::{assert_malicious_from_topo, runtime_from_url, MessageCanister},
 };
-use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
-use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::Height;
+use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use slog::info;
 
 fn setup(env: TestEnv) {

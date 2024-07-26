@@ -1,5 +1,7 @@
-use crate::rw_message::{can_read_msg, can_store_msg, cert_state_makes_progress_with_retries};
-use crate::upgrade::assert_assigned_replica_version;
+use crate::{
+    rw_message::{can_read_msg, can_store_msg, cert_state_makes_progress_with_retries},
+    upgrade::assert_assigned_replica_version,
+};
 use anyhow::bail;
 use candid::Principal;
 use canister_test::Canister;
@@ -13,16 +15,14 @@ use ic_consensus_threshold_sig_system_test_utils::{
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::*;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::runtime_from_url,
+    util::{runtime_from_url, *},
 };
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};
-use std::collections::BTreeMap;
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 /// A subnet is considered to be healthy if all nodes in the given vector are healthy
 /// and running the given version, canisters can be installed and messages can be written and read.

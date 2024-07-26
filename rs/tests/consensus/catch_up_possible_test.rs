@@ -23,15 +23,18 @@ end::catalog[] */
 
 use ic_consensus_system_test_catch_up_test_common::test_catch_up_possible;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::systest;
+use ic_system_test_driver::{
+    driver::{
+        group::SystemTestGroup,
+        ic::{InternetComputer, Subnet},
+        prometheus_vm::{HasPrometheus, PrometheusVm},
+        test_env::TestEnv,
+    },
+    systest,
+};
 
 use anyhow::Result;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::Height;
+use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use std::time::Duration;
 
 const PROMETHEUS_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
