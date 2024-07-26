@@ -288,20 +288,12 @@ name = "ic-systest-rejoin-test-large-state"
 path = "message_routing/rejoin_test_large_state.rs"
 
 [[bin]]
-name = "ic-systest-liveness-with-equivocation-test"
-path = "consensus/liveness_with_equivocation_test.rs"
-
-[[bin]]
 name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
 
 [[bin]]
 name = "ic-systest-cow-safety-test"
 path = "consensus/cow_safety_test.rs"
-
-[[bin]]
-name = "ic-systest-safety-test"
-path = "consensus/safety_test.rs"
 
 [[bin]]
 name = "ic-systest-system-api-security-test"
