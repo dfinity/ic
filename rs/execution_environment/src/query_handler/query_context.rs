@@ -229,11 +229,16 @@ impl<'a> QueryContext<'a> {
         let legacy_icqc_enabled = self.own_subnet_type == SubnetType::System
             || self.own_subnet_type == SubnetType::VerifiedApplication;
 
+        error!(
+            self.log,
+            "Canister's {} method {} has a result {:?}", canister_id, method, result
+        );
+
         if let WasmMethod::Query(_) = &method {
             if let Err(err) = &result {
                 if err.code() == ErrorCode::CanisterContractViolation && legacy_icqc_enabled {
                     if self.own_subnet_type == SubnetType::System {
-                        info!(
+                        error!(
                             self.log,
                             "Canister's {} query method {} is using the legacy ICQC feature.",
                             canister_id,

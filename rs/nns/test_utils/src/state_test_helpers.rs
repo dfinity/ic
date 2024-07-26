@@ -1430,7 +1430,7 @@ pub fn list_neurons(
     request: ListNeurons,
 ) -> ListNeuronsResponse {
     let result = state_machine
-        .execute_ingress_as(
+        .query_as(
             sender,
             GOVERNANCE_CANISTER_ID,
             "list_neurons",

@@ -574,4 +574,17 @@ fn test_list_neurons() {
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
     assert_eq!(list_neurons_response.full_neurons.len(), 2);
+
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        principal_1,
+        ListNeurons {
+            neuron_ids: vec![neuron_id_1.id; 50_000],
+            include_neurons_readable_by_caller: false,
+            include_empty_neurons_readable_by_caller: None,
+            include_public_neurons_in_full_neurons: None,
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 1);
+    assert_eq!(list_neurons_response.full_neurons.len(), 50_000);
 }
