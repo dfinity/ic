@@ -48,6 +48,7 @@ pub struct HttpHandlerMetrics {
     pub request_body_size_bytes: HistogramVec,
     pub response_body_size_bytes: HistogramVec,
     pub connections_total: IntCounter,
+    pub closed_connections_total: IntCounter,
     pub health_status_transitions_total: IntCounterVec,
     pub connection_setup_duration: HistogramVec,
     pub connection_duration: HistogramVec,
@@ -112,6 +113,10 @@ impl HttpHandlerMetrics {
             connections_total: metrics_registry.int_counter(
                 "replica_http_tcp_connections_total",
                 "Total number of accepted TCP connections."
+            ),
+            closed_connections_total: metrics_registry.int_counter(
+                "replica_http_tcp_closed_connections_total",
+                "Total number closed connections."
             ),
             health_status_transitions_total: metrics_registry.int_counter_vec(
                 "replica_http_health_status_state_transitions_total",

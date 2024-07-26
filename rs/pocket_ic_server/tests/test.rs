@@ -2,7 +2,7 @@ mod common;
 
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
-use ic_agent::agent::http_transport::ReqwestTransport;
+use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
 use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
@@ -705,8 +705,6 @@ fn canister_state_dir() {
 /// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
 #[test]
 fn test_specified_id_call_v3() {
-    use ic_agent_call_v3::agent::CallResponse;
-
     // Create live PocketIc instance.
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -726,8 +724,12 @@ fn test_specified_id_call_v3() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let agent = ic_agent_call_v3::Agent::builder()
-            .with_url(endpoint.clone())
+        let transport = ReqwestTransport::create(endpoint.clone())
+            .unwrap()
+            .with_use_call_v3_endpoint();
+
+        let agent = ic_agent::Agent::builder()
+            .with_transport(transport)
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
