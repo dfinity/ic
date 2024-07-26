@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
+package(default_visibility = ["//rs:ic-os-pkg"])
+
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/config",
@@ -23,6 +25,5 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )
