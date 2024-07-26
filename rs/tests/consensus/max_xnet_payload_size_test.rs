@@ -37,7 +37,9 @@ use futures::join;
 use slog::{info, Logger};
 use std::sync::Arc;
 
+const INGRESS_MAX_SIZE: usize = 4 * 1024 * 1024;
 const XNET_MAX_SIZE: usize = 2 * 1024 * 1024;
+
 const XNET_MSG_SIZE: usize = 2 * 1024 * 1024 - 20;
 
 /// In this test, the payload size is set to 2MiB and the ingress size to 4MiB.
@@ -49,11 +51,13 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .add_nodes(1)
+                .with_max_ingress_message_size(INGRESS_MAX_SIZE as u64)
                 .with_max_block_payload_size(XNET_MAX_SIZE as u64),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .add_nodes(1)
+                .with_max_ingress_message_size(INGRESS_MAX_SIZE as u64)
                 .with_max_block_payload_size(XNET_MAX_SIZE as u64),
         )
         .setup_and_start(&env)
