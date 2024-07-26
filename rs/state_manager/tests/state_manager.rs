@@ -148,7 +148,7 @@ fn vmemory0_base_exists(
 ) -> bool {
     state_manager
         .state_layout()
-        .checkpoint(height)
+        .checkpoint_verified(height)
         .unwrap()
         .canister(canister_id)
         .unwrap()
@@ -165,7 +165,7 @@ fn vmemory0_num_overlays(
 ) -> usize {
     state_manager
         .state_layout()
-        .checkpoint(height)
+        .checkpoint_verified(height)
         .unwrap()
         .canister(canister_id)
         .unwrap()
@@ -552,7 +552,7 @@ fn checkpoint_marked_ro_at_restart() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         let canister_100_layout = state_manager
             .state_layout()
-            .checkpoint(height(1))
+            .checkpoint_verified(height(1))
             .unwrap()
             .canister(&canister_test_id(100))
             .unwrap();
@@ -855,7 +855,7 @@ fn missing_stable_memory_file_is_handled() {
         let state_layout = state_manager.state_layout();
         let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
             state_layout
-                .checkpoint(height(1))
+                .checkpoint_verified(height(1))
                 .unwrap()
                 .raw_path()
                 .to_path_buf(),
@@ -894,7 +894,7 @@ fn missing_wasm_chunk_store_is_handled() {
         let state_layout = state_manager.state_layout();
         let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
             state_layout
-                .checkpoint(height(1))
+                .checkpoint_verified(height(1))
                 .unwrap()
                 .raw_path()
                 .to_path_buf(),
@@ -1333,14 +1333,14 @@ fn should_archive_checkpoints_correctly() {
         // Manually marks checkpoint at height 6 and 10 as unverified, and it should be archived on restart.
         let marker_file_6 = state_manager
             .state_layout()
-            .checkpoint(height(6))
+            .checkpoint_verified(height(6))
             .unwrap()
             .unverified_checkpoint_marker();
         std::fs::File::create(marker_file_6).expect("failed to write to marker file");
 
         let marker_file_10 = state_manager
             .state_layout()
-            .checkpoint(height(10))
+            .checkpoint_verified(height(10))
             .unwrap()
             .unverified_checkpoint_marker();
         std::fs::File::create(marker_file_10).expect("failed to write to marker file");
@@ -3305,7 +3305,7 @@ fn can_recover_from_corruption_on_state_sync() {
             let state_layout = dst_state_manager.state_layout();
             let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
                 state_layout
-                    .checkpoint(height(1))
+                    .checkpoint_verified(height(1))
                     .unwrap()
                     .raw_path()
                     .to_path_buf(),
@@ -4834,7 +4834,7 @@ fn checkpoints_have_growing_mtime() {
         let checkpoint_age = |h| {
             state_manager
                 .state_layout()
-                .checkpoint(height(h))
+                .checkpoint_verified(height(h))
                 .unwrap()
                 .raw_path()
                 .metadata()
@@ -5389,7 +5389,7 @@ fn can_delete_canister() {
         // Check the checkpoint has the canister.
         let canister_path = state_manager
             .state_layout()
-            .checkpoint(height(1))
+            .checkpoint_verified(height(1))
             .unwrap()
             .canister(&canister_test_id(100))
             .unwrap()
@@ -5411,7 +5411,7 @@ fn can_delete_canister() {
         // Check that the checkpoint does not contain the canister
         assert!(!state_manager
             .state_layout()
-            .checkpoint(height(3))
+            .checkpoint_verified(height(3))
             .unwrap()
             .canister(&canister_test_id(100))
             .unwrap()
@@ -5579,7 +5579,10 @@ fn tip_is_initialized_correctly() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
 
-        let checkpoint_layout = state_manager.state_layout().checkpoint(height(2)).unwrap();
+        let checkpoint_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(2))
+            .unwrap();
 
         // All files are in the checkpoint
         assert!(checkpoint_layout.system_metadata().raw_path().exists());
@@ -5834,7 +5837,7 @@ fn can_merge_unexpected_number_of_files() {
             wait_for_checkpoint(&state_manager, height(HEIGHT - 1));
             let pm_layout = state_manager
                 .state_layout()
-                .checkpoint(height(HEIGHT - 1))
+                .checkpoint_verified(height(HEIGHT - 1))
                 .unwrap()
                 .canister(&canister_test_id(1))
                 .unwrap()
@@ -5869,7 +5872,7 @@ fn can_merge_unexpected_number_of_files() {
             assert_eq!(
                 state_manager
                     .state_layout()
-                    .checkpoint(height(HEIGHT))
+                    .checkpoint_verified(height(HEIGHT))
                     .unwrap()
                     .canister(&canister_test_id(1))
                     .unwrap()
@@ -6756,7 +6759,7 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
     let canister_dir = |env: &StateMachine| {
         env.state_manager
             .state_layout()
-            .checkpoint(latest_height)
+            .checkpoint_verified(latest_height)
             .unwrap()
             .canister(&canister_id)
             .unwrap()

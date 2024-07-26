@@ -2372,7 +2372,7 @@ impl StateMachine {
             other_env.import_canister_state(
                 self.state_manager
                     .state_layout()
-                    .checkpoint(height)
+                    .checkpoint_verified(height)
                     .unwrap()
                     .canister(&canister_id)
                     .unwrap()
