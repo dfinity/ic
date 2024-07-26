@@ -26,12 +26,11 @@ end::catalog[] */
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
-use crate::orchestrator::utils::subnet_recovery::{
-    enable_chain_key_on_subnet, run_chain_key_signature_test,
-};
-use crate::tecdsa::make_key_ids_for_all_schemes;
+use crate::orchestrator::utils::subnet_recovery::enable_chain_key_on_subnet;
 use anyhow::bail;
 use ic_base_types::{NodeId, RegistryVersion};
+use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
+use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_keys::make_crypto_node_key;

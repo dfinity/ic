@@ -137,6 +137,10 @@ pub enum IngressInductionError {
     /// Message enqueuing failed due to calling an unknown subnet method.
     CanisterMethodNotFound(String),
 
+    /// Message enqueuing failed due to calling a subnet method that is not
+    /// allowed to be called via ingress messages.
+    SubnetMethodNotAllowed(String),
+
     /// Message enqueuing failed due to calling a subnet method with
     /// an invalid payload.
     InvalidManagementPayload,
@@ -280,6 +284,7 @@ pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
 pub const LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE: &str = "BitcoinNonMatchingResponse";
 pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
 pub const LABEL_VALUE_CANISTER_METHOD_NOT_FOUND: &str = "CanisterMethodNotFound";
+pub const LABEL_VALUE_SUBNET_METHOD_NOT_ALLOWED: &str = "SubnetMethodNotAllowed";
 pub const LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD: &str = "InvalidManagementPayload";
 pub const LABEL_VALUE_INGRESS_HISTORY_FULL: &str = "IngressHistoryFull";
 
@@ -313,6 +318,9 @@ impl IngressInductionError {
             IngressInductionError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
             IngressInductionError::CanisterMethodNotFound(_) => {
                 LABEL_VALUE_CANISTER_METHOD_NOT_FOUND
+            }
+            IngressInductionError::SubnetMethodNotAllowed(_) => {
+                LABEL_VALUE_SUBNET_METHOD_NOT_ALLOWED
             }
             IngressInductionError::InvalidManagementPayload => {
                 LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD
@@ -385,6 +393,11 @@ impl std::fmt::Display for IngressInductionError {
                 "Cannot enqueue management message. Method {} is unknown.",
                 method
             ),
+            IngressInductionError::SubnetMethodNotAllowed(method) => write!(
+                f,
+                "Cannot enqueue management message. Method {} is not allowed to be called via ingress messages.",
+                method
+            ),
             IngressInductionError::InvalidManagementPayload => write!(
                 f,
                 "Cannot enqueue management message. Candid payload is invalid."
@@ -404,6 +417,7 @@ impl From<&IngressInductionError> for ErrorCode {
             IngressInductionError::CanisterStopping(_) => ErrorCode::CanisterStopping,
             IngressInductionError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
             IngressInductionError::CanisterMethodNotFound(_) => ErrorCode::CanisterMethodNotFound,
+            IngressInductionError::SubnetMethodNotAllowed(_) => ErrorCode::CanisterRejectedMessage,
             IngressInductionError::InvalidManagementPayload => ErrorCode::InvalidManagementPayload,
             IngressInductionError::IngressHistoryFull { .. } => ErrorCode::IngressHistoryFull,
         }

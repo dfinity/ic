@@ -2,6 +2,8 @@ load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
+package(default_visibility = ["//rs:ic-os-pkg"])
+
 LINUX_ONLY = [
     "metrics-proxy",
     "vsock_guest",
@@ -71,11 +73,15 @@ BINARIES = {
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
+    # still needed for release qulifcation
+    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
+    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
 }
 
 # test binaries or binaries using test utils
 TESTONLY_BINARIES = [
     "drun",
+    "e2e-test-driver",
     "ic-admin",
     "ic-backup",
     "ic-boundary",
@@ -144,12 +150,6 @@ LIBRARIES = {
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [
-            "//ic-os/boundary-guestos/envs:__subpackages__",
-            "//ic-os/guestos/envs:__subpackages__",
-            "//ic-os/hostos/envs:__subpackages__",
-            "//ic-os/setupos/envs:__subpackages__",
-        ],
     )
     for name in BINARIES
     if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
@@ -167,12 +167,6 @@ genrule(
         "@platforms//os:osx": "cp $< $@",
     }),
     executable = True,
-    visibility = [
-        "//ic-os/boundary-guestos/envs:__subpackages__",
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-        "//ic-os/setupos/envs:__subpackages__",
-    ],
 )
 
 [
@@ -186,12 +180,6 @@ genrule(
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [
-            "//ic-os/boundary-guestos/envs:__subpackages__",
-            "//ic-os/guestos/envs:__subpackages__",
-            "//ic-os/hostos/envs:__subpackages__",
-            "//ic-os/setupos/envs:__subpackages__",
-        ],
     )
     for name in TEST_BINARIES
 ]
@@ -206,13 +194,6 @@ genrule(
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [
-            "//ic-os/boundary-api-guestos/envs:__subpackages__",
-            "//ic-os/boundary-guestos/envs:__subpackages__",
-            "//ic-os/guestos/envs:__subpackages__",
-            "//ic-os/hostos/envs:__subpackages__",
-            "//ic-os/setupos/envs:__subpackages__",
-        ],
     )
     for name in LIBRARIES
 ]
