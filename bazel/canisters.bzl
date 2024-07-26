@@ -25,7 +25,7 @@ def _wasm_rust_transition_impl(_settings, attr):
             "-C",
             "lto",
             "-C",
-            "target-feature=+bulk-memory,+mutable-globals,+reference-types",
+            "target-feature=+bulk-memory,+mutable-globals",
         ],
     }
 
