@@ -12893,7 +12893,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "futures",
- "ic-agent 0.35.0",
+ "ic-agent",
  "ic-base-types",
  "ic-system-test-driver",
  "ic-types",
@@ -12935,7 +12935,7 @@ dependencies = [
  "candid",
  "canister-test",
  "futures",
- "ic-agent 0.35.0",
+ "ic-agent",
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-nns-constants",
