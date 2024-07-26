@@ -7,9 +7,11 @@ mod verify_signature_batch {
     use ic_crypto_internal_csp::types::CspPublicKey;
     use ic_crypto_internal_csp::types::CspSignature;
     use ic_crypto_internal_csp::types::SigConverter;
+    use ic_crypto_internal_seed::Seed;
     use ic_crypto_test_utils_canister_threshold_sigs::node_id;
     use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
+    use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
     use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -34,6 +36,7 @@ mod verify_signature_batch {
     fn should_fail_if_signers_count_less_than_verification_threshold() {
         const EXPECTED_SIGNERS_COUNT: usize = 1;
         const NUMBER_OF_NODES: u32 = 2;
+        let mock_vault = MockLocalCspVault::new();
         let mut mock_csp = MockAllCryptoServiceProvider::new();
         mock_csp.expect_verify().never();
         let mut mock_registry_client = MockRegistryClient::new();
@@ -52,6 +55,7 @@ mod verify_signature_batch {
         assert_matches!(
             verify_signature_batch(
                 &mock_csp,
+                &mock_vault,
                 setup.registry_client.as_ref(),
                 &setup.batch_signed_idkg_dealing,
                 verification_threshold,
@@ -69,71 +73,23 @@ mod verify_signature_batch {
         let registry_client = Arc::clone(&setup.registry_client);
         let batch_signed_idkg_dealing = setup.batch_signed_idkg_dealing.clone();
         let verification_threshold = NumberOfNodes::new(NUMBER_OF_NODES);
-        let mut mock_csp = MockAllCryptoServiceProvider::new();
-        mock_csp
-            .expect_verify_batch()
+        let mock_csp = MockAllCryptoServiceProvider::new();
+        let mut mock_vault = MockLocalCspVault::new();
+        mock_vault
+            .expect_new_public_seed()
             .times(1)
-            .withf(move |pks_sigs, message, algorithm_id| {
-                check_input_to_verify_batch(pks_sigs, message, algorithm_id, &setup)
-            })
-            .return_const(Ok(()));
+            .return_const(Ok(Seed::from_bytes(&[1, 2, 3])));
 
         assert_matches!(
             verify_signature_batch(
                 &mock_csp,
+                &mock_vault,
                 registry_client.as_ref(),
                 &batch_signed_idkg_dealing,
                 verification_threshold,
                 registry_client.get_latest_version()
             ),
             Ok(())
-        );
-    }
-
-    #[test]
-    fn should_fail_if_single_individual_signature_verification_fails() {
-        const NUMBER_OF_NODES: u32 = 1;
-        let setup = Setup::builder().with_signature_count(1).build();
-        let registry_client = Arc::clone(&setup.registry_client);
-        let batch_signed_idkg_dealing = setup.batch_signed_idkg_dealing.clone();
-        let mut mock_csp = MockAllCryptoServiceProvider::new();
-        let internal_crypto_error = CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::Ed25519,
-            sig_bytes: vec![0; 64],
-            internal_error: "oh no!".to_string(),
-        };
-        {
-            let setup = setup.clone();
-            let internal_crypto_error = internal_crypto_error.clone();
-            mock_csp
-                .expect_verify_batch()
-                .times(1)
-                .withf(move |pks_sigs, message, algorithm_id| {
-                    check_input_to_verify_batch(pks_sigs, message, algorithm_id, &setup)
-                })
-                .return_const(Err(internal_crypto_error.clone()));
-        }
-
-        let node_id_counter = AtomicU64::new(0);
-        mock_csp
-            .expect_verify()
-            .times(1)
-            .withf(move |sig, message, algorithm_id, pk| {
-                check_input_to_verify(sig, message, algorithm_id, pk, &setup, &node_id_counter)
-            })
-            .return_const(Err(internal_crypto_error.clone()));
-        let verification_threshold = NumberOfNodes::new(NUMBER_OF_NODES);
-
-        assert_matches!(
-            verify_signature_batch(
-                &mock_csp,
-                registry_client.as_ref(),
-                &batch_signed_idkg_dealing,
-                verification_threshold,
-                registry_client.get_latest_version()
-            ),
-            Err(VerifySignatureBatchError::InvalidSignatureBatch{error, crypto_error})
-            if error.contains("Invalid basic signature batch") && crypto_error == internal_crypto_error
         );
     }
 
@@ -148,18 +104,12 @@ mod verify_signature_batch {
             internal_error: "oh no!".to_string(),
         };
         let mut mock_csp = MockAllCryptoServiceProvider::new();
+        let mut mock_vault = MockLocalCspVault::new();
+        mock_vault
+            .expect_new_public_seed()
+            .times(1)
+            .return_const(Ok(Seed::from_bytes(&[1, 2, 3])));
 
-        {
-            let setup = setup.clone();
-            let internal_crypto_error = internal_crypto_error.clone();
-            mock_csp
-                .expect_verify_batch()
-                .times(1)
-                .withf(move |pks_sigs, message, algorithm_id| {
-                    check_input_to_verify_batch(pks_sigs, message, algorithm_id, &setup)
-                })
-                .returning(move |_, _, _| Err(internal_crypto_error.clone()));
-        }
         {
             let node_id_counter = AtomicU64::new(0);
             let mut verify_call_counter = 0_u8;
@@ -195,6 +145,7 @@ mod verify_signature_batch {
         assert_matches!(
             verify_signature_batch(
                 &mock_csp,
+                &mock_vault,
                 registry_client.as_ref(),
                 &batch_signed_idkg_dealing,
                 verification_threshold,
@@ -238,26 +189,6 @@ mod verify_signature_batch {
                         node_id_counter_val
                     )
                 })
-    }
-
-    fn check_input_to_verify_batch(
-        pks_sigs: &[(CspPublicKey, CspSignature)],
-        message: &[u8],
-        algorithm_id: &AlgorithmId,
-        setup: &Setup,
-    ) -> bool {
-        (0..)
-            .map(node_id)
-            .zip(pks_sigs.iter().map(|(_pk, sig)| sig.clone()))
-            .collect::<BTreeMap<_, _>>()
-            == setup.idkg_dealing_supports
-            && message == setup.message
-            && algorithm_id == &setup.algorithm_id
-            && setup.csp_public_keys
-                == (0..)
-                    .map(node_id)
-                    .zip(pks_sigs.iter().map(|(pk, _sig)| pk.clone()))
-                    .collect::<BTreeMap<_, _>>()
     }
 
     struct SetupBuilder {

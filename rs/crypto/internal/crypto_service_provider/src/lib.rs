@@ -24,7 +24,7 @@ pub use crate::vault::local_csp_vault::LocalCspVault;
 pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 pub use crate::vault::remote_csp_vault::RemoteCspVault;
 
-use crate::api::{CspSigVerifier, CspSigner, NiDkgCspClient, ThresholdSignatureCspClient};
+use crate::api::{CspSigner, NiDkgCspClient, ThresholdSignatureCspClient};
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::CspVault;
@@ -41,15 +41,10 @@ mod tests;
 
 /// Describes the interface of the crypto service provider (CSP), e.g. for
 /// signing and key generation. The Csp struct implements this trait.
-pub trait CryptoServiceProvider:
-    CspSigner + CspSigVerifier + ThresholdSignatureCspClient + NiDkgCspClient
-{
-}
+pub trait CryptoServiceProvider: CspSigner + ThresholdSignatureCspClient + NiDkgCspClient {}
 
-impl<T> CryptoServiceProvider for T where
-    T: CspSigner + CspSigVerifier + ThresholdSignatureCspClient + NiDkgCspClient
-{
-}
+impl<T> CryptoServiceProvider for T where T: CspSigner + ThresholdSignatureCspClient + NiDkgCspClient
+{}
 
 /// Implements `CryptoServiceProvider` that uses a `CspVault` for
 /// storing and managing secret keys.
