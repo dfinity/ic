@@ -31,7 +31,7 @@ use ic_types::{canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES, CanisterId, Subn
 use pocket_ic::common::rest::{
     CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
     CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    MockCanisterHttpResponse, Topology,
+    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
@@ -103,8 +103,8 @@ pub struct ApiState {
     sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
-    // status of HTTP gateway (true = running, false = stopped)
-    http_gateways: Arc<RwLock<Vec<bool>>>,
+    // HTTP gateway infos (`None` = stopped)
+    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
 }
 
 #[derive(Default)]
@@ -470,7 +470,7 @@ impl ApiState {
     pub async fn create_http_gateway(
         &self,
         http_gateway_config: HttpGatewayConfig,
-    ) -> (InstanceId, u16) {
+    ) -> HttpGatewayInfo {
         use crate::state_api::routes::verify_cbor_content_header;
         use axum::extract::{DefaultBodyLimit, Path, Request as AxumRequest, State};
         use axum::handler::Handler;
@@ -617,8 +617,15 @@ impl ApiState {
         let real_port = listener.local_addr().unwrap().port();
 
         let mut http_gateways = self.http_gateways.write().await;
-        http_gateways.push(true);
-        let instance_id = http_gateways.len() - 1;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        http_gateways.push(Some(http_gateway_details));
         drop(http_gateways);
 
         let http_gateways = self.http_gateways.clone();
@@ -687,7 +694,7 @@ impl ApiState {
             tokio::spawn(async move {
                 loop {
                     let guard = http_gateways_for_shutdown.read().await;
-                    if !guard[instance_id] {
+                    if guard[instance_id].is_none() {
                         shutdown_handle.shutdown();
                         break;
                     }
@@ -712,7 +719,7 @@ impl ApiState {
                     Err(e) => {
                         error!("TLS config could not be created: {:?}", e);
                         let mut guard = http_gateways.write().await;
-                        guard[instance_id] = false;
+                        guard[instance_id] = None;
                         return;
                     }
                 }
@@ -726,13 +733,16 @@ impl ApiState {
 
             info!("Terminating HTTP gateway.");
         });
-        (instance_id, real_port)
+        HttpGatewayInfo {
+            instance_id,
+            port: real_port,
+        }
     }
 
     pub async fn stop_http_gateway(&self, instance_id: InstanceId) {
         let mut http_gateways = self.http_gateways.write().await;
         if instance_id < http_gateways.len() {
-            http_gateways[instance_id] = false;
+            http_gateways[instance_id] = None;
         }
     }
 
@@ -948,6 +958,16 @@ impl ApiState {
             }
         }
         res
+    }
+
+    pub async fn list_http_gateways(&self) -> Vec<HttpGatewayDetails> {
+        self.http_gateways
+            .read()
+            .await
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect()
     }
 
     /// An operation bound to an instance (a Computation) can update the PocketIC state.
