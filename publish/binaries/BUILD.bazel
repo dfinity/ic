@@ -6,7 +6,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 # We don't strip the more complex binaries
 # in order to have some debug information available.
-NO_STRIP = [
+NO_STRIP_BINARIES = [
     "canister_sandbox",
     "ic-btc-adapter",
     "replica",
@@ -87,30 +87,19 @@ TESTONLY_BINARIES = [
 [release_nostrip_binary(
     name = name + "_bin",
     binary = BINARIES[name],
-) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES and name not in TESTONLY_BINARIES]
-
-[release_nostrip_binary(
-    name = name + "_bin",
-    testonly = True,
-    binary = BINARIES[name],
-) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES and name in TESTONLY_BINARIES]
+) for name in NO_STRIP_BINARIES]
 
 [release_strip_binary(
     name = name + "_bin",
+    testonly = name in TESTONLY_BINARIES,
     binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES and name not in TESTONLY_BINARIES]
-
-[release_strip_binary(
-    name = name + "_bin",
-    testonly = True,
-    binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES and name in TESTONLY_BINARIES]
+) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES]
 
 [release_strip_binary_test(
     name = name + "_bin",
     testonly = True,
     binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP and name in TEST_BINARIES]
+) for name in TEST_BINARIES]
 
 # all targets below are tesonly because the targets violating the testonly flag
 # would error at this point
@@ -126,7 +115,8 @@ TESTONLY_BINARIES = [
         }),
         executable = True,
     )
-    for name in BINARIES if name not in TESTONLY_BINARIES
+    for name in BINARIES
+    if name not in TESTONLY_BINARIES
 ]
 
 [
