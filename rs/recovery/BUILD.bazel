@@ -1,7 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
@@ -67,6 +65,10 @@ rust_library(
     data = ["ic_public_key.pem"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs:tools-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 
@@ -76,6 +78,10 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [
         ":recovery",
         "//rs/canister_sandbox:backend_lib",

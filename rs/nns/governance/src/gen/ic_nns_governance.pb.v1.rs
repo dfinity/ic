@@ -560,7 +560,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -651,6 +651,9 @@ pub mod proposal {
         /// Stops or starts a canister controlled by Root.
         #[prost(message, tag = "26")]
         StopOrStartCanister(super::StopOrStartCanister),
+        /// Updates canister settings for those controlled by NNS Root.
+        #[prost(message, tag = "27")]
+        UpdateCanisterSettings(super::UpdateCanisterSettings),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -752,6 +755,13 @@ pub mod manage_neuron {
         #[prost(bool, tag = "1")]
         pub requested_setting_for_auto_stake_maturity: bool,
     }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct SetVisibility {
+        #[prost(enumeration = "super::Visibility", optional, tag = "1")]
+        pub visibility: ::core::option::Option<i32>,
+    }
     /// Commands that only configure a given neuron, but do not interact
     /// with the outside world. They all require the caller to be the
     /// controller of the neuron.
@@ -759,7 +769,7 @@ pub mod manage_neuron {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Configure {
-        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9")]
+        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10")]
         pub operation: ::core::option::Option<configure::Operation>,
     }
     /// Nested message and enum types in `Configure`.
@@ -788,6 +798,8 @@ pub mod manage_neuron {
             LeaveCommunityFund(super::LeaveCommunityFund),
             #[prost(message, tag = "9")]
             ChangeAutoStakeMaturity(super::ChangeAutoStakeMaturity),
+            #[prost(message, tag = "10")]
+            SetVisibility(super::SetVisibility),
         }
     }
     /// Disburse this neuron's stake: transfer the staked ICP to the
@@ -2427,6 +2439,95 @@ pub mod stop_or_start_canister {
                 "CANISTER_ACTION_UNSPECIFIED" => Some(Self::Unspecified),
                 "CANISTER_ACTION_STOP" => Some(Self::Stop),
                 "CANISTER_ACTION_START" => Some(Self::Start),
+                _ => None,
+            }
+        }
+    }
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpdateCanisterSettings {
+    /// The target canister ID to call update_settings on. Required.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The settings to update. Required.
+    #[prost(message, optional, tag = "2")]
+    pub settings: ::core::option::Option<update_canister_settings::CanisterSettings>,
+}
+/// Nested message and enum types in `UpdateCanisterSettings`.
+pub mod update_canister_settings {
+    /// The controllers of the canister. We use a message to wrap the repeated field because prost does
+    /// not generate `Option<Vec<T>>` for repeated fields.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Controllers {
+        /// The controllers of the canister.
+        #[prost(message, repeated, tag = "1")]
+        pub controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    }
+    /// The CanisterSettings struct as defined in the ic-interface-spec
+    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct CanisterSettings {
+        #[prost(message, optional, tag = "1")]
+        pub controllers: ::core::option::Option<Controllers>,
+        #[prost(uint64, optional, tag = "2")]
+        pub compute_allocation: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "3")]
+        pub memory_allocation: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "4")]
+        pub freezing_threshold: ::core::option::Option<u64>,
+        #[prost(enumeration = "LogVisibility", optional, tag = "5")]
+        pub log_visibility: ::core::option::Option<i32>,
+        #[prost(uint64, optional, tag = "6")]
+        pub wasm_memory_limit: ::core::option::Option<u64>,
+    }
+    /// Log visibility of a canister.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum LogVisibility {
+        Unspecified = 0,
+        /// The log is visible to the controllers of the dapp canister.
+        Controllers = 1,
+        /// The log is visible to the public.
+        Public = 2,
+    }
+    impl LogVisibility {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+                LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+                LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+                "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+                "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
                 _ => None,
             }
         }

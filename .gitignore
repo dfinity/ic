@@ -112,8 +112,7 @@ artifacts
 # Boundary node prober binary
 boundary-node-prober
 
-# Scalability test results
-scalability/results/
+# Python pip file
 *Pipfile*
 
 # Bazel outdir dirs

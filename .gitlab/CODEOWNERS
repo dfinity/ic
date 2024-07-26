@@ -287,9 +287,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/workload_generator/                                 @dfinity-lab/teams/runtime-owners
 /rs/xnet/                                               @dfinity-lab/teams/message-routing-owners
 
-# [Scalability]
-/scalability/                                                       @dfinity-lab/teams/runtime-owners
-
 # [No-Approvals]
 # Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
 *.lock                    @dfinity-lab/teams/ghost
