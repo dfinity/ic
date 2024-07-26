@@ -790,8 +790,9 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
+    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
     let a = Agent::builder()
-        .with_transport(ReqwestTransport::create_with_client(url, client)?)
+        .with_transport(transport)
         .with_identity(identity)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
