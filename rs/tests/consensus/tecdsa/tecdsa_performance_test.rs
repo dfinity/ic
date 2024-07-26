@@ -40,9 +40,9 @@
 
 use anyhow::Result;
 use futures::future::join_all;
-use ic_consensus_system_test_utils::subnet_recovery::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::{
     limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
+    subnet::enable_chain_key_signing_on_subnet,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
     run_chain_key_signature_test, ChainSignatureRequest,

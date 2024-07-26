@@ -34,9 +34,7 @@ use ic_consensus_system_test_utils::{
         generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted, AuthMean,
     },
-};
-use ic_consensus_system_test_utils::{
-    subnet_recovery::enable_chain_key_on_subnet,
+    subnet::enable_chain_key_on_subnet,
     upgrade::{
         assert_assigned_replica_version, bless_public_replica_version,
         deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
