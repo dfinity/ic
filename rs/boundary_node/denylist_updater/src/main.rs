@@ -474,30 +474,6 @@ impl<T: List> List for WithNormalize<T> {
     }
 }
 
-struct WithRecover<T: List>(T);
-
-#[async_trait]
-impl<T: List> List for WithRecover<T> {
-    async fn list(&self) -> Result<Entries, Error> {
-        match self.0.list().await {
-            Err(err) => match io_error_kind(&err) {
-                Some(ErrorKind::NotFound) => Ok(Entries(vec![])),
-                _ => Err(err),
-            },
-            Ok(entries) => Ok(entries),
-        }
-    }
-}
-
-fn io_error_kind(err: &Error) -> Option<ErrorKind> {
-    for cause in err.chain() {
-        if let Some(err) = cause.downcast_ref::<io::Error>() {
-            return Some(err.kind());
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
