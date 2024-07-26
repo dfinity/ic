@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/ed25519",
     "//rs/crypto/tree_hash",
@@ -95,6 +94,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/certification/test-utils",
     "@crate_index//:criterion",
     "@crate_index//:tempfile",
     "@crate_index//:wiremock",
@@ -144,7 +144,8 @@ rust_test(
 )
 
 rust_library(
-    name = "ic_boundary",
+    name = "ic_boundary_testonly_lib",
+    testonly = True,
     srcs = glob(
         ["src/**"],
         exclude = ["src/main.rs"],
@@ -161,16 +162,9 @@ rust_library(
 
 rust_bench(
     name = "ic_boundary_bench",
-    srcs = glob(
-        [
-            "benches/**",
-            "src/**",
-        ],
-        exclude = ["src/main.rs"],
-    ),
+    srcs = ["benches/perf.rs"],
     aliases = ALIASES,
-    crate_root = "benches/perf.rs",
     pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary_testonly_lib"],
 )
