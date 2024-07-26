@@ -6,19 +6,13 @@ use canister_test::Canister;
 use ic_base_types::SubnetId;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
-    add_chain_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
-    empty_subnet_update, execute_update_subnet_proposal, get_master_public_key,
-    get_signature_with_logger,
+    add_chain_keys_with_timeout_and_rotation_period, empty_subnet_update,
+    execute_update_subnet_proposal, get_master_public_key, get_signature_with_logger,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::*;
-use ic_system_test_driver::{
-    driver::{test_env::TestEnv, test_env_api::*},
-    util::runtime_from_url,
-};
-use ic_types::ReplicaVersion;
+use ic_system_test_driver::{driver::test_env_api::*, util::runtime_from_url};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
@@ -138,84 +132,6 @@ pub fn enable_chain_key_signing_on_subnet(
             )
         })
         .collect()
-}
-
-/// Create a chain key on the root subnet using the given NNS node, then
-/// create a new subnet of the given size initialized with the chain key.
-/// Disable signing on NNS and enable it on the new app subnet.
-/// Assert that the key stays the same regardless of whether signing
-/// is enabled on NNS or the app subnet. Return the public key for the given canister.
-pub fn enable_chain_key_on_new_subnet(
-    env: &TestEnv,
-    nns_node: &IcNodeSnapshot,
-    canister: &MessageCanister,
-    subnet_size: usize,
-    replica_version: ReplicaVersion,
-    key_ids: Vec<MasterPublicKeyId>,
-    logger: &Logger,
-) -> BTreeMap<MasterPublicKeyId, Vec<u8>> {
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let snapshot = env.topology_snapshot();
-    let root_subnet_id = snapshot.root_subnet_id();
-    let registry_version = snapshot.get_registry_version();
-
-    info!(logger, "Enabling signing on NNS.");
-    let nns_keys = enable_chain_key_signing_on_subnet(
-        nns_node,
-        canister,
-        root_subnet_id,
-        key_ids.clone(),
-        logger,
-    );
-    let snapshot =
-        block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
-    let registry_version = snapshot.get_registry_version();
-
-    let unassigned_node_ids = snapshot
-        .unassigned_nodes()
-        .take(subnet_size)
-        .map(|n| n.node_id)
-        .collect();
-
-    info!(logger, "Creating new subnet with keys.");
-    block_on(create_new_subnet_with_keys(
-        &governance,
-        unassigned_node_ids,
-        key_ids
-            .iter()
-            .cloned()
-            .map(|key_id| (key_id, root_subnet_id.get()))
-            .collect(),
-        replica_version,
-        logger,
-    ));
-
-    let snapshot =
-        block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
-
-    let app_subnet = snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("there is no application subnet");
-
-    app_subnet.nodes().for_each(|n| {
-        n.await_status_is_healthy()
-            .expect("Timeout while waiting for all nodes to be healthy");
-    });
-
-    info!(logger, "Disabling signing on NNS.");
-    disable_chain_key_on_subnet(nns_node, root_subnet_id, canister, key_ids.clone(), logger);
-    let app_keys = enable_chain_key_signing_on_subnet(
-        nns_node,
-        canister,
-        app_subnet.subnet_id,
-        key_ids,
-        logger,
-    );
-
-    assert_eq!(app_keys, nns_keys);
-    app_keys
 }
 
 /// Disable Chain key signing on the given subnet and wait until sign requests fail.
