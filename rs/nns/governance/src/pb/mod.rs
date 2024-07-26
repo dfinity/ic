@@ -1,4 +1,4 @@
-use crate::pb::storage::VersionedMonthlyNodeProviderRewards;
+use crate::pb::storage::ArchivedMonthlyNodeProviderRewards;
 use ic_stable_structures::{storable::Bound, Storable};
 use std::borrow::Cow;
 
@@ -13,13 +13,18 @@ pub mod storage;
 mod conversions;
 mod convert_struct_to_enum;
 
-impl Storable for VersionedMonthlyNodeProviderRewards {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        todo!()
+use prost::Message;
+
+impl Storable for ArchivedMonthlyNodeProviderRewards {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::from(self.encode_to_vec())
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        todo!()
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        Self::decode(&bytes[..])
+            // Convert from Result to Self. (Unfortunately, it seems that
+            // panic is unavoid able in the case of Err.)
+            .expect("Unable to deserialize ArchivedMonthlyNodeProviderRewards.")
     }
 
     const BOUND: Bound = Bound::Unbounded;
