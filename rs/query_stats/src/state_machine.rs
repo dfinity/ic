@@ -200,20 +200,16 @@ fn process_payload(
         None => node.entry(query_stats.epoch).or_default(),
     };
 
-    let mut received_stats = QueryStats::default();
+    let mut query_stats_received = QueryStats::default();
     for message in &query_stats.stats {
-        let previous_value = stats.insert(
-            message.canister_id,
-            QueryStats {
-                num_calls: message.stats.num_calls,
-                num_instructions: message.stats.num_instructions,
-                ingress_payload_size: message.stats.ingress_payload_size,
-                egress_payload_size: message.stats.egress_payload_size,
-            },
-        );
-        received_stats.saturating_accumulate(&message.stats);
+        // Collect metrics about reveived statistics
+        query_stats_received.saturating_accumulate(&message.stats);
 
-        if previous_value.is_some() {
+        // Insert the record into the state machine
+        let previous_record = stats.insert(message.canister_id, message.stats.clone());
+
+        // If there was a previous record, we have received a set of statistics twice, which is likely a bug
+        if previous_record.is_some() {
             error!(
                 logger,
                 "Received duplicate query stats for canister {} from same proposer {}.\
@@ -223,7 +219,7 @@ fn process_payload(
             );
         }
     }
-    metrics.query_stats_received.add(&received_stats);
+    metrics.query_stats_received.add(&query_stats_received);
 
     true
 }
@@ -337,18 +333,30 @@ fn try_aggregate_one_epoch(
     );
 
     // Aggregate statistics
+    let mut empty_stats_counter: usize = 0;
+    let mut total_stats_counter: usize = 0;
+
     let empty_stats = QueryStats::default();
     let mut query_stats_to_be_applied = vec![];
     for (canister_id, mut stats) in records {
         let num_empty_stats = num_nodes_with_stats.saturating_sub(stats.len());
         stats.append(&mut vec![&empty_stats; num_empty_stats]);
 
+        empty_stats_counter += num_empty_stats;
+        total_stats_counter += stats.len();
+
         let aggregated_stats = aggregate_query_stats(stats);
         query_stats_to_be_applied.push((canister_id, aggregated_stats));
     }
 
-    let mut delivered_query_stats = QueryStats::default();
+    metrics
+        .query_stats_empty_stats_aggregated
+        .add(empty_stats_counter as i64);
+    metrics
+        .query_stats_total_aggregated
+        .add(total_stats_counter as i64);
 
+    let mut delivered_query_stats = QueryStats::default();
     for (canister_id, aggregated_stats) in query_stats_to_be_applied {
         delivered_query_stats.saturating_accumulate(&aggregated_stats);
 

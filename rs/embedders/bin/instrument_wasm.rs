@@ -42,7 +42,8 @@ fn instrument_wasm(filename: &str) -> std::io::Result<()> {
 
     let contents = std::fs::read(filename)?;
     let config = EmbeddersConfig::default();
-    let decoded = decode_wasm(Arc::new(contents)).expect("failed to decode canister module");
+    let decoded = decode_wasm(config.wasm_max_size, Arc::new(contents))
+        .expect("failed to decode canister module");
     let embedder = WasmtimeEmbedder::new(config, get_logger().into());
     match validate_and_instrument_for_testing(&embedder, &decoded) {
         Ok((_, output)) => std::io::stdout().write_all(output.binary.as_slice()),

@@ -31,11 +31,18 @@ if ! git diff --cached --quiet; then
     # If a merge request and not on a merge train then update the Cargo.lock file in the MR automatically.
     if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ] && [ "$CI_MERGE_REQUEST_EVENT_TYPE" != "merge_train" ]; then
         # There are some changes staged
-        # Command might fail because the gitlab remote already exists from a previous run.
-        git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-        git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-        git config --global user.email "infra+gitlab-automation@dfinity.org"
-        git config --global user.name "IDX GitLab Automation"
+        if [ -z ${GITHUB_ACTION+x} ]; then
+            # On GitLab we have to point the origin to GitLab
+            # Command might fail because the gitlab remote already exists from a previous run.
+            git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+            git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+            git config --global user.email "infra+gitlab-automation@dfinity.org"
+            git config --global user.name "IDX GitLab Automation"
+        else
+            # On GitHub the origin is already set correctly.
+            git config --global user.email "infra+github-automation@dfinity.org"
+            git config --global user.name "IDX GitHub Automation"
+        fi
         git commit -m "Automatically updated Cargo*.lock"
         git push origin HEAD:"${CI_COMMIT_REF_NAME}"
     fi

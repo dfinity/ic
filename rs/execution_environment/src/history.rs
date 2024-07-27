@@ -12,6 +12,7 @@ use prometheus::{Histogram, HistogramVec};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+use tokio::sync::mpsc::Sender;
 
 /// Struct that implements the ingress history reader trait. Consumers of this
 /// trait can use this to inspect the ingress history.
@@ -85,10 +86,18 @@ pub struct IngressHistoryWriterImpl {
     message_state_transition_completed_wall_clock_duration_seconds: Histogram,
     message_state_transition_failed_ic_duration_seconds: HistogramVec,
     message_state_transition_failed_wall_clock_duration_seconds: HistogramVec,
+    completed_execution_messages_tx: Sender<(MessageId, Height)>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 impl IngressHistoryWriterImpl {
-    pub fn new(config: Config, log: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(
+        config: Config,
+        log: ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+        completed_execution_messages_tx: Sender<(MessageId, Height)>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    ) -> Self {
         Self {
             config,
             log,
@@ -126,7 +135,9 @@ impl IngressHistoryWriterImpl {
                 // The `user_error_code` label is internal information that provides more
                 // detail about the reason for rejection.
                 &["reject_code", "user_error_code"],
-            )
+            ),
+            completed_execution_messages_tx,
+            state_reader
         }
     }
 }
@@ -197,6 +208,24 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 }
             }
             _ => {}
+        };
+
+        if let IngressStatus::Known { state, .. } = &status {
+            if state.is_terminal() {
+                // We want to send the height of the replicated state where
+                // ingress message went into a terminal state.
+                //
+                // latest_state_height() will return the height of the last committed state, `H`.
+                // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
+                let last_committed_height = self.state_reader.latest_state_height();
+                let completed_execution_and_updated_to_terminal_state: Height =
+                    last_committed_height + Height::from(1);
+
+                let _ = self.completed_execution_messages_tx.try_send((
+                    message_id.clone(),
+                    completed_execution_and_updated_to_terminal_state,
+                ));
+            }
         };
 
         state.set_ingress_status(
@@ -300,6 +329,9 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         }
         ReservedCyclesLimitExceededInMemoryGrow => {
             "Canister cannot grow memory due to its reserved cycles limit"
+        }
+        ReservedCyclesLimitIsTooLow => {
+            "Canister cannot set the reserved cycles limit below the reserved cycles balance"
         }
         InsufficientCyclesInMessageMemoryGrow => {
             "Canister does not have enough cycles to grow message memory"

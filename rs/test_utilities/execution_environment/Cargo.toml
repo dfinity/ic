@@ -27,7 +27,6 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-test-utilities = { path = ".." }
-ic-test-utilities-time = { path = "../time" }
 ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
@@ -36,5 +35,6 @@ ic-wasm-types = { path = "../../types/wasm_types" }
 maplit = "1.0.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.4.0"
+tempfile = { workspace = true }
+tokio = { workspace = true }
 wat = "1.0.52"

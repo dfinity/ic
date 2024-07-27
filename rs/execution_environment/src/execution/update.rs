@@ -308,7 +308,8 @@ impl UpdateHelper {
                 });
 
             if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
-                if wasm_memory_usage > wasm_memory_limit {
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                     let err = HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,
@@ -450,7 +451,7 @@ impl UpdateHelper {
         );
 
         let heap_delta = if output.wasm_result.is_ok() {
-            NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
+            NumBytes::from((output.instance_stats.dirty_pages() * ic_sys::PAGE_SIZE) as u64)
         } else {
             NumBytes::from(0)
         };
@@ -498,7 +499,7 @@ impl UpdateHelper {
                 round.log,
                 &original.canister_id,
                 &original.method.name(),
-                output.instance_stats.dirty_pages,
+                output.instance_stats.dirty_pages(),
                 instructions_used,
             );
         }
@@ -595,17 +596,19 @@ impl PausedExecution for PausedCallExecution {
                 }
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {
+                let instructions_consumed = self
+                    .original
+                    .execution_parameters
+                    .instruction_limits
+                    .message()
+                    - output.num_instructions_left;
                 info!(
                     round.log,
                     "[DTS] Finished {:?} execution of canister {} after {} / {} instructions.",
                     self.original.method,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    self.original
-                        .execution_parameters
-                        .instruction_limits
-                        .message()
-                        - output.num_instructions_left,
+                    slice.executed_instructions.display(),
+                    instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
                 helper.finish(

@@ -52,7 +52,6 @@ pub struct SchedulerState {
     /// During the long execution, the Canister is temporarily credited with priority
     /// to slightly boost the long execution priority. Only when the long execution
     /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
-    /// TODO(RUN-305): store priority credit and long execution mode across checkpoints
     pub priority_credit: AccumulatedPriority,
 
     /// Long execution mode: Opportunistic (default) or Prioritized
@@ -306,7 +305,7 @@ impl CanisterState {
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
     pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
-        self.system_state.output_into_iter(self.canister_id())
+        self.system_state.output_into_iter()
     }
 
     /// Unconditionally pushes an ingress message into the ingress pool of the
@@ -325,8 +324,9 @@ impl CanisterState {
     /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
     /// have all the data necessary to compute it itself).
     ///
-    /// `subnet_available_memory` is updated to reflect the change in memory
-    /// usage due to inducting the messages.
+    /// `subnet_available_memory` (the subnet's available guaranteed response
+    /// message memory) is updated to reflect the change in memory usage due to
+    /// inducting the messages.
     pub fn induct_messages_to_self(
         &mut self,
         subnet_available_memory: &mut i64,
@@ -346,17 +346,17 @@ impl CanisterState {
 
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
-    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), StateError> {
+    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), String> {
         let memory_used = self.memory_usage();
         let memory_limit = self.memory_limit(default_limit);
 
         if memory_used > memory_limit {
-            return Err(StateError::InvariantBroken(format!(
-                "Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+            return Err(format!(
+                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
                 self.canister_id(),
                 memory_used,
                 memory_limit
-            )));
+            ));
         }
 
         self.system_state.check_invariants()
@@ -380,9 +380,10 @@ impl CanisterState {
             .map_or(NumBytes::from(0), |es| es.memory_usage())
     }
 
-    /// Returns the amount of canister message memory used by the canister in bytes.
+    /// Returns the amount memory used by or reserved for guaranteed response
+    /// canister messages, in bytes.
     pub fn message_memory_usage(&self) -> NumBytes {
-        self.system_state.message_memory_usage()
+        self.system_state.guaranteed_response_message_memory_usage()
     }
 
     /// Returns the amount of memory used by canisters that have custom Wasm

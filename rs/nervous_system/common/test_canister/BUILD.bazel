@@ -6,6 +6,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "@crate_index//:build-info",
@@ -13,10 +14,12 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
@@ -59,6 +62,7 @@ rust_ic_test(
         "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath :test_canister)",
     },
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/types",

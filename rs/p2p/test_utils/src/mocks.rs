@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
-    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    consensus::{PriorityFn, PriorityFnFactory, ValidatedPoolReader},
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{ArtifactKind, PriorityFn};
+use ic_types::artifact::IdentifiableArtifact;
 use ic_types::NodeId;
 use mockall::mock;
 
@@ -18,12 +18,12 @@ mock! {
 
         fn available_states(&self) -> Vec<StateSyncArtifactId>;
 
-        fn start_state_sync(
+        fn maybe_start_state_sync(
             &self,
             id: &StateSyncArtifactId,
         ) -> Option<Box<dyn Chunkable<T> + Send>>;
 
-        fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
+        fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool;
 
         fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
     }
@@ -60,20 +60,20 @@ mock! {
 }
 
 mock! {
-    pub ValidatedPoolReader<A: ArtifactKind> {}
+    pub ValidatedPoolReader<A: IdentifiableArtifact> {}
 
-    impl<A: ArtifactKind> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
-        fn get(&self, id: &A::Id) -> Option<A::Message>;
+    impl<A: IdentifiableArtifact> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
+        fn get(&self, id: &A::Id) -> Option<A>;
         fn get_all_validated(
             &self,
-        ) -> Box<dyn Iterator<Item = A::Message>>;
+        ) -> Box<dyn Iterator<Item = A>>;
     }
 }
 
 mock! {
-    pub PriorityFnAndFilterProducer<A: ArtifactKind> {}
+    pub PriorityFnFactory<A: IdentifiableArtifact> {}
 
-    impl<A: ArtifactKind + Sync> PriorityFnAndFilterProducer<A, MockValidatedPoolReader<A>> for PriorityFnAndFilterProducer<A> {
+    impl<A: IdentifiableArtifact + Sync> PriorityFnFactory<A, MockValidatedPoolReader<A>> for PriorityFnFactory<A> {
         fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
     }
 }

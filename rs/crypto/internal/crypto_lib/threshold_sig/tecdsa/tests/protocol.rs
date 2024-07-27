@@ -5,9 +5,7 @@ use ic_types::Randomness;
 use rand::{Rng, RngCore};
 use std::collections::BTreeMap;
 
-mod test_utils;
-
-use crate::test_utils::*;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
 fn insufficient_dealings(r: Result<ProtocolRound, CanisterThresholdError>) {
     match r {
@@ -396,10 +394,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), CanisterThresholdE
 
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-        let cfg = TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::Bip340,
-            EccCurveType::K256,
-        );
+        let cfg = TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256);
 
         let setup = SchnorrSignatureProtocolSetup::new(
             cfg,
@@ -457,10 +452,7 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), CanisterThreshold
     let random_seed = Seed::from_rng(&mut rng);
 
     // Ed25519 signatures using secp256k1 MEGa keys
-    let cfg = TestConfig::new(
-        CanisterThresholdSignatureAlgorithm::Ed25519,
-        EccCurveType::K256,
-    );
+    let cfg = TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256);
 
     let setup =
         SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, corrupted_dealings, random_seed)?;

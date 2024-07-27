@@ -109,7 +109,10 @@ impl LocalStoreImpl {
         }
         // version == 1 || version-1 exists
         let path = self.get_path(version);
-        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::create_dir_all(path.parent().expect(
+            "get_path returns a non-empty path
+        whose parent isn't the root or prefix, see the definition of v_path in get_path.",
+        ))?;
         f(path.as_path(), pb)
     }
 

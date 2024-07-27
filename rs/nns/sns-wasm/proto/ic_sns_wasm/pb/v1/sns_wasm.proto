@@ -150,6 +150,16 @@ message GetWasmResponse {
   SnsWasm wasm = 1;
 }
 
+// Similar to GetWasmRequest, but only returns the NNS proposal ID that blessed the wasm.
+message GetProposalIdThatAddedWasmRequest {
+  bytes hash = 1;
+}
+
+// The NNS proposal ID that blessed the wasm, if it was recorded. 
+message GetProposalIdThatAddedWasmResponse {
+  optional uint64 proposal_id = 1;
+}
+
 // Payload to deploy a new SNS.
 message DeployNewSnsRequest {
   // The initial payload to initialize the SNS with.

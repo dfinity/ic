@@ -18,8 +18,9 @@ use ic_agent::{
     agent::http_transport::reqwest_transport::ReqwestTransport, identity::BasicIdentity, Agent,
 };
 use mockall::automock;
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
+use opentelemetry::{metrics::MeterProvider, KeyValue};
 use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
 use prometheus::{labels, Encoder, Registry, TextEncoder};
 use serde::Deserialize;
 use tokio::{net::TcpListener, task, time::Instant};
@@ -70,7 +71,9 @@ async fn main() -> Result<(), Error> {
     )
     .unwrap();
     let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
     let meter = provider.meter(service_name);
 
     let wallet_balances: Arc<DashMap<String, u64>> = Arc::new(DashMap::new());

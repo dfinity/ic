@@ -1,5 +1,6 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
 mod bounded_vec;
+mod data_size;
 mod http;
 mod provisional;
 
@@ -7,6 +8,7 @@ mod provisional;
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
+pub use data_size::*;
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
@@ -79,8 +81,11 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialEcdsaDealings, // TODO(EXC-1599): remove after ComputeInitialIDkgDealings is released.
     ComputeInitialIDkgDealings,
+
+    // Schnorr interface.
+    SchnorrPublicKey,
+    SignWithSchnorr,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -285,6 +290,46 @@ impl CanisterControllersChangeRecord {
     }
 }
 
+/// `CandidType` for `CanisterLoadSnapshotRecord`
+/// ```text
+/// record {
+///    canister_version : nat64;
+///    snapshot_id : blob;
+///    taken_at_timestamp : nat64;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterLoadSnapshotRecord {
+    canister_version: u64,
+    #[serde(with = "serde_bytes")]
+    snapshot_id: Vec<u8>,
+    taken_at_timestamp: u64,
+}
+
+impl CanisterLoadSnapshotRecord {
+    pub fn new(canister_version: u64, snapshot_id: SnapshotId, taken_at_timestamp: u64) -> Self {
+        Self {
+            canister_version,
+            snapshot_id: snapshot_id.to_vec(),
+            taken_at_timestamp,
+        }
+    }
+
+    pub fn canister_version(&self) -> u64 {
+        self.canister_version
+    }
+
+    pub fn taken_at_timestamp(&self) -> u64 {
+        self.taken_at_timestamp
+    }
+
+    pub fn snapshot_id(&self) -> SnapshotId {
+        // Safe to unwrap:
+        // `CanisterLoadSnapshotRecord` contains only valid snapshot IDs.
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+}
+
 /// `CandidType` for `CanisterChangeDetails`
 /// ```text
 /// variant {
@@ -299,6 +344,11 @@ impl CanisterControllersChangeRecord {
 ///   controllers_change : record {
 ///     controllers : vec principal;
 ///   };
+///   load_snapshot : record {
+///     canister_version: nat64;
+///     snapshot_id: blob;
+///     taken_at_timestamp: nat64;
+///   };
 /// }
 /// ```
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -311,6 +361,8 @@ pub enum CanisterChangeDetails {
     CanisterCodeDeployment(CanisterCodeDeploymentRecord),
     #[serde(rename = "controllers_change")]
     CanisterControllersChange(CanisterControllersChangeRecord),
+    #[serde(rename = "load_snapshot")]
+    CanisterLoadSnapshot(CanisterLoadSnapshotRecord),
 }
 
 impl CanisterChangeDetails {
@@ -331,6 +383,18 @@ impl CanisterChangeDetails {
     pub fn controllers_change(controllers: Vec<PrincipalId>) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterControllersChange(CanisterControllersChangeRecord {
             controllers,
+        })
+    }
+
+    pub fn load_snapshot(
+        canister_version: u64,
+        snapshot_id: Vec<u8>,
+        taken_at_timestamp: u64,
+    ) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
+            canister_version,
+            snapshot_id,
+            taken_at_timestamp,
         })
     }
 }
@@ -396,7 +460,8 @@ impl CanisterChange {
                 std::mem::size_of_val(canister_controllers_change.controllers())
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
-            | CanisterChangeDetails::CanisterCodeUninstall => 0,
+            | CanisterChangeDetails::CanisterCodeUninstall
+            | CanisterChangeDetails::CanisterLoadSnapshot(_) => 0,
         };
         NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
     }
@@ -576,6 +641,15 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                     },
                 )
             }
+            CanisterChangeDetails::CanisterLoadSnapshot(canister_load_snapshot) => {
+                pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
+                    pb_canister_state_bits::CanisterLoadSnapshot {
+                        canister_version: canister_load_snapshot.canister_version,
+                        snapshot_id: canister_load_snapshot.snapshot_id.clone(),
+                        taken_at_timestamp: canister_load_snapshot.taken_at_timestamp,
+                    },
+                )
+            }
         }
     }
 }
@@ -632,6 +706,13 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<PrincipalId>, _>>()?,
+            )),
+            pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
+                canister_load_snapshot,
+            ) => Ok(CanisterChangeDetails::load_snapshot(
+                canister_load_snapshot.canister_version,
+                canister_load_snapshot.snapshot_id,
+                canister_load_snapshot.taken_at_timestamp,
             )),
         }
     }
@@ -1797,7 +1878,7 @@ impl SetupInitialDKGArgs {
         for node_id in self.node_ids.iter() {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!(
                         "Expected a set of NodeIds. The NodeId {} is repeated",
                         node_id
@@ -1923,8 +2004,8 @@ impl FromStr for EcdsaCurve {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Secp256k1" => Ok(Self::Secp256k1),
+        match s.to_lowercase().as_str() {
+            "secp256k1" => Ok(Self::Secp256k1),
             _ => Err(format!("{} is not a recognized ECDSA curve", s)),
         }
     }
@@ -2054,9 +2135,9 @@ impl FromStr for SchnorrAlgorithm {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Bip340Secp256k1" => Ok(Self::Bip340Secp256k1),
-            "Ed25519" => Ok(Self::Ed25519),
+        match s.to_lowercase().as_str() {
+            "bip340secp256k1" => Ok(Self::Bip340Secp256k1),
+            "ed25519" => Ok(Self::Ed25519),
             _ => Err(format!("{} is not a recognized Schnorr algorithm", s)),
         }
     }
@@ -2184,18 +2265,25 @@ impl FromStr for MasterPublicKeyId {
         let (scheme, key_id) = s
             .split_once(':')
             .ok_or_else(|| format!("Master public key id {} does not contain a ':'", s))?;
-        match scheme {
+        match scheme.to_lowercase().as_str() {
             "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
             "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
-            other => Err(format!(
+            _ => Err(format!(
                 "Scheme {} in master public key id {} is not supported.",
-                other, s
+                scheme, s
             )),
         }
     }
 }
 
 pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, UNBOUNDED, ByteBuf>;
+
+impl DerivationPath {
+    /// Converts the `DerivationPath`` from `BoundedVec<ByteBuf>` into a `Vec<Vec<u8>>`.
+    pub fn into_inner(self) -> Vec<Vec<u8>> {
+        self.get().iter().map(|x| x.to_vec()).collect()
+    }
+}
 
 impl Payload<'_> for DerivationPath {}
 
@@ -2265,24 +2353,31 @@ pub struct ECDSAPublicKeyResponse {
 
 impl Payload<'_> for ECDSAPublicKeyResponse {}
 
-/// Argument of the compute_initial_ecdsa_dealings API.
+/// Maximum number of nodes allowed in a ComputeInitialDealings request.
+const MAX_ALLOWED_NODES_COUNT: usize = 100;
+
+pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
+
+/// Argument of the compute_initial_idkg_dealings API.
 /// `(record {
-///     key_id: ecdsa_key_id;
+///     key_id: master_public_key_id;
 ///     subnet_id: principal;
 ///     nodes: vec principal;
 ///     registry_version: nat64;
 /// })`
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
-pub struct ComputeInitialEcdsaDealingsArgs {
-    pub key_id: EcdsaKeyId,
+pub struct ComputeInitialIDkgDealingsArgs {
+    pub key_id: MasterPublicKeyId,
     pub subnet_id: SubnetId,
-    nodes: Vec<PrincipalId>,
+    nodes: BoundedNodes,
     registry_version: u64,
 }
 
-impl ComputeInitialEcdsaDealingsArgs {
+impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
+
+impl ComputeInitialIDkgDealingsArgs {
     pub fn new(
-        key_id: EcdsaKeyId,
+        key_id: MasterPublicKeyId,
         subnet_id: SubnetId,
         nodes: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
@@ -2290,17 +2385,17 @@ impl ComputeInitialEcdsaDealingsArgs {
         Self {
             key_id,
             subnet_id,
-            nodes: nodes.iter().map(|id| id.get()).collect(),
+            nodes: BoundedNodes::new(nodes.iter().map(|id| id.get()).collect()),
             registry_version: registry_version.get(),
         }
     }
 
     pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
         let mut set = BTreeSet::<NodeId>::new();
-        for node_id in self.nodes.iter() {
+        for node_id in self.nodes.get().iter() {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!(
                         "Expected a set of NodeIds. The NodeId {} is repeated",
                         node_id
@@ -2316,56 +2411,66 @@ impl ComputeInitialEcdsaDealingsArgs {
     }
 }
 
-impl Payload<'_> for ComputeInitialEcdsaDealingsArgs {}
-
-/// Struct used to return the xnet initial dealings.
-#[derive(Debug)]
-pub struct ComputeInitialEcdsaDealingsResponse {
-    pub initial_dkg_dealings: InitialIDkgDealings,
+/// Represents the argument of the sign_with_schnorr API.
+/// ```text
+/// (record {
+///   message : blob;
+///   derivation_path : vec blob;
+///   key_id : schnorr_key_id;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct SignWithSchnorrArgs {
+    #[serde(with = "serde_bytes")]
+    pub message: Vec<u8>,
+    pub derivation_path: DerivationPath,
+    pub key_id: SchnorrKeyId,
 }
 
-impl ComputeInitialEcdsaDealingsResponse {
-    pub fn encode(&self) -> Vec<u8> {
-        let serde_encoded_transcript_records = self.encode_with_serde_cbor();
-        Encode!(&serde_encoded_transcript_records).unwrap()
-    }
+impl Payload<'_> for SignWithSchnorrArgs {}
 
-    fn encode_with_serde_cbor(&self) -> Vec<u8> {
-        let transcript_records = (&self.initial_dkg_dealings,);
-        serde_cbor::to_vec(&transcript_records).unwrap()
-    }
-
-    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
-        let serde_encoded_transcript_records =
-            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
-        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
-            Err(err) => Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
-            )),
-            Ok((initial_dkg_dealings,)) => Ok(Self {
-                initial_dkg_dealings,
-            }),
-        }
-    }
+/// Struct used to return an Schnorr signature.
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SignWithSchnorrReply {
+    #[serde(with = "serde_bytes")]
+    pub signature: Vec<u8>,
 }
 
-/// Argument of the compute_initial_idkg_dealings API.
-/// `(record {
-///     key_id: master_public_key_id;
-///     subnet_id: principal;
-///     nodes: vec principal;
-///     registry_version: nat64;
-/// })`
-#[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
-pub struct ComputeInitialIDkgDealingsArgs {
-    pub key_id: MasterPublicKeyId,
-    pub subnet_id: SubnetId,
-    nodes: Vec<PrincipalId>,
-    registry_version: u64,
+impl Payload<'_> for SignWithSchnorrReply {}
+
+/// Represents the argument of the schnorr_public_key API.
+/// ```text
+/// (record {
+///   canister_id : opt canister_id;
+///   derivation_path : vec blob;
+///   key_id : schnorr_key_id;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct SchnorrPublicKeyArgs {
+    pub canister_id: Option<CanisterId>,
+    pub derivation_path: DerivationPath,
+    pub key_id: SchnorrKeyId,
 }
 
-impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
+impl Payload<'_> for SchnorrPublicKeyArgs {}
+
+/// Represents the response of the schnorr_public_key API.
+/// ```text
+/// (record {
+///   public_key : blob;
+///   chain_code : blob;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SchnorrPublicKeyResponse {
+    #[serde(with = "serde_bytes")]
+    pub public_key: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub chain_code: Vec<u8>,
+}
+
+impl Payload<'_> for SchnorrPublicKeyResponse {}
 
 /// Struct used to return the xnet initial dealings.
 #[derive(Debug)]
@@ -2406,7 +2511,7 @@ pub use ic_btc_interface::{
     GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionArgs,
 };
-pub use ic_btc_types_internal::{
+pub use ic_btc_replica_types::{
     GetSuccessorsRequest as BitcoinGetSuccessorsArgs,
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
@@ -2426,8 +2531,6 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 #[derive(Debug, EnumString, EnumIter, Display, Copy, Clone, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum QueryMethod {
-    BitcoinGetUtxosQuery,
-    BitcoinGetBalanceQuery,
     FetchCanisterLogs,
 }
 
@@ -2523,10 +2626,18 @@ impl Payload<'_> for CanisterLogRecord {}
 
 impl DataSize for CanisterLogRecord {
     fn data_size(&self) -> usize {
-        self.idx.data_size()
-            + self.timestamp_nanos.data_size()
-            + self.content.as_slice().data_size()
+        std::mem::size_of::<Self>() + self.content.as_slice().data_size()
     }
+}
+
+#[test]
+fn test_canister_log_record_data_size() {
+    let record = CanisterLogRecord {
+        idx: 100,
+        timestamp_nanos: 200,
+        content: vec![1, 2, 3],
+    };
+    assert_eq!(record.data_size(), 8 + 8 + 24 + 3);
 }
 
 impl From<&CanisterLogRecord> for pb_canister_state_bits::CanisterLogRecord {
@@ -2886,7 +2997,7 @@ impl LoadCanisterSnapshotArgs {
         SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 
-    pub fn sender_canister_version(&self) -> Option<u64> {
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
         self.sender_canister_version
     }
 }
@@ -2909,14 +3020,14 @@ impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
 /// `(record {
 ///      id: blob;
 ///      taken_at_timestamp: nat64;
-///      total_size: nat;
+///      total_size: nat64;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSnapshotResponse {
     #[serde(with = "serde_bytes")]
     pub id: Vec<u8>,
     pub taken_at_timestamp: u64,
-    pub total_size: candid::Nat,
+    pub total_size: u64,
 }
 
 impl Payload<'_> for CanisterSnapshotResponse {}
@@ -2926,7 +3037,7 @@ impl CanisterSnapshotResponse {
         Self {
             id: snapshot_id.to_vec(),
             taken_at_timestamp,
-            total_size: candid::Nat::from(total_size.get()),
+            total_size: total_size.get(),
         }
     }
 
@@ -2935,7 +3046,11 @@ impl CanisterSnapshotResponse {
     }
 
     pub fn total_size(&self) -> u64 {
-        self.total_size.0.to_u64().unwrap()
+        self.total_size
+    }
+
+    pub fn taken_at_timestamp(&self) -> u64 {
+        self.taken_at_timestamp
     }
 }
 

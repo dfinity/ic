@@ -49,7 +49,7 @@
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},

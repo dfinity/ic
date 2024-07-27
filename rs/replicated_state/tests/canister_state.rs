@@ -12,7 +12,6 @@ use ic_test_utilities_types::{
 use ic_types::{
     messages::{CallbackId, Request, RequestOrResponse, NO_DEADLINE},
     time::{CoarseTime, UNIX_EPOCH},
-    xnet::QueueId,
     Time,
 };
 use std::sync::Arc;
@@ -105,12 +104,12 @@ impl CanisterFixture {
             .push_output_request(request.into(), UNIX_EPOCH)
     }
 
-    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
         let mut iter = self.canister_state.output_into_iter();
         iter.pop()
     }
 
-    fn with_input_reservation(&mut self) {
+    fn with_input_slot_reservation(&mut self) {
         self.push_output_request(output_request_to(
             OTHER_CANISTER_ID,
             CallbackId::from(CALLBACK_ID_RAW),
@@ -130,7 +129,7 @@ fn running_canister_accepts_requests() {
 fn running_canister_accepts_responses() {
     let mut fixture = CanisterFixture::running();
     fixture.register_default_callback();
-    fixture.with_input_reservation();
+    fixture.with_input_slot_reservation();
     fixture.push_input(default_input_response()).unwrap();
 }
 
@@ -150,7 +149,7 @@ fn stopping_canister_rejects_requests() {
 fn stopping_canister_accepts_responses() {
     let mut fixture = CanisterFixture::stopping();
     fixture.register_default_callback();
-    fixture.with_input_reservation();
+    fixture.with_input_slot_reservation();
     fixture.push_input(default_input_response()).unwrap();
 }
 
@@ -170,7 +169,7 @@ fn stopped_canister_rejects_requests() {
 fn stopped_canister_rejects_responses() {
     let mut fixture = CanisterFixture::stopped();
     // A stopped canister can't make a callback id.
-    fixture.with_input_reservation();
+    fixture.with_input_slot_reservation();
     assert_eq!(
         fixture.push_input(default_input_response()),
         Err((

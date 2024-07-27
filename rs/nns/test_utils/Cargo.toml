@@ -16,7 +16,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http = { path = "../../rust_canisters/dfn_http" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-flate2 = "1.0.27"
+flate2 = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
@@ -62,9 +62,9 @@ lifeline = { path = "../handlers/lifeline/impl" }
 maplit = "1.0.2"
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
-prometheus-parse = "0.2.4"
+prometheus-parse = { workspace = true }
 prost = { workspace = true }
-rand = { version = "0.8.4" }
+rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }

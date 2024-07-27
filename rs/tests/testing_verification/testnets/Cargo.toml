@@ -12,11 +12,14 @@ candid = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
 tests = { path = "../.." }
 ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
 ic-xrc-types = "1.0.0"
 slog = { workspace = true }
 xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
+serde_json = { workspace = true }
+serde = { workspace = true }
 
 [[bin]]
 name = "large"
@@ -53,3 +56,7 @@ path = "sns_testing.rs"
 [[bin]]
 name = "src_testing"
 path = "src_testing.rs"
+
+[[bin]]
+name = "from_config"
+path = "from_config.rs"

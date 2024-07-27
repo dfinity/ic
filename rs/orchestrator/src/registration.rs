@@ -3,6 +3,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, Signer},
+    utils::http_endpoint_to_url,
 };
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
@@ -21,7 +22,6 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
-    node_operator::ConnectionEndpoint,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_local_store::LocalStore;
@@ -38,7 +38,6 @@ use registry_canister::mutations::{
 };
 use std::{
     net::IpAddr,
-    str::FromStr,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -217,9 +216,7 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            p2p_flow_endpoints: vec![],
             chip_id: None,
-            prometheus_metrics_endpoint: "".to_string(),
             public_ipv4_config: process_ipv4_config(
                 &self.log,
                 &self.node_config.initial_ipv4_config,
@@ -227,6 +224,9 @@ impl NodeRegistration {
             .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
+            // Unused section follows
+            p2p_flow_endpoints: Default::default(),
+            prometheus_metrics_endpoint: Default::default(),
         }
     }
 
@@ -237,7 +237,7 @@ impl NodeRegistration {
     /// to generate or register keys are retried.
     pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) {
         let registry_version = self.registry_client.get_latest_version();
-        // If there is no ECDSA config or no key_ids, ECDSA is disabled.
+        // If there is no Chain key config or no key_ids, threshold signing is disabled.
         // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
         let delta = match self.get_key_rotation_period(registry_version, subnet_id) {
             Some(delta) => delta,
@@ -319,9 +319,9 @@ impl NodeRegistration {
     ) -> Option<Duration> {
         match self
             .registry_client
-            .get_ecdsa_config(subnet_id, registry_version)
+            .get_chain_key_config(subnet_id, registry_version)
         {
-            Ok(Some(config)) if !config.key_ids.is_empty() => config
+            Ok(Some(config)) if !config.key_configs.is_empty() => config
                 .idkg_key_rotation_period_ms
                 .map(Duration::from_millis),
             _ => None,
@@ -500,38 +500,13 @@ impl NodeRegistration {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| self.http_endpoint_to_url(h))
+                    .and_then(|h| http_endpoint_to_url(h, &self.log))
             })
             .collect();
 
         let mut rng = thread_rng();
         urls.shuffle(&mut rng);
         urls.pop()
-    }
-
-    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
-        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) => {
-                if v.is_ipv6() {
-                    format!("[{}]", v)
-                } else {
-                    v.to_string()
-                }
-            }
-            Err(_) => {
-                // assume hostname
-                http.ip_addr.clone()
-            }
-        };
-
-        let url = format!("http://{}:{}/", host_str, http.port);
-        match Url::parse(&url) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                warn!(self.log, "Invalid url: {}: {:?}", url, e);
-                None
-            }
-        }
     }
 
     async fn is_node_registered(&self) -> bool {

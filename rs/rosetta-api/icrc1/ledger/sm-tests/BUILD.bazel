@@ -6,23 +6,28 @@ package(default_visibility = ["//visibility:public"])
     rust_library(
         name = "sm-tests" + name_suffix,
         testonly = True,
-        srcs = ["src/lib.rs"],
+        srcs = glob([
+            "src/**/*.rs",
+        ]),
         crate_features = features,
         crate_name = "ic_icrc1_ledger_sm_tests",
         data = [
             "//rs/rosetta-api/icrc1/ledger:block.cddl",
         ],
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:async-trait",
         ],
         version = "0.9.0",
         deps = [
+            # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/icrc1/ledger",
             "//rs/rosetta-api/ledger_canister_core",
             "//rs/rosetta-api/ledger_core",
+            "//rs/rust_canisters/http_types",
             "//rs/state_machine_tests",
             "//rs/types/base_types",
             "//rs/types/error_types",

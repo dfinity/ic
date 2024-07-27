@@ -205,7 +205,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             }
             if fees.len() >= 100 {
                 state::mutate_state(|s| {
-                    s.last_fee_per_vbyte = fees.clone();
+                    s.last_fee_per_vbyte.clone_from(&fees);
                     s.retrieve_btc_min_amount =
                         compute_min_withdrawal_amount(s.btc_network, fees[50]);
                 });

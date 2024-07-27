@@ -7,7 +7,7 @@ use strum::IntoEnumIterator;
 fn should_zk_equal_openings_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 
@@ -36,7 +36,7 @@ fn should_zk_equal_openings_proof_work() -> CanisterThresholdResult<()> {
 fn should_zk_mul_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 
@@ -78,7 +78,7 @@ fn should_zk_mul_proof_work() -> CanisterThresholdResult<()> {
 fn should_invalid_zk_mul_proof_be_rejected() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 
@@ -116,7 +116,7 @@ fn should_invalid_zk_mul_proof_be_rejected() -> CanisterThresholdResult<()> {
 fn should_zk_dlog_eq_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 

@@ -3,14 +3,14 @@ use candid::{CandidType, Deserialize};
 use serde::Serialize;
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Page {
+pub struct LineDisplayPage {
     pub lines: Vec<String>,
 }
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ConsentMessage {
     GenericDisplayMessage(String),
-    LineDisplayMessage { pages: Vec<Page> },
+    LineDisplayMessage { pages: Vec<LineDisplayPage> },
 }
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]

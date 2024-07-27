@@ -15,17 +15,17 @@ Success::
 
 end::catalog[] */
 
-use crate::{
+use crate::orchestrator::utils::rw_message::{
+    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message,
+};
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{SubnetSnapshot, *},
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
-    orchestrator::utils::rw_message::{
-        can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
-        install_nns_and_check_progress, store_message,
-    },
     util::{block_on, runtime_from_url},
 };
 

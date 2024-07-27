@@ -28,9 +28,8 @@ icrc-ledger-client = { path = "../../../../../packages/icrc-ledger-client" }
 icrc-ledger-client-cdk = { path = "../../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
-rand = { version = "0.8.5", features = ["small_rng"] }
-rand_chacha = "0.3.1"
-rand_core = "0.6.4"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 ring = { version = "0.16.11", features = ["std"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

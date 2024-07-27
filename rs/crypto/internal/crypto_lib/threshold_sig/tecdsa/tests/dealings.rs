@@ -463,7 +463,7 @@ mod privately_verify {
     fn should_fail_on_private_key_curve_mismatch() {
         let rng = &mut reproducible_rng();
 
-        for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        for alg in IdkgProtocolAlgorithm::iter() {
             let curve_type = alg.curve();
             let setup = Setup::new(curve_type, rng);
             let private_key = MEGaPrivateKey::generate(wrong_curve(curve_type), rng);
@@ -487,7 +487,7 @@ mod privately_verify {
     fn should_fail_on_public_key_curve_mismatch() {
         let rng = &mut reproducible_rng();
 
-        for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        for alg in IdkgProtocolAlgorithm::iter() {
             let curve_type = alg.curve();
             let setup = Setup::new(curve_type, rng);
             let private_key = MEGaPrivateKey::generate(wrong_curve(curve_type), rng);
@@ -512,7 +512,7 @@ mod privately_verify {
     fn should_fail_on_commitment_constant_curve_type_mismatch() {
         let rng = &mut reproducible_rng();
 
-        for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        for alg in IdkgProtocolAlgorithm::iter() {
             let curve_type = alg.curve();
             let setup = Setup::new(curve_type, rng);
             let private_key = MEGaPrivateKey::generate(wrong_curve(curve_type), rng);
@@ -537,7 +537,7 @@ mod privately_verify {
     fn should_fail_if_decryption_and_check_of_internal_ciphertext_fails() {
         let rng = &mut reproducible_rng();
 
-        for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        for alg in IdkgProtocolAlgorithm::iter() {
             let curve_type = alg.curve();
             let setup = Setup::new(curve_type, rng);
             let another_setup = Setup::new(curve_type, rng);
@@ -572,7 +572,7 @@ mod privately_verify_dealing {
         for curve_type in EccCurveType::all() {
             let setup = Setup::new(curve_type, rng);
             for algorithm_id in AlgorithmId::iter() {
-                if CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id).is_none() {
+                if IdkgProtocolAlgorithm::from_algorithm(algorithm_id).is_none() {
                     assert_eq!(
                         privately_verify_dealing(
                             algorithm_id,

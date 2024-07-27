@@ -5,11 +5,11 @@
 use crate::UserError;
 use candid::Principal;
 use hex;
-use reqwest::blocking::Response;
+use reqwest::Response;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 pub type InstanceId = usize;
@@ -21,9 +21,17 @@ pub enum HttpGatewayBackend {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpsConfig {
+    pub cert_path: String,
+    pub key_path: String,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HttpGatewayConfig {
     pub listen_at: Option<u16>,
     pub forward_to: HttpGatewayBackend,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -157,11 +165,11 @@ pub enum ApiResponse<T> {
     Error { message: String },
 }
 
-impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
-    fn from(resp: Response) -> Self {
+impl<T: DeserializeOwned> ApiResponse<T> {
+    pub async fn from_response(resp: Response) -> Self {
         match resp.status() {
             reqwest::StatusCode::OK => {
-                let result = resp.json::<T>();
+                let result = resp.json::<T>().await;
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
@@ -170,7 +178,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             reqwest::StatusCode::ACCEPTED => {
-                let result = resp.json::<StartedOrBusyResponse>();
+                let result = resp.json::<StartedOrBusyResponse>().await;
                 match result {
                     Ok(StartedOrBusyResponse { state_label, op_id }) => {
                         ApiResponse::Started { state_label, op_id }
@@ -181,7 +189,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             reqwest::StatusCode::CONFLICT => {
-                let result = resp.json::<StartedOrBusyResponse>();
+                let result = resp.json::<StartedOrBusyResponse>().await;
                 match result {
                     Ok(StartedOrBusyResponse { state_label, op_id }) => {
                         ApiResponse::Busy { state_label, op_id }
@@ -192,7 +200,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             _ => {
-                let result = resp.json::<ApiError>();
+                let result = resp.json::<ApiError>().await;
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {
@@ -217,7 +225,7 @@ pub struct RawCycles {
     pub cycles: u128,
 }
 
-#[derive(Clone, Serialize, Eq, PartialEq, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
@@ -317,7 +325,9 @@ pub mod base64 {
 
 // ================================================================================================================= //
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
 pub enum SubnetKind {
     Application,
     Bitcoin,
@@ -402,6 +412,13 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct InstanceConfig {
+    pub subnet_config_set: ExtendedSubnetConfigSet,
+    pub state_dir: Option<PathBuf>,
+    pub nonmainnet_features: bool,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct ExtendedSubnetConfigSet {
     pub nns: Option<SubnetSpec>,
     pub sns: Option<SubnetSpec>,
@@ -481,7 +498,9 @@ impl Default for SubnetSpec {
 }
 
 /// Specifies instruction limits for canister execution on this subnet.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
 pub enum SubnetInstructionConfig {
     /// Use default instruction limits as in production.
     Production,
@@ -529,11 +548,13 @@ impl SubnetStateConfig {
 
 impl ExtendedSubnetConfigSet {
     // Return the configured named subnets in order.
+    #[allow(clippy::type_complexity)]
     pub fn get_named(
         &self,
     ) -> Vec<(
         SubnetKind,
         Option<PathBuf>,
+        Option<RawSubnetId>,
         SubnetInstructionConfig,
         DtsFlag,
     )> {
@@ -552,6 +573,7 @@ impl ExtendedSubnetConfigSet {
             (
                 kind,
                 spec.get_state_path(),
+                spec.get_subnet_id(),
                 spec.get_instruction_config(),
                 spec.get_dts_flag(),
             )
@@ -596,9 +618,10 @@ impl ExtendedSubnetConfigSet {
 }
 
 /// Configuration details for a subnet, returned by PocketIc server
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
+    pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
     /// Number of nodes in the subnet.
@@ -607,14 +630,14 @@ pub struct SubnetConfig {
     pub canister_ranges: Vec<CanisterIdRange>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct CanisterIdRange {
     pub start: RawCanisterId,
     pub end: RawCanisterId,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Topology(pub HashMap<SubnetId, SubnetConfig>);
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
+pub struct Topology(pub BTreeMap<SubnetId, SubnetConfig>);
 
 impl Topology {
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {

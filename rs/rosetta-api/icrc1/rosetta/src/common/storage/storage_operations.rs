@@ -7,8 +7,8 @@ use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
-use rusqlite::{named_params, params, Params};
-use rusqlite::{Connection, Statement};
+use rusqlite::Connection;
+use rusqlite::{named_params, params, CachedStatement, Params};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
@@ -27,7 +27,7 @@ pub fn store_metadata(
 }
 
 pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry>> {
-    let mut stmt_metadata = connection.prepare("SELECT key, value FROM metadata")?;
+    let mut stmt_metadata = connection.prepare_cached("SELECT key, value FROM metadata")?;
     let rows = stmt_metadata.query_map(params![], |row| {
         Ok(MetadataEntry {
             key: row.get(0)?,
@@ -269,7 +269,7 @@ pub fn store_blocks(
                 None,
                 None,
                 Some(to.owner),
-                to.subaccount,
+                Some(*to.effective_subaccount()),
                 None,
                 None,
                 amount,
@@ -286,9 +286,9 @@ pub fn store_blocks(
             } => (
                 "transfer",
                 Some(from.owner),
-                from.subaccount,
+                Some(*from.effective_subaccount()),
                 Some(to.owner),
-                to.subaccount,
+                Some(*to.effective_subaccount()),
                 None,
                 None,
                 amount,
@@ -299,7 +299,7 @@ pub fn store_blocks(
             crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => (
                 "burn",
                 Some(from.owner),
-                from.subaccount,
+                Some(*from.effective_subaccount()),
                 None,
                 None,
                 None,
@@ -319,11 +319,11 @@ pub fn store_blocks(
             } => (
                 "approve",
                 Some(from.owner),
-                from.subaccount,
+                Some(*from.effective_subaccount()),
                 None,
                 None,
                 Some(spender.owner),
-                spender.subaccount,
+                Some(*spender.effective_subaccount()),
                 amount,
                 expected_allowance,
                 fee,
@@ -368,7 +368,7 @@ pub fn get_block_at_idx(
         "SELECT idx,serialized_block FROM blocks WHERE idx = {}",
         block_idx
     );
-    let mut stmt = connection.prepare(&command)?;
+    let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
 }
 
@@ -383,7 +383,7 @@ fn get_block_at_next_idx(
         "SELECT idx,serialized_block FROM blocks WHERE idx > {} ORDER BY idx ASC LIMIT 1",
         block_idx
     );
-    let mut stmt = connection.prepare(&command)?;
+    let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
 }
 
@@ -393,23 +393,26 @@ pub fn get_block_by_hash(
     connection: &Connection,
     hash: ByteBuf,
 ) -> anyhow::Result<Option<RosettaBlock>> {
-    let mut stmt = connection.prepare("SELECT idx,serialized_block FROM blocks WHERE hash = ?1")?;
+    let mut stmt =
+        connection.prepare_cached("SELECT idx,serialized_block FROM blocks WHERE hash = ?1")?;
     read_single_block(&mut stmt, params![hash.as_slice().to_vec()])
 }
 
 pub fn get_block_with_highest_block_idx(
     connection: &Connection,
 ) -> anyhow::Result<Option<RosettaBlock>> {
-    let command = "SELECT idx,serialized_block FROM blocks ORDER BY idx DESC LIMIT 1";
-    let mut stmt = connection.prepare(command)?;
+    let command =
+        "SELECT idx,serialized_block FROM blocks WHERE idx = (SELECT MAX(idx) FROM blocks)";
+    let mut stmt = connection.prepare_cached(command)?;
     read_single_block(&mut stmt, params![])
 }
 
 pub fn get_block_with_lowest_block_idx(
     connection: &Connection,
 ) -> anyhow::Result<Option<RosettaBlock>> {
-    let command = "SELECT idx,serialized_block FROM blocks ORDER BY idx ASC LIMIT 1";
-    let mut stmt = connection.prepare(command)?;
+    let command =
+        "SELECT idx,serialized_block FROM blocks WHERE idx = (SELECT MIN(idx) FROM blocks)";
+    let mut stmt = connection.prepare_cached(command)?;
     read_single_block(&mut stmt, params![])
 }
 
@@ -419,7 +422,7 @@ pub fn get_blocks_by_index_range(
     end_index: u64,
 ) -> anyhow::Result<Vec<RosettaBlock>> {
     let command = "SELECT idx,serialized_block FROM blocks WHERE idx>= ?1 AND idx<=?2";
-    let mut stmt = connection.prepare(command)?;
+    let mut stmt = connection.prepare_cached(command)?;
     read_blocks(&mut stmt, params![start_index, end_index])
 }
 
@@ -428,7 +431,7 @@ pub fn get_blockchain_gaps(
 ) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
     // Search for blocks, such that there is no block with index+1.
     let command = "SELECT b1.idx,b1.serialized_block FROM blocks b1 WHERE not exists(select 1 from blocks b2 where b2.idx = b1.idx + 1)";
-    let mut stmt = connection.prepare(command)?;
+    let mut stmt = connection.prepare_cached(command)?;
     let gap_starts = read_blocks(&mut stmt, params![])?;
     let mut gap_limits = vec![];
 
@@ -442,6 +445,14 @@ pub fn get_blockchain_gaps(
     Ok(gap_limits)
 }
 
+pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
+    let command = "SELECT COUNT(*) FROM blocks";
+    let mut stmt = connection.prepare_cached(command)?;
+    let mut rows = stmt.query(params![])?;
+    let count: u64 = rows.next()?.unwrap().get(0)?;
+    Ok(count)
+}
+
 // Returns icrc1 Transactions if the transaction hash exists in the database, else returns None.
 // Returns an Error if the query fails.
 pub fn get_blocks_by_transaction_hash(
@@ -449,7 +460,7 @@ pub fn get_blocks_by_transaction_hash(
     hash: ByteBuf,
 ) -> anyhow::Result<Vec<RosettaBlock>> {
     let mut stmt =
-        connection.prepare("SELECT idx,serialized_block FROM blocks WHERE tx_hash = ?1")?;
+        connection.prepare_cached("SELECT idx,serialized_block FROM blocks WHERE tx_hash = ?1")?;
     read_blocks(&mut stmt, params![hash.as_slice().to_vec()])
 }
 
@@ -457,23 +468,12 @@ pub fn get_highest_block_idx_in_account_balance_table(
     connection: &Connection,
 ) -> anyhow::Result<Option<u64>> {
     match connection
-        .prepare_cached("SELECT block_idx FROM account_balances ORDER BY block_idx DESC LIMIT 1")?
+        .prepare_cached("SELECT block_idx FROM account_balances WHERE block_idx = (SELECT MAX(block_idx) FROM account_balances)")?
         .query_map(params![], |row| row.get(0))?
         .next()
     {
         None => Ok(None),
         Some(res) => Ok(res?),
-    }
-}
-
-pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
-    match connection
-        .prepare_cached("SELECT COUNT(*) FROM blocks")?
-        .query_map(params![], |row| row.get(0))?
-        .next()
-    {
-        None => Ok(0),
-        Some(count) => Ok(count?),
     }
 }
 
@@ -517,7 +517,22 @@ pub fn get_account_balance_at_block_idx(
         .transpose()?)
 }
 
-fn read_single_block<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Option<RosettaBlock>>
+pub fn get_blocks_by_custom_query<P>(
+    connection: &Connection,
+    sql_query: String,
+    params: P,
+) -> anyhow::Result<Vec<RosettaBlock>>
+where
+    P: Params,
+{
+    let mut stmt = connection.prepare_cached(&sql_query)?;
+    read_blocks(&mut stmt, params)
+}
+
+fn read_single_block<P>(
+    stmt: &mut CachedStatement,
+    params: P,
+) -> anyhow::Result<Option<RosettaBlock>>
 where
     P: Params,
 {
@@ -535,7 +550,7 @@ where
 }
 
 // Executes the constructed statement that reads blocks. The statement expects two values: The serialized Block and the index of that block
-fn read_blocks<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Vec<RosettaBlock>>
+fn read_blocks<P>(stmt: &mut CachedStatement, params: P) -> anyhow::Result<Vec<RosettaBlock>>
 where
     P: Params,
 {

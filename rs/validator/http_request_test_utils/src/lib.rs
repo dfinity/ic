@@ -8,8 +8,8 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, ReadState,
-    SignedDelegation, SignedIngressContent, UserQuery,
+    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
+    ReadState, SignedDelegation, SignedIngressContent,
 };
 use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
@@ -278,7 +278,7 @@ impl HttpRequestEnvelopeContentWithCanisterId for HttpCanisterUpdate {
 }
 
 impl HttpRequestEnvelopeContent for HttpUserQuery {
-    type HttpRequestContentType = UserQuery;
+    type HttpRequestContentType = Query;
 
     fn set_sender(&mut self, sender: Blob) {
         self.sender = sender;

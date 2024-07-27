@@ -80,7 +80,7 @@ impl CkErc20Setup {
     }
 
     pub fn new_without_ckerc20_active(env: Arc<StateMachine>) -> Self {
-        let cketh = CkEthSetup::new(env.clone());
+        let cketh = CkEthSetup::maybe_evm_rpc(env.clone());
         let orchestrator = LedgerSuiteOrchestrator::new(
             env.clone(),
             LedgerSuiteOrchestratorInitArg {
@@ -88,7 +88,8 @@ impl CkErc20Setup {
                 minter_id: Some(cketh.minter_id.get_ref().0),
                 cycles_management: None,
             },
-        );
+        )
+        .register_embedded_wasms();
         Self {
             env,
             cketh,
@@ -98,14 +99,7 @@ impl CkErc20Setup {
     }
 
     pub fn add_supported_erc20_tokens(mut self) -> Self {
-        let embedded_ledger_wasm_hash = self.orchestrator.embedded_ledger_wasm_hash.clone();
-        let embedded_index_wasm_hash = self.orchestrator.embedded_index_wasm_hash.clone();
-
-        self.supported_erc20_tokens = supported_erc20_tokens(
-            self.cketh.minter_id.into(),
-            embedded_ledger_wasm_hash,
-            embedded_index_wasm_hash,
-        );
+        self.supported_erc20_tokens = supported_erc20_tokens(self.cketh.minter_id.into());
         for token in self.supported_erc20_tokens.iter() {
             self.orchestrator = self
                 .orchestrator
@@ -393,7 +387,7 @@ impl CkErc20DepositParams {
         ethers_core::types::Log::from((self.override_erc20_log_entry)(self.erc20_log_entry()))
     }
 
-    fn erc20_log_entry(&self) -> Erc20LogEntry {
+    pub fn erc20_log_entry(&self) -> Erc20LogEntry {
         Erc20LogEntry {
             encoded_principal: crate::flow::encode_principal(self.recipient),
             amount: self.ckerc20_amount,

@@ -9,6 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
+use bytes::Bytes;
 use http::header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH};
 use http::{response, Version};
 use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
@@ -78,7 +79,7 @@ struct CacheItem {
     status: StatusCode,
     version: Version,
     headers: HeaderMap,
-    body: Vec<u8>,
+    body: Bytes,
 }
 
 #[derive(Clone)]
@@ -90,7 +91,7 @@ pub struct Cache {
 
 // Estimate rough amount of bytes that cache entry takes in memory
 fn weigh_entry(k: &Arc<RequestContext>, v: &CacheItem) -> u32 {
-    let mut cost = v.body.capacity()
+    let mut cost = v.body.len()
         + std::mem::size_of::<CacheItem>()
         + std::mem::size_of::<Arc<RequestContext>>()
         + k.method_name.as_ref().map(|x| x.len()).unwrap_or(0)
@@ -136,11 +137,7 @@ impl Cache {
 
     // Stores the response components in the cache
     // Response itself cannot be stored since it's not cloneable, so we have to rebuild it
-    async fn store(&self, ctx: Arc<RequestContext>, parts: &response::Parts, body: &[u8]) {
-        // Make sure that the vector has the smallest possible memory footprint
-        let mut body = body.to_vec();
-        body.shrink_to_fit();
-
+    async fn store(&self, ctx: Arc<RequestContext>, parts: &response::Parts, body: Bytes) {
         let item = CacheItem {
             status: parts.status,
             version: parts.version,
@@ -272,7 +269,7 @@ pub async fn cache_middleware(
     let body = read_streaming_body(body, body_size as usize).await?;
 
     // Insert the response into the cache
-    cache.store(ctx, &parts, &body).await;
+    cache.store(ctx, &parts, body.clone()).await;
 
     // Reconstruct the response from components
     let response = Response::from_parts(parts, axum::body::boxed(Body::from(body)));

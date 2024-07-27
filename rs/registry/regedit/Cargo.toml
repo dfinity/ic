@@ -31,7 +31,7 @@ url = { version = "2.1.1", features = ["serde"] }
 [dev-dependencies]
 ic-prep = { path = "../../prep" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 
 [[bin]]
 name = "ic-regedit"

@@ -351,6 +351,67 @@ pub enum MemoryMapOrData<'a> {
     Data(&'a [u8]),
 }
 
+impl<'a> MemoryInstructions<'a> {
+    // Filters and cuts any instructions that do not fall into `new_range`.
+    pub fn restrict_to_range(&mut self, new_range: &Range<PageIndex>) {
+        self.range = PageIndex::new(std::cmp::max(self.range.start.get(), new_range.start.get()))
+            ..PageIndex::new(std::cmp::min(self.range.end.get(), new_range.end.get()));
+        let instructions = std::mem::take(&mut self.instructions);
+        self.instructions = instructions
+            .into_iter()
+            .filter_map(|(range, instruction)| {
+                if range.end.get() <= self.range.start.get()
+                    || range.start.get() >= self.range.end.get()
+                {
+                    // The entire instruction is outside of `new_range` and can be dropped.
+                    None
+                } else {
+                    // Cut off from the left.
+                    let (range, instruction) = if range.start.get() < self.range.start.get() {
+                        let shift = (self.range.start.get() - range.start.get()) as usize;
+                        let range = self.range.start..range.end;
+                        match instruction {
+                            MemoryMapOrData::MemoryMap(fd, offset) => (
+                                range,
+                                MemoryMapOrData::MemoryMap(fd, offset + shift * PAGE_SIZE),
+                            ),
+                            MemoryMapOrData::Data(data) => {
+                                (range, MemoryMapOrData::Data(&data[(shift * PAGE_SIZE)..]))
+                            }
+                        }
+                    } else {
+                        (range, instruction)
+                    };
+
+                    // Cut off from the right.
+                    let (range, instruction) = if range.end.get() > self.range.end.get() {
+                        let shift = (range.end.get() - self.range.end.get()) as usize;
+                        let range = range.start..self.range.end;
+                        match instruction {
+                            MemoryMapOrData::MemoryMap(fd, offset) => {
+                                (range, MemoryMapOrData::MemoryMap(fd, offset))
+                            }
+                            MemoryMapOrData::Data(data) => {
+                                debug_assert!(data.len() > shift * PAGE_SIZE);
+                                (
+                                    range,
+                                    MemoryMapOrData::Data(
+                                        &data[..(data.len() - shift * PAGE_SIZE)],
+                                    ),
+                                )
+                            }
+                        }
+                    } else {
+                        (range, instruction)
+                    };
+
+                    Some((range, instruction))
+                }
+            })
+            .collect();
+    }
+}
+
 /// `PageMap` is a data structure that represents an image of a canister virtual
 /// memory.  The memory is viewed as a collection of _pages_. `PageMap` uses
 /// 4KiB host OS pages to track the heap contents, not 64KiB Wasm pages.
@@ -589,9 +650,8 @@ impl PageMap {
     }
 
     /// Returns a sequence of instructions on how to prepare a memory region. It always returns instructions for at least `min_range`,
-    /// but the range can be as large as `max_range`, as long as there are no more than `target_complexity` instructions.
-    /// Note that `target_complexity` is only a guide. The result can have more instructions if they are contained in `min_range`, or fewer
-    /// if there are not enough instructions to fill `max_range`.
+    /// but the range can be as large as `max_range`. The result only extends past `min_range`, if it does not require any extra instructions
+    /// to do so.
     /// Assumptions:
     ///       * `min_range` ⊆ `max_range`
     ///       * The entire memory has already been initialized according to `get_base_memory_instructions`
@@ -604,7 +664,6 @@ impl PageMap {
         &self,
         min_range: Range<PageIndex>,
         max_range: Range<PageIndex>,
-        target_complexity: usize,
     ) -> MemoryInstructions {
         debug_assert!(min_range.start >= max_range.start && min_range.end <= max_range.end);
 
@@ -680,28 +739,6 @@ impl PageMap {
             );
         }
 
-        // Extend range up to `max_range` by growing right first.
-        while delta_instructions.len() < target_complexity && result_range.end < max_range.end {
-            grow_right(
-                &self.page_delta,
-                &mut delta_instructions,
-                &mut result_range,
-                &max_range,
-                true,
-            );
-        }
-
-        // Extend by growing left.
-        while delta_instructions.len() < target_complexity && result_range.start > max_range.start {
-            grow_left(
-                &self.page_delta,
-                &mut delta_instructions,
-                &mut result_range,
-                &max_range,
-                true,
-            );
-        }
-
         // Grow `result_range` to the edge of the next deltas, but do not include them.
         grow_left(
             &self.page_delta,
@@ -735,10 +772,35 @@ impl PageMap {
             .instructions;
         storage_instructions.extend(delta_instructions);
 
-        MemoryInstructions {
-            range: result_range,
-            instructions: storage_instructions,
+        // Find left and right cutoff point to have no instructions fully outside of `min_range`.
+        let mut cut_left = result_range.start;
+        for instruction in &storage_instructions {
+            // We explicitly do not consider instructions that start within `min_range`,
+            // and end outside, as they do not add additional instructions.
+            if instruction.0.end.get() > cut_left.get()
+                && instruction.0.end.get() <= min_range.start.get()
+            {
+                cut_left = instruction.0.end;
+            }
         }
+        let mut cut_right = result_range.end;
+        for instruction in &storage_instructions {
+            if instruction.0.start.get() < cut_right.get()
+                && instruction.0.start.get() >= min_range.end.get()
+            {
+                cut_right = instruction.0.start;
+            }
+        }
+
+        let result_range = cut_left..cut_right;
+
+        let mut result = MemoryInstructions {
+            range: result_range.clone(),
+            instructions: storage_instructions,
+        };
+
+        result.restrict_to_range(&result_range);
+        result
     }
 
     /// Returns how to memory map the base layer of this PageMap

@@ -31,6 +31,7 @@ fn get_orchestrator_info() -> OrchestratorInfo {
         cycles_management: s.cycles_management().clone(),
         more_controller_ids: s.more_controller_ids().to_vec(),
         minter_id: s.minter_id().cloned(),
+        ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
     })
 }
 
@@ -174,7 +175,7 @@ fn http_request(
 
                 w.encode_gauge(
                     "ledger_suite_orchestrator_stable_memory_bytes",
-                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::api::stable::stable64_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 

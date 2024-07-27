@@ -35,7 +35,7 @@ use crate::{
 // Some magical prefix that the public key should have
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -43,7 +43,7 @@ pub struct Node {
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
-    pub replica_version: String,
+    pub avg_latency_secs: f64,
 }
 
 // Lightweight Eq, just compare principals
@@ -73,6 +73,9 @@ impl Node {
             RequestType::Unknown => {
                 panic!("can't construct url for unknown request type")
             }
+            RequestType::CallV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/canister/{principal}/call",
+            )),
             RequestType::ReadStateSubnet => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v2/subnet/{principal}/read_state",
             )),
@@ -132,7 +135,6 @@ pub trait Snapshot: Send + Sync {
 pub struct RegistrySnapshot {
     pub version: u64,
     pub timestamp: u64,
-    pub nns_subnet_id: Principal,
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     pub nodes: HashMap<String, Arc<Node>>,
@@ -288,6 +290,8 @@ impl Snapshotter {
                             .context("Unable to parse TLS certificate")?;
 
                         let node = Node {
+                            // init to max, this value is updated with running health checks
+                            avg_latency_secs: f64::MAX,
                             id: node_id.as_ref().0,
                             subnet_id: subnet_id.as_ref().0,
                             subnet_type,
@@ -295,7 +299,6 @@ impl Snapshotter {
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
                             tls_certificate: cert.certificate_der,
-                            replica_version: replica_version.to_string(),
                         };
                         let node = Arc::new(node);
 
@@ -331,7 +334,6 @@ impl Snapshotter {
         Ok(RegistrySnapshot {
             version: version.get(),
             timestamp,
-            nns_subnet_id: nns_subnet_id.get().0,
             nns_public_key: nns_key_with_prefix,
             subnets,
             nodes: nodes_map,
@@ -458,7 +460,6 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
     RegistrySnapshot {
         version: 0,
         timestamp: 0,
-        nns_subnet_id: subnet_test_id(666).get().0,
         nns_public_key: vec![],
         subnets,
         nodes,
@@ -473,13 +474,14 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
         .enumerate()
         .map(|(i, x)| {
             Arc::new(Node {
+                // init to max, this value is updated with running health checks
+                avg_latency_secs: f64::MAX,
                 id: node_test_id(i as u64).get().0,
                 subnet_type: SubnetType::Application,
                 subnet_id,
                 addr: x.ip(),
                 port: x.port(),
                 tls_certificate: vec![],
-                replica_version: "".into(),
             })
         })
         .collect::<Vec<_>>();

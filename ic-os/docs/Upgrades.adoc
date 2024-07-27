@@ -37,7 +37,7 @@ Note that the upgrade images include only the boot and root partitions in a tar 
 
 === Installing upgrade image
 
-Each HostOS/GuestOS rootfs folder contains the manageboot script, used to install the upgrade image:
+Each HostOS/GuestOS contains the manageboot script, used to install the upgrade image:
 
     manageboot.sh upgrade-install update-img.tar
     manageboot.sh upgrade-commit
@@ -46,4 +46,4 @@ Following the execution of these commands, the system will reboot into the newly
 
     manageboot.sh confirm
 
-For more information on the upgrade commands, see https://github.com/dfinity/ic/blob/master/ic-os/rootfs/guestos/opt/ic/bin/manageboot.sh[rootfs/opt/ic/bin/manageboot.sh]
+For more information on the upgrade commands, see https://github.com/dfinity/ic/blob/master/ic-os/components/upgrade/manageboot[components/upgrade/manageboot]

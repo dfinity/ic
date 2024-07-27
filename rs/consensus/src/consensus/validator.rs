@@ -38,8 +38,9 @@ use ic_types::{
     consensus::{
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
-        FinalizationContent, HasCommittee, HasHeight, HasRank, HasVersion, Notarization,
-        NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare, Rank,
+        EquivocationProof, FinalizationContent, HasCommittee, HasHeight, HasRank, HasVersion,
+        Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
+        RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
@@ -74,7 +75,7 @@ enum ValidationFailure {
     RegistryClientError(RegistryClientError),
     PayloadValidationFailed(PayloadValidationFailure),
     DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
-    EcdsaPayloadValidationFailed(ecdsa::EcdsaPayloadValidationFailure),
+    IDkgPayloadValidationFailed(ecdsa::IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -100,7 +101,7 @@ enum InvalidArtifactReason {
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
     InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
-    InvalidEcdsaPayload(ecdsa::InvalidEcdsaPayloadReason),
+    InvalidIDkgPayload(ecdsa::InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -112,6 +113,7 @@ enum InvalidArtifactReason {
     MismatchedRandomBeaconInCatchUpPackageShare,
     RepeatedSigner,
     ReplicaVersionMismatch,
+    NotABlockmaker,
 }
 
 impl From<CryptoError> for ValidationFailure {
@@ -318,10 +320,45 @@ impl SignatureVerify for CatchUpPackage {
     }
 }
 
+impl SignatureVerify for EquivocationProof {
+    fn verify_signature(
+        &self,
+        membership: &Membership,
+        crypto: &dyn ConsensusCrypto,
+        pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
+    ) -> ValidationResult<ValidatorError> {
+        let height = self.height();
+        let previous_beacon = get_previous_beacon(pool, height)?;
+        let registry_version = get_registry_version(pool, height)?;
+        if membership
+            .get_block_maker_rank(height, &previous_beacon, self.signer)
+            .map_err(membership_error_to_validation_error)?
+            .is_none()
+        {
+            return Err(ValidationError::from(InvalidArtifactReason::NotABlockmaker));
+        }
+
+        let (first, second) = self.into_signed_metadata();
+        crypto.verify_basic_sig(
+            &first.signature.signature,
+            &first.content,
+            self.signer,
+            registry_version,
+        )?;
+        crypto.verify_basic_sig(
+            &second.signature.signature,
+            &second.content,
+            self.signer,
+            registry_version,
+        )?;
+        Ok(())
+    }
+}
+
 /// `NotaryIssued` is a trait that exists to deduplicate the validation code of
 /// Notarization, Finalization and the corresponding shares.
 trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
-    fn block(&self) -> &CryptoHashOf<Block>;
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -337,10 +374,6 @@ trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
 }
 
 impl NotaryIssued for NotarizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -382,10 +415,6 @@ impl NotaryIssued for NotarizationContent {
 }
 
 impl NotaryIssued for FinalizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -654,7 +683,8 @@ impl Validator {
         let validate_tape_shares = || self.validate_tape_shares(pool_reader);
         let validate_catch_up_package_shares =
             || self.validate_catch_up_package_shares(pool_reader);
-        let calls: [&'_ dyn Fn() -> ChangeSet; 11] = [
+        let validate_equivocation_proofs = || self.validate_equivocation_proofs(pool_reader);
+        let calls: [&'_ dyn Fn() -> ChangeSet; 12] = [
             &|| self.call_with_metrics("Finalization", validate_finalization),
             &|| self.call_with_metrics("Notarization", validate_notarization),
             &|| self.call_with_metrics("BlockProposal", validate_blocks),
@@ -666,6 +696,7 @@ impl Validator {
             &|| self.call_with_metrics("RandomBeaconShare", validate_beacon_shares),
             &|| self.call_with_metrics("RandomTapeShare", validate_tape_shares),
             &|| self.call_with_metrics("CUPShare", validate_catch_up_package_shares),
+            &|| self.call_with_metrics("EquivocationProof", validate_equivocation_proofs),
         ];
         self.schedule.call_next(&calls)
     }
@@ -863,107 +894,8 @@ impl Validator {
             .block_proposal()
             .get_by_height_range(range)
         {
-            if proposal.check_integrity() {
-                // Attempt to validate the proposal through a notarization
-                if let Some(notarization) = pool_reader
-                    .pool()
-                    .unvalidated()
-                    .notarization()
-                    .get_by_height(proposal.height())
-                    .find(|notarization| &notarization.content.block == proposal.content.get_hash())
-                {
-                    // Verify notarization signature before checking block validity.
-                    let verification = self.verify_artifact(pool_reader, &notarization);
-                    if let Err(ValidationError::InvalidArtifact(e)) = verification {
-                        change_set.push(ChangeAction::HandleInvalid(
-                            notarization.into_message(),
-                            format!("{:?}", e),
-                        ));
-                    } else if verification.is_ok() {
-                        if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                            self.metrics
-                                .observe_data_payload(&proposal, self.ingress_selector.as_deref());
-                            self.metrics.observe_block(pool_reader, &proposal);
-                            known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
-                            change_set
-                                .push(ChangeAction::MoveToValidated(notarization.into_message()));
-                        }
-                        // If the parent is notarized, this block and its notarization are
-                        // validated. If not, this block currently cannot be
-                        // validated through parent either.
-                        continue;
-                    }
-                    // Note that transient errors on notarization signature
-                    // verification should cause fall through, and the block
-                    // proposals proceed to be checked normally.
-                }
-
-                // Skip validation and drop the block if it has a higher rank than a known valid
-                // block. Note that this must happen after we first allow "block with
-                // notarization" validation (see above). Otherwise we may get stuck when a block
-                // maker equivocates.
-                if let Some(Some(min_rank)) = known_ranks.get(&proposal.height()) {
-                    if proposal.rank() > *min_rank {
-                        // Skip them instead of removal because we don't want to end up
-                        // requesting these artifacts again.
-                        let id = proposal.get_id();
-                        if self.unvalidated_for_too_long(pool_reader, &id) {
-                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                  self.log,
-                                  "Due a valid proposal with a lower rank {}, /
-                                  skipping validating the proposal: {:?} with rank {}",
-                                  min_rank.0, id, proposal.rank().0
-                            );
-                        }
-                        continue;
-                    }
-                }
-
-                // We only validate blocks from a block maker of a certain rank after a
-                // rank-based delay. If this time has not elapsed yet, we ignore the block for
-                // now.
-                if !is_time_to_make_block(
-                    &self.log,
-                    self.registry_client.as_ref(),
-                    self.replica_config.subnet_id,
-                    pool_reader,
-                    proposal.height(),
-                    proposal.rank(),
-                    self.time_source.as_ref(),
-                ) {
-                    continue;
-                }
-
-                match self.check_block_validity(pool_reader, &proposal) {
-                    Ok(()) => {
-                        self.metrics
-                            .observe_data_payload(&proposal, self.ingress_selector.as_deref());
-                        self.metrics.observe_block(pool_reader, &proposal);
-                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
-                    }
-                    Err(ValidationError::InvalidArtifact(
-                        InvalidArtifactReason::ReplicaVersionMismatch,
-                    )) => change_set
-                        .push(ChangeAction::RemoveFromUnvalidated(proposal.into_message())),
-                    Err(ValidationError::InvalidArtifact(err)) => change_set.push(
-                        ChangeAction::HandleInvalid(proposal.into_message(), format!("{:?}", err)),
-                    ),
-                    Err(ValidationError::ValidationFailed(err)) => {
-                        if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
-                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                  self.log,
-                                  "Couldn't check the block validity: {:?}", err
-                            );
-                        }
-                    }
-                }
-            } else {
-                warn!(
-                    self.log,
-                    "Invalid block (compromised payload integrity): {:?}", proposal
-                );
+            // Handle integrity check and verification errors early
+            if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
                     proposal.clone().into_message(),
                     format!(
@@ -972,7 +904,115 @@ impl Validator {
                         proposal.as_ref().payload.get_hash(),
                         proposal.as_ref().payload.as_ref()
                     ),
-                ))
+                ));
+                continue;
+            }
+            let verification_result = self.verify_artifact(pool_reader, &proposal);
+            if let Err(error) = verification_result {
+                if let Some(action) = self.compute_action_from_validation_error(
+                    pool_reader,
+                    error,
+                    proposal.into_message(),
+                ) {
+                    change_set.push(action);
+                }
+                continue;
+            }
+
+            // Attempt to validate the proposal through a notarization
+            if let Some(notarization) = pool_reader
+                .pool()
+                .unvalidated()
+                .notarization()
+                .get_by_height(proposal.height())
+                .find(|notarization| &notarization.content.block == proposal.content.get_hash())
+            {
+                // Verify notarization signature. If the signature is valid, both
+                // artifacts may be validated.
+                let verification = self.verify_artifact(pool_reader, &notarization);
+                if let Err(ValidationError::InvalidArtifact(e)) = verification {
+                    change_set.push(ChangeAction::HandleInvalid(
+                        notarization.into_message(),
+                        format!("{:?}", e),
+                    ));
+                } else if verification.is_ok() {
+                    if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
+                        // A successful verification is enough to validate this block,
+                        // because from the notarization we know that the block validity
+                        // was already checked.
+                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
+                    }
+                    // If the parent is notarized, this block and its notarization are
+                    // validated. If not, this block currently cannot be
+                    // validated through parent either.
+                    continue;
+                }
+                // Note that transient errors on notarization signature
+                // verification should cause fall through, and the block
+                // proposals proceed to be checked normally.
+            }
+
+            // Skip validation and drop the block if it has a higher rank than a known valid
+            // block. Note that this must happen after we first allow "block with
+            // notarization" validation (see above). Otherwise we may get stuck when a block
+            // maker equivocates.
+            if let Some(Some(min_rank)) = known_ranks.get(&proposal.height()) {
+                if proposal.rank() > *min_rank {
+                    // Skip them instead of removal because we don't want to end up
+                    // requesting these artifacts again.
+                    let id = proposal.get_id();
+                    if self.unvalidated_for_too_long(pool_reader, &id) {
+                        warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                              self.log,
+                              "Due a valid proposal with a lower rank {}, /
+                              skipping validating the proposal: {:?} with rank {}",
+                              min_rank.0, id, proposal.rank().0
+                        );
+                    }
+                    continue;
+                }
+            }
+
+            // We only validate blocks from a block maker of a certain rank after a
+            // rank-based delay. If this time has not elapsed yet, we ignore the block for
+            // now.
+            if !is_time_to_make_block(
+                &self.log,
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                pool_reader,
+                proposal.height(),
+                proposal.rank(),
+                self.time_source.as_ref(),
+            ) {
+                continue;
+            }
+
+            // The artifact was already verified at this point, so we can do
+            // all the remaining block validity checks.
+            let check = self.check_block_validity(pool_reader, &proposal);
+            if let Some(action) = self.compute_action_from_artifact_verification(
+                pool_reader,
+                check,
+                proposal.into_message(),
+            ) {
+                if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) =
+                    &action
+                {
+                    known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                }
+                change_set.push(action);
+            }
+        }
+
+        for action in &change_set {
+            if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) = action
+            {
+                self.metrics
+                    .observe_data_payload(proposal, self.ingress_selector.as_deref());
+                self.metrics.observe_block(pool_reader, proposal);
             }
         }
         self.metrics.observe_and_reset_dkg_time_per_validator_run();
@@ -980,8 +1020,9 @@ impl Validator {
     }
 
     /// Check whether or not the provided `BlockProposal` can be moved into the
-    /// validated pool. A `ValidatiorError::ValidationFailure` value is returned
-    /// when any of the following conditions are met:
+    /// validated pool. This function assumes that the block proposal was already
+    /// verified (see [`SignatureVerify`]). A `ValidatiorError::ValidationFailure`
+    /// value is returned when any of the following conditions are met:
     ///
     /// - the `Block`'s validation context is not available locally.
     /// - The `Block`'s parent is not in the validated pool
@@ -991,9 +1032,6 @@ impl Validator {
     /// A `ValidatorError::InvalidArtifact` is returned when any of the following
     /// conditions are met:
     ///
-    /// - The signer of the `BlockProposal` does not have the rank claimed on
-    ///   the `Block`
-    /// - The signature on the `BlockProposal` is invalid.
     /// - Any messages included in the payload are present in some ancestor of
     ///   the block
     /// - Any of the values in the `ValidationContext` on the `Block` are less
@@ -1029,7 +1067,6 @@ impl Validator {
 
         let proposer = proposal.signature.signer;
         let parent = get_notarized_parent(pool_reader, proposal)?;
-        self.verify_artifact(pool_reader, proposal)?;
 
         // Ensure registry_version, certified_height increase monotonically and that
         // time increases *strictly* monotonically.
@@ -1126,8 +1163,8 @@ impl Validator {
         )
         .map_err(|err| {
             err.map(
-                InvalidArtifactReason::InvalidEcdsaPayload,
-                ValidationFailure::EcdsaPayloadValidationFailed,
+                InvalidArtifactReason::InvalidIDkgPayload,
+                ValidationFailure::IDkgPayloadValidationFailed,
             )
         })?;
 
@@ -1524,6 +1561,70 @@ impl Validator {
         Ok(block)
     }
 
+    /// Return a `ChangeSet` of `EquivocationProof` artifacts. This consists
+    /// of checking that both signatures are valid signatures of the two
+    /// derived block metadata instances, that the subnet is identical to
+    /// our current subnet, and that the signer was a blockmaker at that height.
+    fn validate_equivocation_proofs(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+        let finalized_height = pool_reader.get_finalized_height();
+        let range = match pool_reader
+            .pool()
+            .unvalidated()
+            .equivocation_proof()
+            .height_range()
+        {
+            Some(height) => height,
+            None => return ChangeSet::new(),
+        };
+
+        let range_to_validate = HeightRange::new(finalized_height.increment(), range.max);
+        let mut existing_proofs = HashSet::<(NodeId, Height)>::from_iter(
+            pool_reader
+                .pool()
+                .validated()
+                .equivocation_proof()
+                .get_by_height_range(range_to_validate.clone())
+                .map(|proof| (proof.signer, proof.height)),
+        );
+
+        pool_reader
+            .pool()
+            .unvalidated()
+            .equivocation_proof()
+            .get_by_height_range(range_to_validate)
+            .filter_map(|proof| {
+                let signer_height_pair = (proof.signer, proof.height);
+                if existing_proofs.contains(&signer_height_pair) {
+                    return Some(ChangeAction::RemoveFromUnvalidated(proof.into_message()));
+                }
+
+                let result = if proof.hash1 == proof.hash2 {
+                    Some(ChangeAction::HandleInvalid(
+                        proof.into_message(),
+                        "both block hashes in the equivocation proof are identical".to_string(),
+                    ))
+                } else if proof.subnet_id != self.replica_config.subnet_id {
+                    Some(ChangeAction::HandleInvalid(
+                        proof.into_message(),
+                        "equivocation proof has different subnet id".to_string(),
+                    ))
+                } else {
+                    let verification = self.verify_artifact(pool_reader, &proof);
+                    self.compute_action_from_artifact_verification(
+                        pool_reader,
+                        verification,
+                        proof.into_message(),
+                    )
+                };
+
+                if let Some(ChangeAction::MoveToValidated(_)) = result {
+                    existing_proofs.insert(signer_height_pair);
+                }
+                result
+            })
+            .collect()
+    }
+
     fn dedup_change_actions(&self, name: &str, actions: ChangeSet) -> ChangeSet {
         let mut change_set = ChangeSet::new();
         for action in actions {
@@ -1551,17 +1652,28 @@ impl Validator {
     ) -> Option<ChangeAction> {
         match result {
             Ok(()) => Some(ChangeAction::MoveToValidated(message)),
-            Err(ValidationError::InvalidArtifact(
-                InvalidArtifactReason::ReplicaVersionMismatch,
-            )) => Some(ChangeAction::RemoveFromUnvalidated(message)),
-            Err(ValidationError::InvalidArtifact(s)) => {
+            Err(err) => self.compute_action_from_validation_error(pool_reader, err, message),
+        }
+    }
+
+    fn compute_action_from_validation_error(
+        &self,
+        pool_reader: &PoolReader<'_>,
+        error: ValidatorError,
+        message: ConsensusMessage,
+    ) -> Option<ChangeAction> {
+        match error {
+            ValidationError::InvalidArtifact(InvalidArtifactReason::ReplicaVersionMismatch) => {
+                Some(ChangeAction::RemoveFromUnvalidated(message))
+            }
+            ValidationError::InvalidArtifact(s) => {
                 Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
             }
-            Err(ValidationError::ValidationFailed(err)) => {
+            ValidationError::ValidationFailed(err) => {
                 if self.unvalidated_for_too_long(pool_reader, &message.get_id()) {
                     warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
                           self.log,
-                          "Could not verify signature: {:?}", err
+                          "Could not determine if artifact is valid: {:?}", err
                     );
                 }
                 None
@@ -1653,14 +1765,14 @@ impl Validator {
 
 #[cfg(test)]
 pub mod test {
-    use crate::ecdsa::test_utils::{
-        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_key_id,
-        fake_sign_with_ecdsa_context_with_quadruple, fake_state_with_ecdsa_contexts,
-    };
-
     use super::*;
+    use crate::ecdsa::test_utils::{
+        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
+        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
+    use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies, RefMockPayloadBuilder,
@@ -1681,17 +1793,21 @@ pub mod test {
     use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
+        batch::{BatchPayload, IngressPayload},
         consensus::{
-            idkg::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
-            HashedBlock, HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent,
-            RandomTapeContent, SummaryPayload,
+            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
+            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
+            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
-        crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
-        CryptoHashOfState, ReplicaVersion,
+        CryptoHashOfState, ReplicaVersion, Time,
     };
     use std::{
         borrow::Borrow,
@@ -1900,30 +2016,22 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let key_id = fake_ecdsa_key_id();
+            let key_id = fake_ecdsa_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
-            let quadruple_id1 = QuadrupleId::new(1);
-            let quadruple_id2 = QuadrupleId::new(2);
-            let quadruple_id3 = QuadrupleId::new(3);
+            let pre_sig_id1 = PreSigId(1);
+            let pre_sig_id2 = PreSigId(2);
+            let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    1,
-                    key_id.clone(),
-                    Some(quadruple_id1.clone()),
-                ),
-                fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    3,
-                    key_id.clone(),
-                    Some(quadruple_id3.clone()),
-                ),
+                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
+                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_ecdsa_contexts(
+                .return_const(Ok(fake_state_with_signature_requests(
                     Height::from(0),
                     contexts.clone(),
                 )
@@ -1957,11 +2065,11 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut ecdsa = empty_ecdsa_payload(subnet_test_id(0));
+            let mut ecdsa = empty_idkg_payload(subnet_test_id(0));
             // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
@@ -2375,7 +2483,6 @@ pub mod test {
                 data_provider,
                 registry_client,
                 mut pool,
-                time_source,
                 replica_config,
                 ..
             } = setup_dependencies(pool_config, &committee);
@@ -2433,38 +2540,6 @@ pub mod test {
             pool.finalize(&block_chain[1]);
             pool.finalize(&block_chain[2]);
 
-            // ensure that the validator initially does not validate anything, as it is not
-            // time for rank 1 yet
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty(),);
-
-            // Time between blocks increases by at least initial_notary_delay + 1ns
-            let monotonic_block_increment = registry_client
-                .get_notarization_delay_settings(
-                    replica_config.subnet_id,
-                    test_block.context.registry_version,
-                )
-                .unwrap()
-                .expect("subnet record should be available")
-                .initial_notary_delay
-                + Duration::from_nanos(1);
-
-            // After sufficiently advancing the time, ensure that the validator validates
-            // the block
-            let delay = monotonic_block_increment
-                + get_block_maker_delay(
-                    &no_op_logger(),
-                    registry_client.as_ref(),
-                    replica_config.subnet_id,
-                    PoolReader::new(&pool)
-                        .registry_version(test_block.height())
-                        .unwrap(),
-                    rank,
-                )
-                .unwrap();
-
-            time_source.set_time(parent.context.time + delay).unwrap();
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(results.len(), 1);
             assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
@@ -3290,11 +3365,250 @@ pub mod test {
             assert_eq!(
                 changeset,
                 vec![
-                    ChangeAction::MoveToValidated(block.into_message()),
-                    ChangeAction::MoveToValidated(notarization.into_message())
+                    ChangeAction::MoveToValidated(notarization.into_message()),
+                    ChangeAction::MoveToValidated(block.into_message())
                 ]
             );
             pool.apply_changes(changeset);
         })
+    }
+
+    /// Returns a consensus pool and validator, along with a valid equivocation proof.
+    fn setup_equivocation_proof_test(
+        pool_config: ArtifactPoolConfig,
+    ) -> (TestConsensusPool, Validator, EquivocationProof) {
+        let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+        let ValidatorAndDependencies {
+            validator,
+            membership,
+            mut pool,
+            replica_config,
+            ..
+        } = setup_dependencies(pool_config, &subnet_members);
+
+        pool.advance_round_normal_operation();
+        pool.insert_validated(pool.make_next_beacon());
+
+        let original = pool.make_next_block();
+        let mut block = original.clone();
+        let correct_signer = get_block_maker_by_rank(
+            membership.borrow(),
+            &PoolReader::new(&pool),
+            block.height(),
+            &subnet_members,
+            Rank(0),
+        );
+
+        // Create two different blocks from the same block maker
+        let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
+            .method_payload(vec![0; 64])
+            .nonce(0)
+            .expiry_time(Time::from_nanos_since_unix_epoch(0))
+            .build()]);
+        block.content.as_mut().payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
+                    ingress,
+                    ..BatchPayload::default()
+                },
+                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                ecdsa: None,
+            }),
+        );
+        block.signature.signer = correct_signer;
+        block.update_content();
+        let first = block.clone();
+        block.content.as_mut().payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
+                    ingress: IngressPayload::from(vec![]),
+                    ..BatchPayload::default()
+                },
+                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                ecdsa: None,
+            }),
+        );
+        block.update_content();
+        let second = block.clone();
+
+        (
+            pool,
+            validator,
+            EquivocationProof {
+                signer: correct_signer,
+                version: block.content.as_ref().version.clone(),
+                height: Height::new(2),
+                subnet_id: replica_config.subnet_id,
+                hash1: first.content.get_hash().clone(),
+                signature1: BasicSigOf::new(BasicSig(vec![])),
+                hash2: second.content.get_hash().clone(),
+                signature2: BasicSigOf::new(BasicSig(vec![])),
+            },
+        )
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_identical_hashes() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Invalidate proof with identical hashes
+            proof.hash2 = proof.hash1.clone();
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("both block hashes in the equivocation proof are identical")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_wrong_subnet_id() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Invalidate proof with incorrect subnet ID
+            proof.subnet_id = subnet_test_id(1337);
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("equivocation proof has different subnet id")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_signer_not_in_subnet() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Don't validate if signer is not part of subnet
+            proof.signer = node_test_id(10);
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("NodeNotFound")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_signer_not_blockmaker() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Some test id that's different from the block maker, but still part of the subnet
+            let non_blockmaker_node = node_test_id(3);
+            assert!(non_blockmaker_node != proof.signer);
+
+            proof.signer = non_blockmaker_node;
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("NotABlockmaker")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_validates() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
+            // Validate a well-formed equivocation proof, with the correct subnet ID
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::EquivocationProof(_)
+                )]
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_ignored_if_below_finalized_height() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
+            pool.finalize(&block);
+            assert!(validator.on_state_change(&PoolReader::new(&pool))[..].is_empty());
+        });
+    }
+
+    #[test]
+    fn test_equivocation_validate_only_one_per_height_and_signer() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Insert two different proofs for the same height and signer
+            pool.insert_unvalidated(proof.clone());
+            let mut hash = proof.hash1.clone().get();
+            hash.0[0] = !hash.0[0];
+            proof.hash2 = CryptoHashOf::new(hash);
+            pool.insert_unvalidated(proof.clone());
+
+            // We should validate only a single equivocation proof, the other
+            // one is expected to be removed from the unvalidated pool.
+            let change_set = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                change_set[..],
+                [
+                    ChangeAction::MoveToValidated(ConsensusMessage::EquivocationProof(_)),
+                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::EquivocationProof(_))
+                ]
+            );
+        });
+    }
+
+    /// The validation logic may have a fast path for validating blocks for
+    /// which there exists a valid notarization.
+    #[test]
+    fn test_validator_rejects_incorrect_signature_in_notarization_fast_path() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            pool.advance_round_normal_operation_n(9);
+
+            let mut block = pool.make_next_block();
+
+            // Insert notarization into unvalidated pool, not the block
+            let mut notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            notarization.signature.signers =
+                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+            pool.insert_unvalidated(notarization);
+
+            // Insert tampered block into unvalidated pool
+            assert_ne!(block.signature.signer, node_test_id(100));
+            block.signature.signer = node_test_id(3);
+            pool.insert_unvalidated(block);
+
+            // Incorrect block proposals should not get validated
+            assert_matches!(
+                validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::BlockProposal(_),
+                    _
+                )]
+            );
+        });
     }
 }

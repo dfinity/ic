@@ -77,7 +77,7 @@ impl RegistryConsensusHandle {
 
         let mut membership = self.membership.lock().unwrap();
         membership.push(node_id.get().to_vec());
-        subnet_record.membership = membership.clone();
+        subnet_record.membership.clone_from(&membership);
 
         add_subnet_record(
             &self.data_provider,
@@ -108,7 +108,7 @@ impl RegistryConsensusHandle {
             .unwrap();
         membership.remove(index);
 
-        subnet_record.membership = membership.clone();
+        subnet_record.membership.clone_from(&membership);
         add_subnet_record(
             &self.data_provider,
             version.get(),

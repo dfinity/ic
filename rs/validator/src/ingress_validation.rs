@@ -5,7 +5,7 @@ use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesCont
 use ic_crypto_tree_hash::Path;
 use ic_types::crypto::threshold_sig::RootOfTrustProvider;
 use ic_types::crypto::{CanisterSig, CanisterSigOf};
-use ic_types::messages::{ReadState, SignedIngressContent, UserQuery};
+use ic_types::messages::{Query, ReadState, SignedIngressContent};
 use ic_types::{
     crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey},
     messages::{
@@ -121,14 +121,14 @@ where
     }
 }
 
-impl<R> HttpRequestVerifier<UserQuery, R> for HttpRequestVerifierImpl
+impl<R> HttpRequestVerifier<Query, R> for HttpRequestVerifierImpl
 where
     R: RootOfTrustProvider,
     R::Error: std::error::Error,
 {
     fn validate_request(
         &self,
-        request: &HttpRequest<UserQuery>,
+        request: &HttpRequest<Query>,
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {

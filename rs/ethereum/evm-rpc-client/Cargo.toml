@@ -1,0 +1,19 @@
+[package]
+name = "evm-rpc-client"
+description = "Client for the EVM-RPC canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-canister-log = "0.2.0"
+ic-cdk = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+tokio = { workspace = true }

@@ -1,9 +1,6 @@
 use crate::{
-    governance::{
-        combine_aged_stakes,
-        ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
-    },
-    neuron::{DissolveStateAndAge, Neuron},
+    governance::ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
+    neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
     neuron_store::NeuronStore,
     pb::v1::{
         governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
@@ -817,20 +814,6 @@ mod tests {
             },
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW_SECONDS + 1,
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
             },
         ];
 

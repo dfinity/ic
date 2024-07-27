@@ -26,19 +26,18 @@ use ic_management_canister_types::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env_api::HasDependencies;
-use ic_tests::driver::test_env_api::{HasPublicApiUrl, RetrieveIpv4Addr};
-use ic_tests::driver::{
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env_api::HasDependencies;
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, RetrieveIpv4Addr};
+use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
+    test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF},
     universal_vm::UniversalVm,
 };
-use ic_tests::retry_with_msg_async;
-use ic_tests::systest;
-use ic_tests::util::block_on;
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
@@ -138,7 +137,7 @@ pub fn test(env: TestEnv) {
     let runtime_system = get_runtime_from_node(&system_node);
     let proxy_canister_system = create_proxy_canister(&env, &runtime_system, &system_node);
 
-    block_on(retry_with_msg_async!(
+    block_on(ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling send_request of proxy canister {} with URL {}",
             proxy_canister_system.canister_id(),
@@ -191,7 +190,7 @@ pub fn test(env: TestEnv) {
     let runtime_app = get_runtime_from_node(&app_node);
     let proxy_canister_app = create_proxy_canister(&env, &runtime_app, &app_node);
 
-    block_on(retry_with_msg_async!(
+    block_on(ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling send_request of proxy canister {} with URL {}",
             proxy_canister_app.canister_id(),

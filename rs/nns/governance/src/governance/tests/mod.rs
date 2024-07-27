@@ -3,6 +3,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
+        neuron::DissolveState,
         Neuron as NeuronProto,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
@@ -21,6 +22,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
+mod neurons_fund;
 mod stake_maturity;
 
 #[test]
@@ -945,13 +947,6 @@ mod neuron_archiving_tests {
             .build()
         };
 
-        // Case 0: None: Active
-        let neuron =
-            neuron_with_dissolve_state_and_age(DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds: NOW,
-            });
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
-
         // Case 1a: Dissolved in the "distant" past: Inactive. This is the only case where
         // "inactive" is the expected result.
         let neuron =
@@ -974,13 +969,7 @@ mod neuron_archiving_tests {
             });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        // Case 2a: DissolveDelay(0): Active
-        let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::LegacyDissolved {
-            aging_since_timestamp_seconds: 42,
-        });
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
-
-        // Case 2b: DissolveDelay(positive): Active
+        // Case 2: DissolveDelay(positive): Active
         let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 42,
             aging_since_timestamp_seconds: NOW,
@@ -1234,6 +1223,8 @@ fn test_pre_and_post_upgrade_first_time() {
             }
         },
         account: vec![0; 32],
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+        aging_since_timestamp_seconds: 1,
         ..Default::default()
     };
     let neurons = btreemap! { 1 => neuron1 };
@@ -1546,6 +1537,111 @@ fn test_validate_execute_nns_function() {
     for execute_nns_function in ok_test_cases {
         let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
         assert_eq!(actual_result, Ok(()));
+    }
+}
+
+// TODO(NNS1-3204): Remove this test when the new topics are enabled.
+#[test]
+fn test_follow_new_topics() {
+    // Step 1: set up a neuron with no followees.
+    let mut governance = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            ..Default::default()
+        },
+        Box::new(MockEnvironment::new(vec![], 100)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+    let neuron_id = NeuronId { id: 1 };
+    let controller = PrincipalId::new_user_test_id(1);
+    governance
+        .neuron_store
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id,
+                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                controller,
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 42,
+                    aging_since_timestamp_seconds: 1,
+                },
+                123_456_789,
+            )
+            .build(),
+        )
+        .unwrap();
+
+    // Step 2: sanity check to make sure `follow()` works.
+    governance
+        .follow(
+            &neuron_id,
+            &controller,
+            &manage_neuron::Follow {
+                topic: Topic::Unspecified as i32,
+                followees: [NeuronId { id: 2 }].to_vec(),
+            },
+        )
+        .unwrap();
+
+    // Step 3: following a new topic works with feature = "test".
+    #[cfg(feature = "test")]
+    {
+        assert_eq!(
+            governance.follow(
+                &neuron_id,
+                &controller,
+                &manage_neuron::Follow {
+                    topic: Topic::ProtocolCanisterManagement as i32,
+                    followees: [NeuronId { id: 2 }].to_vec(),
+                },
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            governance.follow(
+                &neuron_id,
+                &controller,
+                &manage_neuron::Follow {
+                    topic: Topic::ServiceNervousSystemManagement as i32,
+                    followees: [NeuronId { id: 2 }].to_vec(),
+                },
+            ),
+            Ok(())
+        );
+    }
+
+    // Step 4: following a new topic fails without feature = "test".
+    #[cfg(not(feature = "test"))]
+    {
+        assert_eq!(
+            governance.follow(
+                &neuron_id,
+                &controller,
+                &manage_neuron::Follow {
+                    topic: Topic::ProtocolCanisterManagement as i32,
+                    followees: [NeuronId { id: 2 }].to_vec(),
+                },
+            ),
+            Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Cannot follow the ProtocolCanisterManagement topic yet".to_string()
+            ))
+        );
+        assert_eq!(
+            governance.follow(
+                &neuron_id,
+                &controller,
+                &manage_neuron::Follow {
+                    topic: Topic::ServiceNervousSystemManagement as i32,
+                    followees: [NeuronId { id: 2 }].to_vec(),
+                },
+            ),
+            Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Cannot follow the ServiceNervousSystemManagement topic yet".to_string()
+            ))
+        );
     }
 }
 

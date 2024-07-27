@@ -31,7 +31,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 json5 = "0.4.1"
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
 num-traits = { workspace = true }
@@ -51,4 +51,3 @@ build-info-build = { workspace = true }
 ic-nns-governance = { path = "../../nns/governance" }
 proptest = "1.0"
 serde_bytes = { workspace = true }
-serde_derive = "1.0"

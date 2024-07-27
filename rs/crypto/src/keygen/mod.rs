@@ -390,9 +390,9 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             Some((subnet_id, _subnet_record)) => {
                 let key_rotation_period = match self
                     .registry_client
-                    .get_ecdsa_config(subnet_id, registry_version)
+                    .get_chain_key_config(subnet_id, registry_version)
                 {
-                    Ok(Some(config)) if !config.key_ids.is_empty() => {
+                    Ok(Some(config)) if !config.key_configs.is_empty() => {
                         match config.idkg_key_rotation_period_ms {
                             Some(ms) => Duration::from_millis(ms),
                             None => return Ok(None),

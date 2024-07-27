@@ -87,7 +87,7 @@ impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for Sec
 }
 
 fn encrypt_and_commit_single_polynomial(
-    alg: CanisterThresholdSignatureAlgorithm,
+    alg: IdkgProtocolAlgorithm,
     poly: &Polynomial,
     num_coefficients: usize,
     recipients: &[MEGaPublicKey],
@@ -120,7 +120,7 @@ fn encrypt_and_commit_single_polynomial(
 }
 
 fn encrypt_and_commit_pair_of_polynomials(
-    alg: CanisterThresholdSignatureAlgorithm,
+    alg: IdkgProtocolAlgorithm,
     values: &Polynomial,
     mask: &Polynomial,
     num_coefficients: usize,
@@ -170,7 +170,7 @@ pub struct IDkgDealingInternal {
 impl IDkgDealingInternal {
     pub fn new(
         shares: &SecretShares,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         seed: Seed,
         threshold: usize,
         recipients: &[MEGaPublicKey],
@@ -188,10 +188,12 @@ impl IDkgDealingInternal {
         let num_coefficients = threshold;
 
         let mut poly_rng = seed
-            .derive("ic-crypto-tecdsa-create-dealing-polynomials")
+            .derive(&DomainSep::SeedForDealingPolynomials(alg).to_string())
             .into_rng();
 
-        let mega_seed = seed.derive("ic-crypto-tecdsa-create-dealing-mega-encrypt");
+        let mega_seed = seed.derive(
+            &DomainSep::SeedForDealingMega(alg, dealer_index, recipients.len()).to_string(),
+        );
 
         let (commitment, ciphertext, proof) = match shares {
             SecretShares::Random => {
@@ -333,7 +335,7 @@ impl IDkgDealingInternal {
     pub fn publicly_verify(
         &self,
         key_curve: EccCurveType,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         transcript_type: &IDkgTranscriptOperationInternal,
         reconstruction_threshold: NumberOfNodes,
         dealer_index: NodeIndex,
@@ -452,14 +454,14 @@ impl IDkgDealingInternal {
     pub fn privately_verify(
         &self,
         key_curve: EccCurveType,
-        signature_alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         private_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
     ) -> CanisterThresholdResult<()> {
-        let signature_curve = signature_alg.curve();
+        let signature_curve = alg.curve();
 
         if private_key.curve_type() != key_curve || public_key.curve_type() != key_curve {
             return Err(CanisterThresholdError::CurveMismatch);
@@ -478,6 +480,7 @@ impl IDkgDealingInternal {
             .verify_is(mega_type, key_curve, signature_curve)?;
 
         let _opening = self.ciphertext.decrypt_and_check(
+            alg,
             &self.commitment,
             associated_data,
             dealer_index,
@@ -490,12 +493,21 @@ impl IDkgDealingInternal {
     }
 
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::to_vec(self).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to serialize IDkgDealingInternal: {}",
+                e
+            ))
+        })
     }
 
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
-        serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to deserialize IDkgDealingInternal: {}",
+                e
+            ))
+        })
     }
 }
 

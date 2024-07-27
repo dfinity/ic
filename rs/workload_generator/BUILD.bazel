@@ -4,12 +4,13 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/sha2",
-    "//rs/monitoring/metrics",
     "//rs/http_endpoints/metrics",
+    "//rs/monitoring/metrics",
     "//rs/test_utilities/identity",
     "//rs/types/management_canister_types",
     "//rs/types/types",

@@ -143,20 +143,8 @@ fn call_context_handling() {
 
     // One outstanding call is closed
     let callback = call_context_manager.callback(callback_id1).unwrap().clone();
-    assert_eq!(
-        callback.on_reply,
-        WasmClosure {
-            func_idx: 0,
-            env: 1
-        }
-    );
-    assert_eq!(
-        callback.on_reject,
-        WasmClosure {
-            func_idx: 2,
-            env: 3
-        }
-    );
+    assert_eq!(callback.on_reply, WasmClosure::new(0, 1));
+    assert_eq!(callback.on_reject, WasmClosure::new(2, 3));
     assert_eq!(call_context_manager.callbacks().len(), 3);
 
     assert_eq!(
@@ -197,20 +185,8 @@ fn call_context_handling() {
 
     // The outstanding call of CallContext 2 is back
     let callback = call_context_manager.callback(callback_id3).unwrap().clone();
-    assert_eq!(
-        callback.on_reply,
-        WasmClosure {
-            func_idx: 8,
-            env: 9
-        }
-    );
-    assert_eq!(
-        callback.on_reject,
-        WasmClosure {
-            func_idx: 10,
-            env: 11
-        }
-    );
+    assert_eq!(callback.on_reply, WasmClosure::new(8, 9));
+    assert_eq!(callback.on_reject, WasmClosure::new(10, 11));
 
     // Since we didn't mark CallContext 2 as answered we still have two
     assert_eq!(call_context_manager.call_contexts().len(), 2);
@@ -237,20 +213,8 @@ fn call_context_handling() {
 
     // the last outstanding call of CallContext 1 is finished
     let callback = call_context_manager.callback(callback_id2).unwrap().clone();
-    assert_eq!(
-        callback.on_reply,
-        WasmClosure {
-            func_idx: 4,
-            env: 5
-        }
-    );
-    assert_eq!(
-        callback.on_reject,
-        WasmClosure {
-            func_idx: 6,
-            env: 7
-        }
-    );
+    assert_eq!(callback.on_reply, WasmClosure::new(4, 5));
+    assert_eq!(callback.on_reject, WasmClosure::new(6, 7));
     assert_eq!(
         (
             CallContextAction::AlreadyResponded,

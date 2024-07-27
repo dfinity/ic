@@ -174,7 +174,17 @@ fn change_nns_canister_(request: ChangeCanisterRequest) {
 
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
-    let future = change_canister::<DfnRuntime>(request);
+    let future = async move {
+        let change_canister_result = change_canister::<DfnRuntime>(request).await;
+        match change_canister_result {
+            Ok(()) => {
+                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
+            }
+            Err(err) => {
+                println!("{LOG_PREFIX}change_canister: Canister change failed: {err}");
+            }
+        };
+    };
 
     // Starts the proposal execution, which will continue after this function has
     // returned.

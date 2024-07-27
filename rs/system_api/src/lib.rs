@@ -5,6 +5,7 @@ pub mod sandbox_safe_system_state;
 mod stable_memory;
 
 use ic_base_types::PrincipalIdBlobParseError;
+use ic_config::embedders::StableMemoryPageLimit;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -110,6 +111,9 @@ pub struct InstructionLimits {
     /// more instructions than this limit.
     message: NumInstructions,
 
+    /// The instruction limit to report in case of an error.
+    limit_to_report: NumInstructions,
+
     /// The number of instructions in the largest possible slice. It may
     /// exceed `self.message()` if the latter was reduced or updated by the
     /// previous executions.
@@ -122,6 +126,7 @@ impl InstructionLimits {
     pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
         Self {
             message,
+            limit_to_report: message,
             max_slice: match dts {
                 FlagStatus::Enabled => max_slice,
                 FlagStatus::Disabled => message,
@@ -132,6 +137,11 @@ impl InstructionLimits {
     /// See the comments of the corresponding field.
     pub fn message(&self) -> NumInstructions {
         self.message
+    }
+
+    /// See the comments of the corresponding field.
+    pub fn limit_to_report(&self) -> NumInstructions {
+        self.limit_to_report
     }
 
     /// Returns the effective slice size, which is the smallest of
@@ -189,6 +199,7 @@ pub enum ResponseStatus {
 /// because some non-replicated queries can call other queries. In such
 /// a case the caller has too keep the state until the callee returns.
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum NonReplicatedQueryKind {
     Stateful {
         call_context_id: CallContextId,
@@ -1462,11 +1473,13 @@ impl SystemApiImpl {
         self.sandbox_safe_system_state.append_canister_log(
             is_enabled,
             self.api_type.time(),
-            valid_subslice("save_log_message", src, size, heap).unwrap_or(
-                // Do not trap here!
-                // If the specified memory range is invalid, ignore it and log the error message.
-                b"(debug_print message out of memory bounds)",
-            ),
+            valid_subslice("save_log_message", src, size, heap)
+                .unwrap_or(
+                    // Do not trap here!
+                    // If the specified memory range is invalid, ignore it and log the error message.
+                    b"(debug_print message out of memory bounds)",
+                )
+                .to_vec(),
         );
     }
 
@@ -1487,6 +1500,34 @@ impl SystemApiImpl {
             self.api_type,
             ApiType::Init { .. } | ApiType::PreUpgrade { .. }
         )
+    }
+
+    /// Based on the page limit object, returns the page limit for the current
+    /// system API type. Can be called with the limit for dirty pages or accessed pages.
+    pub fn get_page_limit(&self, page_limit: &StableMemoryPageLimit) -> NumOsPages {
+        match &self.api_type {
+            // Longer-running messages make use of a different, possibly higher limit.
+            ApiType::Init { .. } | ApiType::PreUpgrade { .. } => page_limit.upgrade,
+            // Queries have a separate limit.
+            ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => page_limit.query,
+            // Callbacks and cleanup for composite queries (non-replicated execution) need to be treated as queries,
+            // whereas in replicated mode they are treated as regular messages.
+            ApiType::ReplyCallback { execution_mode, .. }
+            | ApiType::RejectCallback { execution_mode, .. }
+            | ApiType::Cleanup { execution_mode, .. } => {
+                if *execution_mode == ExecutionMode::NonReplicated {
+                    page_limit.query
+                } else {
+                    page_limit.message
+                }
+            }
+            // All other API types get the replicated message limit.
+            ApiType::Update { .. } | ApiType::Start { .. } | ApiType::SystemTask { .. } => {
+                page_limit.message
+            }
+        }
     }
 }
 
@@ -2013,9 +2054,9 @@ impl SystemApi for SystemApiImpl {
         name_src: usize,
         name_len: usize,
         reply_fun: u32,
-        reply_env: u32,
+        reply_env: u64,
         reject_fun: u32,
-        reject_env: u32,
+        reject_env: u64,
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
@@ -2134,7 +2175,7 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()> {
+    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u64) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2601,7 +2642,9 @@ impl SystemApi for SystemApiImpl {
             {
                 let wasm_memory_usage =
                     NumBytes::new(new_bytes.get().saturating_add(old_bytes.get()));
-                if wasm_memory_usage > wasm_memory_limit {
+
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                     return Err(HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,

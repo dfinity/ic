@@ -2,7 +2,7 @@
 Hold manifest common to all GuestOS variants.
 """
 
-load("//ic-os/rootfs:guestos.bzl", "rootfs_files")
+load("//ic-os/components:guestos.bzl", "component_files")
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
@@ -22,6 +22,7 @@ def image_deps(mode, malicious = False):
 
     deps = {
         "base_dockerfile": "//ic-os/guestos/context:Dockerfile.base",
+        "dockerfile": "//ic-os/guestos/context:Dockerfile",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
@@ -33,7 +34,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
-            "//publish/binaries:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",
+            "//rs/https_outcalls/adapter:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
@@ -44,8 +45,8 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
-            "//ic-os/cpp:infogetty": "/opt/ic/bin/infogetty:0755",
-            "//ic-os/cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",
+            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
+            "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",
 
             # additional libraries to install
             "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
@@ -53,7 +54,7 @@ def image_deps(mode, malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
-        "rootfs_files": rootfs_files,
+        "component_files": component_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -70,28 +71,35 @@ def image_deps(mode, malicious = False):
         "boot_args_template": Label("//ic-os/guestos/context:extra_boot_args.template"),
     }
 
-    # Add extra files depending on image variant
-    extra_deps = {
+    dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
+    prod_build_args = ["BUILD_TYPE=prod"]
+    dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
+    prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
+
+    image_variants = {
         "dev": {
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-dev": {
-            # Use the non-local-base file
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "dev-malicious": {
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-malicious:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-prod": {
-            # Use the non-local-base file
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
         "prod": {
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
     }
 
-    deps.update(extra_deps[mode])
+    deps.update(image_variants[mode])
 
     # Add extra files depending on image variant
     extra_rootfs_deps = {

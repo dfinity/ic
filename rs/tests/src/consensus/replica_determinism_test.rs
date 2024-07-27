@@ -13,7 +13,8 @@ Success:: The restarted node reports block finalizations.
 
 end::catalog[] */
 
-use crate::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
@@ -21,7 +22,6 @@ use crate::{
     },
     util::*,
 };
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use ic_universal_canister::wasm;
 use slog::info;

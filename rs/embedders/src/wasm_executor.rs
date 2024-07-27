@@ -399,8 +399,10 @@ impl WasmExecutorImpl {
                 }
                 None => {
                     use std::borrow::Cow;
-                    let decoded_wasm: Cow<'_, BinaryEncodedWasm> =
-                        Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?);
+                    let decoded_wasm: Cow<'_, BinaryEncodedWasm> = Cow::Owned(decode_wasm(
+                        self.wasm_embedder.config().wasm_max_size,
+                        wasm_binary.binary.to_shared_vec(),
+                    )?);
                     let (cache, result) = compile(&self.wasm_embedder, decoded_wasm.as_ref());
                     *guard = Some(cache.clone());
                     let (compilation_result, serialized_module) = result?;
@@ -661,7 +663,7 @@ pub fn process(
     // In case the message dirtied too many pages, as a performance optimization we will
     // yield the control to the replica and then resume copying dirty pages in a new execution slice.
     let num_dirty_pages = if let Ok(ref res) = run_result {
-        let dirty_pages = NumOsPages::from(res.dirty_pages.len() as u64);
+        let dirty_pages = NumOsPages::from(res.wasm_dirty_pages.len() as u64);
         // Do not perform this optimization for subnets where DTS is not enabled.
         if execution_parameters.instruction_limits.slicing_enabled()
             && dirty_pages.get() > embedder.config().max_dirty_pages_without_optimization as u64
@@ -704,12 +706,17 @@ pub fn process(
     // returning cycles from a request that wasn't sent.
     let mut wasm_result = system_api.take_execution_result(run_result.as_ref().err());
 
-    let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
-    let wasm_heap_limit =
-        NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
+    // The error below can only happen for Wasm32.
+    if instance.is_wasm32() {
+        let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
+        let wasm32_max_pages = NumWasmPages::from(
+            wasmtime_environ::WASM32_MAX_SIZE as usize / wasmtime_environ::WASM_PAGE_SIZE as usize,
+        );
+        let wasm_heap_limit = wasm32_max_pages - wasm_reserved_pages;
 
-    if wasm_heap_size_after > wasm_heap_limit {
-        wasm_result = Err(HypervisorError::ReservedPagesForOldMotoko);
+        if wasm_heap_size_after > wasm_heap_limit {
+            wasm_result = Err(HypervisorError::ReservedPagesForOldMotoko);
+        }
     }
 
     let mut allocated_bytes = NumBytes::from(0);
@@ -723,7 +730,7 @@ pub fn process(
                     wasm_memory.size = instance.heap_size(CanisterMemoryType::Heap);
                     let wasm_memory_delta = wasm_memory.page_map.update(&compute_page_delta(
                         &mut instance,
-                        &run_result.dirty_pages,
+                        &run_result.wasm_dirty_pages,
                         CanisterMemoryType::Heap,
                     ));
 
@@ -773,7 +780,7 @@ pub fn process(
                 canister_log.add_record(
                     embedder.config().feature_flags.canister_logging == FlagStatus::Enabled,
                     timestamp_nanos,
-                    log_message.as_bytes(),
+                    log_message.into_bytes(),
                 );
             }
             None

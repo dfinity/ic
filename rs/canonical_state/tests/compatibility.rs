@@ -3,10 +3,10 @@ use ic_canonical_state::{
     encoding::{
         old_types::{
             RequestOrResponseV13, RequestOrResponseV17, RequestOrResponseV3, StreamHeaderV16,
-            StreamHeaderV6, SystemMetadataV9,
+            StreamHeaderV18, StreamHeaderV6, SystemMetadataV9,
         },
         types::{
-            RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV17,
+            RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV19,
             SubnetMetrics as SubnetMetricsV15, SystemMetadata as SystemMetadataV10,
         },
         CborProxyDecoder, CborProxyEncoder,
@@ -18,7 +18,10 @@ use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
 use ic_test_utilities_state::{arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
-    crypto::CryptoHash, messages::RequestOrResponse, xnet::StreamHeader, CryptoHashOfPartialState,
+    crypto::CryptoHash,
+    messages::RequestOrResponse,
+    xnet::{RejectReason, StreamHeader},
+    CryptoHashOfPartialState,
 };
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -77,16 +80,18 @@ pub(crate) fn arb_valid_versioned_stream_header(
             arb_stream_header(
                 /* min_signal_count */ 0,
                 /* max_signal_count */ 0,
+                /* with_reject_reasons */ vec![],
                 /* with_responses_only_flag */ vec![false],
             ),
             Just(CertificationVersion::V0..=CertificationVersion::V8)
         ),
-        // Stream headers may have reject signals starting with certification version
-        // 8.
+        // Stream headers may have reject signals for responses (`CanisterMigrating` only)
+        // starting with certification version 8.
         (
             arb_stream_header(
                 /* min_signal_count */ 0,
                 max_signal_count,
+                /* with_reject_reasons */ vec![RejectReason::CanisterMigrating],
                 /* with_responses_only_flag */ vec![false],
             ),
             Just(CertificationVersion::V8..=CertificationVersion::V16)
@@ -97,10 +102,31 @@ pub(crate) fn arb_valid_versioned_stream_header(
             arb_stream_header(
                 /* min_signal_count */ 0,
                 max_signal_count,
+                /* with_reject_reasons */ vec![RejectReason::CanisterMigrating],
                 /* with_responses_only_flag */ vec![true, false],
             ),
-            Just(CertificationVersion::V17..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+            Just(CertificationVersion::V17..=CertificationVersion::V18)
         ),
+        // Stream headers may have flavours of reject signals other than `CanisterMigrating`
+        // starting from certification version 19.
+        (
+            arb_stream_header(
+                /* min_signal_count */ 0,
+                max_signal_count,
+                /* with_reject_reasons */
+                vec![
+                    RejectReason::CanisterMigrating,
+                    RejectReason::CanisterNotFound,
+                    RejectReason::CanisterStopped,
+                    RejectReason::CanisterStopping,
+                    RejectReason::QueueFull,
+                    RejectReason::OutOfMemory,
+                    RejectReason::Unknown
+                ],
+                /* with_responses_only_flag */ vec![true, false],
+            ),
+            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        )
     ]
 }
 
@@ -115,6 +141,7 @@ pub(crate) fn arb_invalid_versioned_stream_header(
             arb_stream_header(
                 /* min_signal_count */ 1,
                 max_signal_count,
+                /* with_reject_reasons */ vec![RejectReason::CanisterMigrating],
                 /* with_responses_only_flag */ vec![false],
             ),
             Just(CertificationVersion::V7..=CertificationVersion::V7)
@@ -125,9 +152,29 @@ pub(crate) fn arb_invalid_versioned_stream_header(
             arb_stream_header(
                 /* min_signal_count */ 0,
                 max_signal_count,
+                /* with_reject_reasons */ vec![RejectReason::CanisterMigrating],
                 /* with_responses_only_flags */ vec![true],
             ),
             Just(CertificationVersion::V16..=CertificationVersion::V16)
+        ),
+        // Encoding a stream header with reject signal flavors other than `CanisterMigrating`
+        // before certification version 19 should panic.
+        (
+            arb_stream_header(
+                /* min_signal_count */ 1,
+                max_signal_count,
+                /* with_reject_reasons */
+                vec![
+                    RejectReason::CanisterNotFound,
+                    RejectReason::CanisterStopped,
+                    RejectReason::CanisterStopping,
+                    RejectReason::QueueFull,
+                    RejectReason::OutOfMemory,
+                    RejectReason::Unknown,
+                ],
+                /* with_responses_only_flags */ vec![true, false],
+            ),
+            Just(CertificationVersion::V18..=CertificationVersion::V18)
         ),
     ]
 }
@@ -150,10 +197,16 @@ lazy_static! {
             |v| StreamHeaderV16::proxy_decode(v),
         ),
         VersionedEncoding::new(
+            CertificationVersion::V0..=CertificationVersion::V18,
+            "StreamHeaderV18",
+            |v| StreamHeaderV18::proxy_encode(v),
+            |v| StreamHeaderV18::proxy_decode(v),
+        ),
+        VersionedEncoding::new(
             CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamHeader",
-            |v| StreamHeaderV17::proxy_encode(v),
-            |v| StreamHeaderV17::proxy_decode(v),
+            |v| StreamHeaderV19::proxy_encode(v),
+            |v| StreamHeaderV19::proxy_decode(v),
         ),
     ];
 }

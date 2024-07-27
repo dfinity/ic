@@ -1,4 +1,4 @@
-use super::services;
+use super::services::{self, initial_sync_is_completed};
 use crate::{
     common::{types::Error, utils::utils::verify_network_id},
     AppState,
@@ -7,6 +7,17 @@ use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_rosetta_api::models::MempoolResponse;
 use rosetta_core::{request_types::*, response_types::*};
 use std::sync::Arc;
+
+// This endpoint is used to determine whether ICRC Rosetta is ready to be querried for data.
+// It returns Status Code 200 if an initial sync of the blockchain has been done
+// This means that no gaps in the blockchain exist and the genesis block has already been fetched
+pub async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<()>) {
+    if initial_sync_is_completed(&state.storage, state.synched.clone()) {
+        (StatusCode::OK, Json(()))
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(()))
+    }
+}
 
 pub async fn health() -> (StatusCode, Json<()>) {
     (StatusCode::OK, Json(()))
@@ -114,5 +125,22 @@ pub async fn search_transactions(
         request,
         state.metadata.symbol.clone(),
         state.metadata.decimals,
+    )?))
+}
+
+pub async fn call(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<CallRequest>,
+) -> Result<Json<CallResponse>> {
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+    Ok(Json(services::call(
+        &state.storage,
+        &request.method_name,
+        request.parameters,
+        rosetta_core::objects::Currency::new(
+            state.metadata.symbol.clone(),
+            state.metadata.decimals.into(),
+        ),
     )?))
 }

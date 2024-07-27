@@ -8,12 +8,7 @@ default-run = "ic-rosetta-api"
 
 [dependencies]
 actix-rt = "2.2.0"
-actix-web = { version = "4.0.1", default-features = false, features = [
-    "compress-brotli",
-    "compress-gzip",
-    "cookies",
-    "macros",
-] }
+actix-web = "4.0.1"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
@@ -38,17 +33,16 @@ ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "icp_ledger" }
-lazy_static = "1.4.0"
-num-bigint = "0.4.4"
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
 on_wire = { path = "../rust_canisters/on_wire" }
 prometheus = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = "0.2.0"
 rosetta-core = { path = "rosetta_core" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-serde_derive = "1.0"
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
@@ -59,12 +53,12 @@ tracing-subscriber = { workspace = true }
 url = "2.2.1"
 
 [dev-dependencies]
-ed25519-consensus = "2.0.1"
 futures = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_blocks_synchronizer/test_utils" }
 ic-nns-governance = { path = "../nns/governance" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../types/types" }
 proptest = "1.0"
-rand_chacha = "0.3.1"
+rand_chacha = { workspace = true }

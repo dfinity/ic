@@ -282,14 +282,14 @@ impl EccScalar {
     pub fn deserialize_tagged(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         if bytes.is_empty() {
             return Err(CanisterThresholdSerializationError(
-                "Empty bytestring".to_string(),
+                "failed to deserialize tagged EccScalar: empty bytestring".to_string(),
             ));
         }
 
         match EccCurveType::from_tag(bytes[0]) {
             Some(curve) => Self::deserialize(curve, &bytes[1..]),
             None => Err(CanisterThresholdSerializationError(
-                "Unknown curve tag".to_string(),
+                "failed to deserialize tagged EccScalar: unknown curve tag".to_string(),
             )),
         }
     }
@@ -301,27 +301,26 @@ impl EccScalar {
     ) -> CanisterThresholdSerializationResult<Self> {
         if bytes.len() != curve.scalar_bytes() {
             return Err(CanisterThresholdSerializationError(
-                "Unexpected length".to_string(),
+                "failed to deserialize EccScalar: unexpected length".to_string(),
             ));
         }
 
+        let deser_err_msg_fn = || {
+            CanisterThresholdSerializationError(
+                "failed to deserialize EccScalar: invalid encoding".to_string(),
+            )
+        };
         match curve {
             EccCurveType::K256 => {
-                let s = secp256k1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
-                })?;
+                let s = secp256k1::Scalar::deserialize(bytes).ok_or_else(deser_err_msg_fn)?;
                 Ok(Self::K256(s))
             }
             EccCurveType::P256 => {
-                let s = secp256r1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
-                })?;
+                let s = secp256r1::Scalar::deserialize(bytes).ok_or_else(deser_err_msg_fn)?;
                 Ok(Self::P256(s))
             }
             EccCurveType::Ed25519 => {
-                let s = ed25519::Scalar::deserialize(bytes).ok_or_else(|| {
-                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
-                })?;
+                let s = ed25519::Scalar::deserialize(bytes).ok_or_else(deser_err_msg_fn)?;
                 Ok(Self::Ed25519(s))
             }
         }

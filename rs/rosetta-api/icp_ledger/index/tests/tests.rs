@@ -1,4 +1,4 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
@@ -12,7 +12,7 @@ use ic_ledger_core::Tokens;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, Transaction,
-    MAX_BLOCKS_PER_REQUEST,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation};
 use icrc_ledger_types::icrc1::account::Account;
@@ -21,6 +21,7 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
+use on_wire::FromWire;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -184,6 +185,17 @@ fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     Decode!(&res, Status).expect("Failed to decode status response")
 }
 
+fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
+    let res = env
+        .query(ledger_id, "tip_of_chain_pb", vec![])
+        .expect("Failed to send tip_of_chain_pb request")
+        .bytes();
+    let tip: icp_ledger::TipOfChainRes = dfn_protobuf::ProtoBuf::from_bytes(res)
+        .map(|c| c.0)
+        .expect("failed to decode tip_of_chain_pb result");
+    tip.tip_index
+}
+
 fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
         start: 0u64,
@@ -273,15 +285,34 @@ fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger
 }
 
 fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes()
+    };
+    call_index_get_blocks(&query)
+}
+
+fn index_get_blocks_update(
+    env: &StateMachine,
+    index_id: CanisterId,
+    caller: Principal,
+) -> Vec<icp_ledger::Block> {
+    let update = |req: Vec<u8>| {
+        env.execute_ingress_as(PrincipalId(caller), index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes()
+    };
+    call_index_get_blocks(&update)
+}
+
+fn call_index_get_blocks(query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>) -> Vec<icp_ledger::Block> {
     let req = GetBlocksRequest {
         start: 0u8.into(),
         length: u64::MAX.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
-    let res = env
-        .query(index_id, "get_blocks", req)
-        .expect("Failed to send get_blocks request")
-        .bytes();
+    let res = query_or_update(req);
     Decode!(&res, ic_icp_index::GetBlocksResponse)
         .expect("Failed to decode ic_icp_index::GetBlocksResponse")
         .blocks
@@ -289,6 +320,106 @@ fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger:
         .map(icp_ledger::Block::decode)
         .collect::<Result<Vec<icp_ledger::Block>, String>>()
         .unwrap()
+}
+
+fn get_account_id_transactions_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    account: &Account,
+) -> usize {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_account_identifier_transactions", req)
+            .expect("Failed to send get_account_identifier_transactions request")
+            .bytes()
+    };
+    call_get_account_id_transactions(&query, account)
+}
+
+fn get_account_id_transactions_update_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    caller: Principal,
+    account: &Account,
+) -> usize {
+    let update = |req: Vec<u8>| {
+        env.execute_ingress_as(
+            PrincipalId(caller),
+            index_id,
+            "get_account_identifier_transactions",
+            req,
+        )
+        .expect("Failed to send get_account_identifier_transactions request")
+        .bytes()
+    };
+    call_get_account_id_transactions(&update, account)
+}
+
+fn call_get_account_id_transactions(
+    query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>,
+    account: &Account,
+) -> usize {
+    let req = GetAccountIdentifierTransactionsArgs {
+        start: None,
+        max_results: u64::MAX,
+        account_identifier: (*account).into(),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetAccountIdentifierTransactionsArgs");
+    let res = query_or_update(req);
+    Decode!(&res, ic_icp_index::GetAccountIdentifierTransactionsResult)
+        .expect("Failed to decode ic_icp_index::GetAccountIdentifierTransactionsResult")
+        .unwrap()
+        .transactions
+        .len()
+}
+
+fn get_account_transactions_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    account: &Account,
+) -> usize {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_account_transactions", req)
+            .expect("Failed to send get_account_transactions request")
+            .bytes()
+    };
+    call_get_account_transactions(&query, account)
+}
+
+fn get_account_transactions_update_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    caller: Principal,
+    account: &Account,
+) -> usize {
+    let update = |req: Vec<u8>| {
+        env.execute_ingress_as(
+            PrincipalId(caller),
+            index_id,
+            "get_account_transactions",
+            req,
+        )
+        .expect("Failed to send get_account_transactions request")
+        .bytes()
+    };
+    call_get_account_transactions(&update, account)
+}
+
+fn call_get_account_transactions(
+    query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>,
+    account: &Account,
+) -> usize {
+    let req = GetAccountTransactionsArgs {
+        start: None,
+        max_results: u64::MAX.into(),
+        account: *account,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetAccountTransactionsArgs");
+    let res = query_or_update(req);
+    Decode!(&res, ic_icp_index::GetAccountTransactionsResult)
+        .expect("Failed to decode ic_icp_index::GetAccountTransactionsResult")
+        .unwrap()
+        .transactions
+        .len()
 }
 
 fn transfer(
@@ -435,7 +566,7 @@ fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger
         env.advance_time(SYNC_STEP_SECONDS);
         env.tick();
         num_blocks_synced = status(env, index_id).num_blocks_synced;
-        chain_length = icp_get_blocks(env, ledger_id).len() as u64;
+        chain_length = icp_ledger_tip(env, ledger_id) + 1;
         if num_blocks_synced == chain_length {
             return;
         }
@@ -1558,4 +1689,91 @@ fn test_post_upgrade_start_timer() {
     // if the new block is not synced).
     transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
+}
+
+#[test]
+fn check_block_endpoint_limits() {
+    // check that the index canister can incrementally get the blocks from the ledger.
+
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(
+        AccountIdentifier::from(account(1, 0)),
+        Tokens::from_e8s(1_000_000_000_000),
+    );
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+
+    for _ in 0..MAX_BLOCKS_PER_REQUEST {
+        transfer(env, ledger_id, account(1, 0), account(2, 0), 1);
+    }
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    let user_principal =
+        Principal::from_text("luwgt-ouvkc-k5rx5-xcqkq-jx5hm-r2rj2-ymqjc-pjvhb-kij4p-n4vms-gqe")
+            .unwrap();
+    let canister_principal = Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+
+    // get_blocks
+    let blocks = index_get_blocks(env, index_id);
+    assert_eq!(blocks.len(), MAX_BLOCKS_PER_REQUEST);
+
+    let blocks = index_get_blocks_update(env, index_id, canister_principal);
+    assert_eq!(blocks.len(), MAX_BLOCKS_PER_REQUEST);
+
+    let blocks = index_get_blocks_update(env, index_id, user_principal);
+    assert_eq!(
+        blocks.len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+
+    // get_account_identifier_transactions
+    assert_eq!(
+        get_account_id_transactions_len(env, index_id, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_id_transactions_update_len(env, index_id, canister_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_id_transactions_update_len(env, index_id, user_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+
+    // get_account_transactions
+    assert_eq!(
+        get_account_transactions_len(env, index_id, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_transactions_update_len(env, index_id, canister_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_transactions_update_len(env, index_id, user_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+}
+
+mod metrics {
+    use crate::index_wasm;
+    use candid::Principal;
+    use ic_icp_index::InitArg;
+
+    #[test]
+    fn should_export_total_memory_usage_bytes_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+            index_wasm(),
+            encode_init_args,
+        );
+    }
+
+    fn encode_init_args(ledger_id: Principal) -> InitArg {
+        InitArg { ledger_id }
+    }
 }

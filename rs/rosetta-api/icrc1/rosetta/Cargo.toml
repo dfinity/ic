@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.0.2"
+version = "1.1.1"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -35,11 +35,11 @@ ic-sys = { path = "../../../sys" }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 indicatif = "0.17.3"
-lazy_static = "1.4.0"
-num-bigint = "0.4.4"
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = "1.0"
-rand = "0.8.4"
+rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = "0.2.0"
 rosetta-core = { path = "../../rosetta_core" }
@@ -51,9 +51,9 @@ serde_json = { workspace = true }
 serde_with = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
-tower-http = { version = "^0.5.2", features = ["trace"] }
+tower-http = { workspace = true }
 tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

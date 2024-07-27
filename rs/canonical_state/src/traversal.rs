@@ -654,7 +654,6 @@ mod tests {
                 nodes: BTreeSet::new(),
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
-                ecdsa_keys_held: BTreeSet::new(),
                 idkg_keys_held: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
@@ -662,7 +661,6 @@ mod tests {
                 nodes: BTreeSet::new(),
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
-                ecdsa_keys_held: BTreeSet::new(),
                 idkg_keys_held: BTreeSet::new(),
             }
         };

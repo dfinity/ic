@@ -37,7 +37,7 @@ pub use inter_canister::{
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;
-pub use query::{AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, UserQuery};
+pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display, Formatter};
@@ -354,6 +354,15 @@ impl Display for CanisterMessage {
                 write!(f, "Request, method name {},", request.method_name)
             }
             CanisterMessage::Response(_) => write!(f, "Response"),
+        }
+    }
+}
+
+impl From<RequestOrResponse> for CanisterMessage {
+    fn from(msg: RequestOrResponse) -> Self {
+        match msg {
+            RequestOrResponse::Request(request) => CanisterMessage::Request(request),
+            RequestOrResponse::Response(response) => CanisterMessage::Response(response),
         }
     }
 }

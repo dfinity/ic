@@ -4,12 +4,14 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 SUBNET_RECOVERY_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/tests:recovery/binaries",
 ]
 
 ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = ["//rs/tests:src/orchestrator/orchestrator_universal_vm_activation.sh"]
 
-STATIC_FILE_SERVER_IMAGE_RUNTIME_DEP = [
+STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/tests:static-file-server_image",
 ]
 
@@ -249,6 +251,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -256,7 +259,7 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
-        SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEP,
+        SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS,
     deps = DEPENDENCIES + [
         "//rs/tests",
         "//rs/tests/networking/canister_http",

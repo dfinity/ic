@@ -7,7 +7,7 @@ use ic_canister_client::{prepare_update, Agent, Sender};
 use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
@@ -308,8 +308,9 @@ pub fn cmd_add_registry_content(
 ) -> Result<Vec<SignedIngress>, String> {
     let allowed_prefix: Vec<&str> = cmd.allowed_mutation_key_prefixes.split(',').collect();
     let is_allowed = |key: &str| allowed_prefix.iter().any(|p| key.starts_with(p));
-    let mutate_reqs =
-        ic_nns_init::read_initial_mutations_from_local_store_dir(&cmd.registry_local_store_dir);
+    let mutate_reqs = crate::registry_helper::read_initial_mutations_from_local_store_dir(
+        &cmd.registry_local_store_dir,
+    );
     mutate_reqs
         .into_iter()
         .filter_map(|req| {

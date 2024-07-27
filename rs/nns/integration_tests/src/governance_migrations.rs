@@ -87,7 +87,7 @@ fn assert_neuron_indexes_lens(
 
 #[test]
 fn test_neuron_indexes_migrations() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
@@ -114,7 +114,7 @@ fn test_neuron_indexes_migrations() {
 
     // Follow will cause the neuron to be modified.
     let follow_response = nns_set_followees_for_neuron(
-        &mut state_machine,
+        &state_machine,
         neuron_3.principal_id,
         neuron_3.neuron_id,
         &[neuron_1.neuron_id, neuron_2.neuron_id],
@@ -137,7 +137,7 @@ fn test_neuron_indexes_migrations() {
 
     // Split will cause a neuron to be created.
     let split_response = nns_split_neuron(
-        &mut state_machine,
+        &state_machine,
         neuron_1.principal_id,
         neuron_1.neuron_id,
         500_000_000,

@@ -402,7 +402,7 @@ impl EncryptedKeyShare {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = 2 * G1Affine::BYTES + G2Affine::BYTES;
 
-    ///
+    /// Create a new encrypted key share.
     pub fn create<R: RngCore + CryptoRng>(
         rng: &mut R,
         master_pk: &G2Affine,

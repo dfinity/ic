@@ -3,7 +3,7 @@ use crate::pb::v1::{
         FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, Migrations, NeuronInFlightCommand,
     },
     neuron::Followees,
-    Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+    Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
     XdrConversionRate as XdrConversionRatePb,
 };
@@ -26,7 +26,7 @@ pub struct HeapGovernanceData {
     pub short_voting_period_seconds: u64,
     pub neuron_management_voting_period_seconds: u64,
     pub metrics: Option<GovernanceCachedMetrics>,
-    pub most_recent_monthly_node_provider_rewards: Option<MostRecentMonthlyNodeProviderRewards>,
+    pub most_recent_monthly_node_provider_rewards: Option<MonthlyNodeProviderRewards>,
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,
@@ -258,9 +258,7 @@ mod tests {
             short_voting_period_seconds: 4,
             neuron_management_voting_period_seconds: Some(5),
             metrics: Some(GovernanceCachedMetrics::default()),
-            most_recent_monthly_node_provider_rewards: Some(
-                MostRecentMonthlyNodeProviderRewards::default(),
-            ),
+            most_recent_monthly_node_provider_rewards: Some(MonthlyNodeProviderRewards::default()),
             cached_daily_maturity_modulation_basis_points: Some(6),
             maturity_modulation_last_updated_at_timestamp_seconds: Some(7),
             spawning_neurons: Some(true),

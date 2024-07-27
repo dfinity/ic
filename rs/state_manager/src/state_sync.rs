@@ -260,7 +260,7 @@ impl StateSyncClient for StateSync {
     }
 
     /// Non-blocking.
-    fn start_state_sync(
+    fn maybe_start_state_sync(
         &self,
         id: &StateSyncArtifactId,
     ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
@@ -277,8 +277,8 @@ impl StateSyncClient for StateSync {
     }
 
     /// Non-Blocking.
-    fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
-        // Requesting to cancel a state sync is only meaningful if the Id refers to an active state sync started with `start_state_sync`.
+    fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool {
+        // Requesting to cancel a state sync is only meaningful if the Id refers to an active state sync started with `maybe_start_state_sync`.
         // This sanity check if the API is properly called but does not affect the decision on whether to cancel the state sync.
         self.sanity_check_for_cancelling_state_sync(id);
 

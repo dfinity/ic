@@ -1,14 +1,14 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::{
+use ic_agent::agent::RejectCode;
+use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
     },
     util::*,
 };
-use ic_agent::agent::RejectCode;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 

@@ -4,51 +4,46 @@ use discower_bowndary::{
     node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot_health_based::HealthBasedSnapshot,
+    transport::{TransportProvider, TransportProviderImpl},
 };
 use ic_base_types::NodeId;
 use k256::SecretKey;
-use std::collections::HashSet;
-use std::time::Instant;
+use std::{collections::HashSet, time::Instant};
 use tokio::time::sleep;
 
-use crate::{
-    boundary_nodes::{
-        constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
-        helpers::{
-            install_canisters, read_counters_on_counter_canisters,
-            set_counters_on_counter_canisters,
-        },
-        setup::TEST_PRIVATE_KEY,
+use crate::boundary_nodes::{
+    constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
+    helpers::{
+        install_canisters, read_counters_on_counter_canisters, set_counters_on_counter_canisters,
     },
-    driver::test_env_api::IcNodeSnapshot,
+    setup::TEST_PRIVATE_KEY,
 };
-use crate::{
+use candid::{Decode, Encode};
+use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nns_common::types::NeuronId;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_system_test_driver::{
     driver::{
         boundary_node::BoundaryNodeVm,
         test_env::TestEnv,
         test_env_api::{
-            retry_async, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
             SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     nns::{self, vote_execute_proposal_assert_executed},
     util::{block_on, runtime_from_url},
 };
-use candid::{Decode, Encode};
-use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::types::NeuronId;
-use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
-use ic_nns_test_utils::governance::submit_external_update_proposal;
 use itertools::Itertools;
 use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
 };
-use std::sync::Arc;
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::bail;
 use ic_agent::{
@@ -65,11 +60,11 @@ use ic_agent::{
     Agent,
 };
 
-use slog::{debug, error, info};
+use slog::{debug, info};
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
 const API_BN_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(90);
-const ROUTE_CALL_INTERVAL: Duration = Duration::from_secs(1);
+const ROUTE_CALL_INTERVAL: Duration = Duration::from_secs(5);
 
 /* tag::catalog[]
 Title:: API Boundary Nodes Decentralization
@@ -207,11 +202,17 @@ async fn test(env: TestEnv) {
     );
 
     let route_provider = {
+        let subnet_id = env
+            .topology_snapshot()
+            .subnets()
+            .next()
+            .unwrap()
+            .subnet_id
+            .get();
         let api_bn_fetch_interval = Duration::from_secs(5);
-        let fetcher = Arc::new(NodesFetcherImpl::new(
-            http_client.clone(),
-            nns_node.effective_canister_id().into(),
-        ));
+        let transport_provider =
+            Arc::new(TransportProviderImpl::new(http_client.clone())) as Arc<dyn TransportProvider>;
+        let fetcher = Arc::new(NodesFetcherImpl::new(transport_provider, subnet_id.into()));
         let health_timeout = Duration::from_secs(5);
         let check_interval = Duration::from_secs(1);
         let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
@@ -260,7 +261,7 @@ async fn test(env: TestEnv) {
             .build()
             .unwrap();
 
-        retry_async(
+        ic_system_test_driver::retry_with_msg_async!(
             "fetch_root_key",
             &log,
             Duration::from_secs(30),
@@ -270,7 +271,7 @@ async fn test(env: TestEnv) {
                     return Ok(());
                 }
                 bail!("Failed to fetch root key");
-            },
+            }
         )
         .await
         .expect("Failed to fetch root key");
@@ -506,7 +507,7 @@ async fn add_api_boundary_nodes_via_proposal(
 ) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = nns::get_governance_canister(&nns_runtime);
-    let version = crate::nns::get_software_version_from_snapshot(&nns_node)
+    let version = ic_system_test_driver::nns::get_software_version_from_snapshot(&nns_node)
         .await
         .expect("could not obtain replica software version");
 
@@ -579,7 +580,7 @@ async fn add_api_boundary_nodes_via_proposal(
 
 async fn assert_api_bns_healthy(log: &slog::Logger, http_client: Client, api_domains: Vec<&str>) {
     for domain in api_domains.iter() {
-        retry_async(
+        ic_system_test_driver::retry_with_msg_async!(
             "check_api_bns_health",
             log,
             READY_WAIT_TIMEOUT,
@@ -596,7 +597,7 @@ async fn assert_api_bns_healthy(log: &slog::Logger, http_client: Client, api_dom
                 }
 
                 bail!("API BN with domain {domain} is not yet healthy");
-            },
+            }
         )
         .await
         .expect("API BNs didn't report healthy");
@@ -609,7 +610,7 @@ async fn assert_api_bns_present_in_state_tree(
     nns_node: IcNodeSnapshot,
     expected_api_bns: Vec<ApiBoundaryNode>,
 ) {
-    retry_async(
+    ic_system_test_driver::retry_with_msg_async!(
         "assert_api_bns_present_in_state_tree",
         log,
         Duration::from_secs(70),
@@ -639,7 +640,7 @@ async fn assert_api_bns_present_in_state_tree(
             }
 
             Ok(())
-        },
+        }
     )
     .await
     .expect("API BNs haven't appeared in the state tree");
@@ -655,26 +656,38 @@ async fn assert_routing_via_domains(
     if domains.is_empty() {
         panic!("Expected routing domains can't be empty");
     }
-    info!(log, "Assert: domains {domains:?} are all used for routing");
-    let mut unrouted_domains: HashSet<&str> = HashSet::from_iter(domains.into_iter());
+
+    info!(log, "Assert: only domains {domains:?} are used for routing");
+
+    let expected_domains = HashSet::from_iter(domains.into_iter().map(|d| d.to_string()));
+    let route_calls = 30;
     let start = Instant::now();
-    while !unrouted_domains.is_empty() {
-        let domain = match route_provider.route() {
-            Ok(url) => url.domain().expect("no domain name in url").to_string(),
-            Err(err) => {
-                error!(log, "Failed to get routing url: {err:?}");
-                sleep(route_call_interval).await;
-                continue;
-            }
-        };
-        if unrouted_domains.remove(domain.as_str()) {
-            debug!(log, "domain {domain} was discovered for routing");
-        } else {
-            debug!(log, "domain {domain} has already appeared in routing");
+
+    while start.elapsed() < timeout {
+        let routed_domains = (0..route_calls)
+            .map(|_| {
+                route_provider.route().map(|url| {
+                    let domain = url.domain().expect("no domain name in url");
+                    domain.to_string()
+                })
+            })
+            .collect::<Result<HashSet<String>, _>>()
+            .unwrap_or_default();
+
+        if expected_domains == routed_domains {
+            info!(
+                log,
+                "All expected domains {expected_domains:?} used for routing"
+            );
+            return;
         }
-        if start.elapsed() > timeout {
-            panic!("The following domains {unrouted_domains:?} didn't appear in routing within the timeout of {timeout:?}");
-        }
+
+        debug!(
+            log,
+            "Actual routed domains {routed_domains:?} are not equal to expected {expected_domains:?}"
+        );
+
         sleep(route_call_interval).await;
     }
+    panic!("Expected routes {expected_domains:?} were not observed over {route_calls} consecutive routing calls");
 }

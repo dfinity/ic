@@ -5,7 +5,7 @@ use ic_base_types::CanisterId;
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::subnet_test_id;
@@ -175,24 +175,24 @@ impl SubnetPairProxy {
 
     /// Generates a snapshot of the output queue on the local canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
-    fn local_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
+    fn local_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.local_env.get_latest_state(),
-            self.local_canister_id,
-            self.remote_canister_id,
+            &self.local_canister_id,
+            &self.remote_canister_id,
         )
-        .map(|iter| iter.cloned().collect::<Vec<_>>())
+        .map(|iter| iter.collect::<Vec<_>>())
     }
 
     /// Generates a snapshot of the output queue on the remote canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
-    fn remote_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
+    fn remote_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.remote_env.get_latest_state(),
-            self.remote_canister_id,
-            self.local_canister_id,
+            &self.remote_canister_id,
+            &self.local_canister_id,
         )
-        .map(|iter| iter.cloned().collect::<Vec<_>>())
+        .map(|iter| iter.collect::<Vec<_>>())
     }
 
     /// Build backpressure on `local_env` until a minimum number of requests are found in the
@@ -272,19 +272,19 @@ impl SubnetPairProxy {
 /// Returns an iterator over the raw contents of a specific local canister's
 /// output queue to a specific remote canister; or `None` if the queue does not
 /// exist.
-fn get_output_queue_iter(
-    state: &Arc<ReplicatedState>,
-    local_canister_id: CanisterId,
-    remote_canister_id: CanisterId,
-) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>> {
+fn get_output_queue_iter<'a>(
+    state: &'a ReplicatedState,
+    local_canister_id: &CanisterId,
+    remote_canister_id: &'a CanisterId,
+) -> Option<impl Iterator<Item = RequestOrResponse> + 'a> {
     state
         .canister_states
-        .get(&local_canister_id)
-        .and_then(|canister_state| {
+        .get(local_canister_id)
+        .and_then(move |canister_state| {
             canister_state
                 .system_state
                 .queues()
-                .output_queue_iter_for_testing(&remote_canister_id)
+                .output_queue_iter_for_testing(remote_canister_id)
         })
 }
 
@@ -446,7 +446,7 @@ fn test_response_in_output_queue_causes_backpressure() {
     induct_from_head_of_stream(&subnets.remote_env, &subnets.local_env, Some(1)).unwrap();
     assert_matches!(
         subnets.local_output_queue_snapshot().as_deref(),
-        Some([Some(RequestOrResponse::Response(_))])
+        Some([RequestOrResponse::Response(_)])
     );
 
     // Call the 'start' method on canister 1 to restart sending requests using
@@ -466,10 +466,10 @@ fn test_response_in_output_queue_causes_backpressure() {
     })
     .unwrap();
 
-    // Check the local output queue is indeed of the shape [ response, None, ... ].
+    // Check that the local output queue only contains the response.
     assert_matches!(
         subnets.local_output_queue_snapshot().as_deref(),
-        Some([Some(RequestOrResponse::Response(_)), None, ..])
+        Some([RequestOrResponse::Response(_)])
     );
 
     // Call the 'stop' method on the local canister, then induct a request from the local subnet
@@ -753,7 +753,11 @@ fn induct_messages_and_track_callback_ids(
                 .iter()
                 .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end())
             {
-                if !reverse_header.reject_signals().contains(&stream_index) {
+                if !reverse_header
+                    .reject_signals()
+                    .iter()
+                    .any(|signal| signal.index == stream_index)
+                {
                     update_callback_id_trackers(
                         msg,
                         add_callback_id_tracker,
@@ -954,10 +958,10 @@ fn state_machine_subnet_splitting_test() {
             old_subnets_proxy.remote_output_queue_snapshot(),
         ) {
             (Some(local_q), Some(remote_q)) => {
-                Ok(local_q.iter().any(|msg| matches!(msg, Some(Request(_))))
-                    && local_q.iter().any(|msg| matches!(msg, Some(Response(_))))
-                    && remote_q.iter().any(|msg| matches!(msg, Some(Request(_))))
-                    && remote_q.iter().any(|msg| matches!(msg, Some(Response(_)))))
+                Ok(local_q.iter().any(|msg| matches!(msg, Request(_)))
+                    && local_q.iter().any(|msg| matches!(msg, Response(_)))
+                    && remote_q.iter().any(|msg| matches!(msg, Request(_)))
+                    && remote_q.iter().any(|msg| matches!(msg, Response(_))))
             }
             _ => Ok(false),
         }

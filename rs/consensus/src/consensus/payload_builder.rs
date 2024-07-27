@@ -76,12 +76,14 @@ impl PayloadBuilderImpl {
         registry_client: Arc<dyn RegistryClient>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         let section_builder = vec![
             BatchPayloadSectionBuilder::Ingress(ingress_selector),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
+            BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
         ];
 
         Self {
@@ -237,7 +239,7 @@ impl PayloadBuilderImpl {
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
-    use ic_btc_types_internal::{
+    use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{dependencies, Dependencies};

@@ -4,13 +4,18 @@ use super::{
 };
 use crate::{
     canister_snapshots::CanisterSnapshots,
-    canister_state::queues::CanisterQueuesLoopDetector,
-    canister_state::system_state::{push_input, CanisterOutputQueuesIterator},
-    metadata_state::{subnet_call_context_manager::SignWithEcdsaContext, StreamMap},
+    canister_state::{
+        queues::CanisterQueuesLoopDetector,
+        system_state::{push_input, CanisterOutputQueuesIterator},
+    },
+    metadata_state::{
+        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
+        StreamMap,
+    },
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
@@ -21,12 +26,10 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 use strum_macros::EnumIter;
@@ -80,16 +83,10 @@ impl From<ProtoNextInputQueue> for NextInputQueue {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum StateError {
     /// Message enqueuing failed due to no matching canister ID.
     CanisterNotFound(CanisterId),
-
-    /// Message enqueuing failed due to full in/out queue.
-    QueueFull { capacity: usize },
-
-    /// Message enqueuing failed due to full ingress history.
-    IngressHistoryFull { capacity: usize },
 
     /// Canister is stopped, not accepting any messages.
     CanisterStopped(CanisterId),
@@ -97,14 +94,18 @@ pub enum StateError {
     /// Canister is stopping, only accepting responses.
     CanisterStopping(CanisterId),
 
-    /// Canister is out of cycles.
-    CanisterOutOfCycles(CanisterOutOfCyclesError),
+    /// Message enqueuing failed due to canister migration.
+    CanisterMigrating {
+        canister_id: CanisterId,
+        host_subnet: SubnetId,
+    },
 
-    /// Canister state is invalid because of broken invariant.
-    InvariantBroken(String),
+    /// Message enqueuing failed due to full in/out queue.
+    QueueFull { capacity: usize },
 
-    /// Message enqueuing failed due to calling an unknown subnet method.
-    UnknownSubnetMethod(String),
+    /// Message enqueuing would have caused the canister or subnet to run over
+    /// their memory limit.
+    OutOfMemory { requested: NumBytes, available: i64 },
 
     /// Response enqueuing failed due to not matching the expected response.
     NonMatchingResponse {
@@ -115,16 +116,33 @@ pub enum StateError {
         deadline: CoarseTime,
     },
 
-    /// Message enqueuing failed due to calling a subnet method with
-    /// an invalid payload.
-    InvalidSubnetPayload,
-
-    /// Message enqueuing would have caused the canister or subnet to run over
-    /// their memory limit.
-    OutOfMemory { requested: NumBytes, available: i64 },
-
     /// No corresponding request found when trying to push a response from the bitcoin adapter.
     BitcoinNonMatchingResponse { callback_id: u64 },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum IngressInductionError {
+    /// Message enqueuing failed due to no matching canister ID.
+    CanisterNotFound(CanisterId),
+
+    /// Canister is stopped, not accepting any messages.
+    CanisterStopped(CanisterId),
+
+    /// Canister is stopping, only accepting responses.
+    CanisterStopping(CanisterId),
+
+    /// Canister is out of cycles.
+    CanisterOutOfCycles(CanisterOutOfCyclesError),
+
+    /// Message enqueuing failed due to calling an unknown subnet method.
+    CanisterMethodNotFound(String),
+
+    /// Message enqueuing failed due to calling a subnet method with
+    /// an invalid payload.
+    InvalidManagementPayload,
+
+    /// Message enqueuing failed due to full ingress history.
+    IngressHistoryFull { capacity: usize },
 }
 
 /// Circular iterator that consumes messages from all canisters' and the
@@ -155,13 +173,12 @@ impl<'a> OutputIterator<'a> {
     fn new(
         canisters: &'a mut BTreeMap<CanisterId, CanisterState>,
         subnet_queues: &'a mut CanisterQueues,
-        own_subnet_id: SubnetId,
         seed: u64,
     ) -> Self {
         let mut canister_iterators: VecDeque<_> = canisters
-            .iter_mut()
-            .filter(|(_, canister)| canister.has_output())
-            .map(|(owner, canister)| canister.system_state.output_into_iter(*owner))
+            .values_mut()
+            .filter(|canister| canister.has_output())
+            .map(|canister| canister.system_state.output_into_iter())
             .collect();
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
@@ -170,11 +187,11 @@ impl<'a> OutputIterator<'a> {
 
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.
-        let subnet_queues_iter = subnet_queues.output_into_iter(CanisterId::from(own_subnet_id));
+        let subnet_queues_iter = subnet_queues.output_into_iter();
         if !subnet_queues_iter.is_empty() {
             canister_iterators.push_front(subnet_queues_iter)
         }
-        let size = canister_iterators.iter().map(|q| q.size_hint().0).sum();
+        let size = canister_iterators.iter().map(|q| q.size()).sum();
 
         OutputIterator {
             canister_iterators,
@@ -186,50 +203,55 @@ impl<'a> OutputIterator<'a> {
     ///
     /// Time complexity: O(N).
     fn compute_size(queue_handles: &VecDeque<CanisterOutputQueuesIterator<'a>>) -> usize {
-        queue_handles.iter().map(|q| q.size_hint().0).sum()
+        queue_handles.iter().map(|q| q.size()).sum()
     }
 }
 
 impl std::iter::Iterator for OutputIterator<'_> {
-    type Item = (QueueId, RequestOrResponse);
+    type Item = RequestOrResponse;
 
     /// Pops a message from the next canister. If this was not the last message
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
-            if let Some((queue_id, msg)) = canister_iterator.next() {
+            if let Some(msg) = canister_iterator.next() {
                 self.size -= 1;
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
                 debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
 
-                return Some((queue_id, msg));
+                return Some(msg);
             }
         }
+
+        debug_assert_eq!(0, self.size);
         None
     }
 
-    /// Returns the exact number of messages left in the iterator.
+    /// Returns the bounds on the number of messages remaining in the iterator.
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.size, Some(self.size))
     }
 }
 
-pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
-    /// Peeks into the iterator and returns a reference to the item `next`
+pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
+    /// Peeks into the iterator and returns a reference to the item that `next()`
     /// would return.
-    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)>;
+    fn peek(&self) -> Option<&RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The messages are retained
     /// in the output queue.
     fn exclude_queue(&mut self);
+
+    /// Returns the exact number of messages left in the iterator.
+    fn size(&self) -> usize;
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
+    fn peek(&self) -> Option<&RequestOrResponse> {
         self.canister_iterators.front().and_then(|it| it.peek())
     }
 
@@ -242,20 +264,24 @@ impl PeekableOutputIterator for OutputIterator<'_> {
             debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
         }
     }
+
+    fn size(&self) -> usize {
+        self.size
+    }
 }
 
 pub const LABEL_VALUE_CANISTER_NOT_FOUND: &str = "CanisterNotFound";
-pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
-pub const LABEL_VALUE_INGRESS_HISTORY_FULL: &str = "IngressHistoryFull";
 pub const LABEL_VALUE_CANISTER_STOPPED: &str = "CanisterStopped";
 pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
-pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
-pub const LABEL_VALUE_INVARIANT_BROKEN: &str = "InvariantBroken";
-pub const LABEL_VALUE_UNKNOWN_SUBNET_METHOD: &str = "UnknownSubnetMethod";
-pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
-pub const LABEL_VALUE_INVALID_SUBNET_PAYLOAD: &str = "InvalidSubnetPayload";
+pub const LABEL_VALUE_CANISTER_MIGRATING: &str = "CanisterMigrating";
+pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
+pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
 pub const LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE: &str = "BitcoinNonMatchingResponse";
+pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
+pub const LABEL_VALUE_CANISTER_METHOD_NOT_FOUND: &str = "CanisterMethodNotFound";
+pub const LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD: &str = "InvalidManagementPayload";
+pub const LABEL_VALUE_INGRESS_HISTORY_FULL: &str = "IngressHistoryFull";
 
 impl StateError {
     /// Returns a string representation of the `StateError` variant name to be
@@ -263,16 +289,12 @@ impl StateError {
     pub fn to_label_value(&self) -> &'static str {
         match self {
             StateError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
-            StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
-            StateError::IngressHistoryFull { .. } => LABEL_VALUE_INGRESS_HISTORY_FULL,
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
-            StateError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
-            StateError::InvariantBroken(_) => LABEL_VALUE_INVARIANT_BROKEN,
-            StateError::UnknownSubnetMethod(_) => LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
-            StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
-            StateError::InvalidSubnetPayload => LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
+            StateError::CanisterMigrating { .. } => LABEL_VALUE_CANISTER_MIGRATING,
+            StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
+            StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
             StateError::BitcoinNonMatchingResponse { .. } => {
                 LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE
             }
@@ -280,7 +302,28 @@ impl StateError {
     }
 }
 
+impl IngressInductionError {
+    /// Returns a string representation of the `IngressInductionError` variant name to be
+    /// used as a metric label value (e.g. `"InvalidSubnetPayload"`).
+    pub fn to_label_value(&self) -> &'static str {
+        match self {
+            IngressInductionError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
+            IngressInductionError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
+            IngressInductionError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
+            IngressInductionError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
+            IngressInductionError::CanisterMethodNotFound(_) => {
+                LABEL_VALUE_CANISTER_METHOD_NOT_FOUND
+            }
+            IngressInductionError::InvalidManagementPayload => {
+                LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD
+            }
+            IngressInductionError::IngressHistoryFull { .. } => LABEL_VALUE_INGRESS_HISTORY_FULL,
+        }
+    }
+}
+
 impl std::error::Error for StateError {}
+impl std::error::Error for IngressInductionError {}
 
 impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -288,37 +331,18 @@ impl std::fmt::Display for StateError {
             StateError::CanisterNotFound(canister_id) => {
                 write!(f, "Canister {} not found", canister_id)
             }
-            StateError::QueueFull { capacity } => {
-                write!(f, "Maximum queue capacity {} reached", capacity)
-            }
-            StateError::IngressHistoryFull { capacity } => {
-                write!(f, "Maximum ingress history capacity {} reached", capacity)
-            }
             StateError::CanisterStopped(canister_id) => {
                 write!(f, "Canister {} is stopped", canister_id)
             }
             StateError::CanisterStopping(canister_id) => {
                 write!(f, "Canister {} is stopping", canister_id)
             }
-            StateError::CanisterOutOfCycles(err) => write!(f, "{}", err),
-
-            StateError::InvariantBroken(err) => {
-                write!(f, "Invariant broken: {}", err)
+            StateError::CanisterMigrating { canister_id, host_subnet } => {
+                write!(f, "Canister {} is being migrated to/from {}", canister_id, host_subnet)
             }
-            StateError::UnknownSubnetMethod(method) => write!(
-                f,
-                "Cannot enqueue management message. Method {} is unknown.",
-                method
-            ),
-            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
-                f,
-                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",
-                callback_id, err_str, originator, respondent, Time::from(*deadline)
-            ),
-            StateError::InvalidSubnetPayload => write!(
-                f,
-                "Cannot enqueue management message. Candid payload is invalid."
-            ),
+            StateError::QueueFull { capacity } => {
+                write!(f, "Maximum queue capacity {} reached", capacity)
+            }
             StateError::OutOfMemory {
                 requested,
                 available,
@@ -326,6 +350,11 @@ impl std::fmt::Display for StateError {
                 f,
                 "Cannot enqueue message. Out of memory: requested {}, available {}",
                 requested, available
+            ),
+            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
+                f,
+                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",
+                callback_id, err_str, originator, respondent, Time::from(*deadline)
             ),
             StateError::BitcoinNonMatchingResponse { callback_id } => {
                 write!(
@@ -338,35 +367,52 @@ impl std::fmt::Display for StateError {
     }
 }
 
-impl From<&StateError> for ErrorCode {
-    fn from(err: &StateError) -> Self {
-        match err {
-            StateError::CanisterNotFound(_) => ErrorCode::CanisterNotFound,
-            StateError::CanisterStopped(_) => ErrorCode::CanisterStopped,
-            StateError::CanisterStopping(_) => ErrorCode::CanisterStopping,
-            StateError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
-            StateError::UnknownSubnetMethod(_) => ErrorCode::CanisterMethodNotFound,
-            StateError::InvalidSubnetPayload => ErrorCode::InvalidManagementPayload,
-            StateError::QueueFull { .. } => ErrorCode::CanisterQueueFull,
-            StateError::IngressHistoryFull { .. } => ErrorCode::IngressHistoryFull,
-            StateError::OutOfMemory { .. } => ErrorCode::CanisterOutOfMemory,
-
-            // These errors cannot happen when pushing a request or ingress:
-            //
-            //  * `InvariantBroken` is only produced by `check_invariants()`; and
-            //  * `.*NonMatchingResponse` is only produced for responses.
-            StateError::InvariantBroken { .. }
-            | StateError::NonMatchingResponse { .. }
-            | StateError::BitcoinNonMatchingResponse { .. } => {
-                unreachable!("Not a user error: {}", err)
+impl std::fmt::Display for IngressInductionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IngressInductionError::CanisterNotFound(canister_id) => {
+                write!(f, "Canister {} not found", canister_id)
             }
+            IngressInductionError::CanisterStopped(canister_id) => {
+                write!(f, "Canister {} is stopped", canister_id)
+            }
+            IngressInductionError::CanisterStopping(canister_id) => {
+                write!(f, "Canister {} is stopping", canister_id)
+            }
+            IngressInductionError::CanisterOutOfCycles(err) => write!(f, "{}", err),
+            IngressInductionError::CanisterMethodNotFound(method) => write!(
+                f,
+                "Cannot enqueue management message. Method {} is unknown.",
+                method
+            ),
+            IngressInductionError::InvalidManagementPayload => write!(
+                f,
+                "Cannot enqueue management message. Candid payload is invalid."
+            ),
+            IngressInductionError::IngressHistoryFull { capacity } => {
+                write!(f, "Maximum ingress history capacity {} reached", capacity)
+            }
+        }
+    }
+}
+
+impl From<&IngressInductionError> for ErrorCode {
+    fn from(err: &IngressInductionError) -> Self {
+        match err {
+            IngressInductionError::CanisterNotFound(_) => ErrorCode::CanisterNotFound,
+            IngressInductionError::CanisterStopped(_) => ErrorCode::CanisterStopped,
+            IngressInductionError::CanisterStopping(_) => ErrorCode::CanisterStopping,
+            IngressInductionError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
+            IngressInductionError::CanisterMethodNotFound(_) => ErrorCode::CanisterMethodNotFound,
+            IngressInductionError::InvalidManagementPayload => ErrorCode::InvalidManagementPayload,
+            IngressInductionError::IngressHistoryFull { .. } => ErrorCode::IngressHistoryFull,
         }
     }
 }
 
 /// Represents the memory taken in bytes by various resources.
 ///
-/// Should  be used in cases where the deterministic state machine needs to
+/// Should be used in cases where the deterministic state machine needs to
 /// compute how much available memory exists for canisters to use for the
 /// various resources while respecting the relevant configured limits.
 pub struct MemoryTaken {
@@ -375,8 +421,8 @@ pub struct MemoryTaken {
     /// Wasm custom sections) where no explicit memory reservation
     /// has been made.
     execution: NumBytes,
-    /// Memory taken by canister messages.
-    messages: NumBytes,
+    /// Memory taken by guaranteed response canister messages.
+    guaranteed_response_messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
@@ -389,9 +435,9 @@ impl MemoryTaken {
         self.execution
     }
 
-    /// Returns the amount of memory taken by canister messages.
-    pub fn messages(&self) -> NumBytes {
-        self.messages
+    /// Returns the amount of memory taken by guaranteed response canister messages.
+    pub fn guaranteed_response_messages(&self) -> NumBytes {
+        self.guaranteed_response_messages
     }
 
     /// Returns the amount of memory taken by Wasm Custom Sections.
@@ -599,12 +645,20 @@ impl ReplicatedState {
         self.metadata.streams.keys().cloned().collect()
     }
 
-    /// Returns all sign with ECDSA contexts
-    pub fn sign_with_ecdsa_contexts(&self) -> &BTreeMap<CallbackId, SignWithEcdsaContext> {
+    /// Returns all signature request contexts.
+    pub fn signature_request_contexts(&self) -> &BTreeMap<CallbackId, SignWithThresholdContext> {
         &self
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
+            .sign_with_threshold_contexts
+    }
+
+    /// Returns all IDKG dealings contexts.
+    pub fn idkg_dealings_contexts(&self) -> &BTreeMap<CallbackId, IDkgDealingsContext> {
+        &self
+            .metadata
+            .subnet_call_context_manager
+            .idkg_dealings_contexts
     }
 
     /// Retrieves a reference to the stream from this subnet to the destination
@@ -625,7 +679,7 @@ impl ReplicatedState {
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
             raw_memory_taken,
-            mut message_memory_taken,
+            mut guaranteed_response_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
             wasm_chunk_store_memory_usage,
@@ -637,7 +691,9 @@ impl ReplicatedState {
                         MemoryAllocation::Reserved(bytes) => bytes,
                         MemoryAllocation::BestEffort => canister.execution_memory_usage(),
                     },
-                    canister.system_state.message_memory_usage(),
+                    canister
+                        .system_state
+                        .guaranteed_response_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
                     canister.wasm_chunk_store_memory_usage(),
@@ -654,28 +710,34 @@ impl ReplicatedState {
             })
             .unwrap_or_default();
 
-        message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
+        guaranteed_response_message_memory_taken +=
+            (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
         MemoryTaken {
             execution: raw_memory_taken
                 + canister_history_memory_taken
                 + wasm_chunk_store_memory_usage,
-            messages: message_memory_taken,
+            guaranteed_response_messages: guaranteed_response_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
         }
     }
 
-    /// Computes the memory taken by messages.
+    /// Computes the memory taken by guaranteed response messages.
     ///
     /// This is a more efficient alternative to `memory_taken()` for cases when only
     /// the message memory usage is necessary.
-    pub fn message_memory_taken(&self) -> NumBytes {
+    pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
-            .map(|canister| canister.system_state.message_memory_usage())
+            .map(|canister| {
+                canister
+                    .system_state
+                    .guaranteed_response_message_memory_usage()
+            })
             .sum();
-        let subnet_memory_usage = (self.subnet_queues.memory_usage() as u64).into();
+        let subnet_memory_usage =
+            (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
         canisters_memory_usage + subnet_memory_usage
     }
@@ -753,14 +815,14 @@ impl ReplicatedState {
 
     /// Pushes an ingress message into the induction pool (canister or subnet
     /// ingress queue).
-    pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), StateError> {
+    pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), IngressInductionError> {
         if msg.is_addressed_to_subnet(self.metadata.own_subnet_id) {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;
             let canister = match self.canister_states.get_mut(&canister_id) {
                 Some(canister) => canister,
-                None => return Err(StateError::CanisterNotFound(canister_id)),
+                None => return Err(IngressInductionError::CanisterNotFound(canister_id)),
             };
             canister.push_ingress(msg);
         }
@@ -813,13 +875,11 @@ impl ReplicatedState {
     /// state. All messages that have not been explicitly consumed will remain
     /// in the state.
     pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator + '_ {
-        let own_subnet_id = self.metadata.own_subnet_id;
         let time = self.metadata.time();
 
         OutputIterator::new(
             &mut self.canister_states,
             &mut self.subnet_queues,
-            own_subnet_id,
             // We seed the output iterator with the time. We can do this because
             // we don't need unpredictability of the rotation.
             time.as_nanos_since_unix_epoch(),

@@ -9,8 +9,8 @@ documentation.workspace = true
 [dependencies]
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
-serde = { workspace = true }
 rustls = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 x509-parser = { workspace = true }
 

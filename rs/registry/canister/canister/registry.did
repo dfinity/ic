@@ -95,6 +95,7 @@ type CreateSubnetPayload = record {
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
   ecdsa_config : opt EcdsaInitialConfig;
+  chain_key_config : opt InitialChainKeyConfig;
   gossip_max_artifact_streams_per_peer : nat32;
   replica_version_id : text;
   gossip_max_duplicity : nat32;
@@ -119,8 +120,6 @@ type DataCenterRecord = record {
   owner : text;
 };
 
-type DeleteSubnetPayload = record { subnet_id : opt principal };
-
 type DeployGuestosToAllSubnetNodesPayload = record {
   subnet_id : principal;
   replica_version_id : text;
@@ -129,6 +128,29 @@ type DeployGuestosToAllSubnetNodesPayload = record {
 type DeployGuestosToAllUnassignedNodesPayload = record {
   elected_replica_version : text;
 };
+
+type InitialChainKeyConfig = record {
+  key_configs : vec KeyConfigRequest;
+  signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
+};
+
+type KeyConfigRequest = record {
+  key_config : opt KeyConfig;
+  subnet_id : opt principal;
+};
+
+type KeyConfig = record {
+  key_id : opt MasterPublicKeyId;
+  pre_signatures_to_create_in_advance : opt nat32;
+  max_queue_size : opt nat32;
+};
+
+type MasterPublicKeyId = variant { Schnorr : SchnorrKeyId; Ecdsa : EcdsaKeyId };
+
+type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
+
+type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
 
 type EcdsaConfig = record {
   quadruples_to_create_in_advance : nat32;
@@ -173,9 +195,22 @@ type FirewallRulesScope = variant {
   Global;
 };
 
+type GetNodeOperatorsAndDcsOfNodeProviderResponse = variant {
+  Ok : vec record { DataCenterRecord; NodeOperatorRecord };
+  Err : text;
+};
+
+type GetNodeProvidersMonthlyXdrRewardsResponse = variant {
+  Ok : NodeProvidersMonthlyXdrRewards;
+  Err : text;
+};
+
 type GetSubnetForCanisterRequest = record { "principal" : opt principal };
 
-type GetSubnetForCanisterResponse = record { subnet_id : opt principal };
+type GetSubnetForCanisterResponse = variant {
+  Ok : record { subnet_id : opt principal };
+  Err : text;
+};
 
 type Gps = record { latitude : float32; longitude : float32 };
 
@@ -196,6 +231,7 @@ type NodeOperatorRecord = record {
 
 type NodeProvidersMonthlyXdrRewards = record {
   rewards : vec record { text; nat64 };
+  registry_version: opt nat64;
 };
 
 type NodeRewardRate = record {
@@ -217,6 +253,7 @@ type RecoverSubnetPayload = record {
   subnet_id : principal;
   registry_store_uri : opt record { text; text; nat64 };
   ecdsa_config : opt EcdsaInitialConfig;
+  chain_key_config : opt InitialChainKeyConfig;
   state_hash : blob;
   time_ns : nat64;
 };
@@ -237,24 +274,13 @@ type RemoveNodeOperatorsPayload = record {
 
 type RemoveNodesPayload = record { node_ids : vec principal };
 
+type RemoveNodesFromSubnetPayload = record { node_ids : vec principal };
+
 type RerouteCanisterRangesPayload = record {
   source_subnet : principal;
   reassigned_canister_ranges : vec CanisterIdRange;
   destination_subnet : principal;
 };
-
-type Result = variant { Ok : principal; Err : text };
-
-type Result_1 = variant { Ok; Err : text };
-
-type Result_2 = variant {
-  Ok : vec record { DataCenterRecord; NodeOperatorRecord };
-  Err : text;
-};
-
-type Result_3 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
-
-type Result_4 = variant { Ok : GetSubnetForCanisterResponse; Err : text };
 
 type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
 
@@ -280,11 +306,23 @@ type SubnetFeatures = record {
 
 type SubnetType = variant { application; verified_application; system };
 
+type UpdateApiBoundaryNodesVersionPayload = record {
+  version : text;
+  node_ids : vec principal;
+};
+
 type UpdateElectedHostosVersionsPayload = record {
   release_package_urls : vec text;
   hostos_version_to_elect : opt text;
   hostos_versions_to_unelect : vec text;
   release_package_sha256_hex : opt text;
+};
+
+type UpdateFirewallRulesPayload = record {
+  expected_hash : text;
+  scope : FirewallRulesScope;
+  positions : vec int32;
+  rules : vec FirewallRule;
 };
 
 type UpdateNodeDirectlyPayload = record {
@@ -296,10 +334,14 @@ type UpdateNodeDomainDirectlyPayload = record {
   domain : opt text;
 };
 
+type UpdateNodeDomainDirectlyResponse = variant { Ok; Err : text };
+
 type UpdateNodeIPv4ConfigDirectlyPayload = record {
   ipv4_config : opt IPv4Config;
   node_id : principal;
 };
+
+type UpdateNodeIpv4ConfigDirectlyResponse = variant { Ok; Err : text };
 
 type UpdateNodeOperatorConfigDirectlyPayload = record {
   node_operator_id : opt principal;
@@ -341,26 +383,35 @@ type UpdateSubnetPayload = record {
   subnet_id : principal;
   max_ingress_bytes_per_message : opt nat64;
   dkg_dealings_per_block : opt nat64;
-  ecdsa_key_signing_disable : opt vec EcdsaKeyId;
   max_block_payload_size : opt nat64;
   max_instructions_per_install_code : opt nat64;
   start_as_nns : opt bool;
   is_halted : opt bool;
   max_ingress_messages_per_block : opt nat64;
   max_number_of_canisters : opt nat64;
-  ecdsa_config : opt EcdsaConfig;
   retransmission_request_ms : opt nat32;
   dkg_interval_length : opt nat64;
   registry_poll_period_ms : opt nat32;
   max_chunk_wait_ms : opt nat32;
   receive_check_cache_size : opt nat32;
-  ecdsa_key_signing_enable : opt vec EcdsaKeyId;
   ssh_backup_access : opt vec text;
   max_chunk_size : opt nat32;
   initial_notary_delay_millis : opt nat64;
   max_artifact_streams_per_peer : opt nat32;
   subnet_type : opt SubnetType;
   ssh_readonly_access : opt vec text;
+  chain_key_config : opt ChainKeyConfig;
+  chain_key_signing_enable : opt vec MasterPublicKeyId;
+  chain_key_signing_disable : opt vec MasterPublicKeyId;
+  ecdsa_config : opt EcdsaConfig;
+  ecdsa_key_signing_enable : opt vec EcdsaKeyId;
+  ecdsa_key_signing_disable : opt vec EcdsaKeyId;
+};
+
+type ChainKeyConfig = record {
+  key_configs : vec KeyConfig;
+  signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
 };
 
 type UpdateUnassignedNodesConfigPayload = record {
@@ -371,18 +422,15 @@ type UpdateUnassignedNodesConfigPayload = record {
 service : {
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
-  add_node : (AddNodePayload) -> (Result);
+  add_node : (AddNodePayload) -> (principal);
   add_node_operator : (AddNodeOperatorPayload) -> ();
   add_nodes_to_subnet : (AddNodesToSubnetPayload) -> ();
   add_or_remove_data_centers : (AddOrRemoveDataCentersProposalPayload) -> ();
   bless_replica_version : (BlessReplicaVersionPayload) -> ();
   change_subnet_membership : (ChangeSubnetMembershipPayload) -> ();
   clear_provisional_whitelist : () -> ();
-  complete_canister_migration : (CompleteCanisterMigrationPayload) -> (
-      Result_1,
-    );
+  complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
   create_subnet : (CreateSubnetPayload) -> ();
-  delete_subnet : (DeleteSubnetPayload) -> ();
   deploy_guestos_to_all_subnet_nodes : (
       DeployGuestosToAllSubnetNodesPayload,
     ) -> ();
@@ -390,10 +438,10 @@ service : {
       DeployGuestosToAllUnassignedNodesPayload,
     ) -> ();
   get_build_metadata : () -> (text) query;
-  get_node_operators_and_dcs_of_node_provider : (principal) -> (Result_2) query;
-  get_node_providers_monthly_xdr_rewards : () -> (Result_3) query;
-  get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (Result_4) query;
-  prepare_canister_migration : (PrepareCanisterMigrationPayload) -> (Result_1);
+  get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
+  get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
+  get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
+  prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_api_boundary_nodes : (RemoveApiBoundaryNodesPayload) -> ();
   remove_firewall_rules : (RemoveFirewallRulesPayload) -> ();
@@ -401,18 +449,18 @@ service : {
   remove_node_operators : (RemoveNodeOperatorsPayload) -> ();
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
-  reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
+  reroute_canister_ranges : (RerouteCanisterRangesPayload) -> ();
   retire_replica_version : (RetireReplicaVersionPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
-  update_api_boundary_nodes_version : (AddApiBoundaryNodesPayload) -> ();
+  update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   update_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
-  update_firewall_rules : (AddFirewallRulesPayload) -> ();
-  update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
-  update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (Result_1);
+  update_firewall_rules : (UpdateFirewallRulesPayload) -> ();
+  update_node_directly : (UpdateNodeDirectlyPayload) -> ();
+  update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (UpdateNodeDomainDirectlyResponse);
   update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (
-      Result_1,
+      UpdateNodeIpv4ConfigDirectlyResponse,
     );
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (

@@ -22,11 +22,12 @@ use axum::{
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
+use ic_interfaces::p2p::consensus::{Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, SubnetTopology, Transport};
-use ic_types::artifact::{ArtifactKind, Priority, PriorityFn, UnvalidatedArtifactMutation};
+use ic_types::artifact::{PbArtifact, UnvalidatedArtifactMutation};
+use prost::Message;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use tokio::{
     runtime::Handle,
@@ -38,7 +39,7 @@ use tokio::{
     task::JoinSet,
     time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
-use tracing::{instrument, span, Instrument, Level};
+use tracing::instrument;
 
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
@@ -48,7 +49,7 @@ type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + 
 type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
 
 #[allow(unused)]
-pub fn build_axum_router<Artifact: ArtifactKind>(
+pub fn build_axum_router<Artifact: PbArtifact>(
     log: ReplicaLogger,
     pool: ValidatedPoolReaderRef<Artifact>,
 ) -> (Router, Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>) {
@@ -70,7 +71,7 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
     (router, update_rx)
 }
 
-async fn rpc_handler<Artifact: ArtifactKind>(
+async fn rpc_handler<Artifact: PbArtifact>(
     State(pool): State<ValidatedPoolReaderRef<Artifact>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode> {
@@ -89,14 +90,37 @@ async fn rpc_handler<Artifact: ArtifactKind>(
     Ok(bytes)
 }
 
-async fn update_handler<Artifact: ArtifactKind>(
+async fn update_handler<Artifact: PbArtifact>(
     State((log, sender)): State<(ReplicaLogger, ReceivedAdvertSender<Artifact>)>,
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
 ) -> Result<(), StatusCode> {
-    let update: SlotUpdate<Artifact> =
-        pb::SlotUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let pb_slot_update = pb::SlotUpdate::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let update = SlotUpdate {
+        commit_id: CommitId::from(pb_slot_update.commit_id),
+        slot_number: SlotNumber::from(pb_slot_update.slot_id),
+        update: match pb_slot_update.update {
+            Some(pb::slot_update::Update::Advert(advert)) => {
+                let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
+                    .map(|pb_id| pb_id.try_into().map_err(|_| StatusCode::BAD_REQUEST))
+                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                let attr: Artifact::Attribute =
+                    Artifact::PbAttribute::decode(advert.attribute.as_slice())
+                        .map(|pb_attr| pb_attr.try_into().map_err(|_| StatusCode::BAD_REQUEST))
+                        .map_err(|_| StatusCode::BAD_REQUEST)??;
+                Update::Advert((id, attr))
+            }
+            Some(pb::slot_update::Update::Artifact(artifact)) => {
+                let message: Artifact = Artifact::PbMessage::decode(artifact.as_slice())
+                    .map(|pb_msg| pb_msg.try_into().map_err(|_| StatusCode::BAD_REQUEST))
+                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                Update::Artifact(message)
+            }
+            None => return Err(StatusCode::BAD_REQUEST),
+        },
+    };
 
     if sender.send((update, peer, conn_id)).await.is_err() {
         error!(
@@ -158,7 +182,7 @@ impl PeerCounter {
 }
 
 #[allow(unused)]
-pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
+pub(crate) struct ConsensusManagerReceiver<Artifact: PbArtifact, Pool, ReceivedAdvert> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
@@ -168,7 +192,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, Receive
     adverts_received: Receiver<ReceivedAdvert>,
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     raw_pool: Arc<RwLock<Pool>>,
-    priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+    priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
 
@@ -190,7 +214,7 @@ impl<Artifact, Pool>
     ConsensusManagerReceiver<Artifact, Pool, (SlotUpdate<Artifact>, NodeId, ConnId)>
 where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: ArtifactKind,
+    Artifact: PbArtifact,
 {
     pub(crate) fn run(
         log: ReplicaLogger,
@@ -198,7 +222,7 @@ where
         rt_handle: Handle,
         adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
-        priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+        priority_fn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -274,12 +298,6 @@ where
                     .len(),
                 "Number of download tasks should always be the same or exceed the number of distinct ids stored."
             );
-            debug_assert!(
-                self.active_downloads
-                    .iter()
-                    .all(|(k, v)| { v.receiver_count() == 1 }),
-                "Some download task has two node receivers or it was dropped."
-            );
         }
     }
 
@@ -303,7 +321,6 @@ where
         if !peer_rx.borrow().is_empty() {
             self.metrics.download_task_restart_after_join_total.inc();
             self.metrics.download_task_started_total.inc();
-            let process_advert_span = span!(Level::INFO, "process_advert");
             self.artifact_processor_tasks.spawn_on(
                 Self::process_advert(
                     self.log.clone(),
@@ -315,8 +332,7 @@ where
                     self.sender.clone(),
                     self.transport.clone(),
                     self.metrics.clone(),
-                )
-                .instrument(process_advert_span),
+                ),
                 &self.rt_handle,
             );
         } else {
@@ -346,10 +362,7 @@ where
         } = advert_update;
 
         let (id, attribute, artifact) = match update {
-            Update::Artifact(artifact) => {
-                let advert = Artifact::message_to_advert(&artifact);
-                (advert.id, advert.attribute, Some(artifact))
-            }
+            Update::Artifact(artifact) => (artifact.id(), artifact.attribute(), Some(artifact)),
             Update::Advert((id, attribute)) => (id, attribute, None),
         };
 
@@ -403,7 +416,6 @@ where
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_downloads.insert(id.clone(), tx);
 
-                    let process_advert_span = span!(Level::INFO, "process_advert");
                     self.artifact_processor_tasks.spawn_on(
                         Self::process_advert(
                             self.log.clone(),
@@ -415,8 +427,7 @@ where
                             self.sender.clone(),
                             self.transport.clone(),
                             self.metrics.clone(),
-                        )
-                        .instrument(process_advert_span),
+                        ),
                         &self.rt_handle,
                     );
                 }
@@ -447,13 +458,13 @@ where
     async fn wait_fetch(
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
-        artifact: &mut Option<(Artifact::Message, NodeId)>,
+        artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &ConsensusManagerMetrics,
         mut peer_rx: &mut watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: &mut watch::Receiver<
             PriorityFn<Artifact::Id, Artifact::Attribute>,
         >,
-    ) -> Result<(), DownloadStopped> {
+    ) -> Result<(), Aborted> {
         let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
 
         // Clear the artifact from memory if it was pushed.
@@ -463,26 +474,12 @@ where
         }
 
         while let Priority::Stash = priority {
-            select! {
-                Ok(_) = priority_fn_watcher.changed() => {
-                    priority = priority_fn_watcher.borrow_and_update()(id, attr);
-                }
-                res = peer_rx.changed() => {
-                    match res {
-                        Ok(()) if peer_rx.borrow().is_empty() => {
-                            return Err(DownloadStopped::AllPeersDeletedTheArtifact);
-                        },
-                        Ok(()) => {},
-                        Err(_) => {
-                            return Err(DownloadStopped::AllPeersDeletedTheArtifact);
-                        }
-                    }
-                }
-            }
+            let _ = priority_fn_watcher.changed().await;
+            priority = priority_fn_watcher.borrow_and_update()(id, attr);
         }
 
         if let Priority::Drop = priority {
-            return Err(DownloadStopped::PriorityIsDrop);
+            return Err(Aborted);
         }
         Ok(())
     }
@@ -501,12 +498,12 @@ where
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
-        mut artifact: Option<(Artifact::Message, NodeId)>,
+        mut artifact: Option<(Artifact, NodeId)>,
         mut peer_rx: &mut watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
-    ) -> Result<(Artifact::Message, NodeId), DownloadStopped> {
+    ) -> Result<(Artifact, NodeId), Aborted> {
         // Evaluate priority and wait until we should fetch.
         Self::wait_fetch(
             id,
@@ -531,47 +528,48 @@ where
 
             // Fetch artifact
             None => {
-                let mut result = Err(DownloadStopped::AllPeersDeletedTheArtifact);
-
                 let timer = metrics
                     .download_task_artifact_download_duration
                     .start_timer();
                 let mut rng = SmallRng::from_entropy();
-                while let Some(peer) = {
-                    let peer = peer_rx.borrow().peers().choose(&mut rng).copied();
-                    peer
-                } {
-                    let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
-                    let request = Request::builder()
-                        .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
-                        .body(bytes)
-                        .unwrap();
 
-                    if peer_rx.has_changed().unwrap_or(false) {
-                        artifact_download_timeout.reset();
-                    }
-
+                let result = loop {
                     let next_request_at = Instant::now()
                         + artifact_download_timeout
                             .next_backoff()
                             .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
-                    match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
-                        Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                            let body = response.into_body();
-                            if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
-                                if &Artifact::message_to_advert(&message).id == id {
-                                    result = Ok((message, peer));
-                                    break;
-                                } else {
-                                    warn!(
-                                        log,
-                                        "Peer {} responded with wrong artifact for advert", peer
-                                    );
+                    if let Some(peer) = {
+                        let peer = peer_rx.borrow().peers().choose(&mut rng).copied();
+                        peer
+                    } {
+                        let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
+                        let request = Request::builder()
+                            .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
+                            .body(bytes)
+                            .unwrap();
+
+                        if peer_rx.has_changed().unwrap_or(false) {
+                            artifact_download_timeout.reset();
+                        }
+
+                        match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
+                            Ok(Ok(response)) if response.status() == StatusCode::OK => {
+                                let body = response.into_body();
+                                if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
+                                    if &message.id() == id {
+                                        break Ok((message, peer));
+                                    } else {
+                                        warn!(
+                                            log,
+                                            "Peer {} responded with wrong artifact for advert",
+                                            peer
+                                        );
+                                    }
                                 }
                             }
-                        }
-                        _ => {
-                            metrics.download_task_artifact_download_errors_total.inc();
+                            _ => {
+                                metrics.download_task_artifact_download_errors_total.inc();
+                            }
                         }
                     }
 
@@ -586,7 +584,7 @@ where
                         &mut priority_fn_watcher,
                     )
                     .await?;
-                }
+                };
 
                 timer.stop_and_record();
 
@@ -599,12 +597,13 @@ where
     ///
     /// This future waits for all peers that advertise the artifact to delete it.
     /// The artifact is deleted from the unvalidated pool upon completion.
+    #[instrument(skip_all)]
     async fn process_advert(
         log: ReplicaLogger,
         id: Artifact::Id,
         attr: Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
-        mut artifact: Option<(Artifact::Message, NodeId)>,
+        mut artifact: Option<(Artifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
@@ -616,48 +615,67 @@ where
         Artifact::Attribute,
     ) {
         let _timer = metrics.download_task_duration.start_timer();
-        let download_result = Self::download_artifact(
-            log,
-            &id,
-            &attr,
-            artifact,
-            &mut peer_rx,
-            priority_fn_watcher,
-            transport,
-            metrics.clone(),
-        )
-        .await;
 
-        match download_result {
-            Ok((artifact, peer_id)) => {
-                // Send artifact to pool
-                sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
-
-                // wait for deletion from peers
-                peer_rx.wait_for(|p| p.is_empty()).await;
-
-                // Purge from the unvalidated pool
-                sender.send(UnvalidatedArtifactMutation::Remove(id.clone()));
-                metrics
-                    .download_task_result_total
-                    .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
-                    .inc();
+        let mut peer_rx_clone = peer_rx.clone();
+        let all_peers_deleted_artifact = async move {
+            loop {
+                match peer_rx_clone.changed().await {
+                    Err(_) => break,
+                    Ok(x) if peer_rx_clone.borrow().is_empty() => break,
+                    _ => {}
+                }
             }
-            Err(DownloadStopped::PriorityIsDrop) => {
-                // wait for deletion from peers
-                peer_rx.wait_for(|p| p.is_empty()).await;
-                metrics
-                    .download_task_result_total
-                    .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
-                    .inc();
+        };
+
+        let download_artifact = async {
+            Self::download_artifact(
+                log,
+                &id,
+                &attr,
+                artifact,
+                &mut peer_rx,
+                priority_fn_watcher,
+                transport,
+                metrics.clone(),
+            )
+            .await
+        };
+
+        select! {
+            download_result = download_artifact => {
+                match download_result {
+                    Ok((artifact, peer_id)) => {
+                        // Send artifact to pool
+                        sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
+
+                        // wait for deletion from peers
+                        peer_rx.wait_for(|p| p.is_empty()).await;
+
+                        // Purge from the unvalidated pool
+                        sender.send(UnvalidatedArtifactMutation::Remove(id.clone()));
+                        metrics
+                            .download_task_result_total
+                            .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
+                            .inc();
+                    }
+                    Err(Aborted) => {
+                        // wait for deletion from peers
+                        peer_rx.wait_for(|p| p.is_empty()).await;
+                        metrics
+                            .download_task_result_total
+                            .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
+                            .inc();
+
+                    },
+                }
             }
-            Err(DownloadStopped::AllPeersDeletedTheArtifact) => {
+            _ = all_peers_deleted_artifact => {
                 metrics
                     .download_task_result_total
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED])
                     .inc();
-            }
-        }
+            },
+        };
 
         (peer_rx, id, attr)
     }
@@ -696,10 +714,7 @@ where
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum DownloadStopped {
-    AllPeersDeletedTheArtifact,
-    PriorityIsDrop,
-}
+struct Aborted;
 
 #[derive(PartialEq, Eq, Debug)]
 struct SlotEntry<T> {
@@ -727,13 +742,10 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{
         consensus::U64Artifact,
-        mocks::{MockPriorityFnAndFilterProducer, MockTransport, MockValidatedPoolReader},
+        mocks::{MockPriorityFnFactory, MockTransport, MockValidatedPoolReader},
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{
-        artifact::{Advert, ArtifactTag},
-        RegistryVersion,
-    };
+    use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
     use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
@@ -748,7 +760,7 @@ mod tests {
         adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
         raw_pool: MockValidatedPoolReader<U64Artifact>,
         priority_fn_producer:
-            Arc<dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
+            Arc<dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -772,7 +784,7 @@ mod tests {
             let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
             let (_, topology_watcher) = watch::channel(SubnetTopology::default());
 
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            let mut mock_pfn = MockPriorityFnFactory::new();
 
             mock_pfn
                 .expect_get_priority_function()
@@ -794,7 +806,7 @@ mod tests {
         fn with_priority_fn_producer(
             mut self,
             priority_fn_producer: Arc<
-                dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
+                dyn PriorityFnFactory<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
             >,
         ) -> Self {
             self.priority_fn_producer = priority_fn_producer;
@@ -1162,7 +1174,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let mut seq = Sequence::new();
         mock_pfn
             .expect_get_priority_function()
@@ -1226,7 +1238,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let mut seq = Sequence::new();
         mock_pfn
             .expect_get_priority_function()
@@ -1243,9 +1255,9 @@ mod tests {
         mock_transport.expect_rpc().returning(|_, _| {
             Ok(Response::builder()
                 .body(Bytes::from(
-                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
-                        U64Artifact::id_to_msg(0, 1024),
-                    ),
+                    <<U64Artifact as PbArtifact>::PbMessage>::proxy_encode(U64Artifact::id_to_msg(
+                        0, 1024,
+                    )),
                 ))
                 .unwrap())
         });
@@ -1288,7 +1300,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1340,7 +1352,7 @@ mod tests {
         mgr.handle_topology_update();
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert!(mgr.slot_table.get(&NODE_2).is_none());
+        assert!(!mgr.slot_table.contains_key(&NODE_2));
         // Remove all nodes.
         pfn_tx
             .send(SubnetTopology::new(
@@ -1351,8 +1363,8 @@ mod tests {
             .unwrap();
         mgr.handle_topology_update();
         assert_eq!(mgr.slot_table.len(), 0);
-        assert!(mgr.slot_table.get(&NODE_1).is_none());
-        assert!(mgr.slot_table.get(&NODE_2).is_none());
+        assert!(!mgr.slot_table.contains_key(&NODE_1));
+        assert!(!mgr.slot_table.contains_key(&NODE_2));
     }
 
     /// Verify that if node leaves subnet all download tasks are informed.
@@ -1366,7 +1378,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1498,7 +1510,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         mock_pfn
             .expect_get_priority_function()
             .returning(|_| Box::new(|_, _| Priority::Stash));
@@ -1669,7 +1681,7 @@ mod tests {
             std::process::abort();
         }));
 
-        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut mock_pfn = MockPriorityFnFactory::new();
         let priorities = Arc::new(Mutex::new(vec![Priority::FetchNow, Priority::Stash]));
         mock_pfn
             .expect_get_priority_function()
@@ -1729,7 +1741,7 @@ mod tests {
             .returning(|_, _| {
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                        <<U64Artifact as PbArtifact>::PbMessage>::proxy_encode(
                             U64Artifact::id_to_msg(1, 1024),
                         ),
                     ))
@@ -1744,7 +1756,7 @@ mod tests {
                 // Respond with artifact that does correspond to the advertised ID
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                        <<U64Artifact as PbArtifact>::PbMessage>::proxy_encode(
                             U64Artifact::id_to_msg(0, 1024),
                         ),
                     ))
@@ -1785,24 +1797,32 @@ mod tests {
         use ic_protobuf::p2p::v1 as pb;
 
         #[derive(PartialEq, Eq, Debug, Clone)]
-        pub struct BigArtifact;
+        pub struct BigArtifact(Vec<u8>);
+        impl IdentifiableArtifact for BigArtifact {
+            const NAME: &'static str = "big";
+            type Id = ();
+            type Attribute = ();
+            fn id(&self) -> Self::Id {}
+            fn attribute(&self) -> Self::Attribute {}
+        }
+        impl From<BigArtifact> for Vec<u8> {
+            fn from(value: BigArtifact) -> Self {
+                value.0
+            }
+        }
+        impl From<Vec<u8>> for BigArtifact {
+            fn from(value: Vec<u8>) -> Self {
+                Self(value)
+            }
+        }
 
-        impl ArtifactKind for BigArtifact {
-            // Does not matter
-            const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
+        impl PbArtifact for BigArtifact {
             type PbMessage = Vec<u8>;
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
             type PbAttributeError = Infallible;
-            type Message = Vec<u8>;
             type PbId = ();
-            type Id = ();
             type PbAttribute = ();
-            type Attribute = ();
-
-            fn message_to_advert(_: &Self::Message) -> Advert<BigArtifact> {
-                todo!()
-            }
         }
 
         let (router, mut update_rx) = build_axum_router::<BigArtifact>(
@@ -1810,13 +1830,14 @@ mod tests {
             Arc::new(RwLock::new(MockValidatedPoolReader::default())),
         );
 
-        let slot_update = SlotUpdate::<BigArtifact> {
-            slot_number: 0.into(),
-            commit_id: 0.into(),
-            update: Update::Artifact(vec![0; 100_000_000]),
-        };
-
-        let req_pb = pb::SlotUpdate::proxy_encode(slot_update);
+        let req_pb = pb::SlotUpdate {
+            commit_id: 0,
+            slot_id: 0,
+            update: Some(pb::slot_update::Update::Artifact(
+                vec![0; 100_000_000].encode_to_vec(),
+            )),
+        }
+        .encode_to_vec();
 
         let resp = router
             .oneshot(

@@ -8,6 +8,7 @@ rust_library(
     crate_name = "tree_deserializer",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/tree_hash",
         "@crate_index//:leb128",
         "@crate_index//:serde",
@@ -18,9 +19,11 @@ rust_test(
     name = "tree_deserializer_test",
     crate = ":tree_deserializer",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:proptest-derive",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:maplit",
         "@crate_index//:proptest",
     ],

@@ -1781,6 +1781,7 @@ mod idkg_load_transcript_with_openings {
 
             let opening = vault
                 .idkg_open_dealing(
+                    self.algorithm_id,
                     correct_signed_dealings_for_open_dealing
                         .values()
                         .next()
@@ -1811,6 +1812,7 @@ mod idkg_load_transcript_with_openings {
             let mut remaining_iterations = 1 + self.load_twice as usize;
             while remaining_iterations != 0 {
                 loader_vault.idkg_load_transcript_with_openings(
+                    self.algorithm_id,
                     signed_dealings.clone(),
                     openings.clone(),
                     self.context_data.clone(),
@@ -2043,6 +2045,7 @@ mod idkg_open_dealing {
     struct IDkgOpenDealingTest {
         additional_operation: Option<IDkgOpenDealingTestAdditionalOperation>,
         custom_vault_fn: CustomVaultFn,
+        algorithm_id: AlgorithmId,
     }
 
     #[derive(PartialEq)]
@@ -2055,6 +2058,7 @@ mod idkg_open_dealing {
             Self {
                 additional_operation: None,
                 custom_vault_fn: Box::new(|vault| Box::new(vault) as Box<dyn IDkgProtocolCspVault>),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
             }
         }
 
@@ -2090,6 +2094,7 @@ mod idkg_open_dealing {
 
             let opener_vault = (self.custom_vault_fn)(vault);
             opener_vault.idkg_open_dealing(
+                self.algorithm_id,
                 dealing,
                 NODE_INDEX,
                 CONTEXT_DATA.to_vec(),

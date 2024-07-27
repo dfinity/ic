@@ -12,11 +12,11 @@ ic-types = { path = "../../../../../types/types" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 num-traits = { workspace = true }
-pkcs8 = "0.10.2"
-sha2 = "0.10.2"
+pkcs8 = { workspace = true }
+sha2 = { workspace = true }
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
-num-bigint = "~0.4.3"
+num-bigint = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

@@ -28,7 +28,7 @@ fn setup_state_machine_with_nns_canisters() -> StateMachine {
 
 #[test]
 fn upgrade_canister() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
     let n1 = get_neuron_1();
     let lifeline_canister_id = CanisterId::from_u64(LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET);
     let root_status_before = get_root_canister_status(&state_machine).unwrap();
@@ -53,7 +53,7 @@ fn upgrade_canister() {
     };
     // make proposal with neuron 1, it has enough voting power such that the proposal will be accepted
     let response =
-        nns_governance_make_proposal(&mut state_machine, n1.principal_id, n1.neuron_id, &proposal)
+        nns_governance_make_proposal(&state_machine, n1.principal_id, n1.neuron_id, &proposal)
             .command
             .expect("Making NNS proposal failed");
 

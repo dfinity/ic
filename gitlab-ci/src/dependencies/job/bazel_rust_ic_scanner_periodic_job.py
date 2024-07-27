@@ -16,6 +16,7 @@ REPOS_TO_SCAN = [
     Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project(name="internet-identity", path="internet-identity", owner=Team.GIX_TEAM)]),
     Repository("response-verification", "https://github.com/dfinity/response-verification", [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)]),
     Repository("agent-rs", "https://github.com/dfinity/agent-rs", [Project(name="agent-rs", path="agent-rs", owner=Team.SDK_TEAM)]),
+    Repository("ic-canister-sig-creation", "https://github.com/dfinity/ic-canister-sig-creation", [Project(name="ic-canister-sig-creation", path="ic-canister-sig-creation", owner=Team.GIX_TEAM)]),
 ]
 
 if __name__ == "__main__":

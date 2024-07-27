@@ -12,18 +12,6 @@ NnsProposal:
     url: "https://forum.dfinity.org/thread-where-this-sns-is-discussed"
     summary: "This is just a short summary, but I think it's pretty good."
 
-
-Principals:
-    - id: 5zxxw-63ouu-faaaa-aaaap-4ai
-      name: Bruce Wayne
-      email: batman@superherosinc.com
-    - id: uqf5l-jukmu-fqaaa-aaaap-4ai
-      name: Alfred Pennyworth
-    - id: c2n4r-wni5m-dqaaa-aaaap-4ai
-      name: employees (canister)
-    - id: ucm27-3lxwy-faaaa-aaaap-4ai
-      name: departments (canister)
-
 fallback_controller_principals:
     - 5zxxw-63ouu-faaaa-aaaap-4ai # TODO: Bruce Wayne
 
@@ -102,7 +90,7 @@ Swap:
         - CH
 
     VestingSchedule:
-        events: 83
+        events: 9
         interval: 17 days
 
     start_time: 12:00 UTC

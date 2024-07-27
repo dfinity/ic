@@ -27,7 +27,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-interfaces-mocks = { path = "../interfaces/mocks" }
@@ -41,7 +41,7 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 proptest = { version = "1.0.0" }
-rand = "0.8"
+rand = { workspace = true }
 tokio = { workspace = true }
 
 [[bench]]

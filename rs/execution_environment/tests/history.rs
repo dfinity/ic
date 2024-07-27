@@ -7,6 +7,7 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::ids::{
     canister_test_id, message_test_id, subnet_test_id, user_test_id,
@@ -16,6 +17,9 @@ use ic_types::{
     time::UNIX_EPOCH,
     Height,
 };
+use std::sync::Arc;
+use tokio::sync::mpsc::{channel, error::TryRecvError};
+
 use IngressStatus::*;
 
 #[test]
@@ -89,12 +93,85 @@ fn valid_transitions() -> Vec<(IngressStatus, Vec<IngressStatus>)> {
     ]
 }
 
+/// Tests that [`IngressHistoryWriterImpl`] transmits the height of the last committed state + 1
+/// for messages that complete execution.
+#[test]
+fn test_terminal_states_are_transmitted() {
+    with_test_replica_logger(|log| {
+        let mut state_manager = MockStateManager::new();
+
+        let last_committed_state_height = Height::new(10);
+        state_manager
+            .expect_latest_state_height()
+            .return_const(last_committed_state_height);
+
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let (completed_execution_messages_tx, mut completed_execution_messages_rx) = channel(100);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            Config::default(),
+            log,
+            &MetricsRegistry::new(),
+            completed_execution_messages_tx,
+            Arc::new(state_manager),
+        );
+        let message_id = message_test_id(1);
+
+        ingress_history_writer.set_status(&mut state, message_id.clone(), received());
+        assert_eq!(
+            completed_execution_messages_rx.try_recv(),
+            Err(TryRecvError::Empty),
+            "Non terminal state should not trigger a transmission."
+        );
+
+        ingress_history_writer.set_status(&mut state, message_id.clone(), processing());
+        assert_eq!(
+            completed_execution_messages_rx.try_recv(),
+            Err(TryRecvError::Empty),
+            "Non terminal state should not trigger a transmission."
+        );
+
+        {
+            let mut state = state.clone();
+            ingress_history_writer.set_status(&mut state, message_id.clone(), completed());
+            assert_eq!(
+                completed_execution_messages_rx.try_recv(),
+                Ok((
+                    message_id.clone(),
+                    last_committed_state_height + Height::from(1)
+                )),
+                "Terminal state, `Completed`, should trigger the height of state to be sent"
+            );
+        }
+
+        {
+            let mut state = state.clone();
+            ingress_history_writer.set_status(&mut state, message_id.clone(), failed());
+            assert_eq!(
+                completed_execution_messages_rx.try_recv(),
+                Ok((
+                    message_id.clone(),
+                    last_committed_state_height + Height::from(1)
+                )),
+                "Terminal state, `Failed`, should trigger the height of state to be sent"
+            );
+        }
+    })
+}
+
 #[test]
 fn test_valid_transitions() {
     with_test_replica_logger(|log| {
         let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(Config::default(), log, &MetricsRegistry::new());
+
+        let state_reader = Arc::new(FakeStateManager::new());
+        let (completed_execution_messages_tx, _) = channel(1);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            Config::default(),
+            log,
+            &MetricsRegistry::new(),
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let message_id = message_test_id(1);
 
         for (origin_state, next_states) in valid_transitions().into_iter() {
@@ -117,8 +194,15 @@ fn test_valid_transitions() {
 #[test]
 fn test_invalid_transitions() {
     with_test_replica_logger(|log| {
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(Config::default(), log, &MetricsRegistry::new());
+        let state_reader = Arc::new(FakeStateManager::new());
+        let (completed_execution_messages_tx, _) = channel(1);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            Config::default(),
+            log,
+            &MetricsRegistry::new(),
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let message_id = message_test_id(1);
 
         // creates a set of valid transitions

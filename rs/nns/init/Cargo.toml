@@ -36,4 +36,4 @@ name = "ic-get-neuron-ids"
 path = "src/get_neuron_ids.rs"
 
 [dev-dependencies]
-tempfile = "3.0"
+tempfile = { workspace = true }

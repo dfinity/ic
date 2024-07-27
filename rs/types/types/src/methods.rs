@@ -219,14 +219,19 @@ impl TryFrom<pb::wasm_method::SystemMethod> for SystemMethod {
 }
 
 /// A Wasm closure pointing to the Wasm function table.
+///
+/// Wasm closures must be created and consumed either as 32- or 64-bit.
+/// If the canister migrates from `wasm32` to `wasm64` or back having some
+/// outstanding calls, we will try to convert the stored values into
+/// the required type and call the function.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WasmClosure {
     pub func_idx: u32,
-    pub env: u32,
+    pub env: u64,
 }
 
 impl WasmClosure {
-    pub fn new(func_idx: u32, env: u32) -> Self {
+    pub fn new(func_idx: u32, env: u64) -> Self {
         Self { func_idx, env }
     }
 }

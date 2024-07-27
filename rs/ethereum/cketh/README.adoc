@@ -4,4 +4,6 @@ include::docs/cketh.adoc[leveloffset=+1]
 
 include::docs/ckerc20.adoc[leveloffset=+1]
 
+include::../ledger-suite-orchestrator/README.adoc[leveloffset=+1]
+
 include::docs/proposals.adoc[leveloffset=+1]

@@ -85,9 +85,8 @@ impl RerandomizedPresignature {
         let (key_tweak, _chain_key) = derivation_path.derive_tweak(&idkg_key)?;
 
         // Rerandomize presignature
-        let mut ro = RandomOracle::new(DomainSep::RerandomizePresig(
-            CanisterThresholdSignatureAlgorithm::Ed25519,
-        ));
+        let mut ro =
+            RandomOracle::new(DomainSep::RerandomizePresig(IdkgProtocolAlgorithm::Ed25519));
         ro.add_bytestring("randomness", &randomness.get())?;
         ro.add_bytestring("message", message)?;
         ro.add_point("pre_sig", &pre_sig)?;

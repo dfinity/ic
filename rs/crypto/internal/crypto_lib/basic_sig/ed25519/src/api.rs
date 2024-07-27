@@ -6,7 +6,6 @@ use ic_crypto_secrets_containers::{SecretArray, SecretBytes};
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
-use zeroize::Zeroize;
 
 #[cfg(test)]
 mod tests;
@@ -15,12 +14,11 @@ mod tests;
 pub fn keypair_from_rng<R: Rng + CryptoRng>(
     csprng: &mut R,
 ) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
-    let mut signing_key = ed25519_consensus::SigningKey::new(csprng);
+    let signing_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(csprng);
     let sk = types::SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(
-        signing_key.as_bytes(),
+        &signing_key.serialize_raw(),
     ));
-    let pk = types::PublicKeyBytes(signing_key.verification_key().to_bytes());
-    signing_key.zeroize();
+    let pk = types::PublicKeyBytes(signing_key.public_key().serialize_raw());
     (sk, pk)
 }
 
@@ -147,10 +145,9 @@ pub fn secret_key_to_pkcs8_v2_der(
 /// # Errors
 /// * `MalformedSecretKey` if the secret key is malformed
 pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
-    let mut signing_key = ed25519_consensus::SigningKey::from(*sk.0.expose_secret());
-    let signature = signing_key.sign(msg);
-    signing_key.zeroize();
-    Ok(types::SignatureBytes(signature.to_bytes()))
+    let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(sk.0.expose_secret());
+    let signature = signing_key.sign_message(msg);
+    Ok(types::SignatureBytes(signature))
 }
 
 /// Verifies a signature using an Ed25519 public key.

@@ -265,39 +265,39 @@ fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
     (module
       (import "ic0" "msg_reply" (func $msg_reply))
       (import "ic0" "msg_reply_data_append"
-        (func $msg_reply_data_append (param i32) (param i32)))
+        (func $msg_reply_data_append (param i64) (param i64)))
       (import "ic0" "msg_arg_data_copy"
-        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+        (func $ic0_msg_arg_data_copy (param i64) (param i64) (param i64)))
       (import "ic0" "msg_arg_data_size"
-        (func $ic0_msg_arg_data_size (result i32)))
+        (func $ic0_msg_arg_data_size (result i64)))
       (import "ic0" "msg_caller_copy"
-        (func $ic0_msg_caller_copy (param i32) (param i32) (param i32)))
+        (func $ic0_msg_caller_copy (param i64) (param i64) (param i64)))
       (import "ic0" "msg_caller_size"
-        (func $ic0_msg_caller_size (result i32)))
+        (func $ic0_msg_caller_size (result i64)))
       (import "ic0" "canister_self_copy"
-        (func $ic0_canister_self_copy (param i32) (param i32) (param i32)))
+        (func $ic0_canister_self_copy (param i64) (param i64) (param i64)))
       (import "ic0" "canister_self_size"
-        (func $ic0_canister_self_size (result i32)))
+        (func $ic0_canister_self_size (result i64)))
 
       (import "ic0" "canister_cycle_balance128"
-        (func $ic0_canister_cycle_balance128 (param i32)))
+        (func $ic0_canister_cycle_balance128 (param i64)))
 
-      (import "ic0" "stable_grow"
-        (func $ic0_stable_grow (param $pages i32) (result i32)))
+      (import "ic0" "stable64_grow"
+        (func $ic0_stable64_grow (param $pages i64) (result i64)))
       (import "ic0" "stable64_read"
         (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
       (import "ic0" "stable64_write"
         (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
       (func $touch_heap_with_api_calls
-        (call $ic0_msg_caller_copy (i32.const 4096) (i32.const 0) (call $ic0_msg_caller_size))
-        (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
-        (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
-        (call $ic0_canister_cycle_balance128 (i32.const 36864))
+        (call $ic0_msg_caller_copy (i64.const 4096) (i64.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i64.const 12288) (i64.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i64.const 20480) (i64.const 0) (call $ic0_canister_self_size))
+        (call $ic0_canister_cycle_balance128 (i64.const 36864))
 
         (; Write some data to page 10 using stable_read, by first copying 4
         bytes from the second page to stable memory, then copying back ;)
-        (drop (call $ic0_stable_grow (i32.const 1)))
+        (drop (call $ic0_stable64_grow (i64.const 1)))
         (call $ic0_stable64_write (i64.const 0) (i64.const 4096) (i64.const 4))
         (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
       )
@@ -563,10 +563,10 @@ mod tests {
                 assert_eq!(wasm_heap[start..end], test_heap[start..end]);
 
                 if modification_tracking == ModificationTracking::Track {
-                    dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+                    dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
                     // Verify that wasm heap and test buffer are the same.
-                    let i = result.dirty_pages.last().unwrap().get();
+                    let i = result.wasm_dirty_pages.last().unwrap().get();
                     let offset = i as usize * PAGE_SIZE;
                     let page1 = unsafe { test_heap.as_ptr().add(offset) };
                     let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
@@ -584,7 +584,7 @@ mod tests {
                     );
                     page_map.update(&compute_page_delta(
                         &mut instance,
-                        &result.dirty_pages,
+                        &result.wasm_dirty_pages,
                         CanisterMemoryType::Heap,
                     ));
                 }
@@ -999,7 +999,7 @@ mod tests {
                 subnet_type,
             )
             .unwrap();
-            let dry_run_dirty_heap = dry_run_stats.dirty_pages.len() as u64;
+            let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
 
             {
                 // Number of instructions consumed only for copying the payload.
@@ -1011,7 +1011,7 @@ mod tests {
                     subnet_type,
                 )
                 .unwrap();
-                let dirty_heap = run_stats.dirty_pages.len() as u64;
+                let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
                 let consumed_instructions =
                     consumed_instructions - instructions_consumed_without_data;
                 assert_eq!(
@@ -1031,7 +1031,7 @@ mod tests {
                     subnet_type,
                 )
                 .unwrap();
-                let dirty_heap = run_stats.dirty_pages.len() as u64;
+                let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
                 let consumed_instructions =
                     consumed_instructions - instructions_consumed_without_data;
 
@@ -1424,7 +1424,7 @@ mod tests {
                     "touch_heap_with_api_calls".to_string(),
                 )))
                 .expect("call to touch_heap_with_api_calls failed");
-            dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
             let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
             expected_dirty_pages.insert(1); // caller_copy
@@ -1480,7 +1480,7 @@ mod tests {
                     "touch_heap_with_api_calls".to_string(),
                 )))
                 .expect("call to touch_heap_with_api_calls failed");
-            dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
             let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
             expected_dirty_pages.insert(1); // caller_copy

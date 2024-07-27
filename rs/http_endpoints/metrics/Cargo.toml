@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hyper = { version = "0.14.18", features = ["full"] }
+axum = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
 ic-metrics = { path = "../../monitoring/metrics" }
@@ -20,3 +20,4 @@ tower = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+reqwest = { workspace = true }

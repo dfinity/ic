@@ -22,7 +22,7 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
 

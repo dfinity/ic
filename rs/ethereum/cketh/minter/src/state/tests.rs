@@ -6,6 +6,7 @@ use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
+use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     wei_from_milli_ether, BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex,
     LedgerMintIndex, LogIndex, TransactionNonce, Wei, WeiPerGas,
@@ -430,10 +431,13 @@ mod erc20 {
             state.record_add_ckerc20_token(ckerc20.clone());
 
             assert_eq!(
-                state
-                    .ckerc20_tokens
-                    .get_alt(&ckerc20.erc20_contract_address),
-                Some(&ckerc20.ckerc20_ledger_id)
+                state.supported_ck_erc20_tokens().collect::<Vec<_>>(),
+                vec![CkErc20Token {
+                    erc20_ethereum_network: EthereumNetwork::Mainnet,
+                    erc20_contract_address: ckerc20.erc20_contract_address,
+                    ckerc20_token_symbol: ckerc20.ckerc20_token_symbol,
+                    ckerc20_ledger_id: ckerc20.ckerc20_ledger_id,
+                }]
             );
         }
 
@@ -450,7 +454,7 @@ mod erc20 {
             };
             expect_panic_with_message(
                 || state.record_add_ckerc20_token(ckusdt_with_wrong_ledger_id),
-                "ERROR: ledger ID",
+                "same ckERC20 ledger ID",
             );
         }
 
@@ -467,7 +471,7 @@ mod erc20 {
             };
             expect_panic_with_message(
                 || state.record_add_ckerc20_token(ckusdt_with_wrong_address),
-                "address",
+                "ERC-20 address",
             );
         }
 
@@ -611,6 +615,7 @@ prop_compose! {
         ledger_suite_orchestrator_id in proptest::option::of(arb_principal()),
         erc20_helper_contract_address in proptest::option::of(arb_address()),
         last_erc20_scraped_block_number in proptest::option::of(arb_nat()),
+        evm_rpc_id in proptest::option::of(arb_principal()),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -619,7 +624,8 @@ prop_compose! {
             next_transaction_nonce,
             ledger_suite_orchestrator_id,
             erc20_helper_contract_address: erc20_helper_contract_address.map(|addr| addr.to_string()),
-            last_erc20_scraped_block_number
+            last_erc20_scraped_block_number,
+            evm_rpc_id
         }
     }
 }
@@ -977,20 +983,20 @@ fn state_equivalence() {
             }),
         },
     };
-    let mut ckerc20_tokens = MultiKeyMap::default();
+    let mut ckerc20_tokens = DedupMultiKeyMap::default();
     ckerc20_tokens
         .try_insert(
-            "ckUSDC".parse().unwrap(),
+            "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
                 .parse()
                 .unwrap(),
-            "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
+            "ckUSDC".parse().unwrap(),
         )
         .unwrap();
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
-        ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
+        cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
         eth_helper_contract_address: Some(
             "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
                 .parse()
@@ -1048,6 +1054,7 @@ fn state_equivalence() {
         skipped_blocks: Default::default(),
         last_transaction_price_estimate: None,
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
+        evm_rpc_id: Some("7hfb6-caaaa-aaaar-qadga-cai".parse().unwrap()),
         ckerc20_tokens,
     };
 
@@ -1302,7 +1309,7 @@ mod eth_balance {
     use crate::state::tests::{initial_state, received_eth_event};
     use crate::state::transactions::{create_transaction, EthWithdrawalRequest, WithdrawalRequest};
     use crate::state::{EthBalance, State};
-    use crate::tx::{Eip1559Signature, SignedEip1559TransactionRequest, TransactionPrice};
+    use crate::tx::{Eip1559Signature, SignedEip1559TransactionRequest};
     use maplit::btreemap;
 
     #[test]
@@ -1396,11 +1403,11 @@ mod eth_balance {
             created_at: Some(1699527697000000000),
         };
         let withdrawal_flow = WithdrawalFlow {
-            tx_fee: TransactionPrice {
-                gas_limit: GasAmount::from(21_000_u32),
-                max_fee_per_gas: WeiPerGas::from(7_828_365_474_u64),
+            tx_fee: GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(0xbc9998d1_u64),
                 max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
             },
+            gas_limit: GasAmount::from(21_000_u32),
             effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
             tx_status: TransactionStatus::Success,
             ..WithdrawalFlow::for_request(withdrawal_request)
@@ -1483,15 +1490,16 @@ mod eth_balance {
         let erc20_balance_before_withdrawal = state_before_withdrawal.erc20_balances.clone();
         //Values from https://sepolia.etherscan.io/tx/0x9695853792c636f9098844931da5e0ae7c5bdc8b9c6a7471aa44aed96875affc
         let withdrawal_request = erc20_withdrawal_request();
-        let transaction_price = TransactionPrice {
-            gas_limit: GasAmount::from(65_000_u64),
-            max_fee_per_gas: WeiPerGas::from(1_500_766_620_u64),
+        let tx_fee = GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(0x4ce9a_u64),
             max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
         };
+        let gas_limit = GasAmount::from(65_000_u64);
         let effective_gas_price = WeiPerGas::from(0x596cfd9a_u64);
         let effective_gas_used = GasAmount::from(0xb003_u32);
         let withdrawal_flow = WithdrawalFlow {
-            tx_fee: transaction_price.clone(),
+            tx_fee: tx_fee.clone(),
+            gas_limit,
             effective_gas_price,
             effective_gas_used,
             tx_status: TransactionStatus::Success,
@@ -1505,11 +1513,11 @@ mod eth_balance {
         let erc20_balance_after_successful_withdrawal =
             state_after_successful_withdrawal.erc20_balances.clone();
 
-        let estimated_transaction_fee = transaction_price.max_transaction_fee();
+        let charged_transaction_fee = withdrawal_request.max_transaction_fee;
         let effective_transaction_fee = effective_gas_price
             .transaction_cost(effective_gas_used)
             .unwrap();
-        let unspent_tx_fee = estimated_transaction_fee
+        let unspent_tx_fee = charged_transaction_fee
             .checked_sub(effective_transaction_fee)
             .unwrap();
         assert_eq!(
@@ -1560,7 +1568,8 @@ mod eth_balance {
     struct WithdrawalFlow {
         withdrawal_request: WithdrawalRequest,
         nonce: TransactionNonce,
-        tx_fee: TransactionPrice,
+        tx_fee: GasFeeEstimate,
+        gas_limit: GasAmount,
         effective_gas_price: WeiPerGas,
         effective_gas_used: GasAmount,
         tx_status: TransactionStatus,
@@ -1571,11 +1580,11 @@ mod eth_balance {
             Self {
                 withdrawal_request: withdrawal_request.into(),
                 nonce: TransactionNonce::ZERO,
-                tx_fee: TransactionPrice {
-                    gas_limit: GasAmount::from(21_000_u32),
-                    max_fee_per_gas: WeiPerGas::ONE,
+                tx_fee: GasFeeEstimate {
+                    base_fee_per_gas: WeiPerGas::ONE,
                     max_priority_fee_per_gas: WeiPerGas::ONE,
                 },
+                gas_limit: GasAmount::from(21_000_u32),
                 effective_gas_price: WeiPerGas::ONE,
                 effective_gas_used: GasAmount::from(21_000_u32),
                 tx_status: TransactionStatus::Success,
@@ -1597,6 +1606,7 @@ mod eth_balance {
                 &self.withdrawal_request,
                 self.nonce,
                 self.tx_fee,
+                self.gas_limit,
                 EthereumNetwork::Sepolia,
             )
             .expect("BUG: failed to create transaction");

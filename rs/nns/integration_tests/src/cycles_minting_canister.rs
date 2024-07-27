@@ -15,17 +15,14 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
-    TEST_USER3_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
+    TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{NnsFunction, ProposalStatus},
-};
+use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
@@ -303,7 +300,7 @@ fn test_cmc_notify_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -312,7 +309,7 @@ fn test_cmc_notify_create_with_settings() {
 
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
-        &mut state_machine,
+        &state_machine,
         vec![subnet_id],
         neuron.principal_id,
         neuron.neuron_id,
@@ -428,7 +425,7 @@ fn test_cmc_cycles_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -437,7 +434,7 @@ fn test_cmc_cycles_create_with_settings() {
 
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
-        &mut state_machine,
+        &state_machine,
         vec![subnet_id],
         neuron.principal_id,
         neuron.neuron_id,

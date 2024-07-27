@@ -4,7 +4,7 @@ Hold manifest common to all SetupOS variants.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
-load("//ic-os/rootfs:setupos.bzl", "rootfs_files")
+load("//ic-os/components:setupos.bzl", "component_files")
 load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -25,6 +25,7 @@ def image_deps(mode, _malicious = False):
 
     deps = {
         "base_dockerfile": "//ic-os/setupos/context:Dockerfile.base",
+        "dockerfile": "//ic-os/setupos/context:Dockerfile",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
@@ -34,7 +35,7 @@ def image_deps(mode, _malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/setupos/context:context-files"),
-        "rootfs_files": rootfs_files,
+        "component_files": component_files,
         "partition_table": Label("//ic-os/setupos:partitions.csv"),
         "rootfs_size": "1750M",
         "bootfs_size": "100M",
@@ -45,23 +46,31 @@ def image_deps(mode, _malicious = False):
         "custom_partitions": lambda: (_custom_partitions)(mode),
     }
 
-    # Add extra files depending on image variant
-    extra_deps = {
+    dev_build_args = ["BUILD_TYPE=dev"]
+    prod_build_args = ["BUILD_TYPE=prod"]
+    dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
+    prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
+
+    image_variants = {
         "dev": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-dev": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-prod": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
         "prod": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
     }
 
-    deps.update(extra_deps[mode])
+    deps.update(image_variants[mode])
 
     return deps
 

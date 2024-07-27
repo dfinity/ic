@@ -3,15 +3,16 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, DataSize, FetchCanisterLogsRequest, FetchCanisterLogsResponse,
-    LogVisibility, Payload,
+    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, DataSize, EmptyBlob, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibility, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig,
     SubmitIngressError, UserError,
 };
+use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_types::{
@@ -87,23 +88,18 @@ fn setup(
 fn setup_and_install_wasm(
     canister_logging: FlagStatus,
     settings: CanisterSettingsArgs,
-    wat: String,
+    wasm: Vec<u8>,
 ) -> (StateMachine, CanisterId) {
     let (env, canister_id) = setup(canister_logging, settings);
-    env.install_wasm_in_mode(
-        canister_id,
-        CanisterInstallMode::Install,
-        wat::parse_str(wat).unwrap(),
-        vec![],
-    )
-    .unwrap();
+    env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
+        .unwrap();
 
     (env, canister_id)
 }
 
 fn setup_with_controller(
     canister_logging: FlagStatus,
-    wat: String,
+    wasm: Vec<u8>,
 ) -> (StateMachine, CanisterId, PrincipalId) {
     let controller = PrincipalId::new_user_test_id(42);
     let (env, canister_id) = setup_and_install_wasm(
@@ -112,7 +108,7 @@ fn setup_with_controller(
             .with_log_visibility(LogVisibility::Controllers)
             .with_controller(controller)
             .build(),
-        wat,
+        wasm,
     );
     (env, canister_id, controller)
 }
@@ -155,7 +151,7 @@ fn test_fetch_canister_logs_via_submit_ingress() {
             CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(LogVisibility::Public)
                 .build(),
-            wat_canister().build(),
+            wat_canister().build_wasm(),
         );
         let actual_result = env.submit_ingress_as(
             PrincipalId::new_anonymous(), // Any public user.
@@ -185,7 +181,7 @@ fn test_fetch_canister_logs_via_execute_ingress() {
             CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(LogVisibility::Public)
                 .build(),
-            wat_canister().build(),
+            wat_canister().build_wasm(),
         );
         let actual_result = env.execute_ingress_as(
             PrincipalId::new_anonymous(), // Any public user.
@@ -225,7 +221,7 @@ fn test_fetch_canister_logs_via_query_call() {
             CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(LogVisibility::Public)
                 .build(),
-            wat_canister().build(),
+            wat_canister().build_wasm(),
         );
         let actual_result = env.query_as(
             PrincipalId::new_anonymous(), // Any public user.
@@ -234,6 +230,71 @@ fn test_fetch_canister_logs_via_query_call() {
             FetchCanisterLogsRequest::new(canister_id).encode(),
         );
         assert_eq!(actual_result, expected_result);
+    }
+}
+
+#[test]
+fn test_fetch_canister_logs_via_composite_query_call() {
+    // Test that fetch_canister_logs API is not accessible via composite query call.
+    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
+    let test_cases = vec![
+        (
+            FlagStatus::Disabled,
+            // This is expected to fail, because the feature flag is disabled.
+            // TODO(EXC-1655): fix reject response propagation.
+            ErrorCode::CanisterDidNotReply,
+            "did not produce a response",
+        ),
+        (
+            FlagStatus::Enabled,
+            // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
+            // TODO(EXC-1655): fix reject response propagation.
+            ErrorCode::CanisterDidNotReply,
+            "did not produce a response",
+        ),
+    ];
+
+    for (feature_flag, expected_error_code, expected_error_message) in test_cases {
+        let (env, canister_a, user) =
+            setup_with_controller(feature_flag, UNIVERSAL_CANISTER_WASM.to_vec());
+
+        // Create canister_b controlled by canister_a.
+        let canister_b = env.create_canister_with_cycles(
+            None,
+            Cycles::from(100_000_000_000_u128),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![canister_a.get()])
+                    .build(),
+            ),
+        );
+
+        // User attempts to fetch logs of canister_b via canister_a.
+        let actual_result = env.query_as(
+            user,
+            canister_a,
+            "composite_query",
+            wasm()
+                .call_simple(
+                    CanisterId::ic_00(),
+                    "fetch_canister_logs",
+                    call_args()
+                        .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                        .on_reject(wasm().reject_message().reject()),
+                )
+                .build(),
+        );
+
+        // Expect fetching logs via composite_query to fail.
+        let error = actual_result.unwrap_err();
+        assert_eq!(error.code(), expected_error_code);
+        assert!(
+            error.description().contains(expected_error_message),
+            "Expected: {}\nActual: {}",
+            expected_error_message,
+            error.description()
+        );
     }
 }
 
@@ -268,7 +329,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
                 .with_log_visibility(log_visibility)
                 .with_controller(controller)
                 .build(),
-            wat_canister().build(),
+            wat_canister().build_wasm(),
         );
         let actual_result = fetch_canister_logs(&env, sender, canister_id);
         assert_eq!(actual_result, expected_result);
@@ -282,7 +343,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
         FlagStatus::Enabled,
         wat_canister()
             .update("test", wat_fn().debug_print(message.as_bytes()))
-            .build(),
+            .build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -300,7 +361,7 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
         FlagStatus::Enabled,
         wat_canister()
             .update("test", wat_fn().debug_print(message.as_bytes()).trap())
-            .build(),
+            .build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -321,7 +382,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
         FlagStatus::Enabled,
         wat_canister()
             .query("test", wat_fn().debug_print(message.as_bytes()))
-            .build(),
+            .build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -339,7 +400,7 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
         FlagStatus::Enabled,
         wat_canister()
             .query("test", wat_fn().debug_print(message.as_bytes()).trap())
-            .build(),
+            .build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -368,7 +429,7 @@ fn test_canister_log_record_index_increment_for_different_calls() {
                 "test2",
                 wat_fn().debug_print(b"message 2").debug_print(b"message 3"),
             )
-            .build(),
+            .build_wasm(),
     );
 
     // First call.
@@ -408,7 +469,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
                 "test2",
                 wat_fn().debug_print(b"message 2").debug_print(b"message 3"),
             )
-            .build(),
+            .build_wasm(),
     );
     env.set_checkpoints_enabled(true);
 
@@ -442,7 +503,7 @@ fn test_logging_in_trapped_wasm_execution() {
         FlagStatus::Enabled,
         wat_canister()
             .update("test", wat_fn().stable_grow(1).stable_read(0, 70_000))
-            .build(),
+            .build_wasm(),
     );
     // Grow stable memory by 1 page (64kb), reading outside of the page should trap.
     let timestamp = system_time_to_nanos(env.time_of_next_round());
@@ -462,7 +523,7 @@ fn test_logging_in_trapped_wasm_execution() {
 fn test_logging_explicit_canister_trap_without_message() {
     let (env, canister_id, controller) = setup_with_controller(
         FlagStatus::Enabled,
-        wat_canister().update("test", wat_fn().trap()).build(),
+        wat_canister().update("test", wat_fn().trap()).build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -479,7 +540,7 @@ fn test_logging_explicit_canister_trap_with_message() {
         FlagStatus::Enabled,
         wat_canister()
             .update("test", wat_fn().trap_with_blob(b"some text"))
-            .build(),
+            .build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -502,7 +563,7 @@ fn test_canister_log_stays_within_limit() {
                 "test",
                 wat_fn().debug_print(&[42; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE]),
             )
-            .build(),
+            .build_wasm(),
     );
     for _ in 0..MESSAGES_NUMBER {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -510,9 +571,13 @@ fn test_canister_log_stays_within_limit() {
     }
     let result = fetch_canister_logs(&env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
-    // Expect that the total size of the log records is less than the limit.
+    // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
-        response.canister_log_records.data_size(),
+        response
+            .canister_log_records
+            .iter()
+            .map(|r| r.data_size())
+            .sum::<usize>(),
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
     );
 }
@@ -531,7 +596,7 @@ fn test_canister_log_stays_empty_when_feature_is_disabled() {
                     .debug_print(&[b'd'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
                     .trap_with_blob(&[b't'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE]),
             )
-            .build(),
+            .build_wasm(),
     );
     for _ in 0..MESSAGES_NUMBER {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -554,7 +619,7 @@ fn test_canister_log_in_state_stays_within_limit() {
                     .debug_print(&[b'd'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
                     .trap_with_blob(&[b't'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE]),
             )
-            .build(),
+            .build_wasm(),
     );
     for _ in 0..MESSAGES_NUMBER {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
@@ -575,7 +640,7 @@ fn test_logging_trap_in_heartbeat() {
                     .debug_print(b"before trap")
                     .trap_with_blob(b"heartbeat trap!"),
             )
-            .build(),
+            .build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time());
     let result = fetch_canister_logs(&env, controller, canister_id);
@@ -599,7 +664,7 @@ fn test_logging_trap_in_timer() {
                     .debug_print(b"before trap")
                     .trap_with_blob(b"timer trap!"),
             )
-            .build(),
+            .build_wasm(),
     );
     let timestamp = system_time_to_nanos(env.time());
     let result = fetch_canister_logs(&env, controller, canister_id);
@@ -622,7 +687,7 @@ fn test_canister_log_preserved_after_disabling_and_enabling_again() {
             .update("test1", wat_fn().debug_print(b"message 1"))
             .update("test2", wat_fn().debug_print(b"message 2"))
             .update("test3", wat_fn().debug_print(b"message 3"))
-            .build(),
+            .build_wasm(),
     );
     env.set_checkpoints_enabled(true);
 
@@ -666,7 +731,7 @@ fn test_deleting_logs_on_reinstall() {
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
             .update("test_1", wat_fn().debug_print(b"test_1"))
-            .build(),
+            .build_wasm(),
     );
     let timestamp_1_init = system_time_to_nanos(env.time());
     env.advance_time(TIME_STEP);
@@ -691,14 +756,11 @@ fn test_deleting_logs_on_reinstall() {
     env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Reinstall,
-        wat::parse_str(
-            wat_canister()
-                .start(wat_fn().debug_print(b"start_2"))
-                .init(wat_fn().debug_print(b"init_2"))
-                .update("test_2", wat_fn().debug_print(b"test_2"))
-                .build(),
-        )
-        .unwrap(),
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_2"))
+            .init(wat_fn().debug_print(b"init_2"))
+            .update("test_2", wat_fn().debug_print(b"test_2"))
+            .build_wasm(),
         vec![],
     )
     .unwrap();
@@ -726,7 +788,7 @@ fn test_deleting_logs_on_uninstall() {
             .start(wat_fn().debug_print(b"start_1"))
             .init(wat_fn().debug_print(b"init_1"))
             .update("test_1", wat_fn().debug_print(b"test_1"))
-            .build(),
+            .build_wasm(),
     );
     let timestamp_1_init = system_time_to_nanos(env.time());
     env.advance_time(TIME_STEP);
@@ -777,7 +839,7 @@ fn test_logging_debug_print_persists_over_upgrade() {
             .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_1"))
             .post_upgrade(wat_fn().debug_print(b"post_upgrade_1"))
             .update("test", wat_fn().debug_print(b"update_1"))
-            .build(),
+            .build_wasm(),
     );
     let timestamp_init = system_time_to_nanos(env.time());
     env.advance_time(TIME_STEP);
@@ -791,16 +853,13 @@ fn test_logging_debug_print_persists_over_upgrade() {
     let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
     let _ = env.upgrade_canister(
         canister_id,
-        wat::parse_str(
-            wat_canister()
-                .start(wat_fn().debug_print(b"start_2"))
-                .init(wat_fn().debug_print(b"init_2"))
-                .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
-                .post_upgrade(wat_fn().debug_print(b"post_upgrade_2"))
-                .update("test", wat_fn().debug_print(b"update_2"))
-                .build(),
-        )
-        .unwrap(),
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_2"))
+            .init(wat_fn().debug_print(b"init_2"))
+            .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
+            .post_upgrade(wat_fn().debug_print(b"post_upgrade_2"))
+            .update("test", wat_fn().debug_print(b"update_2"))
+            .build_wasm(),
         vec![],
     );
     env.advance_time(TIME_STEP);
@@ -840,13 +899,10 @@ fn test_logging_trap_at_install_start() {
     let result = env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,
-        wat::parse_str(
-            wat_canister()
-                .start(wat_fn().debug_print(b"start_1").trap_with_blob(b"start_1"))
-                .init(wat_fn().debug_print(b"init_1"))
-                .build(),
-        )
-        .unwrap(),
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_1").trap_with_blob(b"start_1"))
+            .init(wat_fn().debug_print(b"init_1"))
+            .build_wasm(),
         vec![],
     );
     // Assert install fails due to trap.
@@ -877,13 +933,10 @@ fn test_logging_trap_at_install_init() {
     let result = env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,
-        wat::parse_str(
-            wat_canister()
-                .start(wat_fn().debug_print(b"start_1"))
-                .init(wat_fn().debug_print(b"init_1").trap_with_blob(b"init_1"))
-                .build(),
-        )
-        .unwrap(),
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_1"))
+            .init(wat_fn().debug_print(b"init_1").trap_with_blob(b"init_1"))
+            .build_wasm(),
         vec![],
     );
     // Assert install fails due to trap.
@@ -914,7 +967,7 @@ fn test_logging_trap_in_pre_upgrade() {
             )
             .post_upgrade(wat_fn().debug_print(b"post_upgrade_1"))
             .update("test", wat_fn().debug_print(b"update_1"))
-            .build(),
+            .build_wasm(),
     );
     let timestamp_init = system_time_to_nanos(env.time());
     env.advance_time(TIME_STEP);
@@ -928,16 +981,13 @@ fn test_logging_trap_in_pre_upgrade() {
     let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
     let result = env.upgrade_canister(
         canister_id,
-        wat::parse_str(
-            wat_canister()
-                .start(wat_fn().debug_print(b"start_2"))
-                .init(wat_fn().debug_print(b"init_2"))
-                .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
-                .post_upgrade(wat_fn().debug_print(b"post_upgrade_2"))
-                .update("test", wat_fn().debug_print(b"update_2"))
-                .build(),
-        )
-        .unwrap(),
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_2"))
+            .init(wat_fn().debug_print(b"init_2"))
+            .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
+            .post_upgrade(wat_fn().debug_print(b"post_upgrade_2"))
+            .update("test", wat_fn().debug_print(b"update_2"))
+            .build_wasm(),
         vec![],
     );
     // Assert upgrade to fail due to trap.
@@ -975,7 +1025,7 @@ fn test_logging_trap_after_upgrade_in_start() {
             .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_1"))
             .post_upgrade(wat_fn().debug_print(b"post_upgrade_1"))
             .update("test", wat_fn().debug_print(b"update_1"))
-            .build(),
+            .build_wasm(),
     );
     let timestamp_init = system_time_to_nanos(env.time());
     env.advance_time(TIME_STEP);
@@ -989,16 +1039,13 @@ fn test_logging_trap_after_upgrade_in_start() {
     let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
     let result = env.upgrade_canister(
         canister_id,
-        wat::parse_str(
-            wat_canister()
-                .start(wat_fn().debug_print(b"start_2").trap_with_blob(b"start_2"))
-                .init(wat_fn().debug_print(b"init_2"))
-                .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
-                .post_upgrade(wat_fn().debug_print(b"post_upgrade_2"))
-                .update("test", wat_fn().debug_print(b"update_2"))
-                .build(),
-        )
-        .unwrap(),
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_2").trap_with_blob(b"start_2"))
+            .init(wat_fn().debug_print(b"init_2"))
+            .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
+            .post_upgrade(wat_fn().debug_print(b"post_upgrade_2"))
+            .update("test", wat_fn().debug_print(b"update_2"))
+            .build_wasm(),
         vec![],
     );
     // Assert upgrade to fail due to trap.
@@ -1037,7 +1084,7 @@ fn test_logging_trap_after_upgrade_in_post_upgrade() {
             .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_1"))
             .post_upgrade(wat_fn().debug_print(b"post_upgrade_1"))
             .update("test", wat_fn().debug_print(b"update_1"))
-            .build(),
+            .build_wasm(),
     );
     let timestamp_init = system_time_to_nanos(env.time());
     env.advance_time(TIME_STEP);
@@ -1051,20 +1098,17 @@ fn test_logging_trap_after_upgrade_in_post_upgrade() {
     let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
     let result = env.upgrade_canister(
         canister_id,
-        wat::parse_str(
-            wat_canister()
-                .start(wat_fn().debug_print(b"start_2"))
-                .init(wat_fn().debug_print(b"init_2"))
-                .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
-                .post_upgrade(
-                    wat_fn()
-                        .debug_print(b"post_upgrade_2")
-                        .trap_with_blob(b"post_upgrade_2"),
-                )
-                .update("test", wat_fn().debug_print(b"update_2"))
-                .build(),
-        )
-        .unwrap(),
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_2"))
+            .init(wat_fn().debug_print(b"init_2"))
+            .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
+            .post_upgrade(
+                wat_fn()
+                    .debug_print(b"post_upgrade_2")
+                    .trap_with_blob(b"post_upgrade_2"),
+            )
+            .update("test", wat_fn().debug_print(b"update_2"))
+            .build_wasm(),
         vec![],
     );
     // Assert upgrade to fail due to trap.
@@ -1114,7 +1158,7 @@ fn test_logging_debug_print_over_dts() {
                     .wait(instructions_per_slice)
                     .debug_print(b"slice_3"),
             )
-            .build(),
+            .build_wasm(),
     );
 
     let timestamp = system_time_to_nanos(env.time_of_next_round());
@@ -1166,7 +1210,7 @@ fn test_logging_trap_over_dts() {
                     .wait(instructions_per_slice)
                     .trap_with_blob(b"slice_3"),
             )
-            .build(),
+            .build_wasm(),
     );
 
     let timestamp = system_time_to_nanos(env.time_of_next_round());
@@ -1223,7 +1267,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
                     .debug_print(b"long_slice_4"),
             )
             .update("test_short", wat_fn().debug_print(b"short"))
-            .build(),
+            .build_wasm(),
     );
 
     // Round #A0: slice #0 is processed inside `send_ingress`.
@@ -1305,7 +1349,7 @@ fn test_canister_log_memory_usage_bytes() {
         FlagStatus::Enabled,
         wat_canister()
             .update("test", wat_fn().debug_print(&[37; PAYLOAD_SIZE]))
-            .build(),
+            .build_wasm(),
     );
     // Assert canister log size metric is zero initially.
     let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
@@ -1318,4 +1362,122 @@ fn test_canister_log_memory_usage_bytes() {
     let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
     assert_le!(PAYLOAD_SIZE as f64, stats.sum);
     assert_le!(stats.sum, 1.05 * (PAYLOAD_SIZE as f64));
+}
+
+#[test]
+fn test_canister_log_on_reply() {
+    // Test that the log is recorded inside response callback.
+    let (env, canister_id, controller) =
+        setup_with_controller(FlagStatus::Enabled, UNIVERSAL_CANISTER_WASM.to_vec());
+
+    let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get();
+    let timestamp_init = system_time_to_nanos(env.time_of_next_round());
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(b"before_call")
+            .call_with_cycles(
+                ic00::IC_00,
+                ic00::Method::RawRand,
+                call_args().other_side(EmptyBlob.encode()).on_reply(
+                    wasm()
+                        .debug_print(b"on_reply slice_0")
+                        .instruction_counter_is_at_least(instructions_per_slice)
+                        .debug_print(b"on_reply slice_1")
+                        .instruction_counter_is_at_least(2 * instructions_per_slice)
+                        .debug_print(b"on_reply slice_2"),
+                ),
+                Cycles::new(0),
+            )
+            .debug_print(b"after_call")
+            .build(),
+    );
+    // The call and its response are processed in different rounds.
+    // All the response slices will have the same initial timestamp of a response round.
+    let call_response_rounds = 2;
+    let round_time_increment = StateMachine::EXECUTE_ROUND_TIME_INCREMENT.as_nanos() as u64;
+    let timestamp_response = timestamp_init + call_response_rounds * round_time_increment;
+
+    // Assert time since the response round advanced by the number of slices minus one.
+    let number_of_slices = 3;
+    let diff_since_response_round = system_time_to_nanos(env.time()) - timestamp_response;
+    assert_eq!(
+        diff_since_response_round,
+        (number_of_slices - 1) * round_time_increment
+    );
+
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![
+            (0, timestamp_init, b"before_call".to_vec()),
+            (1, timestamp_init, b"after_call".to_vec()),
+            (2, timestamp_response, b"on_reply slice_0".to_vec()),
+            (3, timestamp_response, b"on_reply slice_1".to_vec()),
+            (4, timestamp_response, b"on_reply slice_2".to_vec()),
+        ])
+    );
+}
+
+#[test]
+fn test_canister_log_on_cleanup() {
+    // Test that the log is recorded inside cleanup callback.
+    let (env, canister_id, controller) =
+        setup_with_controller(FlagStatus::Enabled, UNIVERSAL_CANISTER_WASM.to_vec());
+
+    let timestamp_init = system_time_to_nanos(env.time_of_next_round());
+    let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get();
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(b"before_call")
+            .call_with_cycles(
+                ic00::IC_00,
+                ic00::Method::RawRand,
+                call_args()
+                    .other_side(EmptyBlob.encode())
+                    .on_reply(
+                        wasm()
+                            .debug_print(b"on_reply slice_0")
+                            .instruction_counter_is_at_least(instructions_per_slice)
+                            .debug_print(b"on_reply slice_1")
+                            .instruction_counter_is_at_least(2 * instructions_per_slice)
+                            .debug_print(b"on_reply slice_2")
+                            .trap_with_blob(b"on_reply trap"),
+                    )
+                    .on_cleanup(wasm().debug_print(b"on_cleanup")),
+                Cycles::new(0),
+            )
+            .debug_print(b"after_call")
+            .build(),
+    );
+    // The call and its response are processed in different rounds.
+    // All the response slices will have the same initial timestamp of a response round.
+    let call_response_rounds = 2;
+    let round_time_increment = StateMachine::EXECUTE_ROUND_TIME_INCREMENT.as_nanos() as u64;
+    let timestamp_response = timestamp_init + call_response_rounds * round_time_increment;
+
+    // Assert time since the response round advanced by the number of slices minus one.
+    let number_of_slices = 3;
+    let diff_since_response_round = system_time_to_nanos(env.time()) - timestamp_response;
+    assert_eq!(
+        diff_since_response_round,
+        (number_of_slices - 1) * round_time_increment
+    );
+
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![
+            (0, timestamp_init, b"before_call".to_vec()),
+            (1, timestamp_init, b"after_call".to_vec()),
+            (2, timestamp_response, b"on_reply slice_0".to_vec()),
+            (3, timestamp_response, b"on_reply slice_1".to_vec()),
+            (4, timestamp_response, b"on_reply slice_2".to_vec()),
+            (5, timestamp_response, b"[TRAP]: on_reply trap".to_vec()),
+            (6, timestamp_response, b"on_cleanup".to_vec()),
+        ])
+    );
 }

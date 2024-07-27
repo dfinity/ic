@@ -12,7 +12,7 @@ use super::{DeterministicTimeSlicingHandler, PausedExecution};
 
 #[test]
 fn dts_state_updates() {
-    let mut state = super::State::new(2500, 1000);
+    let mut state = super::State::new(2500, 2500, 1000);
     assert_eq!(state.slice_instruction_limit, 1000);
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
@@ -36,7 +36,7 @@ fn dts_state_updates() {
 
 #[test]
 fn dts_state_updates_invalid_instructions() {
-    let mut state = super::State::new(2500, 2000);
+    let mut state = super::State::new(2500, 2500, 2000);
     assert_eq!(state.slice_instruction_limit, 2000);
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
@@ -50,7 +50,7 @@ fn dts_state_updates_invalid_instructions() {
 
 #[test]
 fn dts_state_updates_saturating() {
-    let mut state = super::State::new(2500, 2000);
+    let mut state = super::State::new(2500, 2500, 2000);
     assert_eq!(state.slice_instruction_limit, 2000);
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
@@ -64,7 +64,7 @@ fn dts_state_updates_saturating() {
 
 #[test]
 fn dts_max_num_slices() {
-    let mut state = super::State::new(1000000, 100);
+    let mut state = super::State::new(1_000_000, 1_000_000, 100);
     let mut iterations = 0;
     while !state.is_last_slice() {
         state.update(99);
@@ -78,6 +78,7 @@ fn pause_and_resume_works() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
     let total_instruction_limit = 2500;
     let dts = DeterministicTimeSlicingHandler::new(
+        total_instruction_limit,
         total_instruction_limit,
         1000,
         move |_slice, paused| {
@@ -112,7 +113,7 @@ fn pause_and_resume_works() {
 #[test]
 fn early_exit_if_slice_does_not_any_instructions_left() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
-    let dts = DeterministicTimeSlicingHandler::new(10000, 1000, move |_slice, paused| {
+    let dts = DeterministicTimeSlicingHandler::new(10_000, 10_000, 1_000, move |_slice, paused| {
         tx.send(paused).unwrap();
     });
     let control_thread = thread::spawn(move || {
@@ -140,7 +141,7 @@ fn early_exit_if_slice_does_not_any_instructions_left() {
 #[test]
 fn invalid_instructions() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
-    let dts = DeterministicTimeSlicingHandler::new(2500, 1000, move |_slice, paused| {
+    let dts = DeterministicTimeSlicingHandler::new(2500, 2500, 1000, move |_slice, paused| {
         tx.send(paused).unwrap();
     });
     let control_thread = thread::spawn(move || {
@@ -174,6 +175,7 @@ fn max_num_slices() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
     let total_instruction_limit = 1000000;
     let dts = DeterministicTimeSlicingHandler::new(
+        total_instruction_limit,
         total_instruction_limit,
         100,
         move |_slice, paused| {

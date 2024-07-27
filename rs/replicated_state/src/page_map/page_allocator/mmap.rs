@@ -256,7 +256,7 @@ impl PageAllocatorInner {
     }
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
+#[allow(clippy::new_without_default)]
 impl PageAllocatorInner {
     /// One always needs to instantiate a PageAllocatorInner with a file descriptor factory
     /// which will serve as a backing file for the MmapBasedPageAllocator

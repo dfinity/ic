@@ -62,7 +62,7 @@ message Block {
   IngressPayload ingress_payload = 9;
   XNetPayload xnet_payload = 10;
   SelfValidatingPayload self_validating_payload = 12;
-  EcdsaPayload ecdsa_payload = 13;
+  IDkgPayload idkg_payload = 13;
   reserved 14;
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
@@ -82,6 +82,7 @@ message ConsensusMessage {
     RandomTapeShare random_tape_share = 9;
     CatchUpPackage cup = 10;
     CatchUpPackageShare cup_share = 11;
+    EquivocationProof equivocation_proof = 12;
   }
 }
 
@@ -153,6 +154,20 @@ message NotarizationShare {
   bytes block = 3;
   bytes signature = 4;
   NodeId signer = 5;
+}
+
+message EquivocationProof {
+  NodeId signer = 1;
+  string version = 2;
+  uint64 height = 3;
+  SubnetId subnet_id = 4;
+
+  // First equivocating block
+  bytes hash1 = 5;
+  bytes signature1 = 6;
+  // Second equivocating block
+  bytes hash2 = 7;
+  bytes signature2 = 8;
 }
 
 message SubnetStreamSlice {

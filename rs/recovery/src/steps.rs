@@ -394,6 +394,7 @@ pub struct ReplayStep {
     pub config: PathBuf,
     pub subcmd: Option<ReplaySubCmd>,
     pub canister_caller_id: Option<CanisterId>,
+    pub replay_until_height: Option<u64>,
     pub result: PathBuf,
 }
 
@@ -401,10 +402,13 @@ impl Step for ReplayStep {
     fn descr(&self) -> String {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let mut base = format!(
-            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}",
+            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
+            self.replay_until_height
+                .map(|h| format!(" --replay-until-height {h}"))
+                .unwrap_or_default()
         );
         if let Some(subcmd) = &self.subcmd {
             base.push_str(&subcmd.descr);
@@ -424,6 +428,7 @@ impl Step for ReplayStep {
             self.canister_caller_id,
             self.work_dir.join("data"),
             self.subcmd.as_ref().map(|c| c.cmd.clone()),
+            self.replay_until_height,
             self.result.clone(),
         ))?;
 
@@ -714,6 +719,7 @@ impl Step for UpdateLocalStoreStep {
             None,
             self.work_dir.join("data"),
             Some(SubCommand::UpdateRegistryLocalStore),
+            None,
             self.work_dir.join("update_local_store.txt"),
         ))?;
         Ok(())
@@ -754,6 +760,7 @@ impl Step for GetRecoveryCUPStep {
                 registry_store_sha256: None,
                 output_file: self.work_dir.join("cup.proto"),
             })),
+            None,
             self.result.clone(),
         ))?;
         Ok(())

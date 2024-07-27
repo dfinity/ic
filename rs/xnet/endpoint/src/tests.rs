@@ -405,7 +405,7 @@ async fn handle_stream_with_witness_begin() {
 
     let witness_begin = STREAM_BEGIN.increment();
     let msg_begin = witness_begin.increment();
-    let msg_limit = std::usize::MAX;
+    let msg_limit = usize::MAX;
     let url = Url::parse(&format!(
         "http://localhost/api/v1/stream/{}?witness_begin={}&msg_begin={}",
         DST_SUBNET, witness_begin, msg_begin
@@ -560,7 +560,7 @@ fn put_replicated_state_for_testing(
     let (_height, mut state) = state_manager.take_tip();
     let stream = get_stream_for_testing();
     state.with_streams(btreemap![DST_SUBNET => stream]);
-    state_manager.commit_and_certify(state, h, CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, h, CertificationScope::Metadata, None);
 }
 
 /// Generates a stream containing `STREAM_COUNT` requests, beginning at

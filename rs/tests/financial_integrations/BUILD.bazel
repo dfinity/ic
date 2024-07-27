@@ -4,11 +4,13 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 BTC_RUNTIME_DEPS = [
-    "@btc_canister//file",
+    # Keep sorted.
     "//rs/tests:btc_uvm_config_image",
+    "@btc_canister//file",
 ]
 
 LEDGER_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
 ]
 
@@ -16,6 +18,9 @@ system_test(
     name = "btc_get_balance_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -43,6 +48,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],

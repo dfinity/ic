@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto::get_master_public_key_from_transcript;
-use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     ecdsa::environment_with_sig_inputs, ecdsa_sig_share_from_each_receiver,
@@ -11,6 +10,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     IDkgParticipants, IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,

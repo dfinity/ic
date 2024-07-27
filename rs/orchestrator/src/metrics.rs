@@ -12,7 +12,7 @@ pub struct OrchestratorMetrics {
     pub reboot_duration: IntGauge,
     pub orchestrator_info: IntGaugeVec,
     pub key_rotation_status: IntGaugeVec,
-    pub ecdsa_key_changed_errors: IntCounterVec,
+    pub master_public_key_changed_errors: IntCounterVec,
     pub failed_consecutive_upgrade_checks: IntCounter,
 }
 
@@ -68,9 +68,9 @@ impl OrchestratorMetrics {
                 "The current key rotation status.",
                 &["status"],
             ),
-            ecdsa_key_changed_errors: metrics_registry.int_counter_vec(
+            master_public_key_changed_errors: metrics_registry.int_counter_vec(
                 "orchestrator_tecdsa_key_changed_errors_total",
-                "Critical error counter monitoring changed tECDSA public keys",
+                "Critical error counter monitoring changed threshold master public keys",
                 &["key_id"],
             ),
             failed_consecutive_upgrade_checks: metrics_registry.int_counter(

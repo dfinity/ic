@@ -14,6 +14,7 @@ ed25519-consensus = "2.0.1"
 hex = { workspace = true }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-seed = { path = "../../../crypto_lib/seed" }
+ic-crypto-ed25519 = { path = "../../../../ed25519" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
@@ -21,8 +22,8 @@ ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 lazy_static = "1.4"
 parking_lot = "0.12"
-rand = "0.8.5"
-rand_chacha = "0.3.1"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
@@ -31,7 +32,7 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 assert_matches = { workspace = true }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-num-bigint = "0.4.3"
+num-bigint = { workspace = true }
 proptest = "1.0"
 proptest-derive = "0.3.0"
 serde_cbor = { workspace = true }

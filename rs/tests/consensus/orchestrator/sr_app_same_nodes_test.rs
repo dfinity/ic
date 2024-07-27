@@ -2,11 +2,11 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::orchestrator::subnet_recovery_app_subnet::{
     setup_same_nodes as setup, test_without_tecdsa as test,
 };
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

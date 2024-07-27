@@ -3,15 +3,16 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/types/base_types",
-    "//rs/types/types",
-    "//rs/crypto/internal/crypto_service_provider",
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
     "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/tls_interfaces",
     "//rs/protobuf",
+    "//rs/types/base_types",
+    "//rs/types/types",
     "@crate_index//:mockall",
 ]
 

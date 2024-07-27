@@ -13,4 +13,4 @@ dfn_core = { path = "../dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-serde = "1.0"
+serde = { workspace = true }

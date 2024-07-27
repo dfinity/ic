@@ -28,11 +28,6 @@ AKA:: Testcase 2.4
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::types::*;
-use crate::util::*;
 use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
@@ -41,6 +36,11 @@ use ic_management_canister_types::{
     EmptyBlob, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::types::*;
+use ic_system_test_driver::util::*;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
@@ -1015,7 +1015,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
                 &agent,
                 app_node.effective_canister_id(),
                 MAX_COMP_ALLOC,
-                Some(std::u64::MAX as u128),
+                Some(u64::MAX as u128),
                 None,
                 &logger,
             )
@@ -1030,7 +1030,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             &agent,
             app_node.effective_canister_id(),
             MAX_COMP_ALLOC,
-            Some(std::u64::MAX as u128),
+            Some(u64::MAX as u128),
             None,
         )
         .await;
@@ -1062,7 +1062,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             &agent,
             app_node.effective_canister_id(),
             Some(0),
-            Some(std::u64::MAX as u128),
+            Some(u64::MAX as u128),
             None,
             &logger,
         )

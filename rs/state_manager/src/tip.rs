@@ -119,6 +119,13 @@ pub(crate) enum TipRequest {
         states: Arc<parking_lot::RwLock<SharedState>>,
         persist_metadata_guard: Arc<Mutex<()>>,
     },
+    /// Validate the checkpointed state is valid and identical to the execution state.
+    /// Crash if diverges.
+    #[cfg(debug_assertions)]
+    ValidateReplicatedState {
+        checkpointed_state: Box<ReplicatedState>,
+        execution_state: Box<ReplicatedState>,
+    },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
     Wait {
@@ -422,6 +429,20 @@ pub(crate) fn spawn_tip_thread(
                             );
                             have_latest_manifest = true;
                         }
+
+                        #[cfg(debug_assertions)]
+                        TipRequest::ValidateReplicatedState {
+                            checkpointed_state,
+                            execution_state,
+                        } => {
+                            debug_assert!(
+                                checkpointed_state == execution_state,
+                                "Divergence: checkpointed {:#?}, \nexecution: {:#?}",
+                                checkpointed_state,
+                                execution_state,
+                            );
+                        }
+
                         TipRequest::Noop => {}
                     }
                 }
@@ -815,6 +836,8 @@ fn serialize_canister_to_tip(
             last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
             call_context_manager: canister_state.system_state.call_context_manager().cloned(),
             compute_allocation: canister_state.scheduler_state.compute_allocation,
+            priority_credit: canister_state.scheduler_state.priority_credit,
+            long_execution_mode: canister_state.scheduler_state.long_execution_mode,
             accumulated_priority: canister_state.scheduler_state.accumulated_priority,
             memory_allocation: canister_state.system_state.memory_allocation,
             freeze_threshold: canister_state.system_state.freeze_threshold,
@@ -838,10 +861,7 @@ fn serialize_canister_to_tip(
                 .canister_metrics
                 .interrupted_during_execution,
             certified_data: canister_state.system_state.certified_data.clone(),
-            consumed_cycles_since_replica_started: canister_state
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started,
+            consumed_cycles: canister_state.system_state.canister_metrics.consumed_cycles,
             stable_memory_size: canister_state
                 .execution_state
                 .as_ref()
@@ -864,10 +884,10 @@ fn serialize_canister_to_tip(
                 .global_timer
                 .to_nanos_since_unix_epoch(),
             canister_version: canister_state.system_state.canister_version,
-            consumed_cycles_since_replica_started_by_use_cases: canister_state
+            consumed_cycles_by_use_cases: canister_state
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
             wasm_chunk_store_metadata: canister_state

@@ -1,7 +1,7 @@
 use crate::message_routing::{ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys};
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
 use ic_interfaces::execution_environment::{
-    ExecutionRoundType, RegistryExecutionSettings, Scheduler,
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_logger::{fatal, ReplicaLogger};
 use ic_query_stats::deliver_query_stats;
@@ -135,16 +135,17 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Process messages from the induction pool through the Scheduler.
-        let next_checkpoint_round = batch
-            .next_checkpoint_height
-            .map(|h| ExecutionRound::from(h.get()));
+        let round_summary = batch.batch_summary.map(|b| ExecutionRoundSummary {
+            next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
+            current_interval_length: ExecutionRound::from(b.current_interval_length.get()),
+        });
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            batch.ecdsa_subnet_public_keys,
-            batch.ecdsa_quadruple_ids,
+            batch.idkg_subnet_public_keys,
+            batch.idkg_pre_signature_ids,
             ExecutionRound::from(batch.batch_number.get()),
-            next_checkpoint_round,
+            round_summary,
             execution_round_type,
             registry_settings,
         );

@@ -70,7 +70,7 @@ impl Partition for ExtPartition {
                 "1970-1-1 0:0:0",
                 "/usr/sbin/debugfs",
                 "-w",
-                &self.backing_dir.path().join(STORE_NAME).to_str().unwrap(),
+                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
                 "-",
             ])
@@ -113,7 +113,7 @@ impl Partition for ExtPartition {
         // run the underlying debugfs operation
         let mut cmd = Command::new("/usr/sbin/debugfs")
             .args([
-                &self.backing_dir.path().join(STORE_NAME).to_str().unwrap(),
+                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
                 "-",
             ])
@@ -170,7 +170,7 @@ impl ExtPartition {
                 "1970-1-1 0:0:0",
                 "/usr/sbin/debugfs",
                 "-w",
-                &self.backing_dir.path().join(STORE_NAME).to_str().unwrap(),
+                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
                 "-",
             ])

@@ -14,6 +14,7 @@ go_library(
     importpath = "github.com/dfinity/ic/rs/tests/ict/cmd",
     visibility = ["//visibility:public"],
     deps = [
+        # Keep sorted.
         "@com_github_fatih_color//:color",
         "@com_github_schollz_closestmatch//:closestmatch",
         "@com_github_spf13_cobra//:cobra",
@@ -24,6 +25,7 @@ go_test(
     name = "cmd_test",
     srcs = ["cmd_test.go"],
     deps = [
+        # Keep sorted.
         ":cmd",
         "@com_github_stretchr_testify//assert",
     ],

@@ -15,10 +15,11 @@ rust_library(
     crate_name = "canister_http",
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
+        # Keep sorted.
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
-        "//rs/tests",
+        "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:slog",
         "@crate_index//:tokio",
@@ -30,8 +31,8 @@ uvm_config_image(
     srcs = [
         ":minica_image",
         ":universal_vm_activation.sh",
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.key",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
         "//rs/tests/httpbin-rs:httpbin_image.tar",
     ],
     remap_paths = {

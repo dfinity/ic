@@ -49,8 +49,8 @@ fn derive_rho(
     let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
 
     let alg = match curve_type {
-        EccCurveType::K256 => CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-        EccCurveType::P256 => CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+        EccCurveType::K256 => IdkgProtocolAlgorithm::EcdsaSecp256k1,
+        EccCurveType::P256 => IdkgProtocolAlgorithm::EcdsaSecp256r1,
         _ => return Err(CanisterThresholdError::CurveMismatch),
     };
 
@@ -253,13 +253,12 @@ impl ThresholdEcdsaCombinedSigInternal {
         algorithm_id: AlgorithmId,
         bytes: &[u8],
     ) -> CanisterThresholdSerializationResult<Self> {
-        let alg =
-            CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id).ok_or_else(|| {
-                CanisterThresholdSerializationError(format!(
-                    "Invalid algorithm {:?} for threshold ECDSA",
-                    algorithm_id
-                ))
-            })?;
+        let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id).ok_or_else(|| {
+            CanisterThresholdSerializationError(format!(
+                "Invalid algorithm {:?} for threshold ECDSA",
+                algorithm_id
+            ))
+        })?;
 
         let curve_type = alg.curve();
 

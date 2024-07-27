@@ -343,7 +343,7 @@ impl BackupManager {
                     }
                     if !old_state_dir.join("checkpoints").exists() {
                         println!(
-                            "Error: directory {:?} doesn't have checkpints!",
+                            "Error: directory {:?} doesn't have checkpoints!",
                             old_state_dir
                         );
                         continue;

@@ -1,17 +1,15 @@
 use std::time::Duration;
 
-use crate::driver::{
-    test_env::TestEnv,
-    test_env_api::{
-        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        TopologySnapshot,
-    },
-};
-use crate::retry_with_msg_async;
 use anyhow::{anyhow, bail, Error};
 use futures::future::join_all;
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
+use ic_system_test_driver::driver::{
+    test_env::TestEnv,
+    test_env_api::{
+        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
+    },
+};
 use ic_utils::interfaces::ManagementCanister;
 
 pub fn get_install_url(env: &TestEnv) -> Result<(url::Url, PrincipalId), Error> {
@@ -146,7 +144,7 @@ pub async fn set_counters_on_counter_canisters(
         let mut requests = vec![];
         let calls_count = counter_values[idx];
         for _ in 0..calls_count {
-            let request_id = retry_with_msg_async!(
+            let request_id = ic_system_test_driver::retry_with_msg_async!(
                 format!("write call on canister={canister_id}"),
                 log,
                 retry_timeout,
@@ -174,7 +172,7 @@ pub async fn set_counters_on_counter_canisters(
     // Poll all results sequentially.
     // Overall polling duration should be roughly equal to a single polling duration. As all requests were submitted at nearly same time.
     for (canister_id, request_id) in requests_all.into_iter().flatten() {
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("call wait on canister={canister_id}"),
             log,
             retry_timeout,
@@ -206,7 +204,7 @@ pub async fn read_counters_on_counter_canisters(
     // Perform query read calls on canisters sequentially.
     let mut results = vec![];
     for canister_id in canisters {
-        let read_result = retry_with_msg_async!(
+        let read_result = ic_system_test_driver::retry_with_msg_async!(
             format!("call read on canister={canister_id}"),
             log,
             retry_timeout,

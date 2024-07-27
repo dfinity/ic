@@ -9,7 +9,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
     use strum::IntoEnumIterator;
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let associated_data = b"assoc_data_test";
 
@@ -135,7 +135,8 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
 
             let opener_index = 1;
 
-            let opening = open_dealing(
+            let opening = CommitmentOpening::open_dealing(
+                alg,
                 dealing,
                 associated_data,
                 dealer_index,
@@ -203,7 +204,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
 fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let associated_data = b"assoc_data_test";
 

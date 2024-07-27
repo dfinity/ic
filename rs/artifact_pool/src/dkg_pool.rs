@@ -10,10 +10,7 @@ use ic_interfaces::{
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::{
-    artifact::ArtifactKind, artifact_kind::DkgArtifact, consensus, consensus::dkg,
-    consensus::dkg::DkgMessageId, Height,
-};
+use ic_types::{consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height};
 use prometheus::IntCounter;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
@@ -80,7 +77,7 @@ impl DkgPoolImpl {
     }
 }
 
-impl MutablePool<DkgArtifact> for DkgPoolImpl {
+impl MutablePool<dkg::Message> for DkgPoolImpl {
     type ChangeSet = ChangeSet;
 
     /// Inserts an unvalidated artifact into the unvalidated section.
@@ -101,7 +98,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<DkgArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<dkg::Message> {
         let changed = !change_set.is_empty();
         let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
@@ -114,14 +111,14 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
                 }
                 ChangeAction::AddToValidated(message) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: DkgArtifact::message_to_advert(&message),
+                        artifact: message.clone(),
                         is_latency_sensitive: true,
                     });
                     self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: DkgArtifact::message_to_advert(&message),
+                        artifact: message.clone(),
                         // relayed
                         is_latency_sensitive: false,
                     });
@@ -148,7 +145,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
     }
 }
 
-impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
+impl ValidatedPoolReader<dkg::Message> for DkgPoolImpl {
     fn get(&self, id: &DkgMessageId) -> Option<dkg::Message> {
         self.validated.get(id).cloned()
     }
