@@ -1,8 +1,3 @@
-// False positive clippy lint.
-// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
-// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
-#![allow(clippy::needless_borrows_for_generic_args)]
-
 use std::{ffi::OsString, fmt::Write, fs, path::PathBuf};
 
 use ic_embedders::wasm_utils::validation::wasmtime_validation_config;
