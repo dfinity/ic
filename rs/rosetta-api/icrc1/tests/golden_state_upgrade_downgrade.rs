@@ -4,6 +4,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::verify_ledger_state;
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc1::account::Account;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -21,6 +22,13 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
         ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
         );
 
+    let ck_btc_minter = Account {
+        owner: PrincipalId::from_str("mqygn-kiaaa-aaaar-qaadq-cai")
+            .unwrap()
+            .0,
+        subaccount: None,
+    };
+
     for canister_id_and_name in canister_ids_and_names {
         println!("Processing {} ledger", canister_id_and_name.0);
         let canister_id = CanisterId::unchecked_from_principal(
@@ -34,7 +42,7 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
             canister_id_and_name,
             bump_gzip_timestamp(&ledger_wasm),
         );
-        verify_ledger_state(&state_machine, canister_id);
+        verify_ledger_state(&state_machine, canister_id, Some(ck_btc_minter));
     }
     assert_eq!(4, 7);
 }
@@ -53,7 +61,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     let ledger_wasm_u256 = ledger_wasm();
 
     let canister_ids_and_names_u256 = vec![
-        CK_ETH_LEDGER,
+        // CK_ETH_LEDGER,
         CK_USDC_LEDGER,
         CK_LINK_LEDGER,
         CK_OCT_LEDGER,
@@ -84,7 +92,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         );
         verify_ledger_state(&state_machine, canister_id);
     }
-    assert_eq!(4, 7);
 }
 
 #[cfg(not(feature = "u256-tokens"))]

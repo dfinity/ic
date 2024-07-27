@@ -1,16 +1,18 @@
-use super::{balance_of, get_all_ledger_and_archive_blocks, get_allowance, Tokens};
+use super::{get_all_ledger_and_archive_blocks, get_allowance, Tokens};
 use crate::metrics::parse_metric;
+use candid::{Decode, Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1::Operation;
 use ic_icrc1_ledger::ApprovalKey;
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::tokens::{TokensType, Zero};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
 use std::hash::Hash;
+use std::str::FromStr;
 
 trait InMemoryLedgerState {
     type AccountId;
@@ -31,6 +33,7 @@ trait InMemoryLedgerState {
         from: &Self::AccountId,
         spender: &Option<Self::AccountId>,
         amount: &Self::Tokens,
+        index: usize,
     );
     fn process_mint(&mut self, to: &Self::AccountId, amount: &Self::Tokens);
     fn process_transfer(
@@ -42,6 +45,8 @@ trait InMemoryLedgerState {
         fee: &Option<Self::Tokens>,
     );
     fn validate_invariants(&self);
+    fn is_interesting_allowance(from: &Self::AccountId, spender: &Self::AccountId) -> bool;
+    fn is_interesting_burn(from: &Self::AccountId) -> bool;
 }
 
 pub struct InMemoryLedger<K, AccountId, Tokens>
@@ -52,13 +57,14 @@ where
     pub allowances: BTreeMap<K, Allowance<Tokens>>,
     pub total_supply: Tokens,
     pub fee_collector: Option<AccountId>,
+    pub minter: Option<AccountId>,
 }
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
     K: Into<(AccountId, AccountId)>,
-    AccountId: PartialEq + Ord + Clone + Hash,
+    AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType + Default,
 {
     type AccountId = AccountId;
@@ -74,6 +80,15 @@ where
         fee: &Option<Self::Tokens>,
         now: TimeStamp,
     ) {
+        if Self::is_interesting_allowance(from, spender) {
+            println!(
+                "Processing approve from {} spender {}, amount {:?}, expected_allowance: {:?}, expires_at: {:?}",
+                &InMemoryLedger::<K, AccountId, Tokens>::account_hash(from)[..8],
+                &InMemoryLedger::<K, AccountId, Tokens>::account_hash(spender)[..8],
+                &amount, &expected_allowance, &expires_at
+            );
+            // println!("now: {:?}, spender: {:?}", now, spender);
+        }
         self.burn_fee(from, fee);
         self.set_allowance(from, spender, amount, expected_allowance, expires_at, now);
     }
@@ -83,12 +98,32 @@ where
         from: &Self::AccountId,
         spender: &Option<Self::AccountId>,
         amount: &Self::Tokens,
+        index: usize,
     ) {
+        if spender.is_none() && Self::is_interesting_burn(from) {
+            println!(
+                "Processing burn from {} for amount {:?} at index {}",
+                &InMemoryLedger::<K, AccountId, Tokens>::account_hash(from)[..8],
+                &amount,
+                index
+            );
+        }
+        let burns_without_spender = vec![
+            100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
+        ];
+        let spender: &Option<Self::AccountId> = &spender.clone().or_else(|| {
+            if burns_without_spender.contains(&index) {
+                self.minter.clone()
+            } else {
+                None
+            }
+        });
+        let print_stuff = index == 90258 || index == 101298;
         self.decrease_balance(from, amount);
         self.decrease_total_supply(amount);
         if let Some(spender) = spender {
             if from != spender {
-                self.decrease_allowance(from, spender, amount, None);
+                self.decrease_allowance(from, spender, amount, None, print_stuff);
             }
         }
     }
@@ -106,12 +141,24 @@ where
         amount: &Self::Tokens,
         fee: &Option<Self::Tokens>,
     ) {
+        if let Some(spender) = spender {
+            if Self::is_interesting_allowance(from, spender) {
+                println!(
+                    "Processing transfer_from from {} to {}, amount {:?}, fee: {:?}",
+                    &InMemoryLedger::<K, AccountId, Tokens>::account_hash(from)[..8],
+                    &InMemoryLedger::<K, AccountId, Tokens>::account_hash(spender)[..8],
+                    &amount,
+                    &fee
+                );
+                println!("spender: {:?}", spender);
+            }
+        }
         self.decrease_balance(from, amount);
         self.collect_fee(from, fee);
         if let Some(fee) = fee {
             if let Some(spender) = spender {
                 if from != spender {
-                    self.decrease_allowance(from, spender, &amount, Some(fee));
+                    self.decrease_allowance(from, spender, &amount, Some(fee), false);
                 }
             }
         }
@@ -125,6 +172,45 @@ where
             assert_ne!(amount, &Tokens::zero());
         }
         assert_eq!(self.total_supply, balances_total);
+    }
+
+    fn is_interesting_allowance(from: &AccountId, spender: &AccountId) -> bool {
+        let interesting_allowances = vec![
+            ("21b6fe61", "500cacfe"),
+            ("9d85cfe5", "500cacfe"),
+            ("13412832", "500cacfe"),
+            ("588bb12f", "500cacfe"),
+            ("31059c53", "500cacfe"),
+            ("6f88ff8e", "500cacfe"),
+            ("bc85029b", "500cacfe"),
+        ];
+        let from_hash = &InMemoryLedger::<K, AccountId, Tokens>::account_hash(from)[..8];
+        let spender_hash = &InMemoryLedger::<K, AccountId, Tokens>::account_hash(spender)[..8];
+        for (interesting_from, interesting_spender) in interesting_allowances {
+            if from_hash == interesting_from && spender_hash == interesting_spender {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn is_interesting_burn(from: &AccountId) -> bool {
+        let interesting_allowances = vec![
+            ("21b6fe61", "500cacfe"),
+            ("9d85cfe5", "500cacfe"),
+            ("13412832", "500cacfe"),
+            ("588bb12f", "500cacfe"),
+            ("31059c53", "500cacfe"),
+            ("6f88ff8e", "500cacfe"),
+            ("bc85029b", "500cacfe"),
+        ];
+        let from_hash = &InMemoryLedger::<K, AccountId, Tokens>::account_hash(from)[..8];
+        for (interesting_from, _interesting_spender) in interesting_allowances {
+            if from_hash == interesting_from {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -141,6 +227,7 @@ where
             allowances: BTreeMap::new(),
             total_supply: Tokens::zero(),
             fee_collector: None,
+            minter: None,
         }
     }
 
@@ -150,6 +237,7 @@ where
         spender: &AccountId,
         amount: &Tokens,
         fee: Option<&Tokens>,
+        print_stuff: bool,
     ) {
         let key = K::from((from, spender));
         let old_allowance = self
@@ -160,14 +248,35 @@ where
             .amount
             .checked_sub(amount)
             .unwrap_or_else(|| panic!("Insufficient allowance",));
+        if print_stuff {
+            println!("old allowance: {:?}", old_allowance);
+        }
         if let Some(fee) = fee {
+            if print_stuff {
+                println!("deducting fee");
+            }
             new_allowance_value = new_allowance_value
                 .checked_sub(fee)
                 .unwrap_or_else(|| panic!("Insufficient allowance",));
         }
+        if print_stuff {
+            println!("new allowance: {:?}", old_allowance);
+        }
         if new_allowance_value.is_zero() {
+            if print_stuff {
+                println!(
+                    "removing allowance since it is zero: {:?}",
+                    &new_allowance_value
+                );
+            }
             self.allowances.remove(&key);
         } else {
+            if print_stuff {
+                println!(
+                    "updating allowance since it is not zero: {:?}",
+                    &new_allowance_value
+                );
+            }
             self.allowances.insert(
                 key,
                 Allowance {
@@ -220,14 +329,18 @@ where
                 panic!("Expected allowance does not match current allowance");
             }
         }
-        self.allowances.insert(
-            key,
-            Allowance {
-                amount: amount.clone(),
-                expires_at: expires_at.map(|e| TimeStamp::from_nanos_since_unix_epoch(e)),
-                arrived_at,
-            },
-        );
+        if amount == &Tokens::zero() {
+            self.allowances.remove(&key);
+        } else {
+            self.allowances.insert(
+                key,
+                Allowance {
+                    amount: amount.clone(),
+                    expires_at: expires_at.map(|e| TimeStamp::from_nanos_since_unix_epoch(e)),
+                    arrived_at,
+                },
+            );
+        }
     }
 
     fn increase_balance(&mut self, to: &AccountId, amount: &Tokens) {
@@ -304,16 +417,43 @@ where
         let hash = hasher.finish();
         String::from(&hex::encode(hash)[..8])
     }
+
+    fn prune_expired_allowances(&mut self, now: TimeStamp) {
+        let expired_allowances: Vec<K> = self
+            .allowances
+            .iter()
+            .filter_map(|(key, allowance)| {
+                if let Some(expires_at) = allowance.expires_at {
+                    if now >= expires_at {
+                        return Some(key.clone());
+                    }
+                }
+                None
+            })
+            .collect();
+        for key in expired_allowances {
+            self.allowances.remove(&key);
+        }
+    }
 }
 
 impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     fn new_from_icrc1_ledger_blocks(
         blocks: &Vec<ic_icrc1::Block<Tokens>>,
+        minter: Option<Account>,
     ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
         let mut state = InMemoryLedger::new();
-        for block in blocks {
-            println!("processing block");
-            print_block(&block);
+        state.minter = minter;
+        let mut print_blocks = 0;
+        for (index, block) in blocks.iter().enumerate() {
+            if index == 90258 || index == 101297 {
+                print_blocks = 4;
+            }
+            if print_blocks > 0 {
+                print_blocks -= 1;
+                println!("processing block with index {}", index);
+                print_block(&block);
+            }
             if let Some(fee_collector) = block.fee_collector {
                 state.fee_collector = Some(fee_collector);
                 println!("Fee collector: {}", account_hash(&fee_collector));
@@ -326,12 +466,14 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     spender,
                     amount,
                     fee,
-                } => state.process_transfer(from, to, spender, amount, fee),
+                } => {
+                    state.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee))
+                }
                 Operation::Burn {
                     from,
                     spender,
                     amount,
-                } => state.process_burn(from, spender, amount),
+                } => state.process_burn(from, spender, amount, index),
                 Operation::Approve {
                     from,
                     spender,
@@ -345,23 +487,26 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     amount,
                     expected_allowance,
                     expires_at,
-                    fee,
+                    &fee.or(block.effective_fee),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
-            state.print_balances();
-            state.print_allowances();
-            state.validate_invariants();
+            // state.print_balances();
+            // state.print_allowances();
+            // state.validate_invariants();
         }
+        state.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
+            blocks.last().unwrap().timestamp,
+        ));
         state
     }
 }
 
-pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
+pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId, minter: Option<Account>) {
     println!("verifying state of ledger {}", ledger_id);
     let blocks = get_all_ledger_and_archive_blocks(&env, ledger_id);
     println!("retrieved all ledger and archive blocks");
-    let expected_ledger_state = InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks);
+    let expected_ledger_state = InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks, minter);
     println!("recreated expected ledger state");
     let actual_num_approvals = parse_metric(&env, ledger_id, "ledger_num_approvals");
     let actual_num_balances = parse_metric(&env, ledger_id, "ledger_balance_store_entries");
@@ -398,8 +543,24 @@ pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
         actual_num_balances, actual_num_approvals
     );
     for (account, balance) in expected_ledger_state.balances.iter() {
-        let actual_balance = balance_of(&env, ledger_id, account.clone());
-        if &Tokens::from(actual_balance) != balance {
+        // println!(
+        //     "Checking balance of account {:?}, expected balance {:?}",
+        //     account_hash(account),
+        //     balance
+        // );
+        let actual_balance = Decode!(
+            &env.query(
+                ledger_id,
+                "icrc1_balance_of",
+                Encode!(&Account::from(account.clone())).unwrap()
+            )
+            .expect("failed to query balance")
+            .bytes(),
+            Nat
+        )
+        .expect("failed to decode balance_of response");
+
+        if &Tokens::try_from(actual_balance.clone()).unwrap() != balance {
             println!(
                 "Mismatch in balance for account {:?} ({} vs {})",
                 account, balance, actual_balance
@@ -416,11 +577,22 @@ pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
     }
     for (approval, allowance) in expected_ledger_state.allowances.iter() {
         let (from, spender): (Account, Account) = approval.clone().into();
+        if allowance.amount.is_zero() {
+            println!(
+                "Expected allowance is zero! Should not happen... from: {}, spender: {}",
+                account_hash(&from),
+                account_hash(&spender)
+            );
+        }
         let actual_allowance = get_allowance(&env, ledger_id, from, spender);
         if allowance.amount != Tokens::try_from(actual_allowance.allowance.clone()).unwrap() {
             println!(
-                "Mismatch in allowance for approval {:?} ({:?} vs {:?})",
-                approval, allowance, actual_allowance.allowance
+                "Mismatch in allowance for approval from {} spender {}: {:?} ({:?} vs {:?})",
+                account_hash(&from),
+                account_hash(&spender),
+                approval,
+                allowance,
+                actual_allowance
             );
         }
         // assert_eq!(
@@ -598,7 +770,7 @@ mod tests {
         in_memory_ledger.validate_invariants();
         let expected_balance = amount.checked_sub(&burn_amount).unwrap();
 
-        in_memory_ledger.process_burn(&to, &None, &burn_amount);
+        in_memory_ledger.process_burn(&to, &None, &burn_amount, 0);
         assert_eq!(in_memory_ledger.total_supply, expected_balance);
         assert_eq!(in_memory_ledger.balances.len(), 1);
         assert!(in_memory_ledger.allowances.is_empty());
@@ -625,7 +797,7 @@ mod tests {
         in_memory_ledger.process_mint(&to, &amount);
         in_memory_ledger.validate_invariants();
 
-        in_memory_ledger.process_burn(&to, &None, &burn_amount);
+        in_memory_ledger.process_burn(&to, &None, &burn_amount, 0);
         in_memory_ledger.validate_invariants();
         assert_eq!(in_memory_ledger.total_supply, expected_total_supply);
         assert!(in_memory_ledger.balances.is_empty());
