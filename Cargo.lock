@@ -10792,6 +10792,7 @@ dependencies = [
 name = "ic-replicated-state"
 version = "0.9.0"
 dependencies = [
+ "arbitrary",
  "assert_matches",
  "bit-vec",
  "criterion",

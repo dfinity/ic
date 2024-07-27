@@ -46,10 +46,11 @@ tempfile = { workspace = true }
 uuid = { workspace = true }
 
 # Optional dependencies needed for fuzzing
+arbitrary = { workspace = true, optional = true }
+assert_matches = { workspace = true, optional = true }
 ic-test-utilities-io = { path = "../test_utilities/io", optional = true }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics", optional = true }
 proptest = { version = "1.0", optional = true }
-serde_cbor = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -75,8 +76,9 @@ harness = false
 
 [features]
 fuzzing_code = [
+    "dep:arbitrary",
+    "dep:assert_matches",
     "dep:ic-test-utilities-io",
     "dep:ic-test-utilities-metrics",
     "dep:proptest",
-    "dep:serde_cbor",
 ]
