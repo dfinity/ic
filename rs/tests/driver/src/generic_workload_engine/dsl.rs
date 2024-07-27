@@ -42,6 +42,7 @@
 /// 3. (agents.2).query("http_request", url="/main.js")
 /// 4. (agents.2).query("http_request", url="/main.js")
 /// 5. (agents.2).query("http_request", url="/main.js")
+///
 /// Thus, the frequencies of the calls is (2/5) * 100 = 40 RPS, and (3/5) * 100 = 60 RPS for the "get_account_request" and
 /// "http_request" endpoints, resp.
 #[macro_export]
