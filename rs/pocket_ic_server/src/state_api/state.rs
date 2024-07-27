@@ -953,14 +953,14 @@ impl ApiState {
     /// An operation bound to an instance (a Computation) can update the PocketIC state.
     ///
     /// * If the instance is busy executing an operation, the call returns [UpdateReply::Busy]
-    /// immediately. In that case, the state label and operation id contained in the result
-    /// indicate that the instance is busy with a previous operation.
+    ///   immediately. In that case, the state label and operation id contained in the result
+    ///   indicate that the instance is busy with a previous operation.
     ///
     /// * If the instance is available and the computation exceeds a (short) timeout,
-    /// [UpdateReply::Busy] is returned.
+    ///   [UpdateReply::Busy] is returned.
     ///
     /// * If the computation finished within the timeout, [UpdateReply::Output] is returned
-    /// containing the result.
+    ///   containing the result.
     ///
     /// Operations are _not_ queued by default. Thus, if the instance is busy with an existing operation,
     /// the client has to retry until the operation is done. Some operations for which the client
