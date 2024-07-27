@@ -348,6 +348,9 @@ pub(crate) fn syscalls<
                     })
             })
             .and_then(|mem| {
+                // False positive lint. Caller is moved if we remove the borrow
+                // meaning compilation fails.
+                #[allow(clippy::needless_borrows_for_generic_args)]
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
                 f(store.system_api_mut()?, mem)
             })

@@ -358,6 +358,7 @@ impl ValidatedCanisterSettings {
 ///     - there must be enough cycles to avoid freezing the canister.
 /// - controllers:
 ///     - the number of controllers cannot exceed the given maximum.
+///
 /// Keep this function in sync with `do_update_settings()`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_canister_settings(
