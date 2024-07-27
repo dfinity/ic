@@ -189,11 +189,6 @@ type Ok_1 = record {
   neurons_fund_neurons_count : opt nat64;
 };
 type Ok_2 = record { ticket : opt Ticket };
-type OpenRequest = record {
-  cf_participants : vec CfParticipant;
-  params : opt Params;
-  open_sns_token_swap_proposal_id : opt nat64;
-};
 type Params = record {
   min_participant_icp_e8s : nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
@@ -311,7 +306,6 @@ service : (Init) -> {
     ) query;
   new_sale_ticket : (NewSaleTicketRequest) -> (NewSaleTicketResponse);
   notify_payment_failure : (record {}) -> (Ok_2);
-  open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
     );

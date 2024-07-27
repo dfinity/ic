@@ -1,10 +1,8 @@
 use ic_crypto_internal_csp::api::{
-    CspSigVerifier, CspSigner, CspThresholdSignError, CspTlsHandshakeSignerProvider,
-    NiDkgCspClient, ThresholdSignatureCspClient,
+    CspSigVerifier, CspSigner, CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
-use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateReshareDealingError, CspDkgCreateReshareTranscriptError,
     CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError,
@@ -20,7 +18,6 @@ use ic_types::{NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 mock! {
     pub AllCryptoServiceProvider {}
@@ -197,9 +194,5 @@ mock! {
         fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch);
 
         fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
-    }
-
-    impl CspTlsHandshakeSignerProvider for AllCryptoServiceProvider {
-        fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault>;
     }
 }

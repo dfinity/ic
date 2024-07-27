@@ -288,10 +288,6 @@ name = "ic-systest-rejoin-test-large-state"
 path = "message_routing/rejoin_test_large_state.rs"
 
 [[bin]]
-name = "ic-systest-liveness-with-equivocation-test"
-path = "consensus/liveness_with_equivocation_test.rs"
-
-[[bin]]
 name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
 
@@ -300,44 +296,8 @@ name = "ic-systest-cow-safety-test"
 path = "consensus/cow_safety_test.rs"
 
 [[bin]]
-name = "ic-systest-replica-determinism-test"
-path = "consensus/replica_determinism_test.rs"
-
-[[bin]]
-name = "ic-systest-request-auth-malicious-replica-test"
-path = "consensus/request_auth_malicious_replica_test.rs"
-
-[[bin]]
-name = "ic-systest-safety-test"
-path = "consensus/safety_test.rs"
-
-[[bin]]
 name = "ic-systest-system-api-security-test"
 path = "execution/system_api_security_test.rs"
-
-[[bin]]
-name = "ic-systest-max-ingress-payload-size-test"
-path = "consensus/max_ingress_payload_size_test.rs"
-
-[[bin]]
-name = "ic-systest-dual-workload-test"
-path = "consensus/dual_workload_test.rs"
-
-[[bin]]
-name = "ic-systest-catch-up-possible-test"
-path = "consensus/catch_up_possible_test.rs"
-
-[[bin]]
-name = "ic-systest-catch-up-loop-prevention-test"
-path = "consensus/catch_up_loop_prevention_test.rs"
-
-[[bin]]
-name = "ic-systest-max-xnet-payload-size-test"
-path = "consensus/max_xnet_payload_size_test.rs"
-
-[[bin]]
-name = "ic-systest-node-graceful-leaving-test"
-path = "consensus/node_graceful_leaving_test.rs"
 
 [[bin]]
 name = "test-driver-e2e-scenarios"

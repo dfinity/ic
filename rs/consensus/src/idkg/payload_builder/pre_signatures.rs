@@ -966,7 +966,7 @@ pub(super) mod tests {
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestIDkgTranscriptBuilder::new();
 
-        // Start quadruple creation
+        // Start pre-signature creation
         let [ref blinder_config_ref] = create_new_pre_signature_in_creation(
             &env.nodes.ids::<Vec<_>>(),
             env.newest_registry_version,
