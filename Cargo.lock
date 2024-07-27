@@ -8556,6 +8556,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canisters-http-types",
+ "ic-crypto-sha2",
  "ic-error-types",
  "ic-icrc1",
  "ic-icrc1-ledger",

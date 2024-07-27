@@ -1,6 +1,7 @@
 use super::{balance_of, get_all_ledger_and_archive_blocks, get_allowance, Tokens};
 use crate::metrics::parse_metric;
 use ic_base_types::CanisterId;
+use ic_crypto_sha2::Sha256;
 use ic_icrc1::Operation;
 use ic_icrc1_ledger::ApprovalKey;
 use ic_ledger_core::approvals::Allowance;
@@ -9,6 +10,7 @@ use ic_ledger_core::tokens::TokensType;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
+use std::hash::Hash;
 
 trait InMemoryLedgerState {
     type AccountId;
@@ -49,13 +51,14 @@ where
     pub balances: BTreeMap<AccountId, Tokens>,
     pub allowances: BTreeMap<K, Allowance<Tokens>>,
     pub total_supply: Tokens,
+    pub fee_collector: Option<AccountId>,
 }
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
     K: Into<(AccountId, AccountId)>,
-    AccountId: PartialEq + Ord + Clone,
+    AccountId: PartialEq + Ord + Clone + Hash,
     Tokens: TokensType + Default,
 {
     type AccountId = AccountId;
@@ -71,10 +74,7 @@ where
         fee: &Option<Self::Tokens>,
         now: TimeStamp,
     ) {
-        if let Some(fee) = fee {
-            self.decrease_balance(from, fee);
-            self.decrease_total_supply(fee);
-        }
+        self.burn_fee(from, fee);
         self.set_allowance(from, spender, amount, expected_allowance, expires_at, now);
     }
 
@@ -107,9 +107,8 @@ where
         fee: &Option<Self::Tokens>,
     ) {
         self.decrease_balance(from, amount);
+        self.collect_fee(from, fee);
         if let Some(fee) = fee {
-            self.decrease_balance(from, fee);
-            self.decrease_total_supply(fee);
             if let Some(spender) = spender {
                 if from != spender {
                     self.decrease_allowance(from, spender, &amount, Some(fee));
@@ -123,6 +122,7 @@ where
         let mut balances_total = Self::Tokens::default();
         for (_account, amount) in &self.balances {
             balances_total = balances_total.checked_add(amount).unwrap();
+            assert_ne!(amount, &Tokens::zero());
         }
         assert_eq!(self.total_supply, balances_total);
     }
@@ -132,7 +132,7 @@ impl<K, AccountId, Tokens> InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
     K: Into<(AccountId, AccountId)>,
-    AccountId: PartialEq + Ord + Clone,
+    AccountId: PartialEq + Ord + Clone + Hash,
     Tokens: TokensType,
 {
     pub fn new() -> Self {
@@ -140,6 +140,7 @@ where
             balances: BTreeMap::new(),
             allowances: BTreeMap::new(),
             total_supply: Tokens::zero(),
+            fee_collector: None,
         }
     }
 
@@ -247,6 +248,62 @@ where
             .checked_add(amount)
             .unwrap_or_else(|| panic!("Total supply overflow"));
     }
+
+    fn collect_fee(&mut self, from: &AccountId, amount: &Option<Tokens>) {
+        if let Some(amount) = amount {
+            self.decrease_balance(from, amount);
+            if let Some(fee_collector) = &self.fee_collector {
+                self.increase_balance(&fee_collector.clone(), amount);
+            } else {
+                self.decrease_total_supply(amount);
+            }
+        }
+    }
+
+    fn burn_fee(&mut self, from: &AccountId, amount: &Option<Tokens>) {
+        if let Some(amount) = amount {
+            self.decrease_balance(from, amount);
+            self.decrease_total_supply(amount);
+        }
+    }
+
+    fn print_balances(&self) {
+        println!("Balances: {{");
+        for (account, amount) in &self.balances {
+            println!(
+                "  Account: {}",
+                InMemoryLedger::<K, AccountId, Tokens>::account_hash(account)
+            );
+            println!("  Amount: {:?}", amount);
+        }
+        println!("}}");
+    }
+
+    fn print_allowances(&self) {
+        println!("Allowances: {{");
+        for (key, allowance) in &self.allowances {
+            let (from, spender) = key.clone().into();
+            println!(
+                "  From: {}",
+                InMemoryLedger::<K, AccountId, Tokens>::account_hash(&from)
+            );
+            println!(
+                "  Spender: {}",
+                InMemoryLedger::<K, AccountId, Tokens>::account_hash(&spender)
+            );
+            println!("  Amount: {:?}", allowance.amount);
+            println!("  Expires at: {:?}", &allowance.expires_at);
+            println!("  Arrived at: {:?}", &allowance.arrived_at);
+        }
+        println!("}}");
+    }
+
+    fn account_hash(account: &AccountId) -> String {
+        let mut hasher = Sha256::new();
+        account.hash(&mut hasher);
+        let hash = hasher.finish();
+        String::from(&hex::encode(hash)[..8])
+    }
 }
 
 impl InMemoryLedger<ApprovalKey, Account, Tokens> {
@@ -255,6 +312,12 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
         let mut state = InMemoryLedger::new();
         for block in blocks {
+            println!("processing block");
+            print_block(&block);
+            if let Some(fee_collector) = block.fee_collector {
+                state.fee_collector = Some(fee_collector);
+                println!("Fee collector: {}", account_hash(&fee_collector));
+            }
             match &block.transaction.operation {
                 Operation::Mint { to, amount } => state.process_mint(to, amount),
                 Operation::Transfer {
@@ -286,6 +349,8 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
+            state.print_balances();
+            state.print_allowances();
             state.validate_invariants();
         }
         state
@@ -368,6 +433,117 @@ pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
         // );
     }
     println!("ledger state verified successfully");
+}
+
+fn account_hash(account: &Account) -> String {
+    let mut hasher = Sha256::new();
+    account.hash(&mut hasher);
+    let hash = hasher.finish();
+    String::from(&hex::encode(hash)[..8])
+}
+
+fn print_block(block: &ic_icrc1::Block<Tokens>) {
+    println!("Block {{");
+    match block.transaction.operation {
+        Operation::Mint { to, amount } => {
+            println!("  Operation: Mint {{");
+            println!("    to: {}", account_hash(&to));
+            println!("    amount: {:?}", &amount);
+            println!("  }}")
+        }
+        Operation::Transfer {
+            from,
+            to,
+            spender,
+            amount,
+            fee,
+        } => {
+            match spender {
+                None => {
+                    println!("  Operation: Transfer {{");
+                }
+                Some(_) => {
+                    println!("  Operation: Transfer From {{");
+                }
+            }
+            println!("    from: {}", account_hash(&from));
+            println!("    to: {}", account_hash(&to));
+            match spender {
+                None => {
+                    println!("    spender: None");
+                }
+                Some(spender) => {
+                    println!("    spender: {}", account_hash(&spender));
+                }
+            }
+            println!("    amount: {:?}", &amount);
+            match fee {
+                None => {
+                    println!("    fee: None");
+                }
+                Some(fee) => {
+                    println!("    fee: {:?}", fee);
+                }
+            }
+            println!("  }}")
+        }
+        Operation::Burn {
+            from,
+            spender,
+            amount,
+        } => {
+            println!("  Operation: Burn {{");
+            println!("    from: {}", account_hash(&from));
+            match spender {
+                None => {
+                    println!("    spender: None");
+                }
+                Some(spender) => {
+                    println!("    spender: {}", account_hash(&spender));
+                }
+            }
+            println!("    amount: {:?}", &amount);
+            println!("  }}")
+        }
+        Operation::Approve {
+            from,
+            spender,
+            amount,
+            expected_allowance,
+            expires_at,
+            fee,
+        } => {
+            println!("  Operation: Approve {{");
+            println!("    from: {}", account_hash(&from));
+            println!("    spender: {}", account_hash(&spender));
+            println!("    amount: {:?}", &amount);
+            match expected_allowance {
+                None => {
+                    println!("    expected_allowance: None");
+                }
+                Some(expected_allowance) => {
+                    println!("    expected_allowance: {:?}", &expected_allowance);
+                }
+            }
+            match expires_at {
+                None => {
+                    println!("    expires_at: None");
+                }
+                Some(expires_at) => {
+                    println!("    expires_at: {}", expires_at);
+                }
+            }
+            match fee {
+                None => {
+                    println!("    fee: None");
+                }
+                Some(fee) => {
+                    println!("    fee: {:?}", fee);
+                }
+            }
+            println!("  }}")
+        }
+    }
 }
 
 #[cfg(test)]

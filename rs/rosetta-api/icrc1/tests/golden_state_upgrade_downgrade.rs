@@ -3,10 +3,6 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::verify_ledger_state;
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
-use ic_nns_test_utils_golden_nns_state::{
-    new_state_machine_with_golden_fiduciary_state_or_panic,
-    new_state_machine_with_golden_sns_state_or_panic,
-};
 use ic_state_machine_tests::StateMachine;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -21,7 +17,9 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
 
     let canister_ids_and_names = vec![CK_BTC_LEDGER];
 
-    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let state_machine =
+        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
+        );
 
     for canister_id_and_name in canister_ids_and_names {
         println!("Processing {} ledger", canister_id_and_name.0);
@@ -52,10 +50,10 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     const CK_PEPE_LEDGER: (&str, &str) = ("etik7-oiaaa-aaaar-qagia-cai", "ckPEPE");
     const CK_SHIB_LEDGER: (&str, &str) = ("fxffn-xiaaa-aaaar-qagoa-cai", "ckSHIB");
 
-    let ledger_wasm_u256 = ledger_wasm_u256();
+    let ledger_wasm_u256 = ledger_wasm();
 
     let canister_ids_and_names_u256 = vec![
-        // CK_ETH_LEDGER,
+        CK_ETH_LEDGER,
         CK_USDC_LEDGER,
         CK_LINK_LEDGER,
         CK_OCT_LEDGER,
@@ -63,7 +61,9 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         CK_SHIB_LEDGER,
     ];
 
-    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let state_machine =
+        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
+        );
 
     for canister_id_and_name_u256 in canister_ids_and_names_u256 {
         println!("Processing {} ledger", canister_id_and_name_u256.0);
@@ -87,6 +87,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     assert_eq!(4, 7);
 }
 
+#[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
@@ -148,7 +149,8 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         YUKU,
     ];
 
-    let state_machine = new_state_machine_with_golden_sns_state_or_panic();
+    let state_machine =
+        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
 
     for canister_id_and_name in canister_id_and_names {
         upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
@@ -172,21 +174,11 @@ fn upgrade_canister(
     println!("Upgraded {} '{}'", canister_name, canister_id_str);
 }
 
-#[cfg(not(feature = "u256-tokens"))]
 fn ledger_wasm() -> Wasm {
     Wasm::from_bytes(ic_test_utilities_load_wasm::load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("ledger"),
         "ic-icrc1-ledger",
         &[],
-    ))
-}
-
-#[cfg(feature = "u256-tokens")]
-fn ledger_wasm_u256() -> Wasm {
-    Wasm::from_bytes(ic_test_utilities_load_wasm::load_wasm(
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("ledger"),
-        "ic-icrc1-ledger",
-        &["u256"],
     ))
 }
 

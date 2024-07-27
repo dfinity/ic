@@ -112,14 +112,13 @@ rust_test(
         srcs = [
             "tests/golden_state_upgrade_downgrade.rs",
         ],
+        crate_features = features,
         data = [
-            "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
-            "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
-            "IC_ICRC1_LEDGER_U256_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
         },
         tags = [
             "manual",  # CI should not be downloading fiduciary_state.tar.zst or sns_state.tar.zst.

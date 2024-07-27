@@ -15,6 +15,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
+ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
 ic-error-types = { path = "../../../../types/error_types" }
 ic-icrc1 = { path = "../.." }
 ic-icrc1-ledger = { path = ".." }
