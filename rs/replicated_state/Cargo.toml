@@ -45,6 +45,12 @@ strum_macros = { workspace = true }
 tempfile = { workspace = true }
 uuid = { workspace = true }
 
+# Optional dependencies needed for fuzzing
+ic-test-utilities-io = { path = "../test_utilities/io", optional = true }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics", optional = true }
+proptest = { version = "1.0", optional = true }
+serde_cbor = { workspace = true, optional = true }
+
 [dev-dependencies]
 assert_matches = { workspace = true }
 criterion = { workspace = true }
@@ -68,4 +74,9 @@ name = "bench_allocator"
 harness = false
 
 [features]
-fuzzing_code = []
+fuzzing_code = [
+    "dep:ic-test-utilities-io",
+    "dep:ic-test-utilities-metrics",
+    "dep:proptest",
+    "dep:serde_cbor",
+]
