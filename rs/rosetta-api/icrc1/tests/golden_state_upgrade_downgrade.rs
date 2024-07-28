@@ -49,7 +49,6 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
         bump_gzip_timestamp(&ledger_wasm),
     );
     verify_ledger_state(&state_machine, canister_id, Some(burns_without_spender));
-    assert_eq!(4, 7);
 }
 
 #[cfg(feature = "u256-tokens")]

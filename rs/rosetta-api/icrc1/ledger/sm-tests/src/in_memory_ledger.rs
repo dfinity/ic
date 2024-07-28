@@ -424,7 +424,7 @@ pub fn verify_ledger_state(
     for (approval, allowance) in expected_ledger_state.allowances.iter() {
         let (from, spender): (Account, Account) = approval.clone().into();
         assert!(
-            allowance.amount.is_zero(),
+            !allowance.amount.is_zero(),
             "Expected allowance is zero! Should not happen... from: {}, spender: {}",
             account_hash(&from),
             account_hash(&spender)
