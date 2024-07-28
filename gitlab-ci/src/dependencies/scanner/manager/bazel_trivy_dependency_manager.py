@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import typing
+from html import unescape
 from pathlib import Path
 
 from model.dependency import Dependency
@@ -18,6 +19,7 @@ TRIVY_SCANNER_ID = "BAZEL_TRIVY_CS"
 RE_SHA256_HASH = re.compile(r"^[\da-fA-F]{64}$")
 RE_ROOTFS_FILE = re.compile(r"^/tmp/tmp\.\w+/tmp_rootfs/(.+)$")
 RE_VULNERABLE_DEPENDENCY_ID_REPLACEMENTS = [re.compile(r"^(?P<dependency_id>linux-modules-[^-]+).*$")]
+
 
 class TrivyResultParser(abc.ABC):
     """Base class for helper classes for converting different trivy results to findings."""
@@ -89,7 +91,7 @@ class TrivyResultParser(abc.ABC):
                     Vulnerability(
                         id=vulnerability_id,
                         name=trivy_vulnerability["VulnerabilityID"],
-                        description=trivy_vulnerability["Title"] if "Title" in trivy_vulnerability else "n/a",
+                        description=unescape(trivy_vulnerability["Title"]) if "Title" in trivy_vulnerability else "n/a",
                         score=TrivyResultParser.__score(trivy_vulnerability),
                     )
                 )

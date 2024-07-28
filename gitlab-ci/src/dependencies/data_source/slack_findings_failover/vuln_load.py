@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from html import unescape
 from typing import Dict, Tuple, List
 
 from data_source.slack_findings_failover.data import VULNERABILITY_HEADER, SlackFinding, VULNERABILITY_MSG_FIXED_REACTION, VULNERABILITY_MSG_AUTHOR
@@ -35,7 +36,7 @@ class SlackVulnerabilityLoader:
                 next(block_iter)
                 cur_block = next(block_iter)
                 assert cur_block["type"] == "section" and cur_block["text"] and cur_block["text"]["text"]
-                vuln_desc = parse_slack_field(cur_block["text"]["text"], "Description")
+                vuln_desc = unescape(parse_slack_field(cur_block["text"]["text"], "Description"))
                 slack_vuln = Vulnerability(id=vuln_id, name=vuln_name, description=vuln_desc, score=vuln_score)
 
                 findings_by_id: Dict[Tuple[str, str, str, str], SlackFinding] = {}
