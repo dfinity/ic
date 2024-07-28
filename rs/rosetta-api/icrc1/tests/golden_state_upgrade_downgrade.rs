@@ -4,46 +4,51 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::verify_ledger_state;
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc1::account::Account;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 #[cfg(not(feature = "u256-tokens"))]
 #[test]
-fn should_upgrade_icrc_ck_canisters_with_golden_state() {
-    // u64 ledgers
-    const CK_BTC_LEDGER: (&str, &str) = ("mxzaz-hqaaa-aaaar-qaada-cai", "ckBTC");
+fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
+    const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
+    const CK_BTC_LEDGER_CANISTER_NAME: &str = "ckBTC";
 
     let ledger_wasm = ledger_wasm();
-
-    let canister_ids_and_names = vec![CK_BTC_LEDGER];
 
     let state_machine =
         ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
         );
 
-    let ck_btc_minter = Account {
+    let ck_btc_minter = icrc_ledger_types::icrc1::account::Account {
         owner: PrincipalId::from_str("mqygn-kiaaa-aaaar-qaadq-cai")
             .unwrap()
             .0,
         subaccount: None,
     };
+    let burns_without_spender = ic_icrc1_ledger_sm_tests::in_memory_ledger::BurnsWithoutSpender {
+        minter: ck_btc_minter,
+        burn_indexes: vec![
+            100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
+        ],
+    };
 
-    for canister_id_and_name in canister_ids_and_names {
-        println!("Processing {} ledger", canister_id_and_name.0);
-        let canister_id = CanisterId::unchecked_from_principal(
-            PrincipalId::from_str(canister_id_and_name.0).unwrap(),
-        );
-        // verify_ledger_state(&state_machine, canister_id);
-        upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
-        // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        upgrade_canister(
-            &state_machine,
-            canister_id_and_name,
-            bump_gzip_timestamp(&ledger_wasm),
-        );
-        verify_ledger_state(&state_machine, canister_id, Some(ck_btc_minter));
-    }
+    let canister_id = CanisterId::unchecked_from_principal(
+        PrincipalId::from_str(CK_BTC_LEDGER_CANISTER_ID).unwrap(),
+    );
+    // TODO: Uncomment once mainnet ledger has been upgraded to include `ledger_num_approvals` metric
+    // verify_ledger_state(&state_machine, canister_id);
+    upgrade_canister(
+        &state_machine,
+        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
+        ledger_wasm.clone(),
+    );
+    // Upgrade again with bumped wasm timestamp to test pre_upgrade
+    upgrade_canister(
+        &state_machine,
+        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
+        bump_gzip_timestamp(&ledger_wasm),
+    );
+    verify_ledger_state(&state_machine, canister_id, Some(burns_without_spender));
     assert_eq!(4, 7);
 }
 
@@ -61,7 +66,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     let ledger_wasm_u256 = ledger_wasm();
 
     let canister_ids_and_names_u256 = vec![
-        // CK_ETH_LEDGER,
+        CK_ETH_LEDGER,
         CK_USDC_LEDGER,
         CK_LINK_LEDGER,
         CK_OCT_LEDGER,
@@ -78,7 +83,8 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         let canister_id = CanisterId::unchecked_from_principal(
             PrincipalId::from_str(canister_id_and_name_u256.0).unwrap(),
         );
-        verify_ledger_state(&state_machine, canister_id);
+        // TODO: Uncomment once mainnet ledgers have been upgraded to include `ledger_num_approvals` metric
+        verify_ledger_state(&state_machine, canister_id, None);
         upgrade_canister(
             &state_machine,
             canister_id_and_name_u256,
@@ -90,7 +96,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
             canister_id_and_name_u256,
             bump_gzip_timestamp(&ledger_wasm_u256),
         );
-        verify_ledger_state(&state_machine, canister_id);
+        verify_ledger_state(&state_machine, canister_id, None);
     }
 }
 
@@ -160,13 +166,19 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
 
     for canister_id_and_name in canister_id_and_names {
+        let canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::from_str(canister_id_and_name.0).unwrap(),
+        );
+        verify_ledger_state(&state_machine, canister_id, None);
         upgrade_canister(&state_machine, canister_id_and_name, ledger_wasm.clone());
+        verify_ledger_state(&state_machine, canister_id, None);
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
         upgrade_canister(
             &state_machine,
             canister_id_and_name,
             bump_gzip_timestamp(&ledger_wasm),
         );
+        verify_ledger_state(&state_machine, canister_id, None);
     }
 }
 
