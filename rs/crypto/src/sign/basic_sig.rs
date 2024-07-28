@@ -71,7 +71,8 @@ impl BasicSigVerifierInternal {
             if pubkey_alg != AlgorithmId::Ed25519 {
                 return Err(CryptoError::AlgorithmNotSupported {
                     algorithm: pubkey_alg,
-                    reason: format!("Only Ed25519 is supported in batched basic sig verification."),
+                    reason: "Only Ed25519 is supported in batched basic sig verification."
+                        .to_string(),
                 });
             }
             let pk = ic_crypto_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(
@@ -101,8 +102,7 @@ impl BasicSigVerifierInternal {
                 sig_bytes: vec![],
                 internal_error: e.to_string(),
             }
-        })?;
-        Ok(())
+        })
     }
 }
 
