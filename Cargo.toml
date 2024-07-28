@@ -528,7 +528,7 @@ ic-utils = { version = "0.37.0", features = ["raw"] }
 ic-btc-interface = "0.2.0"
 ic-btc-validation = "0.1.0"
 ic-btc-test-utils = "0.1.0"
-ic_bls12_381 = { version = "=0.9.2", default-features = false, features = [
+ic_bls12_381 = { version = "^0.10", default-features = false, features = [
     "groups",
     "pairings",
     "alloc",
@@ -578,8 +578,8 @@ pprof = { version = "0.13.0", default-features = false, features = [
 ] }
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
-prost = "=0.12.2"
-prost-build = "=0.12.2"
+prost = "^0.12"
+prost-build = "^0.12"
 protobuf = "2.28.0"
 quinn = { git = "https://github.com/quinn-rs/quinn", rev = "693c9b7cfbf89c541ba99523237594499984ffed", default-features = false, features = [
     "ring",

@@ -7,12 +7,13 @@ use crate::pocket_ic::{
 };
 use crate::InstanceId;
 use crate::{OpId, Operation};
+use fqdn::{Fqdn, fqdn};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
 use futures::future::Shared;
-use hyper::header::{HeaderValue, HOST};
-use hyper::Version;
+//use hyper::header::{HeaderValue, HOST};
+//use hyper::Version;
 use hyper_legacy::{client::connect::HttpConnector, Client};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
@@ -472,19 +473,19 @@ impl ApiState {
         http_gateway_config: HttpGatewayConfig,
     ) -> (InstanceId, u16) {
         use crate::state_api::routes::verify_cbor_content_header;
-        use axum::extract::{DefaultBodyLimit, Path, Request as AxumRequest, State};
-        use axum::handler::Handler;
-        use axum::middleware::{self, Next};
-        use axum::response::Response as AxumResponse;
+        use axum::extract::{DefaultBodyLimit, Path, /*Request as AxumRequest,*/ State};
+        use axum::middleware::from_fn_with_state;
+        //use axum::handler::Handler;
+        //use axum::middleware::{self, Next};
+        //use axum::response::Response as AxumResponse;
         use axum::routing::{get, post};
         use axum::Router;
         use http_body_util::Full;
         use hyper::body::{Bytes, Incoming};
         use hyper::header::CONTENT_TYPE;
-        use hyper::{Method, Request, Response, StatusCode, Uri};
+        use hyper::{Method, Request, Response, StatusCode, /*Uri*/};
         use hyper_util::client::legacy::{connect::HttpConnector, Client};
-        use icx_proxy::{agent_handler, AppState, DnsCanisterConfig, ResolverState, Validator};
-        use std::str::FromStr;
+        //use std::str::FromStr;
 
         async fn handler_status(
             State(replica_url): State<String>,
@@ -587,29 +588,6 @@ impl ApiState {
             .await
         }
 
-        // converts an HTTP request to an HTTP/1.1 request required by icx-proxy
-        async fn http2_middleware(mut request: AxumRequest, next: Next) -> AxumResponse {
-            let uri = Uri::try_from(
-                request
-                    .uri()
-                    .path_and_query()
-                    .map(|v| v.as_str())
-                    .unwrap_or(request.uri().path()),
-            )
-            .unwrap();
-            let authority = request.uri().authority().map(|a| a.to_string());
-            *request.version_mut() = Version::HTTP_11;
-            *request.uri_mut() = uri;
-            if let Some(authority) = authority {
-                if !request.headers().contains_key(HOST) {
-                    request
-                        .headers_mut()
-                        .insert(HOST, HeaderValue::from_str(&authority).unwrap());
-                }
-            }
-            next.run(request).await
-        }
-
         let port = http_gateway_config.listen_at.unwrap_or_default();
         let addr = format!("[::]:{}", port);
         let listener = std::net::TcpListener::bind(&addr)
@@ -638,6 +616,7 @@ impl ApiState {
                 .build()
                 .unwrap();
             agent.fetch_root_key().await.unwrap();
+            /*
             let replica_uri = Uri::from_str(&replica_url).unwrap();
             let replicas = vec![(agent, replica_uri)];
             let gateway_domains = http_gateway_config
@@ -651,6 +630,29 @@ impl ApiState {
             let validator = Validator::default();
             let app_state = AppState::new_for_testing(replicas, resolver, validator);
             let fallback_handler = agent_handler.with_state(app_state);
+            */
+            let client = ic_http_gateway::HttpGatewayClientBuilder::new()
+              .with_agent(agent)
+              .build().unwrap();
+            let state_handler = Arc::new(ic_gateway::HandlerState::new(
+                client,
+                true,
+            ));
+
+            struct NoopCustomDomainResolver;
+
+            impl ic_gateway::ResolvesDomain for NoopCustomDomainResolver {
+               fn resolve(&self, _host: &Fqdn) -> Option<ic_gateway::DomainLookup> {
+                 None
+               }
+            }
+
+            let domain_resolver = Arc::new(ic_gateway::DomainResolver::new(
+                vec![fqdn!("localhost")],
+                vec![],
+                vec![],
+                Arc::new(NoopCustomDomainResolver),
+            )) as Arc<dyn ic_gateway::ResolvesDomain>;
 
             let router = Router::new()
                 .route("/api/v2/status", get(handler_status))
@@ -674,10 +676,22 @@ impl ApiState {
                     post(handler_read_state)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
-                .fallback_service(fallback_handler)
+                //.fallback_service(fallback_handler)
+      .fallback(
+        post(ic_gateway::handler)
+            .get(ic_gateway::handler)
+            .put(ic_gateway::handler)
+            .layer(ic_gateway::layer(&[
+                Method::HEAD,
+                Method::GET,
+                Method::POST,
+                Method::OPTIONS,
+            ]))
+            .with_state(state_handler)
+      )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .layer(middleware::from_fn(http2_middleware))
+                .layer(from_fn_with_state(domain_resolver, ic_gateway::validate_middleware))
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 

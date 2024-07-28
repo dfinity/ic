@@ -16,6 +16,7 @@ hyper-legacy = { package = "hyper", version = "0.14.18", features = ["full"] }
 hyper-socks2 = "^0.8.0"
 hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-util = { workspace = true }
+fqdn = "0.3.11"
 futures = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
@@ -55,7 +56,8 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
-icx-proxy = { path = "../boundary_node/icx_proxy", features = ["dev_proxy"] }
+ic-http-gateway = { path = "/home/martin/http-gateway/packages/ic-http-gateway" }
+ic-gateway = { path = "/home/martin/ic-gateway" }
 hex = { workspace = true }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 clap = { version = "3.2.25", features = ["derive"] }

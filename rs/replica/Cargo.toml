@@ -43,8 +43,8 @@ ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
 ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-jemalloc-ctl = "0.3.3"
-jemallocator = "0.3.2"
+tikv-jemalloc-ctl = "0.5"
+tikv-jemallocator = "0.5"
 libc = { workspace = true }
 nix = { workspace = true }
 num_cpus = "1.13.1"
