@@ -697,15 +697,15 @@ fn get_master_public_keys(
 ) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
     let mut public_keys = BTreeMap::new();
 
-    let Some(ecdsa) = cup.content.block.get_value().payload.as_ref().as_ecdsa() else {
+    let Some(idkg) = cup.content.block.get_value().payload.as_ref().as_idkg() else {
         return public_keys;
     };
 
-    for (key_id, key_transcript) in &ecdsa.key_transcripts {
+    for (key_id, key_transcript) in &idkg.key_transcripts {
         let Some(transcript) = key_transcript
             .current
             .as_ref()
-            .and_then(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id()))
+            .and_then(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id()))
         else {
             continue;
         };
@@ -859,7 +859,7 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let mut ecdsa = idkg::IDkgPayload::empty(
+        let mut idkg = idkg::IDkgPayload::empty(
             h,
             subnet_test_id(0),
             vec![MasterKeyTranscript {
@@ -868,7 +868,7 @@ mod tests {
                 master_key_id: key_id.clone(),
             }],
         );
-        ecdsa.idkg_transcripts = idkg_transcripts;
+        idkg.idkg_transcripts = idkg_transcripts;
 
         let block = Block::new(
             CryptoHashOf::from(CryptoHash(Vec::new())),
@@ -876,7 +876,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
                     dkg: ic_types::consensus::dkg::Summary::fake(),
-                    ecdsa: Some(ecdsa),
+                    idkg: Some(idkg),
                 }),
             ),
             h,

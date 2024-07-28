@@ -69,7 +69,7 @@ impl OrchestratorMetrics {
                 &["status"],
             ),
             master_public_key_changed_errors: metrics_registry.int_counter_vec(
-                "orchestrator_tecdsa_key_changed_errors_total",
+                "orchestrator_master_public_key_changed_errors_total",
                 "Critical error counter monitoring changed threshold master public keys",
                 &["key_id"],
             ),

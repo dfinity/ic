@@ -336,11 +336,11 @@ impl BlockMaker {
 
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
-                        ecdsa: idkg_summary,
+                        idkg: idkg_summary,
                     })
                 }
                 dkg::Payload::Dealings(dealings) => {
-                    let (batch_payload, dealings, ecdsa_data) = match status::get_status(
+                    let (batch_payload, dealings, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
@@ -355,7 +355,7 @@ impl BlockMaker {
                         Status::Halting => (
                             BatchPayload::default(),
                             dkg::Dealings::new_empty(dealings.start_height),
-                            /*ecdsa_data=*/ None,
+                            /*idkg_data=*/ None,
                         ),
                         Status::Running => {
                             let batch_payload = self.build_batch_payload(
@@ -367,7 +367,7 @@ impl BlockMaker {
                                 subnet_records,
                             );
 
-                            let ecdsa_data = idkg::create_data_payload(
+                            let idkg_data = idkg::create_data_payload(
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
                                 &*self.crypto,
@@ -385,7 +385,7 @@ impl BlockMaker {
                             .ok()
                             .flatten();
 
-                            (batch_payload, dealings, ecdsa_data)
+                            (batch_payload, dealings, idkg_data)
                         }
                     };
 
@@ -397,7 +397,7 @@ impl BlockMaker {
                     BlockPayload::Data(DataPayload {
                         batch: batch_payload,
                         dealings,
-                        ecdsa: ecdsa_data,
+                        idkg: idkg_data,
                     })
                 }
             },

@@ -1,4 +1,10 @@
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
+
+use ic_system_test_driver::driver::test_env_api::set_var_to_path;
+
+pub mod node;
+pub mod rw_message;
+pub mod ssh_access;
 
 /**
  * 1. Delete existing tc rules (if present).
@@ -27,4 +33,10 @@ sudo tc qdisc show dev {device}
         latency_ms = latency.as_millis(),
         p2p_listen_port = p2p_listen_port
     )
+}
+
+pub fn set_sandbox_env_vars(dir: PathBuf) {
+    set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
+    set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
+    set_var_to_path("COMPILER_BINARY", dir.join("compiler_sandbox"));
 }

@@ -767,15 +767,14 @@ pub fn register_callback(
     canister_state: &mut CanisterState,
     originator: CanisterId,
     respondent: CanisterId,
-    callback_id: CallbackId,
     deadline: CoarseTime,
-) {
+) -> CallbackId {
     let call_context_manager = canister_state
         .system_state
         .call_context_manager_mut()
         .unwrap();
     let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(originator, callback_id, deadline),
+        CallOrigin::SystemTask,
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         RequestMetadata::new(0, UNIX_EPOCH),
@@ -792,7 +791,7 @@ pub fn register_callback(
         WasmClosure::new(0, 2),
         None,
         deadline,
-    ));
+    ))
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
@@ -1024,7 +1023,6 @@ prop_compose! {
         update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
         threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
-        ecdsa_signature_agreements in any::<u64>(),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
@@ -1035,7 +1033,6 @@ prop_compose! {
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
         metrics.threshold_signature_agreements = threshold_signature_agreements;
-        metrics.ecdsa_signature_agreements = ecdsa_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(

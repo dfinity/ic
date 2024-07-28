@@ -259,7 +259,7 @@ pub fn deliver_batches(
 /// This function creates responses to the system calls that are redirected to
 /// consensus. There are two types of calls being handled here:
 /// - Initial NiDKG transcript creation, where a response may come from summary payloads.
-/// - Threshold ECDSA signature creation, where a response may come from from data payloads.
+/// - Canister threshold signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
 pub fn generate_responses_to_subnet_calls(
     block: &Block,
@@ -281,8 +281,10 @@ pub fn generate_responses_to_subnet_calls(
         ))
     } else {
         let block_payload = block_payload.as_ref().as_data();
-        if let Some(payload) = &block_payload.ecdsa {
-            consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(payload));
+        if let Some(payload) = &block_payload.idkg {
+            consensus_responses.append(&mut generate_responses_to_signature_request_contexts(
+                payload,
+            ));
             consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
         }
 
@@ -431,9 +433,9 @@ fn generate_dkg_response_payload(
     }
 }
 
-/// Creates responses to `SignWithECDSA` system calls with the computed
+/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
 /// signature.
-pub fn generate_responses_to_sign_with_ecdsa_calls(
+pub fn generate_responses_to_signature_request_contexts(
     idkg_payload: &idkg::IDkgPayload,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();

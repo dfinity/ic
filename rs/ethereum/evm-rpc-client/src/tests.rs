@@ -108,6 +108,52 @@ async fn should_not_retry_when_max_num_retries_reached() {
     assert_eq!(result, expected_result);
 }
 
+mod max_expected_too_few_cycles_error {
+    use super::*;
+    use crate::max_expected_too_few_cycles_error;
+    use crate::types::candid::{RpcApi, RpcService};
+
+    #[test]
+    fn should_get_max_expected_too_few_cycles_for_custom_rpc_service() {
+        let result: MultiRpcResult<()> = MultiRpcResult::Inconsistent(vec![
+            (
+                RpcService::Custom(RpcApi {
+                    url: "https://eth.llamarpc.com".to_string(),
+                    headers: None,
+                }),
+                Err(RpcError::ProviderError(ProviderError::TooFewCycles {
+                    expected: 701_433_600,
+                    received: 350_729_600,
+                })),
+            ),
+            (
+                RpcService::Custom(RpcApi {
+                    url: "https://ethereum-rpc.publicnode.com".to_string(),
+                    headers: None,
+                }),
+                Err(RpcError::ProviderError(ProviderError::TooFewCycles {
+                    expected: 893_894_400,
+                    received: 350_729_600,
+                })),
+            ),
+            (
+                RpcService::Custom(RpcApi {
+                    url: "https://rpc.ankr.com/eth".to_string(),
+                    headers: None,
+                }),
+                Err(RpcError::ProviderError(ProviderError::TooFewCycles {
+                    expected: 893_894_400,
+                    received: 350_729_600,
+                })),
+            ),
+        ]);
+
+        let max_too_few_cycles = max_expected_too_few_cycles_error(&result);
+
+        assert_eq!(max_too_few_cycles, Some(893_894_400));
+    }
+}
+
 fn a_block() -> Block {
     Block {
         base_fee_per_gas: 8_876_901_983_u64.into(),
