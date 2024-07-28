@@ -1,6 +1,7 @@
 import logging
 
 from data_source.jira_finding_data_source import JiraFindingDataSource
+from data_source.slack_findings_failover_data_store import SlackFindingsFailoverDataStore
 from integration.slack.slack_default_notification_handler import SlackDefaultNotificationHandler
 from integration.slack.slack_trivy_finding_notification_handler import SlackTrivyFindingNotificationHandler
 from model.project import Project
@@ -60,5 +61,6 @@ if __name__ == "__main__":
         BazelTrivyContainer(app_owner_msg_subscriber=notifier),
         JiraFindingDataSource(finding_data_source_subscribers),
         scanner_subscribers,
+        SlackFindingsFailoverDataStore(projects=REPOS_TO_SCAN[0].projects)
     )
     scanner_job.do_periodic_scan(REPOS_TO_SCAN)

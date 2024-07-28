@@ -9,6 +9,7 @@ import typing
 
 from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
+from data_source.findings_failover_data_store import FindingsFailoverDataStore
 from integration.github.github_api import GithubApi
 from model.finding import Finding
 from model.repository import Repository
@@ -31,10 +32,12 @@ class DependencyScanner:
         dependency_manager: DependencyManager,
         finding_data_source: FindingDataSource,
         scanner_subscribers: typing.List[ScannerSubscriber],
+        failover_data_store: typing.Optional[FindingsFailoverDataStore] = None,
     ):
         self.subscribers = scanner_subscribers
         self.dependency_manager = dependency_manager
         self.finding_data_source = finding_data_source
+        self.failover_data_store = failover_data_store
         self.job_id = os.environ.get("CI_PIPELINE_ID", "CI_PIPELINE_ID")
         self.root = PROJECT_ROOT
 
@@ -92,9 +95,17 @@ class DependencyScanner:
                         if dependency_id not in existing_findings_by_vul_dep_id:
                             existing_findings_by_vul_dep_id[dependency_id] = []
                         existing_findings_by_vul_dep_id[dependency_id].append(finding)
+
+                    failover_findings = []
                     for index, finding in enumerate(current_findings):
                         jira_finding = existing_findings.get(finding.id())
-                        if jira_finding:
+                        if self.failover_data_store and self.failover_data_store.can_handle(current_findings[index]):
+                            # the finding is handled by the failover store (because it can't be handled by finding_data_source)
+                            failover_findings.append(current_findings[index])
+                            if jira_finding:
+                                # if there is an existing finding in the finding_data_source we delete it to avoid confusion
+                                self.finding_data_source.delete_finding(jira_finding)
+                        elif jira_finding:
                             # update vulnerabilities and clear risk if we have new vulnerabilities
                             if jira_finding.vulnerabilities != current_findings[index].vulnerabilities:
                                 jira_finding.update_risk_and_vulnerabilities_for_same_finding(current_findings[index])
@@ -131,6 +142,9 @@ class DependencyScanner:
                             if len(prev_deleted_findings) > 0:
                                 # only link the last created deleted finding to the current finding
                                 self.finding_data_source.link_findings(prev_deleted_findings[0], cur_finding)
+
+                    if self.failover_data_store:
+                        self.failover_data_store.store_findings(repository.name, self.dependency_manager.get_scanner_id(), failover_findings)
 
                 findings_to_remove = set(existing_findings.keys()).difference(map(lambda x: x.id(), current_findings))
                 for key in findings_to_remove:

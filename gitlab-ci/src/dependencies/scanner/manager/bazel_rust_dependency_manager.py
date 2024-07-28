@@ -9,19 +9,21 @@ import traceback
 import typing
 
 import git
-import git_changes
 import parse
 from cvss import CVSS3
+from packaging import version
+
+import git_changes
 from model.dependency import Dependency
 from model.finding import Finding
 from model.project import Project
 from model.vulnerability import Vulnerability
-from packaging import version
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 
 RUSTSEC_URL = "https://rustsec.org/advisories/"
 CRATES_IO_URL = "https://crates.io/crates/"
+
 
 # noinspection PyMethodMayBeStatic
 class BazelCargoExecutor:
@@ -73,6 +75,7 @@ class BazelCargoExecutor:
             return ProcessExecutor.execute_command(command, path.resolve(), environment)
         except subprocess.CalledProcessError:
             return ""
+
 
 class BazelRustDependencyManager(DependencyManager):
     """Helper for Bazel-related functions."""
@@ -127,7 +130,7 @@ class BazelRustDependencyManager(DependencyManager):
         if vulnerability_from_cargo_audit["versions"]["patched"]:
             fix = {
                 vulnerability_id: vulnerability_from_cargo_audit["versions"]["patched"]
-                + vulnerability_from_cargo_audit["versions"]["unaffected"]
+                                  + vulnerability_from_cargo_audit["versions"]["unaffected"]
             }
         else:
             fix = {}
@@ -155,8 +158,6 @@ class BazelRustDependencyManager(DependencyManager):
             description=vulnerability_from_cargo_audit["title"],
             score=score,
         )
-
-
 
     def has_dependencies_changed(self) -> typing.Dict[str, bool]:
 
@@ -285,8 +286,8 @@ class BazelRustDependencyManager(DependencyManager):
                         index
                         for index, value in enumerate(finding_builder)
                         if vulnerable_dependency.id == value.vulnerable_dependency.id
-                        and vulnerable_dependency.name == value.vulnerable_dependency.name
-                        and vulnerable_dependency.version == value.vulnerable_dependency.version
+                           and vulnerable_dependency.name == value.vulnerable_dependency.name
+                           and vulnerable_dependency.version == value.vulnerable_dependency.version
                     ),
                     -1,
                 )
@@ -365,7 +366,7 @@ class BazelRustDependencyManager(DependencyManager):
         # in this case the path doesn't uniquely identify the dependency so we use the name as ID
         return Dependency(id=name, name=name, version=vers, fix_version_for_vulnerability={})
 
-    def __get_first_level_dependencies_and_projects_from_cargo(self, vulnerable_dependency: Dependency, path: pathlib.Path) -> typing.Tuple[typing.List[Dependency],typing.List[str]]:
+    def __get_first_level_dependencies_and_projects_from_cargo(self, vulnerable_dependency: Dependency, path: pathlib.Path) -> typing.Tuple[typing.List[Dependency], typing.List[str]]:
         tree = self.executor.get_cargo_tree_output_for_vulnerable_dependency(vulnerable_dependency, path)
         # sample cargo tree output:
         # 0time v0.1.45
@@ -481,7 +482,7 @@ class BazelRustDependencyManager(DependencyManager):
 
             result = result.split("\n")
             for project_string in result:
-                project_builder.add(project_string)
+                project_builder.add("ic/" + project_string)
 
         project_builder.discard("")
         return list(project_builder)

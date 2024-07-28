@@ -1,0 +1,188 @@
+import json
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Tuple
+
+from data_source.slack_findings_failover.data import SlackFinding, SlackProjectInfo, SlackVulnerabilityEvent, VULNERABILITY_HEADER
+from data_source.slack_findings_failover.parse_format import project_to_list_item, get_current_iso_timestamp
+from integration.slack.slack_block_kit_utils import block_kit_header, block_kit_section_with_two_cols, block_kit_bullet_list_with_headline, block_kit_section_with_single_col, block_kit_divider, BlockKitListHeadline
+from model.finding import Finding
+from model.vulnerability import Vulnerability
+
+
+@dataclass
+class VulnerabilityInfo:
+    vulnerability: Vulnerability
+    finding_by_id: Dict[Tuple[str, str, str, str], Finding]
+
+
+@dataclass
+class SlackVulnerabilityInfo:
+    vulnerability: Vulnerability
+    finding_by_id: Dict[Tuple[str, str, str, str], SlackFinding]
+    msg_id_by_channel: Dict[str, str] = field(default_factory=lambda: {})
+
+    @staticmethod
+    def from_vuln_info(vuln_info: VulnerabilityInfo):
+        finding_by_id = {}
+        for finding in vuln_info.finding_by_id.values():
+            si = SlackFinding.from_finding(finding)
+            finding_by_id[si.id()] = si
+
+        return SlackVulnerabilityInfo(vuln_info.vulnerability, finding_by_id)
+
+    def get_channel_ids(self, info_by_project: Dict[str, SlackProjectInfo]) -> Set[str]:
+        channel_ids = set(self.msg_id_by_channel.keys())
+        for finding in self.finding_by_id.values():
+            for proj in finding.projects:
+                channel_ids.update(info_by_project[proj].channels)
+        return channel_ids
+
+    def remove_findings_for(self, info_by_project: Dict[str, SlackProjectInfo], repository: str, scanner: str) -> List[SlackVulnerabilityEvent]:
+        res = []
+        for finding in self.finding_by_id.values():
+            if finding.repository == repository and finding.scanner == scanner:
+                channel_ids = set()
+                for proj in finding.projects:
+                    channel_ids.update(info_by_project[proj].channels)
+                res.append(SlackVulnerabilityEvent.dep_removed(self.vulnerability.id, channel_ids, finding.id(), finding.projects))
+                del self.finding_by_id[finding.id()]
+        if len(self.finding_by_id) == 0:
+            return [SlackVulnerabilityEvent.vuln_removed(self.vulnerability.id, self.get_channel_ids(info_by_project))]
+        return res
+
+    def merge_with(self, findings: Dict[Tuple[str, str, str, str], SlackFinding], channel_id: str, message_id: str):
+        if channel_id in self.msg_id_by_channel:
+            raise RuntimeError(f"merging vuln info with vuln info from same channel: existing {self.msg_id_by_channel[channel_id]}, new {message_id}")
+        self.msg_id_by_channel[channel_id] = message_id
+        for s_finding in findings.values():
+            if s_finding.id() in self.finding_by_id:
+                add = set(s_finding.projects).difference(self.finding_by_id[s_finding.id()].projects)
+                for proj in add:
+                    self.finding_by_id[s_finding.id()].projects.append(proj)
+                self.finding_by_id[s_finding.id()].projects.sort()
+            else:
+                self.finding_by_id[s_finding.id()] = s_finding
+
+    def get_diff_for_add(self, info_by_project: Dict[str, SlackProjectInfo]) -> List[SlackVulnerabilityEvent]:
+        res = []
+        res.append(SlackVulnerabilityEvent.vuln_added(self.vulnerability.id, self.get_channel_ids(info_by_project)))
+        for s_finding in self.finding_by_id.values():
+            channel_ids = set()
+            for proj in s_finding.projects:
+                channel_ids.update(info_by_project[proj].channels)
+            res.append(SlackVulnerabilityEvent.dep_added(self.vulnerability.id, channel_ids, s_finding.id(), s_finding.projects))
+        return res
+
+    def get_diff_for_remove(self, info_by_project: Dict[str, SlackProjectInfo], repository: str, scanner: str) -> List[SlackVulnerabilityEvent]:
+        res = []
+        finding_skipped = False
+        for s_finding in self.finding_by_id.values():
+            if s_finding.repository != repository or s_finding.scanner != scanner:
+                finding_skipped = True
+                continue
+            channel_ids = set()
+            for proj in s_finding.projects:
+                channel_ids.update(info_by_project[proj].channels)
+            res.append(SlackVulnerabilityEvent.dep_removed(self.vulnerability.id, channel_ids, s_finding.id(), s_finding.projects))
+        if not finding_skipped:
+            res = [SlackVulnerabilityEvent.vuln_removed(self.vulnerability.id, self.get_channel_ids(info_by_project))] + res
+        return res
+
+    def update_with(self, other: VulnerabilityInfo, info_by_project: Dict[str, SlackProjectInfo], repository: str, scanner: str) -> List[SlackVulnerabilityEvent]:
+        if self.vulnerability.id != other.vulnerability.id:
+            raise RuntimeError(f"trying to merge different vulnerabilities {self.vulnerability.id} and {other.vulnerability.id}")
+        vuln_id = self.vulnerability.id
+        res = []
+        vuln_updated_fields = {}
+        # we set name = id if the id is not a link
+        if self.vulnerability.name != other.vulnerability.name and self.vulnerability.id.startswith("http"):
+            vuln_updated_fields["Name"] = self.vulnerability.name
+            self.vulnerability.name = other.vulnerability.name
+        if self.vulnerability.description != other.vulnerability.description:
+            vuln_updated_fields["Description"] = self.vulnerability.description
+            self.vulnerability.description = other.vulnerability.description
+        if self.vulnerability.score != other.vulnerability.score:
+            vuln_updated_fields["Score"] = str(self.vulnerability.score) if self.vulnerability.score != -1 else "n/a"
+            self.vulnerability.score = other.vulnerability.score
+        if len(vuln_updated_fields) > 0:
+            res.append(SlackVulnerabilityEvent.vuln_changed(vuln_id, set(self.msg_id_by_channel.keys()), vuln_updated_fields))
+
+        for o_finding in other.finding_by_id.values():
+            if o_finding.id() in self.finding_by_id:
+                o_projs = set(o_finding.projects)
+                projs = set(self.finding_by_id[o_finding.id()].projects)
+                added = o_projs.difference(projs)
+                removed = projs.difference(o_projs)
+                if len(added) > 0:
+                    channel_ids = set()
+                    for proj in added:
+                        channel_ids.update(info_by_project[proj].channels)
+                    res.append(SlackVulnerabilityEvent.dep_added(vuln_id, channel_ids, o_finding.id(), list(added)))
+                if len(removed) > 0:
+                    channel_ids = set()
+                    for proj in removed:
+                        channel_ids.update(info_by_project[proj].channels)
+                    res.append(SlackVulnerabilityEvent.dep_removed(vuln_id, channel_ids, o_finding.id(), list(removed)))
+                if len(added) > 0 or len(removed) > 0:
+                    self.finding_by_id[o_finding.id()].projects = sorted(o_finding.projects)
+            else:
+                channel_ids = set()
+                for proj in o_finding.projects:
+                    channel_ids.update(info_by_project[proj].channels)
+                res.append(SlackVulnerabilityEvent.dep_added(vuln_id, channel_ids, o_finding.id(), o_finding.projects))
+                self.finding_by_id[o_finding.id()] = SlackFinding.from_finding(o_finding)
+
+        keys = list(self.finding_by_id.keys())
+        for key in keys:
+            s_finding = self.finding_by_id[key]
+            if s_finding.repository != repository or s_finding.scanner != scanner:
+                # we are only processing findings with matching repo & scanner
+                continue
+            if s_finding.id() not in other.finding_by_id:
+                channel_ids = set()
+                for proj in s_finding.projects:
+                    channel_ids.update(info_by_project[proj].channels)
+                res.append(SlackVulnerabilityEvent.dep_removed(vuln_id, channel_ids, s_finding.id(), s_finding.projects))
+                del self.finding_by_id[key]
+
+        return res
+
+    def get_slack_msg_for(self, channel_id: str, info_by_project: Dict[str, SlackProjectInfo]) -> Optional[str]:
+        block_kit_msg = [block_kit_header(VULNERABILITY_HEADER)]
+        if self.vulnerability.id.startswith("http"):
+            vuln_id = f"<{self.vulnerability.id}|{self.vulnerability.name}>"
+        else:
+            vuln_id = self.vulnerability.id
+        vuln_score = str(self.vulnerability.score) if self.vulnerability.score != -1 else "n/a"
+        block_kit_msg.append(block_kit_section_with_two_cols("ID", vuln_id, "Score", vuln_score))
+
+        risk_assessors = set()
+        filtered_findings = []
+        for finding in self.finding_by_id.values():
+            is_filtered = False
+            for proj in finding.projects:
+                if channel_id in info_by_project[proj].channels:
+                    if not is_filtered:
+                        filtered_findings.append(finding)
+                        is_filtered = True
+                    risk_assessors.update(info_by_project[proj].risk_assessors_by_channel[channel_id])
+        if len(filtered_findings) == 0:
+            return None
+
+        block_kit_msg.append(block_kit_section_with_two_cols("Risk Assessor", ", ".join(sorted(list(risk_assessors))), "Last Update", get_current_iso_timestamp()))
+        block_kit_msg.append(block_kit_section_with_single_col("Description", self.vulnerability.description))
+
+        block_kit_msg.append(block_kit_header("Findings"))
+
+        filtered_findings.sort(key=lambda x: x.id())
+        for finding in filtered_findings:
+            block_kit_msg.append(block_kit_divider())
+            block_kit_msg.append(block_kit_section_with_two_cols("Repository", finding.repository, "Scanner", finding.scanner))
+            block_kit_msg.append(block_kit_section_with_two_cols("Dependency", finding.dependency_id, "Version", finding.dependency_version))
+            list_items = []
+            for proj in finding.projects:
+                if channel_id in info_by_project[proj].channels:
+                    list_items.append(project_to_list_item(proj, 0))
+            block_kit_msg.append(block_kit_bullet_list_with_headline(BlockKitListHeadline.with_text("Projects"), list_items))
+
+        return json.dumps(block_kit_msg)

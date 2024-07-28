@@ -4,12 +4,13 @@ import os
 import pathlib
 import typing
 
+from nested_lookup import nested_lookup
+from nodesemver import satisfies
+
 from model.dependency import Dependency
 from model.finding import Finding
 from model.project import Project
 from model.vulnerability import Vulnerability
-from nested_lookup import nested_lookup
-from nodesemver import satisfies
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 
@@ -220,7 +221,7 @@ class NPMDependencyManager(DependencyManager):
                         vulnerable_dependency=vulnerable_dependency,
                         vulnerabilities=vulnerabilities,
                         first_level_dependencies=first_level_dependencies,
-                        projects=[project.name],
+                        projects=[project.path],
                         risk_assessor=[],
                         score=score,
                     )
