@@ -2,6 +2,7 @@ import json
 import logging
 import traceback
 import urllib.request
+from time import sleep
 from typing import Dict, List, Optional
 
 from integration.slack.slack_channel_config import SlackChannelConfig
@@ -20,27 +21,30 @@ class SlackApi:
         self.log_to_console = log_to_console
         self.oauth_token = oauth_token
 
-    def __api_request(self, url: str, data: Optional[any] = None) -> Optional[any]:
+    def __api_request(self, url: str, data: Optional[any] = None, retry: int = 0) -> Optional[any]:
         req = urllib.request.Request(
             url=url,
             data=json.dumps(data).encode(),
             headers={"Authorization": f"Bearer {self.oauth_token}", "content-type": "application/json; charset=utf-8"},
         )
-
-        try:
-            http_response = urllib.request.urlopen(req, timeout=30)
-            return json.loads(http_response.read())
-        except urllib.error.HTTPError as e:
-            body = e.read().decode()
-            logging.error(
-                f"Slack API request {url} failed."
-            )
-            logging.debug(
-                f"Slack API request {url} failed with HTTP response body: {body}\ntraceback:\n{traceback.format_exc()}"
-            )
-        except Exception:
-            logging.error(f"Slack API request {url} could not send the requested message.")
-            logging.debug(f"Slack API request {url} could not send the requested message.\ntraceback:\n{traceback.format_exc()}")
+        while retry >= 0:
+            try:
+                http_response = urllib.request.urlopen(req, timeout=30)
+                return json.loads(http_response.read())
+            except urllib.error.HTTPError as e:
+                body = e.read().decode()
+                logging.error(
+                    f"Slack API request {url} failed."
+                )
+                logging.debug(
+                    f"Slack API request {url} failed with HTTP response body: {body}\ntraceback:\n{traceback.format_exc()}"
+                )
+            except Exception:
+                logging.error(f"Slack API request {url} could not send the requested message.")
+                logging.debug(f"Slack API request {url} could not send the requested message.\ntraceback:\n{traceback.format_exc()}")
+            retry -= 1
+            if retry >= 0:
+                sleep(1)
         return None
 
     def send_message(self, message: str, is_block_kit_message: bool = False, thread_id: Optional[str] = None) -> Optional[str]:
@@ -59,7 +63,7 @@ class SlackApi:
             if thread_id:
                 data["thread_ts"] = thread_id
 
-            api_response = self.__api_request("https://slack.com/api/chat.postMessage", data)
+            api_response = self.__api_request("https://slack.com/api/chat.postMessage", data, retry=3)
             if api_response["ok"]:
                 return api_response["ts"]
             return None
@@ -77,7 +81,7 @@ class SlackApi:
                 data["blocks"] = message
             else:
                 data["text"] = message
-            self.__api_request("https://slack.com/api/chat.update", data)
+            self.__api_request("https://slack.com/api/chat.update", data, retry=3)
 
     def delete_message(self, message_id: str):
         if self.log_to_console:
@@ -89,7 +93,7 @@ class SlackApi:
                 "ts": message_id,
             }
 
-            self.__api_request("https://slack.com/api/chat.delete", data)
+            self.__api_request("https://slack.com/api/chat.delete", data, retry=3)
 
     def add_reaction(self, reaction: str, message_id: str):
         if self.log_to_console:
@@ -102,7 +106,7 @@ class SlackApi:
                 "timestamp": message_id,
             }
 
-            self.__api_request("https://slack.com/api/reactions.add", data)
+            self.__api_request("https://slack.com/api/reactions.add", data, retry=3)
 
     def try_get_slack_id(self, user: User) -> Optional[str]:
         if user.email is None:
@@ -151,7 +155,7 @@ class SlackApi:
                 url += f"&cursor={cursor}"
 
             # https://api.slack.com/methods/conversations.history#examples
-            api_response = self.__api_request(url)
+            api_response = self.__api_request(url, retry=3)
 
             if api_response["ok"]:
                 for message in api_response["messages"]:
