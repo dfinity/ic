@@ -278,7 +278,7 @@ class BazelRustDependencyManager(DependencyManager):
                         vulnerable_dependency
                     )
                     projects = self.__get_projects_for_vulnerable_dependency(
-                        vulnerable_dependency, first_level_dependencies
+                        project, vulnerable_dependency, first_level_dependencies
                     )
                 else:
                     first_level_dependencies, projects = self.__get_first_level_dependencies_and_projects_from_cargo(vulnerable_dependency, path)
@@ -464,7 +464,7 @@ class BazelRustDependencyManager(DependencyManager):
         return dependency_builder
 
     def __get_projects_for_vulnerable_dependency(
-        self, vulnerable_dependency: Dependency, first_level_dependencies: typing.List[Dependency]
+        self, project: Project, vulnerable_dependency: Dependency, first_level_dependencies: typing.List[Dependency]
     ) -> typing.List[str]:
         project_builder: typing.Set = set()
 
@@ -483,7 +483,7 @@ class BazelRustDependencyManager(DependencyManager):
 
             result = result.split("\n")
             for project_string in result:
-                project_builder.add("ic/" + project_string)
+                project_builder.add(f"{project.path}/{project_string}")
 
         project_builder.discard("")
         return list(project_builder)
