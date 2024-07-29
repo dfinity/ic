@@ -3076,6 +3076,16 @@ pub struct ListNeurons {
     /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: ::core::option::Option<bool>,
+    /// If this is set to true, and a neuron in the "requested list" has its
+    /// visibility set to public, then, it will (also) be included in the
+    /// full_neurons field in the response (which is of type ListNeuronsResponse).
+    /// Note that this has no effect on which neurons are in the "requested list".
+    /// In particular, this does not cause all public neurons to become part of the
+    /// requested list. In general, you probably want to set this to true, but
+    /// since this feature was added later, it is opt in to avoid confusing
+    /// existing (unmigrated) callers.
+    #[prost(bool, optional, tag = "4")]
+    pub include_public_neurons_in_full_neurons: ::core::option::Option<bool>,
 }
 /// A response to a `ListNeurons` request.
 ///

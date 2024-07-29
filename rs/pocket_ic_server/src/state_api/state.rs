@@ -610,8 +610,11 @@ impl ApiState {
             next.run(request).await
         }
 
-        let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("[::]:{}", port);
+        let ip_addr = http_gateway_config
+            .ip_addr
+            .unwrap_or("127.0.0.1".to_string());
+        let port = http_gateway_config.port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
         let real_port = listener.local_addr().unwrap().port();

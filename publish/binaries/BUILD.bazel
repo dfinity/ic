@@ -4,17 +4,7 @@ load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "re
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-NO_STRIP = [
-    "canister_sandbox",
-    "ic-btc-adapter",
-    "replica",
-]
-
-TEST_BINARIES = [
-    "types-test",
-]
-
-BINARIES = {
+ALL_BINARIES = {
     "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
@@ -82,33 +72,33 @@ TESTONLY_BINARIES = [
     "replicated-state-test",
 ]
 
-[release_nostrip_binary(
-    name = name + "_bin",
-    binary = BINARIES[name],
-) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES and name not in TESTONLY_BINARIES]
+# We don't strip the more complex binaries
+# in order to have some debug information available.
+NO_STRIP_BINARIES = [
+    "canister_sandbox",
+    "replica",
+]
+
+TEST_BINARIES = [
+    "types-test",
+]
 
 [release_nostrip_binary(
     name = name + "_bin",
-    testonly = True,
-    binary = BINARIES[name],
-) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES and name in TESTONLY_BINARIES]
+    binary = ALL_BINARIES[name],
+) for name in NO_STRIP_BINARIES]
 
 [release_strip_binary(
     name = name + "_bin",
-    binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES and name not in TESTONLY_BINARIES]
-
-[release_strip_binary(
-    name = name + "_bin",
-    testonly = True,
-    binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES and name in TESTONLY_BINARIES]
+    testonly = name in TESTONLY_BINARIES,
+    binary = ALL_BINARIES[name],
+) for name in ALL_BINARIES if name not in NO_STRIP_BINARIES and name not in TEST_BINARIES]
 
 [release_strip_binary_test(
     name = name + "_bin",
     testonly = True,
-    binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP and name in TEST_BINARIES]
+    binary = ALL_BINARIES[name],
+) for name in TEST_BINARIES]
 
 # all targets below are tesonly because the targets violating the testonly flag
 # would error at this point
@@ -116,7 +106,7 @@ TESTONLY_BINARIES = [
 [
     genrule(
         name = name + "_cleaned",
-        testonly = True,
+        testonly = name in TESTONLY_BINARIES,
         srcs = [name + "_bin"],
         outs = [name],
         cmd = select({
@@ -125,37 +115,7 @@ TESTONLY_BINARIES = [
         }),
         executable = True,
     )
-    for name in BINARIES
-    if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
-]
-
-# TODO: remove "ic-https-outcalls-adapter" exception
-# once transition rules are functioning as expected
-genrule(
-    name = "ic-https-outcalls-adapter_cleaned",
-    testonly = True,
-    srcs = ["ic-https-outcalls-adapter_bin"],
-    outs = ["ic-https-outcalls-adapter"],
-    cmd = select({
-        "@platforms//os:linux": "objcopy --strip-unneeded -R .comment -R .note -R .note.gnu.build-id $< $@",
-        "@platforms//os:osx": "cp $< $@",
-    }),
-    executable = True,
-)
-
-[
-    genrule(
-        name = name + "_cleaned",
-        testonly = True,
-        srcs = [name + "_bin"],
-        outs = [name],
-        cmd = select({
-            "@platforms//os:linux": "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
-            "@platforms//os:osx": "cp $< $@",
-        }),
-        executable = True,
-    )
-    for name in TEST_BINARIES
+    for name in ALL_BINARIES
 ]
 
 [
@@ -163,13 +123,12 @@ genrule(
         name = name + ".gz",
         srcs = [name],
     )
-    for name in BINARIES
+    for name in ALL_BINARIES
 ]
 
 filegroup(
     name = "binaries",
-    testonly = True,
-    srcs = [name + ".gz" for name in BINARIES],
+    srcs = [name + ".gz" for name in ALL_BINARIES],
 )
 
 upload_artifacts(
@@ -199,7 +158,7 @@ upload_artifacts(
     visibility = ["//testnet/tools:__pkg__"],
 )
 
-BINS_TO_TEST = [":" + name for name in BINARIES]
+BINS_TO_TEST = [":" + name for name in ALL_BINARIES]
 
 sh_test(
     name = "binary-libraries-test",
