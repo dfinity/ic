@@ -471,8 +471,8 @@ pub(crate) fn get_chain_key_config_if_enabled(
     }
 }
 
-/// Return the set of quadruple IDs to be delivered in the batch of this block.
-/// We deliver IDs of all available quadruples that were created using the current key transcript.
+/// Return the set of pre-signature IDs to be delivered in the batch of this block.
+/// We deliver IDs of all available pre-signatures that were created using the current key transcript.
 pub(crate) fn get_pre_signature_ids_to_deliver(
     block: &Block,
 ) -> BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> {

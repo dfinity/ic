@@ -63,6 +63,7 @@ fn test_merge_neurons_and_simulate_merge_neurons() {
                     not_for_profit: true,
                     ..Default::default()
                 }
+                .into()
             ),
             None,
             "There is more than one neuron with the same id."
@@ -178,6 +179,7 @@ fn test_spawn_neuron() {
                     maturity_e8s_equivalent: 1_000_000_000, // Equivalent to 10 ICP
                     ..Default::default()
                 }
+                .into()
             ),
             None,
             "There is more than one neuron with the same id."
@@ -524,6 +526,7 @@ fn test_list_neurons() {
             neuron_ids: vec![neuron_id_1.id, neuron_id_2.id, neuron_id_3.id],
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: Some(false),
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -537,6 +540,7 @@ fn test_list_neurons() {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);
@@ -550,6 +554,7 @@ fn test_list_neurons() {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(false),
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 1);
@@ -564,6 +569,7 @@ fn test_list_neurons() {
             neuron_ids: vec![neuron_id_3.id],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);

@@ -710,7 +710,6 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    use_cost_scaling_flag: bool,
     enable_canister_snapshots: bool,
     idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
@@ -737,7 +736,6 @@ impl StateMachineBuilder {
             checkpoint_interval_length: None,
             subnet_type: SubnetType::System,
             enable_canister_snapshots: false,
-            use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
@@ -850,13 +848,6 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_use_cost_scaling_flag(self, use_cost_scaling_flag: bool) -> Self {
-        Self {
-            use_cost_scaling_flag,
-            ..self
-        }
-    }
-
     pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
         Self {
             enable_canister_snapshots,
@@ -956,7 +947,6 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.use_cost_scaling_flag,
             self.enable_canister_snapshots,
             self.idkg_keys_signing_enabled_status,
             self.ecdsa_signature_fee,
@@ -1252,7 +1242,6 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        use_cost_scaling_flag: bool,
         enable_canister_snapshots: bool,
         idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
@@ -1332,14 +1321,12 @@ impl StateMachine {
             ..Default::default()
         };
 
-        let mut cycles_account_manager = CyclesAccountManager::new(
+        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
             subnet_type,
             subnet_id,
             subnet_config.cycles_account_manager_config,
-        );
-        cycles_account_manager.set_using_cost_scaling(use_cost_scaling_flag);
-        let cycles_account_manager = Arc::new(cycles_account_manager);
+        ));
         let state_manager = Arc::new(StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,

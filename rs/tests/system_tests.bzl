@@ -220,6 +220,7 @@ def system_test(
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
     )
@@ -254,6 +255,7 @@ def system_test(
         env = env,
         tags = tags + ["requires-network", "system_test"] +
                ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
     )
@@ -275,6 +277,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         outs = [name + "_size.txt"],
         cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -288,6 +291,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         /usr/sbin/mkfs.vfat -i "0" -n CONFIG $@
         """,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -297,6 +301,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         fs = ":" + name + "_vfat",
         remap_paths = remap_paths,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -312,5 +317,6 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         name = name,
         actual = name + ".zst",
         tags = tags,
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
     )

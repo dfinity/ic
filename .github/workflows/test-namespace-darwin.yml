@@ -1,12 +1,16 @@
 # Darwin tests on runners from https://namespace.so
 name: test-namespace
 on: [push]
+
+# Ensure there's only one instance of this workflow for any PR/branch/tag, and
+# cancel the previous one if necessary
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-namespace:
-    strategy:
-      matrix:
-        os: [ namespace-profile-darwin-small ] # profile created in namespace console
-    runs-on: ${{ matrix.os }}
+    runs-on: namespace-profile-darwin-small # profile created in namespace console
     steps:
 
       - name: Install nsc

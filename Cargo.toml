@@ -185,6 +185,8 @@ members = [
     "rs/nns/common/protobuf_generator",
     "rs/nns/cmc",
     "rs/nns/governance",
+    "rs/nns/governance/api",
+    "rs/nns/governance/init",
     "rs/nns/governance/protobuf_generator",
     "rs/nns/handlers/lifeline/impl",
     "rs/nns/handlers/lifeline/interface",
@@ -208,6 +210,7 @@ members = [
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
     "rs/orchestrator/registry_replicator",
+    "rs/p2p/artifact_downloader",
     "rs/p2p/artifact_manager",
     "rs/p2p/consensus_manager",
     "rs/p2p/peer_manager",
@@ -506,21 +509,22 @@ hyper-util = { version = "0.1.6", features = ["full"] }
 hyper-socks2 = { version = "0.8.0", default-features = false, features = [
     "rustls",
 ] }
-ic-agent = { version = "0.35.0", features = ["hyper"] }
-# TODO: [NET-1734] Delete this once the feature is merged to master.
-ic-agent-call-v3 = { package = "ic-agent", git = "https://github.com/dfinity/agent-rs", rev = "9e45b314fc7496d48065590fac90790e0bdc6eed", features = [
-    "sync_call",
+ic-agent = { version = "0.37.1", features = [
+    "experimental_sync_call",
+    "hyper",
+    "reqwest",
+    "pem",
 ] }
 ic-cdk = "0.13.2"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
 ic_principal = { version = "0.1.1", default-features = false }
-ic-response-verification = "2.3.0"
+ic-response-verification = "2.6.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.5"
-ic-utils = { version = "0.35.0", features = ["raw"] }
+ic-utils = { version = "0.37.0", features = ["raw"] }
 ic-btc-interface = "0.2.0"
 ic-btc-validation = "0.1.0"
 ic-btc-test-utils = "0.1.0"

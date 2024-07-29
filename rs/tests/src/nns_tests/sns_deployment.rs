@@ -1,12 +1,11 @@
-use std::collections::{BTreeSet, HashMap};
-use std::str::FromStr;
-use std::time::Duration;
-use std::time::Instant;
+use std::{
+    collections::{BTreeSet, HashMap},
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
-use candid::Decode;
-use candid::{Nat, Principal};
-use ic_agent::Agent;
-use ic_agent::{agent::EnvelopeContent, Identity, Signature};
+use candid::{Decode, Nat, Principal};
+use ic_agent::{agent::EnvelopeContent, Agent, Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_icrc1_test_utils::KeyPairGenerator;
@@ -15,61 +14,62 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
-use ic_system_test_driver::canister_agent::{CanisterAgent, HasCanisterAgentCapability};
-use ic_system_test_driver::canister_api::{
-    CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
-    NnsDappRequestProvider, Request, Response, SnsRequestProvider,
+use ic_system_test_driver::{
+    canister_agent::{CanisterAgent, HasCanisterAgentCapability},
+    canister_api::{
+        CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
+        NnsDappRequestProvider, Request, Response, SnsRequestProvider,
+    },
+    canister_requests,
+    driver::{
+        farm::HostFeature,
+        prometheus_vm::{HasPrometheus, PrometheusVm},
+        test_env::TestEnv,
+        test_env_api::{
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
+            NnsCanisterWasmStrategy, NnsCustomizations, TEST_USER1_STARTING_TOKENS,
+        },
+    },
+    generic_workload_engine::{
+        engine::Engine,
+        metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome},
+    },
+    sns_client::openchat_create_service_nervous_system_proposal,
+    types::{CanisterStatusResult, CreateCanisterResult},
+    util::UniversalCanister,
 };
-use ic_system_test_driver::canister_requests;
-use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
-use ic_system_test_driver::driver::test_env_api::NnsCanisterWasmStrategy;
-use ic_system_test_driver::driver::test_env_api::TEST_USER1_STARTING_TOKENS;
-use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, NnsCustomizations,
-};
-use ic_system_test_driver::generic_workload_engine::engine::Engine;
-use ic_system_test_driver::generic_workload_engine::metrics::{
-    LoadTestMetrics, LoadTestOutcome, RequestOutcome,
-};
-use ic_system_test_driver::sns_client::openchat_create_service_nervous_system_proposal;
-use ic_system_test_driver::types::CanisterStatusResult;
-use ic_system_test_driver::types::CreateCanisterResult;
-use ic_system_test_driver::util::UniversalCanister;
 use rosetta_core::models::RosettaSupportedKeyPair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
-use ic_sns_swap::pb::v1::{new_sale_ticket_response, Lifecycle};
-use ic_sns_swap::swap::principal_to_subaccount;
-use ic_types::Cycles;
-use ic_types::Height;
-use ic_universal_canister::management;
-use ic_universal_canister::wasm;
+use ic_sns_swap::{
+    pb::v1::{new_sale_ticket_response, Lifecycle},
+    swap::principal_to_subaccount,
+};
+use ic_types::{Cycles, Height};
+use ic_universal_canister::{management, wasm};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_system_test_driver::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
-use ic_system_test_driver::util::{assert_create_agent_with_identity, block_on};
-
-use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+use ic_system_test_driver::{
+    sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S},
+    util::{assert_create_agent_with_identity, block_on},
 };
-use ic_system_test_driver::driver::test_env::TestEnvAttribute;
+
+use ic_system_test_driver::driver::{
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    test_env::TestEnvAttribute,
+};
 
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 
-use crate::nns_tests::neurons_fund::NnsNfNeuron;
-use crate::nns_tests::sns_aggregator::AggregatorClient;
+use crate::nns_tests::{neurons_fund::NnsNfNeuron, sns_aggregator::AggregatorClient};
 
 const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
 
@@ -276,7 +276,7 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
 /// that the tests are using realistic parameters.
 ///
 /// The NNS will be initialized with only the "test" neurons.
-/// (See [`ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder::with_test_neurons`].)
+/// (See [`ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder::with_test_neurons`].)
 pub fn setup_with_oc_parameters(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
@@ -1280,27 +1280,27 @@ async fn create_one_sale_participant(
 
     // 4. Call sns.get_buyer_state
     {
-            let request = sns_request_provider
-                .get_buyer_state(Some(participant.principal_id), CallMode::Update);
-            canister_agent.call_with_retries(
-                request,
-                SNS_ENDPOINT_RETRY_TIMEOUT,
-                SNS_ENDPOINT_RETRY_BACKOFF,
-                None,
-            )
+        let request = sns_request_provider
+            .get_buyer_state(Some(participant.principal_id), CallMode::Update);
+        canister_agent.call_with_retries(
+            request,
+            SNS_ENDPOINT_RETRY_TIMEOUT,
+            SNS_ENDPOINT_RETRY_BACKOFF,
+            None,
+        )
     }
-    .await
-    .check_response(|response| {
-        let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
-        if response_amount >= contribution {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
-        }
-    })
-    .with_workflow_position(4)
-    .push_outcome_display_error(outcome)
-    .result()?;
+        .await
+        .check_response(|response| {
+            let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
+            if response_amount >= contribution {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
+            }
+        })
+        .with_workflow_position(4)
+        .push_outcome_display_error(outcome)
+        .result()?;
 
     // 5. Check that the ticket has been deleted via swap.get_open_ticket
     {

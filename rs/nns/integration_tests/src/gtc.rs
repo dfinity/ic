@@ -525,9 +525,14 @@ pub fn add_test_gtc_neurons(payload_builder: &mut NnsInitPayloadsBuilder) {
     payload_builder
         .genesis_token
         .add_ect_neurons(TEST_ECT_ACCOUNTS);
-    payload_builder
-        .governance
-        .add_gtc_neurons(payload_builder.genesis_token.get_gtc_neurons());
+    payload_builder.governance.add_gtc_neurons(
+        payload_builder
+            .genesis_token
+            .get_gtc_neurons()
+            .into_iter()
+            .map(|n| n.into())
+            .collect(),
+    );
     payload_builder
         .genesis_token
         .add_forward_whitelist(&[TEST_IDENTITY_4.gtc_address]);

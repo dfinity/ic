@@ -88,7 +88,7 @@ impl Default for Config {
             max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
             max_pprof_concurrent_requests: 5,
             ingress_message_certificate_timeout_seconds: 10,
-            max_tracing_flamegraph_concurrent_requests: 10,
+            max_tracing_flamegraph_concurrent_requests: 5,
         }
     }
 }

@@ -1,7 +1,4 @@
-use crate::{
-    icrc1_agent_test::install_icrc1_ledger,
-    tecdsa::{get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature},
-};
+use crate::icrc1_agent_test::install_icrc1_ledger;
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
@@ -18,6 +15,9 @@ use ic_ckbtc_minter::{
 use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
     subnet_config::ECDSA_SIGNATURE_FEE,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_management_canister_types::{
@@ -195,9 +195,6 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
-        max_instructions_per_message: None,
-        max_instructions_per_round: None,
-        max_instructions_per_install_code: None,
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,

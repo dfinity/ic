@@ -2,6 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 use ic_system_test_driver::driver::test_env_api::set_var_to_path;
 
+pub mod node;
 pub mod rw_message;
 pub mod ssh_access;
 
