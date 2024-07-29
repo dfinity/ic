@@ -1,4 +1,4 @@
-//! This an upgrade/downgrade test for canister queues. The approach (following
+//! This is an upgrade/downgrade test for canister queues. The approach (following
 //! the CUP compatibility tests):
 //!
 //! 1. At each commit to master, we create a binary that can serialize and
