@@ -573,7 +573,7 @@ impl MmapBasedPageAllocatorCore {
         #[cfg(target_os = "linux")]
         {
             // Huge pages are 2MiB on x86_64. We only use huge pages for
-            // memory allocations that are at least MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.
+            // memory allocations that are at least MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION huge pages (i.e., 64 MiB).
             if mmap_size >= MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.get() as usize * HUGE_PAGE_SIZE {
                 unsafe {
                     madvise(
