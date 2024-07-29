@@ -54,6 +54,12 @@ anchors:
         --privileged --cgroupns host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
+  dind-small-setup: &dind-small-setup
+    runs-on:
+      labels: dind-small
+    container:
+      <<: *image
+    timeout-minutes: 30
   before-script: &before-script
     name: Before script
     id: before-script
@@ -208,8 +214,7 @@ jobs:
 
   python-ci-tests:
     name: Python CI Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    <<: *dind-small-setup
     steps:
       - <<: *checkout
       - <<: *python-setup
