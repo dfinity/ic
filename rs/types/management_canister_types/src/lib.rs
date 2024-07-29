@@ -801,12 +801,11 @@ pub enum LogVisibility {
 // TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     fn from(item: &LogVisibility) -> Self {
+        use pb_canister_state_bits as pb;
         match item {
-            LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
-            LogVisibility::AllowedViewers(_) => {
-                pb_canister_state_bits::LogVisibility::EmptyAllowedViewers
-            }
-            LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
+            LogVisibility::Controllers => pb::LogVisibility::Controllers,
+            LogVisibility::AllowedViewers(_) => pb::LogVisibility::EmptyAllowedViewers,
+            LogVisibility::Public => pb::LogVisibility::Public,
         }
     }
 }
@@ -814,13 +813,12 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
 // TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
     fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
+        use pb_canister_state_bits as pb;
         match item {
-            pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
-            pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
-            pb_canister_state_bits::LogVisibility::EmptyAllowedViewers => {
-                Self::AllowedViewers(Default::default())
-            }
-            pb_canister_state_bits::LogVisibility::Public => Self::Public,
+            pb::LogVisibility::Unspecified => Self::default(),
+            pb::LogVisibility::Controllers => Self::Controllers,
+            pb::LogVisibility::EmptyAllowedViewers => Self::AllowedViewers(Default::default()),
+            pb::LogVisibility::Public => Self::Public,
         }
     }
 }
@@ -852,29 +850,27 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
 
 impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
     fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
-        match pb_canister_state_bits::LogVisibilityEnum::try_from(item.log_visibility_enum) {
+        use pb_canister_state_bits as pb;
+        match pb::LogVisibilityEnum::try_from(item.log_visibility_enum) {
             Err(err) => panic!(
                 "Invalid LogVisibilityEnum value: {}, decode error: {}",
                 item.log_visibility_enum, err,
             ),
-            Ok(log_visibility_enum) => {
-                match log_visibility_enum {
-                    pb_canister_state_bits::LogVisibilityEnum::Unspecified => Self::default(),
-                    pb_canister_state_bits::LogVisibilityEnum::Controllers => Self::Controllers,
-                    pb_canister_state_bits::LogVisibilityEnum::AllowedViewers => {
-                        Self::AllowedViewers(BoundedAllowedViewers::new(
-                            item.allowed_viewers
-                                .iter()
-                                .map(|p| {
-                                    PrincipalId::try_from(p.raw.clone())
-                                        .expect("Invalid PrincipalId")
-                                })
-                                .collect(),
-                        ))
-                    }
-                    pb_canister_state_bits::LogVisibilityEnum::Public => Self::Public,
+            Ok(log_visibility_enum) => match log_visibility_enum {
+                pb::LogVisibilityEnum::Unspecified => Self::default(),
+                pb::LogVisibilityEnum::Controllers => Self::Controllers,
+                pb::LogVisibilityEnum::AllowedViewers => {
+                    Self::AllowedViewers(BoundedAllowedViewers::new(
+                        item.allowed_viewers
+                            .iter()
+                            .map(|p| {
+                                PrincipalId::try_from(p.raw.clone()).expect("Invalid PrincipalId")
+                            })
+                            .collect(),
+                    ))
                 }
-            }
+                pb::LogVisibilityEnum::Public => Self::Public,
+            },
         }
     }
 }
