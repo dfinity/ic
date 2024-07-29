@@ -182,8 +182,7 @@
 
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
-    timed_call, IDkgClientMetrics, IDkgGossipMetrics,
-    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+    timed_call, IDkgClientMetrics, IDkgGossipMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
 use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
@@ -363,11 +362,11 @@ impl IDkgImpl {
                 error!(
                     self.logger,
                     "{}: failed with error = {:?}",
-                    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+                    CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
                     error
                 );
                 self.metrics
-                    .critical_error_ecdsa_retain_active_transcripts
+                    .critical_error_idkg_retain_active_transcripts
                     .inc();
             }
             Ok(()) => {
