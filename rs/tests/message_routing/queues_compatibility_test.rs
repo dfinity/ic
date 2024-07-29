@@ -207,7 +207,6 @@ fn test(env: TestEnv) {
         serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");
     let mainnet_versions: Vec<String> = parsed.subnets.values().cloned().collect();
 
-    // let mainnet_versions = vec!["38565ef90ef16d47f0d4646903bba61226f36d40".to_string()];
     info!(logger, "Mainnet versions: {:?}", mainnet_versions);
 
     for mainnet_version in mainnet_versions {
