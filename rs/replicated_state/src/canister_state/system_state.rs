@@ -382,7 +382,7 @@ impl OnLowWasmMemoryHookStatus {
 
         // If the canister has memory allocation, then it maximum allowed Wasm memory
         // can be calculated as min(memory_allocation - used_stable_memory, 4 GiB).
-        let wasm_capacity = if let Some(memory_allocation) = memory_allocation{
+        let wasm_capacity = if let Some(memory_allocation) = memory_allocation {
             std::cmp::min(memory_allocation - used_stable_memory, max_wasm_capacity)
         } else {
             max_wasm_capacity

@@ -1,9 +1,3 @@
-pub mod cycles_balance_change;
-mod request_in_prep;
-mod routing;
-pub mod sandbox_safe_system_state;
-mod stable_memory;
-
 use ic_base_types::PrincipalIdBlobParseError;
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_config::flag_status::FlagStatus;
@@ -19,16 +13,16 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, Memory, memory_required_to_push_request, NumWasmPages,
     PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_types::{
-    ingress::WasmResult,
-    messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    methods::{SystemMethod, WasmClosure},
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId,
+    CanisterLog,
+    CanisterTimer,
+    ComputeAllocation, Cycles, ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MemoryAllocation, messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request}, methods::{SystemMethod, WasmClosure},
+    NumBytes, NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -39,6 +33,12 @@ use std::{
     convert::{From, TryFrom},
     rc::Rc,
 };
+
+pub mod cycles_balance_change;
+mod request_in_prep;
+mod routing;
+pub mod sandbox_safe_system_state;
+mod stable_memory;
 
 pub const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
@@ -590,9 +590,9 @@ impl ApiType {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        call_context_id, ..
-                    },
+                NonReplicatedQueryKind::Stateful {
+                    call_context_id, ..
+                },
                 ..
             }
             | ApiType::ReplyCallback {
@@ -686,7 +686,7 @@ impl std::fmt::Display for ApiType {
 #[derive(Debug, PartialEq, Eq)]
 enum ExecutionMemoryType {
     WasmMemory,
-    StableMemory
+    StableMemory,
 }
 
 /// A struct to gather the relevant fields that correspond to a canister's
@@ -877,7 +877,7 @@ impl MemoryUsage {
 
                         Ok(())
                     }
-                    Err(_err) =>  Err(HypervisorError::OutOfMemory),
+                    Err(_err) => Err(HypervisorError::OutOfMemory),
                 }
             }
             MemoryAllocation::Reserved(reserved_bytes) => {
@@ -1062,15 +1062,17 @@ impl SystemApiImpl {
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
+        let stable_memory_usage = stable_memory.size.checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+            .map(NumBytes::new)
+            .ok_or(HypervisorError::OutOfMemory)?;
+
         let memory_usage = MemoryUsage::new(
             log.clone(),
             sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
-            stable_memory_usage: stable_memory.size.checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
-                .map(NumBytes::new)
-                .ok_or(HypervisorError::OutOfMemory)?,
+            stable_memory_usage,
             canister_current_message_memory_usage,
             subnet_available_memory,
             execution_parameters.memory_allocation,
@@ -1964,9 +1966,9 @@ impl SystemApi for SystemApiImpl {
                 ResponseStatus::NotRepliedYet => {
                     if size as u64 > max_reply_size.get() {
                         let string = format!(
-                        "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
-                        size, max_reply_size
-                    );
+                            "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
+                            size, max_reply_size
+                        );
                         return Err(UserContractViolation {
                             error: string,
                             suggestion: "".to_string(),
@@ -2139,9 +2141,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        outgoing_request, ..
-                    },
+                NonReplicatedQueryKind::Stateful {
+                    outgoing_request, ..
+                },
                 ..
             }
             | ApiType::SystemTask {
@@ -2214,9 +2216,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        outgoing_request, ..
-                    },
+                NonReplicatedQueryKind::Stateful {
+                    outgoing_request, ..
+                },
                 ..
             }
             | ApiType::SystemTask {
@@ -2256,9 +2258,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        outgoing_request, ..
-                    },
+                NonReplicatedQueryKind::Stateful {
+                    outgoing_request, ..
+                },
                 ..
             }
             | ApiType::SystemTask {
@@ -2341,10 +2343,10 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery {
                 time,
                 query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        call_context_id,
-                        outgoing_request,
-                    },
+                NonReplicatedQueryKind::Stateful {
+                    call_context_id,
+                    outgoing_request,
+                },
                 ..
             } => {
                 let req_in_prep =
@@ -2721,7 +2723,7 @@ impl SystemApi for SystemApiImpl {
                 &self.api_type,
                 &mut self.sandbox_safe_system_state,
                 &self.execution_parameters.subnet_memory_saturation,
-                ExecutionMemoryType::WasmMemory
+                ExecutionMemoryType::WasmMemory,
             ) {
                 Ok(()) => Ok(()),
                 Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
@@ -2983,13 +2985,13 @@ impl SystemApi for SystemApiImpl {
                         if overflow || upper_bound > data_certificate.len() {
                             return Err(ToolchainContractViolation {
                                 error: format!(
-                            "ic0_data_certificate_copy failed because offset + size is out \
+                                    "ic0_data_certificate_copy failed because offset + size is out \
                         of bounds. Found offset = {} and size = {} while offset + size \
                         must be <= {}",
-                            offset,
-                            size,
-                            data_certificate.len()
-                        ),
+                                    offset,
+                                    size,
+                                    data_certificate.len()
+                                ),
                             });
                         }
 
@@ -3249,9 +3251,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        outgoing_request, ..
-                    },
+                NonReplicatedQueryKind::Stateful {
+                    outgoing_request, ..
+                },
                 ..
             }
             | ApiType::SystemTask {
@@ -3263,13 +3265,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ToolchainContractViolation{
+                None => Err(HypervisorError::ToolchainContractViolation {
                     error: "ic0.call_with_best_effort_response called when no call is under construction."
-                    .to_string(),
+                        .to_string(),
                 }),
                 Some(request) => {
                     if request.is_timeout_set() {
-                        Err(HypervisorError::ToolchainContractViolation{
+                        Err(HypervisorError::ToolchainContractViolation {
                             error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
                         })
                     } else {
