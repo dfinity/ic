@@ -9,6 +9,7 @@ use super::{
 };
 use cvt::{cvt, cvt_r};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, HUGE_PAGE_SIZE, PAGE_SIZE};
+use ic_types::NumOsPages;
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
@@ -17,6 +18,10 @@ use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+
+/// The minimum number of huge pages where the actual huge page optimization
+/// will kick in. This corresponds to 64 MiB of memory (because the huge page size is 2 MiB)
+const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
 
 const MIN_PAGES_TO_FREE: usize = 10000;
 // The start address of a page.
@@ -564,12 +569,12 @@ impl MmapBasedPageAllocatorCore {
             )
         }) as *mut u8;
 
-        // Do madvise THP performance optimization only on Linux.
+        // Do madvise transparent huge page performance optimization only on Linux.
         #[cfg(target_os = "linux")]
         {
-            // Since huge pages are 2MiB on x86_64, we only use huge pages for
-            // chunks that are at least 2MiB.
-            if mmap_size >= HUGE_PAGE_SIZE {
+            // Huge pages are 2MiB on x86_64. We only use huge pages for
+            // memory allocations that are at least MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.
+            if mmap_size >= MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.get() as usize * HUGE_PAGE_SIZE {
                 unsafe {
                     madvise(
                         mmap_ptr as *mut c_void,
