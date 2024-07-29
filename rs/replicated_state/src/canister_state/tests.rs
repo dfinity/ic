@@ -622,18 +622,6 @@ fn canister_state_log_visibility_round_trip() {
 }
 
 #[test]
-fn compatibility_for_log_visibility() {
-    // If this fails, you are making a potentially incompatible change to `LogVisibility`.
-    // See note [Handling changes to Enums in Replicated State] for how to proceed.
-    assert_eq!(
-        LogVisibility::iter()
-            .map(|x| x as i32)
-            .collect::<Vec<i32>>(),
-        [1, 2]
-    );
-}
-
-#[test]
 fn long_execution_mode_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
@@ -663,6 +651,18 @@ fn long_execution_mode_decoding() {
     test(1, LongExecutionMode::Opportunistic);
     test(2, LongExecutionMode::Prioritized);
     test(3, LongExecutionMode::Opportunistic);
+}
+
+#[test]
+fn compatibility_for_log_visibility() {
+    // If this fails, you are making a potentially incompatible change to `LogVisibility`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        LogVisibility::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2, 3]
+    );
 }
 
 #[test]
