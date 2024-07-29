@@ -1,6 +1,6 @@
 use anyhow::Error;
 use clap::Parser;
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 
 use crate::cli::Cli;
 
