@@ -1,39 +1,14 @@
-/* tag::catalog[]
-Title:: Consensus Liveness with Equivocating Blocks
-
-Goal:: Demonstrate that the consensus can progress even in the presence of
-equivocating blocks.
-
-Runbook::
-. Set up one subnets with 3f+1 nodes, f of which malicious.
-. Install a universal canister in an honest node.
-. Continuously push messages to the canister's stable memory
-. Pull the last sent message and compare with the expectation.
-
-Success:: Check the messages have really been written to memory
-by pulling the last one from a different node.
-The `ekg::finalized_height_progress_within` does not detect any stuck node. This is part of `ekg::basic_monitoring`, and
-hence, checked by default.
-
-Coverage::
-. Consensus doesn't break in the presence of simple malicious behavior
-
-
-end::catalog[] */
-
+/// Common test function for a couple of system tests;
 use ic_agent::export::Principal;
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
-use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     util::{assert_malicious_from_topo, UniversalCanister},
 };
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use slog::{debug, info, Logger};
@@ -41,19 +16,6 @@ use slog::{debug, info, Logger};
 const MSG_LEN: usize = 8;
 // Seed for a random generator
 const RND_SEED: u64 = 42;
-
-pub fn config(env: TestEnv) {
-    let malicious_behaviour =
-        MaliciousBehaviour::new(true).set_maliciously_propose_equivocating_blocks();
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(3)
-                .add_malicious_nodes(1, malicious_behaviour),
-        )
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-}
 
 pub fn test(env: TestEnv) {
     let log = env.logger();

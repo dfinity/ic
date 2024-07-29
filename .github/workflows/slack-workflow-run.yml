@@ -34,7 +34,7 @@ jobs:
 
           if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
             CHANNEL="release-management-alerts"
-            COMMIT= ${{ github.event.workflow_run.head_sha }}
+            COMMIT="${{ github.event.workflow_run.head_sha }}"
             FULL_MESSAGE="${FULL_MESSAGE} commit: ${COMMIT}"
           fi
 

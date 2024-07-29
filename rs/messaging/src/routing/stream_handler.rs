@@ -3,6 +3,11 @@ use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
+use ic_interfaces::messaging::{
+    LABEL_VALUE_CANISTER_METHOD_NOT_FOUND, LABEL_VALUE_CANISTER_NOT_FOUND,
+    LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
+    LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
+};
 use ic_logger::{debug, error, fatal, info, trace, ReplicaLogger};
 use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
@@ -11,11 +16,7 @@ use ic_metrics::{
 use ic_replicated_state::{
     metadata_state::{StreamHandle, Streams},
     replicated_state::{
-        ReplicatedStateMessageRouting, LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
-        LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
-        LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
-        LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
-        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
     ReplicatedState, StateError,
 };
