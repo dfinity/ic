@@ -8,7 +8,7 @@ use super::{
     PageValidation, ALLOCATED_PAGES,
 };
 use cvt::{cvt, cvt_r};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, HUGE_PAGE_SIZE, PAGE_SIZE};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
@@ -569,8 +569,7 @@ impl MmapBasedPageAllocatorCore {
         {
             // Since huge pages are 2MiB on x86_64, we only use huge pages for
             // chunks that are at least 2MiB.
-            const MB: usize = 1024 * 1024;
-            if mmap_size >= 2 * MB {
+            if mmap_size >= HUGE_PAGE_SIZE {
                 unsafe {
                     madvise(
                         mmap_ptr as *mut c_void,
@@ -578,6 +577,8 @@ impl MmapBasedPageAllocatorCore {
                         MmapAdvise::MADV_HUGEPAGE,
                     )
                 }.unwrap_or_else(|err| {
+                    // We don't need to panic, madvise failing is not a problem, 
+                    // it will only mean that we are not using huge pages.
                     println!(
                     "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",
                     mmap_size, mmap_ptr, self.file_descriptor, err
