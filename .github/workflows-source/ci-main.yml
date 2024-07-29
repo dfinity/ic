@@ -47,6 +47,7 @@ anchors:
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
+      group: sf1
     container:
       <<: *image
       options: >-
