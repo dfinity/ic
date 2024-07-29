@@ -3941,23 +3941,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fees-and-limits"
-version = "0.1.0"
-dependencies = [
- "candid",
- "clap 3.2.25",
- "eyre",
- "ic-agent",
- "ic-config",
- "ic-replicated-state",
- "ic-system-api",
- "ic-types",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "ff"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12877,6 +12860,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_consensus_system_test_catch_up_test_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "slog",
+]
+
+[[package]]
+name = "ic_consensus_system_test_liveness_test_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-agent",
+ "ic-base-types",
+ "ic-system-test-driver",
+ "ic-types",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_consensus_system_test_utils"
 version = "0.9.0"
 dependencies = [
@@ -12909,19 +12920,29 @@ dependencies = [
  "canister-test",
  "chrono",
  "futures",
+ "ic-agent",
  "ic-base-types",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-nns-constants",
  "ic-nns-governance",
  "ic-recovery",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-universal-canister",
+ "ic_consensus_system_test_catch_up_test_common",
+ "ic_consensus_system_test_liveness_test_common",
  "ic_consensus_system_test_utils",
+ "k256",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "registry-canister",
  "reqwest 0.12.5",
  "serde_json",
+ "serde_cbor",
  "slog",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -12970,6 +12991,20 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "thiserror",
+]
+
+[[package]]
+name = "icp-config"
+version = "0.1.0"
+dependencies = [
+ "clap 3.2.25",
+ "eyre",
+ "ic-config",
+ "ic-replicated-state",
+ "ic-system-api",
+ "ic-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -13082,7 +13117,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "assert_matches",
  "base32",

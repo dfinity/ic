@@ -1,5 +1,4 @@
 load("@rules_haskell//haskell:defs.bzl", "haskell_binary", "haskell_library")
-load("//bazel:candid.bzl", "did_git_test")
 
 STACK_DEPS = [
     # Keep sorted.
@@ -136,11 +135,6 @@ haskell_binary(
     ],
 )
 
-did_git_test(
-    name = "ic_did_git_test",
-    did = "ic.did",
-)
-
 haskell_library(
     name = "IC-Crypto-BLS",
     srcs = ["src/IC/Crypto/BLS.hsc"],
@@ -208,7 +202,6 @@ haskell_library(
 haskell_library(
     name = "IC-Management",
     srcs = ["src/IC/Management.hs"],
-    extra_srcs = ["ic.did"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
