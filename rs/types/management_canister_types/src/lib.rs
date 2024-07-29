@@ -850,17 +850,15 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
     }
 }
 
-impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
-    type Error = String;
-
-    fn try_from(item: pb_canister_state_bits::LogVisibilityV2) -> Result<Self, Self::Error> {
+impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
+    fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
         match pb_canister_state_bits::LogVisibilityEnum::try_from(item.log_visibility_enum) {
-            Err(err) => Err(format!(
+            Err(err) => panic!(
                 "Invalid LogVisibilityEnum value: {}, decode error: {}",
                 item.log_visibility_enum, err,
-            )),
+            ),
             Ok(log_visibility_enum) => {
-                let result = match log_visibility_enum {
+                match log_visibility_enum {
                     pb_canister_state_bits::LogVisibilityEnum::Unspecified => Self::default(),
                     pb_canister_state_bits::LogVisibilityEnum::Controllers => Self::Controllers,
                     pb_canister_state_bits::LogVisibilityEnum::AllowedViewers => {
@@ -868,15 +866,16 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
                             item.allowed_viewers
                                 .iter()
                                 .map(|p| {
-                                    PrincipalId::try_from(p.raw.clone()).map_err(|e| e.to_string())
+                                    PrincipalId::try_from(p.raw.clone())
+                                        .expect("Invalid PrincipalId")
                                 })
-                                .collect::<Result<Vec<_>, _>>()?,
+                                .collect(),
                         ))
                     }
                     pb_canister_state_bits::LogVisibilityEnum::Public => Self::Public,
                 };
 
-                Ok(result)
+                result
             }
         }
     }
