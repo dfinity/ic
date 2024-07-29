@@ -81,7 +81,7 @@ system_test(
 )
 
 system_test(
-    name = "rosetta_neuron_disbourse_test",
+    name = "rosetta_neuron_disburse_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
