@@ -1546,13 +1546,7 @@ impl StateManagerImpl {
             states_metadata,
             checkpoint_layouts_to_compute_manifest,
             snapshots_with_checkpoint_layouts,
-        } = Self::populate_metadata(
-            &log,
-            &metrics,
-            &state_layout,
-            loaded_states_metadata,
-            states,
-        );
+        } = Self::populate_metadata(&log, &metrics, loaded_states_metadata, states);
 
         info!(
             log,
@@ -1852,7 +1846,6 @@ impl StateManagerImpl {
     fn populate_metadata(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
-        layout: &StateLayout,
         mut metadatas: BTreeMap<Height, StateMetadata>,
         states: Vec<(CheckpointLayout<ReadOnly>, ReplicatedState)>,
     ) -> PopulatedMetadata {
