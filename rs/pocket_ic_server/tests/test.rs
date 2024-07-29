@@ -2,7 +2,7 @@ mod common;
 
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
-use ic_agent::agent::http_transport::ReqwestTransport;
+use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
 use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
@@ -14,7 +14,7 @@ use reqwest::Client as NonblockingClient;
 use reqwest::{StatusCode, Url};
 use std::io::Read;
 use std::io::Write;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -291,19 +291,19 @@ async fn test_gateway(https: bool) {
     let mut builder = NonblockingClient::builder()
         .resolve(
             localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             sub_localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             alt_domain,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             sub_alt_domain,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         );
     // add a custom root certificate
     if https {
@@ -705,8 +705,6 @@ fn canister_state_dir() {
 /// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
 #[test]
 fn test_specified_id_call_v3() {
-    use ic_agent_call_v3::agent::CallResponse;
-
     // Create live PocketIc instance.
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -714,22 +712,24 @@ fn test_specified_id_call_v3() {
         .build();
     let endpoint = pic.make_live(None);
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
     // retrieve the first canister ID on the application subnet
     // which will be the effective canister ID for canister creation
     let topology = pic.topology();
-
     let app_subnet = topology.get_app_subnets()[0];
     let effective_canister_id =
         raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
 
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
     rt.block_on(async {
-        let agent = ic_agent_call_v3::Agent::builder()
-            .with_url(endpoint.clone())
+        let transport = ReqwestTransport::create(endpoint.clone())
+            .unwrap()
+            .with_use_call_v3_endpoint();
+
+        let agent = ic_agent::Agent::builder()
+            .with_transport(transport)
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
@@ -742,7 +742,9 @@ fn test_specified_id_call_v3() {
         };
         let bytes = candid::Encode!(&arg).unwrap();
 
-        // This is an agent that targets /api/v3/.../call for ingress messages.
+        // Submit a call to the `/api/v3/.../call` endpoint.
+        // Note that this might be flaky if it takes more than 10 seconds to process the update call
+        // (then `CallResponse::Poll` would be returned and this test would panic).
         agent
             .update(
                 &Principal::management_canister(),

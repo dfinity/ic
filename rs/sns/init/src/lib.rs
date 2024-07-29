@@ -9,8 +9,7 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::ledger_validation;
-use ic_nervous_system_common::{DEFAULT_TRANSFER_FEE, E8};
+use ic_nervous_system_common::{ledger_validation, DEFAULT_TRANSFER_FEE, E8};
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -338,11 +337,13 @@ impl From<NeuronBasketConstructionParametersValidationError> for Result<(), Stri
 
 impl From<NeuronsFundParticipants> for ic_sns_swap::pb::v1::NeuronsFundParticipants {
     fn from(value: NeuronsFundParticipants) -> Self {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         Self {
             cf_participants: value
                 .participants
                 .iter()
                 .map(|cf_participant| ic_sns_swap::pb::v1::CfParticipant {
+                    controller: cf_participant.controller,
                     hotkey_principal: cf_participant.hotkey_principal.clone(),
                     cf_neurons: cf_participant.cf_neurons.clone(),
                 })

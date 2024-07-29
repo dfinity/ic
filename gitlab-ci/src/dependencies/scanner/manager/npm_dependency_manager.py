@@ -162,7 +162,7 @@ class NPMDependencyManager(DependencyManager):
         return vulnerable_dependency
 
     def get_findings(
-        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[int]
     ) -> typing.List[Finding]:
         path = self.root.parent / project.path
         finding_builder: typing.List[Finding] = []

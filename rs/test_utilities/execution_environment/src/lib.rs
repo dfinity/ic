@@ -1969,11 +1969,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm_chunk_store(mut self, status: FlagStatus) -> Self {
-        self.execution_config.wasm_chunk_store = status;
-        self
-    }
-
     pub fn with_non_native_stable(mut self) -> Self {
         self.execution_config
             .embedders_config
@@ -1984,14 +1979,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
         self.execution_config.canister_snapshots = status;
-        self
-    }
-
-    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .canister_logging = status;
         self
     }
 

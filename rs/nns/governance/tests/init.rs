@@ -1,4 +1,5 @@
-use ic_nns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Topic};
+use ic_nns_governance_api::pb::v1::Topic;
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use std::path::PathBuf;
 
 #[test]

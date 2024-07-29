@@ -255,7 +255,6 @@ impl SystemStateChanges {
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
@@ -557,6 +556,7 @@ pub struct SandboxSafeSystemState {
     dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
@@ -587,6 +587,7 @@ impl SandboxSafeSystemState {
         status: CanisterStatusView,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
@@ -616,6 +617,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            wasm_memory_threshold,
             compute_allocation,
             system_state_changes: SystemStateChanges {
                 // Start indexing new batch of canister log records from the given index.
@@ -700,6 +702,7 @@ impl SandboxSafeSystemState {
             CanisterStatusView::from_full_status(&system_state.status),
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            system_state.wasm_memory_threshold,
             compute_allocation,
             system_state.balance(),
             system_state.reserved_balance(),
@@ -1232,12 +1235,10 @@ impl SandboxSafeSystemState {
     }
 
     /// Appends a log record to the system state changes.
-    pub fn append_canister_log(&mut self, is_enabled: bool, time: &Time, content: Vec<u8>) {
-        self.system_state_changes.canister_log.add_record(
-            is_enabled,
-            time.as_nanos_since_unix_epoch(),
-            content,
-        );
+    pub fn append_canister_log(&mut self, time: &Time, content: Vec<u8>) {
+        self.system_state_changes
+            .canister_log
+            .add_record(time.as_nanos_since_unix_epoch(), content);
     }
 
     /// Takes collected canister log records.
@@ -1283,7 +1284,8 @@ mod tests {
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
         time::CoarseTime,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        Time,
     };
 
     use crate::{
@@ -1361,6 +1363,7 @@ mod tests {
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
+            NumBytes::new(0),
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),

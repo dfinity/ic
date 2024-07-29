@@ -1,37 +1,43 @@
 //! This module provides the component responsible for generating and validating
-//! payloads relevant to threshold ECDSA signatures.
+//! payloads relevant to canister threshold signatures.
 //!
-//! # Goal of threshold ECDSA
-//! We want canisters to be able to hold BTC, ETH, and for them to create
-//! bitcoin and ethereum transactions. Since those networks use ECDSA, a
-//! canister must be able to create ECDSA signatures. Since a canister cannot
-//! hold the secret key itself, the secret key will be shared among the replicas
-//! of the subnet, and they must be able to collaboratively create ECDSA
+//! # Goal
+//! We want canisters to be able to hold tokens of other chains, i.e. BTC, ETH, SOL,
+//! and for them to create transactions for these networks, i.e. bitcoin, ethereum,
+//! solana. Since those networks use specific signature schemes such as ECDSA or Schnorr,
+//! a canister must be able to create signatures according to these schemes. Since a
+//! canister cannot hold the secret key itself, the secret key will be shared among the
+//! replicas of the subnet, and they must be able to collaboratively create threshold
 //! signatures.
 //!
 //! # High level implementation design
-//! Each subnet will have a single threshold ECDSA key. From this key, we will
-//! derive per-canister keys. A canister can via a system API request an ECDSA
-//! signature, and this request is stored in the replicated state. Consensus
-//! will observe these requests and store in blocks which signatures should be
-//! created.
+//! Each subnet will have a single threshold key for each scheme deployed to the subnet.
+//! Currently, only threshold ECDSA and threshold Schnorr are supported. From this key,
+//! we will derive per-canister keys. A canister can via a system API request a signature,
+//! and this request is stored in the replicated state. Consensus will observe these
+//! requests and begin working on them by assembling required artifacts in blocks.
 //!
-//! ## Distributed Key Generation & Transcripts
-//! To create threshold ECDSA signatures we need a `Transcript` that gives all
-//! replicas shares of an ECDSA secret key. However, this is not sufficient: we
-//! need additional transcripts to share the ephemeral values used in an ECDSA
-//! signature. The creation of one ECDSA signature requires a transcript that
-//! shares the ECDSA signing key `x`, and additionally four DKG transcripts,
+//! ## Interactive Distributed Key Generation & Transcripts
+//! To create canister threshold signatures we need a `Transcript` that gives all
+//! replicas shares of a secret key. However, this is not sufficient: we need additional
+//! transcripts to share the ephemeral values used in a signature.
+//!
+//! The creation of one ECDSA signature requires a transcript that
+//! shares the ECDSA signing key `x`, and additionally four IDKG transcripts,
 //! with a special structure: we need transcripts `t1`, `t2`, `t3`, `t4`, such
-//! that `t1` and `t2` share a random values `r1` and `r2` respectively, `t3`
+//! that `t1` and `t2` share random values `r1` and `r2` respectively, `t3`
 //! shares the product `r1 * r2`, and `t4` shares `r2 * x`.
 //!
-//! Such transcripts are created via a distributed key generation (DKG)
-//! protocol. The DKG for these transcripts must be computationally efficient,
-//! because we need four transcripts per signature, and we want to be able to
-//! create many signatures. This means that we need interactive DKG for ECDSA
-//! related things, instead of non-interactive DKG like we do for our threshold
-//! BLS signatures.
+//! Similarly, the creation of one Schnorr signature requires a transcript that
+//! shares the Schnorr signing key `x`, and one additional IDKG transcript (blinder) `t`,
+//! such that `t` shares a random value `r`.
+//!
+//! Such transcripts are created via an interactive distributed key generation (IDKG)
+//! protocol. Especially for the ECDSA case, the DKG for these transcripts must be
+//! computationally efficient, because we need four transcripts per signature, and we
+//! want to be able to create many signatures. This means that we need interactive DKG
+//! for canister threshold signatures, instead of non-interactive DKG like we do for
+//! our threshold BLS signatures.
 //!
 //! Consensus orchestrates the creation of these transcripts. Blocks contain
 //! configs (also called params) indicating which transcripts should be created.
@@ -41,22 +47,23 @@
 //! `create_data_payload` and `create_summary_payload`.
 //!
 //! # [IDkgImpl] behavior
-//! The ECDSA component is responsible for adding artifacts to the ECDSA
+//! The IDKG component is responsible for adding artifacts to the IDKG
 //! artifact pool, and validating artifacts in that pool, by exposing a function
 //! `on_state_change`. This function behaves as follows, where `finalized_tip`
-//! denotes the latest finalized consensus block.
+//! denotes the latest finalized consensus block, and `certified_state` denotes
+//! the latest certified state.
 //!
 //! ## add DKG dealings
-//! for every config in `finalized_tip.ecdsa.configs`, do the following: if this
+//! for every config in `finalized_tip.idkg.configs`, do the following: if this
 //! replica is a dealer in this config, and no dealing for this config created
 //! by this replica is in the validated pool, attempt to load the dependencies and,
 //! if successful, create a dealing for this config, and add it to the validated pool.
 //! If loading the dependencies (i.e. t3 depends on t2 and t1) wasn't successful,
 //! we instead send a complaint for the transcript that failed to load.
 //!
-//! ## validate DKG dealings
+//! ## validate IDKG dealings
 //! for every unvalidated dealing d, do the following. If `d.config_id` is an
-//! element of `finalized_tip.ecdsa.configs`, the validated pool does not yet
+//! element of `finalized_tip.idkg.configs`, the validated pool does not yet
 //! contain a dealing from `d.dealer` for `d.config_id`, then do the public
 //! cryptographic validation of the dealing, and move it to the validated pool
 //! if valid, or remove it from the unvalidated pool if invalid.
@@ -71,61 +78,56 @@
 //!
 //! ## Remove stale dealings
 //! for every validated or unvalidated dealing or support d, do the following.
-//! If `d.config_id` is not an element of `finalized_tip.ecdsa.configs`, and
+//! If `d.config_id` is not an element of `finalized_tip.idkg.configs`, and
 //! `d.config_id` is older than `finalized_tip`, remove `d` from the pool.
 //!
 //! ## add signature shares
 //! for every signature request `req` in
-//! `finalized_tip.ecdsa.signature_requests`, do the following: if this replica
+//! `certified_state.signature_requests`, do the following: if this replica
 //! is a signer for `req` and no signature share by this replica is in the
-//! validated pool, load the dependencies (i.e. the quadruple and key transcripts),
+//! validated pool, load the dependencies (i.e. the pre-signature and key transcripts),
 //! then create a signature share for `req` and add it to the validated pool.
 //!
 //! ## validate signature shares
-//! for every unvalidated signature share `s`, do the following: if `s.config_id`
-//! is an element of `finalized_tip.ecdsa.configs`, and there is no signature
-//! share by `s.signer` for `s.config_id` in the validated pool yet, then
-//! cryptographically validate the signature share. If valid, move `s` to
-//! validated, and if invalid, remove `s` from unvalidated.
+//! for every unvalidated signature share `s`, do the following: if `s.request_id`
+//! is an element of `certified_state.signature_requests`, and there is no signature
+//! share by `s.signer` for `s.request_id` in the validated pool yet, then load the
+//! dependencies and cryptographically validate the signature share. If valid, move
+//! `s` to validated, and if invalid, remove `s` from unvalidated.
 //!
-//! ## aggregate ECDSA signatures
+//! ## aggregate signature shares
 //! Signature shares are aggregated into full signatures and included into a block
-//! by the block maker, once enough share are available.
+//! by the block maker, once enough shares are available.
 //!
 //! ## validate complaints
 //! for every unvalidated complaint `c`, do the following: if `c.config_id`
-//! is an element of `finalized_tip.ecdsa.configs`, and there is no complaint
+//! is an element of `finalized_tip.idkg.configs`, and there is no complaint
 //! by `c.complainer` for `c.config_id` in the validated pool yet, then
 //! cryptographically validate the signature of the complaint and the complaint
 //! itself. If valid, move `c` to validated, and if invalid, remove `c` from unvalidated.
 //!
 //! ## send openings
 //! for every validated complaint `c` for which this node has not sent an opening yet and
-//! for which `c.config_id` is an element of `finalized_tip.ecdsa.configs`: create and sign
+//! for which `c.config_id` is an element of `finalized_tip.idkg.configs`: create and sign
 //! the opening, and add it to the validated pool.
 //!
 //!
-//! # ECDSA payload on blocks
-//! The ECDSA payload on blocks serves some purposes: it should ensure that all
-//! replicas are doing DKGs to help create the transcripts required for more
-//! 4-tuples which are used to create ECDSA signatures. In addition, it should
-//! match signature requests to available 4-tuples and generate signatures.
+//! # IDKG payload on blocks
+//! The IDKG payload on blocks serves some purposes: it should ensure that all
+//! replicas are doing IDKGs to help create the transcripts required for more
+//! pre-signatures which are used to create threshold signatures. Additionally, it
+//! should contain newly aggregated signatures that can be delivered back to execution.
 //!
 //! Every block contains
-//! - a set of "4-tuples being created"
-//! - a set of "available 4-tuples"
-//! - a set of "ongoing signing requests", which pair signing requests with
-//!   4-tuples
+//! - a set of "pre-signatures being created"
+//! - a set of "available pre-signatures"
 //! - newly finished signatures to deliver up
 //!
-//! The "4 tuples in creation" contain the following information
-//! - kappa_config: config for 1st masked random transcript
-//! - optionally, kappa_masked: transcript resulting from kappa_config
+//! The ECDSA "pre-signatures in creation" contain the following information
+//! - kappa_config: config for 1st unmasked random transcript
+//! - optionally, kappa_unmasked: transcript resulting from kappa_config
 //! - lambda_config: config for 2nd masked random transcript
-//! - optionally, lambda_masked: transcript resulting from kappa_config
-//! - optionally, unmask_kappa_config: config for resharing as unmasked of
-//!   kappa_masked
-//! - optionally, kappa_unmasked: transcript resulting from unmask_kappa_config
+//! - optionally, lambda_masked: transcript resulting from lambda_config
 //! - optionally, key_times_lambda_config: multiplication of the ECDSA secret
 //!   key and lambda_masked transcript (so masked multiplication of unmasked and
 //!   masked)
@@ -140,39 +142,47 @@
 //! The relation between the different configs/transcripts can be summarized as
 //! follows:
 //! ```text
-//! kappa_masked ────────► kappa_unmasked ─────────►
-//!                                                 kappa_times_lambda
-//!         ┌──────────────────────────────────────►
+//! kappa_unmasked ─────────►
+//!                           kappa_times_lambda
+//!         ┌───────────────►
 //!         │
 //! lambda_masked
 //!         │
-//!         └───────────►
-//!                        key_times_lambda
-//! ecdsa_key  ─────────►
+//!         └───────────────►
+//!                           key_times_lambda
+//! ecdsa_key  ─────────────►
 //! ```
 //! The data transforms like a state machine:
-//! - remove all signature requests from "ongoing signature requests" that are
-//!   no longer present in the replicated state (referenced via the validation
-//!   context)
 //! - when a new transcript is complete, it is added to the corresponding
 //!   "4-tuple being created"
-//!     - when kappa_masked is set, unmask_kappa_config should be set (reshare
-//!       to unmask)
 //!     - when lambda_masked is set, key_times_lambda_config should be set
 //!     - when lambda_masked and kappa_unmasked are set,
 //!       kappa_times_lambda_config must be set
 //!     - when kappa_unmasked, lambda_masked, key_times_lambda,
 //!       kappa_times_lambda are set, the tuple should no longer be in "in
 //!       creation", but instead be moved to the complete 4-tuples.
-//! - whenever the state lists a new signature request (for which no "ongoing
-//!   signing request" is present) and available 4-tuples is not empty, remove
-//!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
-//!   signatures with the signing request and the 4-tuple.
+//!
+//! //! The Schnorr "pre-signatures in creation" contain the following information
+//! - blinder_config: config for unmasked random transcript
+//! - optionally, blinder_unmasked: transcript resulting from blinder_config
+//!
+//! The relation between the different configs/transcripts can be summarized as
+//! follows:
+//! ```text
+//! blinder_unmasked
+//! ```
+//! The data transforms like a state machine:
+//! - when a new transcript is complete, it is added to the corresponding
+//!   "pre-signature being created"
+//!     - when blinder_unmasked is set, the pre-signature should no longer be in "in
+//!       creation", but instead be moved to the complete pre-signatures.
+//!
+//! Completed pre-signatures are delivered to the deterministic state machnine,
+//! where they are matched with incoming signature requests.
 
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
-    timed_call, IDkgClientMetrics, IDkgGossipMetrics,
-    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+    timed_call, IDkgClientMetrics, IDkgGossipMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
 use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
@@ -352,11 +362,11 @@ impl IDkgImpl {
                 error!(
                     self.logger,
                     "{}: failed with error = {:?}",
-                    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+                    CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
                     error
                 );
                 self.metrics
-                    .critical_error_ecdsa_retain_active_transcripts
+                    .critical_error_idkg_retain_active_transcripts
                     .inc();
             }
             Ok(()) => {

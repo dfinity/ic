@@ -103,7 +103,7 @@ impl WasmExecutorMetrics {
 }
 
 /// Contains information about execution of the current slice.
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SliceExecutionOutput {
     /// The number of instructions executed by the slice.
     pub executed_instructions: NumInstructions,
@@ -777,11 +777,7 @@ pub fn process(
                 HypervisorError::CalledTrap(text) => Some(format!("[TRAP]: {}", text)),
                 _ => None,
             } {
-                canister_log.add_record(
-                    embedder.config().feature_flags.canister_logging == FlagStatus::Enabled,
-                    timestamp_nanos,
-                    log_message.into_bytes(),
-                );
+                canister_log.add_record(timestamp_nanos, log_message.into_bytes());
             }
             None
         }

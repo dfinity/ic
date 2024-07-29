@@ -1,13 +1,16 @@
 use axum::{http::Request, Router};
 use bytes::Bytes;
+use consensus::{TestConsensus, U64Artifact};
 use either::Either;
 use futures::{
     future::{join_all, BoxFuture},
     FutureExt,
 };
+use ic_artifact_downloader::FetchArtifact;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
+use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -40,6 +43,7 @@ use tokio::{
     sync::watch::{self, Receiver},
     task::JoinHandle,
 };
+use turmoil::start_test_processor;
 
 pub mod consensus;
 pub mod mocks;
@@ -436,4 +440,33 @@ impl ConnectivityChecker {
 
         !connected_peer_1.contains_key(peer_2)
     }
+}
+
+pub fn start_consensus_manager(
+    log: ReplicaLogger,
+    rt_handle: Handle,
+    processor: TestConsensus<U64Artifact>,
+) -> (
+    Box<dyn JoinGuard>,
+    ic_consensus_manager::ConsensusManagerBuilder,
+) {
+    let _enter = rt_handle.enter();
+    let pool = Arc::new(RwLock::new(processor));
+    let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
+        start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
+    let pfn_producer = Arc::new(pool.clone().read().unwrap().clone());
+    let mut cm1 = ic_consensus_manager::ConsensusManagerBuilder::new(
+        log.clone(),
+        rt_handle.clone(),
+        MetricsRegistry::default(),
+    );
+    let downloader = FetchArtifact::new(
+        log,
+        rt_handle,
+        pool,
+        pfn_producer,
+        MetricsRegistry::default(),
+    );
+    cm1.add_client(artifact_manager_event_rx, artifact_sender, downloader);
+    (artifact_processor_jh, cm1)
 }

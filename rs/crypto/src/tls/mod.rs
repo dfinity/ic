@@ -31,7 +31,7 @@ where
         );
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::server_config(
-            &self.csp,
+            &self.vault,
             self.node_id,
             Arc::clone(&self.registry_client),
             allowed_clients,
@@ -69,7 +69,7 @@ where
         );
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::server_config_without_client_auth(
-            &self.csp,
+            &self.vault,
             self.node_id,
             self.registry_client.as_ref(),
             registry_version,
@@ -107,7 +107,7 @@ where
         );
         let start_time = self.metrics.now();
         let result = rustls::client_handshake::client_config(
-            &self.csp,
+            &self.vault,
             self.node_id,
             Arc::clone(&self.registry_client),
             server,

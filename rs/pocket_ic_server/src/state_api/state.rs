@@ -2,13 +2,15 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp, PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
+    PocketIc,
 };
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
+use futures::future::Shared;
 use hyper::header::{HeaderValue, HOST};
 use hyper::Version;
 use hyper_legacy::{client::connect::HttpConnector, Client};
@@ -33,12 +35,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -175,7 +172,7 @@ impl PocketIcApiStateBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone)]
 pub enum OpOut {
     NoOutput,
     Time(u64),
@@ -186,7 +183,7 @@ pub enum OpOut {
     StableMemBytes(Vec<u8>),
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
-    RawResponse((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
+    RawResponse(Shared<ApiResponse>),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
@@ -272,13 +269,16 @@ impl std::fmt::Debug for OpOut {
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
-            OpOut::RawResponse((status, headers, bytes)) => {
+            OpOut::RawResponse(fut) => {
                 write!(
                     f,
-                    "ApiV2Resp({}:{:?}:{})",
-                    status,
-                    headers,
-                    base64::encode(bytes)
+                    "ApiResp({:?})",
+                    fut.peek().map(|(status, headers, bytes)| format!(
+                        "{}:{:?}:{}",
+                        status,
+                        headers,
+                        base64::encode(bytes)
+                    ))
                 )
             }
             OpOut::Pruned => write!(f, "Pruned"),
@@ -327,7 +327,7 @@ pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
 /// returned directly.
 /// If the computation can be run and takes longer, a Started variant is returned, containing the
 /// requested op and the initial state.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum UpdateReply {
     /// The requested instance is busy executing another update.
     Busy {
@@ -610,8 +610,11 @@ impl ApiState {
             next.run(request).await
         }
 
-        let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("[::]:{}", port);
+        let ip_addr = http_gateway_config
+            .ip_addr
+            .unwrap_or("127.0.0.1".to_string());
+        let port = http_gateway_config.port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
         let real_port = listener.local_addr().unwrap().port();

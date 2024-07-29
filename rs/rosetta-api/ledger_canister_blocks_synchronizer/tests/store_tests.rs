@@ -165,13 +165,13 @@ async fn store_account_balances_test() {
         if let Some(acc_str) = from_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_from = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_from, amount_local);
         }
         if let Some(acc_str) = to_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_to = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_to, amount_local);
         }
     }

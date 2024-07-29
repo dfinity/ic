@@ -228,8 +228,8 @@ impl IDkgPayload {
     /// to require ongoing signature requests to finish before we can let nodes
     /// move off a subnet.
     ///
-    /// Note that we do not consider available quadruples here because it would
-    /// prevent nodes from leaving when the quadruples are not consumed.
+    /// Note that we do not consider available pre-signatures here because it would
+    /// prevent nodes from leaving when the pre-signatures are not consumed.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> Option<RegistryVersion> {
         // Both current key transcript and next_in_creation are considered.
         let idkg_transcripts = &self.idkg_transcripts;
