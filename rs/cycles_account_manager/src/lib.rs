@@ -42,7 +42,7 @@ const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 256;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1163,7 +1163,15 @@ mod tests {
                 .build(),
             sender_canister_version: None, // ingress messages are not supposed to set this field
         };
-        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
+
+        let payload_size = 2 * Encode!(&payload).unwrap().len();
+
+        assert!(
+            payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
+            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
+            payload_size,
+            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+        );
     }
 
     #[test]

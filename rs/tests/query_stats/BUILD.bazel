@@ -13,7 +13,6 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + [
-        "//rs/tests",
         "//rs/tests/query_stats/lib",
     ],
 )
@@ -28,7 +27,6 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + [
-        "//rs/tests",
         "//rs/tests/query_stats/lib",
     ],
 )
@@ -43,7 +41,6 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + [
-        "//rs/tests",
         "//rs/tests/query_stats/lib",
     ],
 )

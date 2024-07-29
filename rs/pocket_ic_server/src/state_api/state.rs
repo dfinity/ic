@@ -610,8 +610,11 @@ impl ApiState {
             next.run(request).await
         }
 
-        let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("[::]:{}", port);
+        let ip_addr = http_gateway_config
+            .ip_addr
+            .unwrap_or("127.0.0.1".to_string());
+        let port = http_gateway_config.port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
         let real_port = listener.local_addr().unwrap().port();
@@ -623,6 +626,9 @@ impl ApiState {
 
         let http_gateways = self.http_gateways.clone();
         let pocket_ic_server_port = self.port.unwrap();
+        let handle = Handle::new();
+        let shutdown_handle = handle.clone();
+        let axum_handle = handle.clone();
         spawn(async move {
             let replica_url = match http_gateway_config.forward_to {
                 HttpGatewayBackend::Replica(replica_url) => replica_url,
@@ -681,8 +687,6 @@ impl ApiState {
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
-            let handle = Handle::new();
-            let shutdown_handle = handle.clone();
             let http_gateways_for_shutdown = http_gateways.clone();
             tokio::spawn(async move {
                 loop {
@@ -704,7 +708,7 @@ impl ApiState {
                 match config {
                     Ok(config) => {
                         axum_server::from_tcp_rustls(listener, config)
-                            .handle(handle)
+                            .handle(axum_handle)
                             .serve(router)
                             .await
                             .unwrap();
@@ -718,7 +722,7 @@ impl ApiState {
                 }
             } else {
                 axum_server::from_tcp(listener)
-                    .handle(handle)
+                    .handle(axum_handle)
                     .serve(router)
                     .await
                     .unwrap();
@@ -726,6 +730,10 @@ impl ApiState {
 
             info!("Terminating HTTP gateway.");
         });
+
+        // Wait until the HTTP gateway starts listening.
+        while handle.listening().await.is_none() {}
+
         (instance_id, real_port)
     }
 

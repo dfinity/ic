@@ -12,19 +12,16 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use crate::{
-    orchestrator::utils::{
-        subnet_recovery::{enable_chain_key_signing_on_subnet, run_chain_key_signature_test},
-        upgrade::*,
-    },
-    tecdsa::{make_key_ids_for_all_schemes, ChainSignatureRequest},
-};
+use crate::orchestrator::utils::{subnet_recovery::enable_chain_key_signing_on_subnet, upgrade::*};
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
     install_nns_and_check_progress, store_message,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    make_key_ids_for_all_schemes, run_chain_key_signature_test, ChainSignatureRequest,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
