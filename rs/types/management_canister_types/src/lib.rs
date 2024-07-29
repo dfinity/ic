@@ -846,20 +846,19 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
 
 impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
     fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
-        match item.log_visibility_enum {
-            0 => Self::default(),
-            1 => Self::Controllers,
-            2 => Self::AllowedViewers(BoundedAllowedViewers::new(
-                item.allowed_viewers
-                    .into_iter()
-                    .map(|p| PrincipalId::try_from(p.raw).unwrap())
-                    .collect(),
-            )),
-            3 => Self::Public,
-            _ => panic!(
-                "Unexpected value for log visibility enum: {}",
-                item.log_visibility_enum
-            ),
+        use pb_canister_state_bits as pb;
+        match pb::LogVisibilityEnum::try_from(item.log_visibility_enum).unwrap() {
+            pb::LogVisibilityEnum::Unspecified => Self::default(),
+            pb::LogVisibilityEnum::Controllers => Self::Controllers,
+            pb::LogVisibilityEnum::AllowedViewers => {
+                Self::AllowedViewers(BoundedAllowedViewers::new(
+                    item.allowed_viewers
+                        .into_iter()
+                        .map(|p| PrincipalId::try_from(p.raw).unwrap())
+                        .collect(),
+                ))
+            }
+            pb::LogVisibilityEnum::Public => Self::Public,
         }
     }
 }
