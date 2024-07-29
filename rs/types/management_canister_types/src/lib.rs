@@ -773,30 +773,38 @@ impl UninstallCodeArgs {
 
 impl Payload<'_> for UninstallCodeArgs {}
 
+/// Maximum number of allowed log viewers (specified in the interface spec).
+const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
+
+pub type BoundedAllowedViewers =
+    BoundedVec<MAX_ALLOWED_LOG_VIEWERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
+
 /// Log visibility for a canister.
 /// ```text
 /// variant {
 ///    controllers;
+///    allowed_viewers: vec principal;
 ///    public;
 /// }
 /// ```
-#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
-    Controllers = 1,
+    Controllers,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
     #[serde(rename = "public")]
-    Public = 2,
-    #[serde(rename = "allow_list")]
-    AllowList = 3,
+    Public,
 }
 
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     fn from(item: &LogVisibility) -> Self {
         match item {
-            LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
+            LogVisibility::AllowedViewers(_) | LogVisibility::Controllers => {
+                pb_canister_state_bits::LogVisibility::Controllers
+            }
             LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
-            LogVisibility::AllowList => pb_canister_state_bits::LogVisibility::AllowList,
         }
     }
 }
@@ -807,7 +815,51 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
             pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
             pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
             pb_canister_state_bits::LogVisibility::Public => Self::Public,
-            pb_canister_state_bits::LogVisibility::AllowList => Self::AllowList,
+        }
+    }
+}
+
+impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
+    fn from(item: &LogVisibility) -> Self {
+        use pb_canister_state_bits as pb;
+        match item {
+            LogVisibility::Controllers => pb::LogVisibilityV2 {
+                log_visibility_enum: pb::LogVisibilityEnum::Controllers.into(),
+                allowed_viewers: Default::default(),
+            },
+            LogVisibility::AllowedViewers(principals) => pb::LogVisibilityV2 {
+                log_visibility_enum: pb::LogVisibilityEnum::AllowedViewers.into(),
+                allowed_viewers: principals
+                    .get()
+                    .iter()
+                    .map(|c| (*c).into())
+                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                    .clone(),
+            },
+            LogVisibility::Public => pb::LogVisibilityV2 {
+                log_visibility_enum: pb::LogVisibilityEnum::Public.into(),
+                allowed_viewers: Default::default(),
+            },
+        }
+    }
+}
+
+impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
+    fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
+        match item.log_visibility_enum {
+            0 => Self::default(),
+            1 => Self::Controllers,
+            2 => Self::AllowedViewers(BoundedAllowedViewers::new(
+                item.allowed_viewers
+                    .into_iter()
+                    .map(|p| PrincipalId::try_from(p.raw).unwrap())
+                    .collect(),
+            )),
+            3 => Self::Public,
+            _ => panic!(
+                "Unexpected value for log visibility enum: {}",
+                item.log_visibility_enum
+            ),
         }
     }
 }
@@ -868,8 +920,8 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> LogVisibility {
-        self.log_visibility
+    pub fn log_visibility(&self) -> &LogVisibility {
+        &self.log_visibility
     }
 }
 
