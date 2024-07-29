@@ -162,10 +162,11 @@ impl Upgrade {
                     (subnet_id, maybe_proto, maybe_cup)
                 }
                 (None, Some(proto)) => {
-                    // We found a local CUP proto that we can't deserialize, which can only happen
-                    // after an upgrade, and this is the first CUP we are reading on the new version.
-                    // This means we have to be an assigned node, otherwise we would have left the
-                    // subnet and deleted the CUP before upgrading to this version.
+                    // We found a local CUP proto that we can't deserialize. This should only happen
+                    // if this is the first CUP we are reading on a new replica version, after an
+                    // upgrade. This means we have to be an assigned node, otherwise we would have
+                    // left the subnet and deleted the CUP before upgrading to this version.
+                    // The only way to leave this branch is via subnet recovery.
 
                     // Try to find the subnet ID by deserializing only the NiDkgId
                     let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
@@ -178,14 +179,19 @@ impl Upgrade {
 
                     let subnet_id = match nidkg_id.target_subnet {
                         NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
-
-                        // If this CUP was created by a remote subnet, then it is a genesis/recovery CUP
-                        // This is the only case in the branch where we can trust the subnet ID of the
-                        // latest registry version.
                         NiDkgTargetSubnet::Remote(_) => {
+                            // If this CUP was created by a remote subnet, then it is a genesis/recovery
+                            // CUP. This is the only case in the branch where we can trust the subnet ID
+                            // of the latest registry version, as switching to a registry CUP "resets" the
+                            // "oldest registry version in use".
                             match self.registry.get_subnet_id(latest_registry_version) {
                                 Ok(subnet_id) => subnet_id,
                                 Err(OrchestratorError::NodeUnassignedError(_, _)) => {
+                                    // If the registry says that we are unassigned, this unassignment
+                                    // must have happened after the registry CUP triggering the upgrade.
+                                    // Otherwise we would have left the subnet before upgrading. This means
+                                    // we will trust the registry and go ahead with removing the node's state
+                                    // including the broken local CUP.
                                     self.metrics.master_public_key_changed_errors.reset();
                                     remove_node_state(
                                         self.replica_config_file.clone(),
