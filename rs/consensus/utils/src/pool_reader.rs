@@ -799,7 +799,7 @@ pub mod test {
 
             // Because `TestConsensusPool::advance_round` alternates between
             // putting blocks in validated and unvalidated pools for each rank,
-            // we expect (f+1)/2 blocks in the unvalidated pool.
+            // we expect (f+1)/2 blocks in the unvalidated pool per round.
             let mut round = pool
                 .prepare_round()
                 .with_replicas(replicas as u32)
