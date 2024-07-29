@@ -120,9 +120,9 @@ pub(crate) fn validate_payload(
     metrics: &IntCounterVec,
 ) -> ValidationResult<PayloadValidationError> {
     let current_height = parent.height.increment();
-    let registry_version = dbg!(pool_reader
+    let registry_version = pool_reader
         .registry_version(current_height)
-        .expect("Couldn't get the registry version."));
+        .expect("Couldn't get the registry version.");
 
     let last_summary_block = pool_reader
         .dkg_summary_block(&parent)
@@ -167,15 +167,15 @@ pub(crate) fn validate_payload(
                     InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into(),
                 );
             }
-            let max_dealings_per_block =
-                dbg!(registry_client.get_dkg_dealings_per_block(subnet_id, registry_version))
-                    .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "No subnet record found for registry version={} and subnet_id={}",
-                            registry_version, subnet_id
-                        )
-                    });
+            let max_dealings_per_block = registry_client
+                .get_dkg_dealings_per_block(subnet_id, registry_version)
+                .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
+                .unwrap_or_else(|| {
+                    panic!(
+                        "No subnet record found for registry version={} and subnet_id={}",
+                        registry_version, subnet_id
+                    )
+                });
 
             validate_dealings_payload(
                 crypto,
