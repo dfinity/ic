@@ -30,6 +30,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         long_execution_mode: LongExecutionMode::default(),
         execution_state_bits: None,
         memory_allocation: MemoryAllocation::default(),
+        wasm_memory_threshold: NumBytes::new(0),
         freeze_threshold: NumSeconds::from(0),
         cycles_balance: Cycles::zero(),
         cycles_debit: Cycles::zero(),
