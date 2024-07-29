@@ -15,6 +15,7 @@ pub fn hypervisor_config(canister_sandboxing: bool) -> HypervisorConfig {
             feature_flags: FeatureFlags {
                 rate_limiting_of_debug_prints: FlagStatus::Disabled,
                 best_effort_responses: FlagStatus::Enabled,
+                wasm64: FlagStatus::Enabled,
                 ..FeatureFlags::default()
             },
             ..EmbeddersConfig::default()
