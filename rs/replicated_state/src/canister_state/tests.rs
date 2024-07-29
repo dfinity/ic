@@ -625,7 +625,12 @@ fn canister_state_log_visibility_round_trip() {
 fn compatibility_for_log_visibility() {
     // If this fails, you are making a potentially incompatible change to `LogVisibility`.
     // See note [Handling changes to Enums in Replicated State] for how to proceed.
-    assert_eq!(LogVisibility::iter().count(), 3);
+    assert_eq!(
+        LogVisibility::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2]
+    );
 }
 
 #[test]
