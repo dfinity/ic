@@ -787,7 +787,7 @@ pub type BoundedAllowedViewers =
 ///    public;
 /// }
 /// ```
-#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
@@ -798,22 +798,28 @@ pub enum LogVisibility {
     Public,
 }
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     fn from(item: &LogVisibility) -> Self {
         match item {
-            LogVisibility::AllowedViewers(_) | LogVisibility::Controllers => {
-                pb_canister_state_bits::LogVisibility::Controllers
+            LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
+            LogVisibility::AllowedViewers(_) => {
+                pb_canister_state_bits::LogVisibility::EmptyAllowedViewers
             }
             LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
         }
     }
 }
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
     fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
         match item {
             pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
             pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
+            pb_canister_state_bits::LogVisibility::EmptyAllowedViewers => {
+                Self::AllowedViewers(Default::default())
+            }
             pb_canister_state_bits::LogVisibility::Public => Self::Public,
         }
     }
