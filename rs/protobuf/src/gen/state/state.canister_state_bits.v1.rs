@@ -655,10 +655,10 @@ pub struct CanisterStateBits {
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     /// Log visibility for the canister.
+    ///
+    /// TODO(EXC-1670): remove this field.
     #[prost(enumeration = "LogVisibility", tag = "42")]
     pub log_visibility: i32,
-    #[prost(message, optional, tag = "51")]
-    pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
@@ -680,6 +680,9 @@ pub struct CanisterStateBits {
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
+    /// Log visibility for the canister.
+    #[prost(message, optional, tag = "51")]
+    pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
