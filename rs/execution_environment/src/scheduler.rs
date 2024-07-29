@@ -815,12 +815,14 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
-            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
+            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
-                    ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
+                    ExecutionTask::Heartbeat
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => false,
                     ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
@@ -1352,7 +1354,7 @@ impl SchedulerImpl {
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
-        // 1. Heartbeat and GlobalTimer tasks exist only during the round
+        // 1. Heartbeat, GlobalTimer, and OnLowWasmMemory tasks exist only during the round
         //    and must not exist after the round.
         // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
         // 3. If deterministic time slicing is disabled, then there are no paused tasks.
@@ -1371,6 +1373,16 @@ impl SchedulerImpl {
                     ExecutionTask::GlobalTimer => {
                         panic!(
                             "Unexpected global timer task after a round in canister {:?}",
+                            id
+                        );
+                    }
+                    // TODO [EXC-1666]
+                    // For now, since OnLowWasmMemory is not used we will copy behaviour similar
+                    // to Heartbeat and GlobalTimer, but when the feature is implemented we will
+                    // come back to it, to revisit if we should keep it after the round ends.
+                    ExecutionTask::OnLowWasmMemory => {
+                        panic!(
+                            "Unexpected on low wasm memory task after a round in canister {:?}",
                             id
                         );
                     }
@@ -1693,7 +1705,7 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignWithThresholdContext`]s by assigning randomness and matching quadruples.
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
             let contexts = state
                 .metadata
@@ -2131,7 +2143,10 @@ fn observe_replicated_state_metrics(
             Some(&ExecutionTask::AbortedInstallCode { .. }) => {
                 num_aborted_install += 1;
             }
-            Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
+            Some(&ExecutionTask::Heartbeat)
+            | Some(&ExecutionTask::GlobalTimer)
+            | Some(&ExecutionTask::OnLowWasmMemory)
+            | None => {}
         }
         consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
         join_consumed_cycles_by_use_case(
@@ -2215,10 +2230,6 @@ fn observe_replicated_state_metrics(
     metrics.observe_consumed_cycles(consumed_cycles_total);
 
     metrics.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
-
-    metrics
-        .ecdsa_signature_agreements
-        .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
 
     for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
         metrics
@@ -2377,7 +2388,6 @@ fn get_instructions_limits_for_subnet_message(
             | ProvisionalTopUpCanister
             | UploadChunk
             | StoredChunks
-            | DeleteChunks
             | ClearChunkStore
             | TakeCanisterSnapshot
             | LoadCanisterSnapshot

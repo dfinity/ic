@@ -1,23 +1,23 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg};
-use crate::orchestrator::utils::rw_message::{
-    can_store_msg, cert_state_makes_progress_with_retries,
-};
-use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
-use crate::tecdsa::{
-    add_chain_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
-    empty_subnet_update, execute_update_subnet_proposal, get_public_key_with_retries,
-    get_signature_with_logger, verify_signature,
-};
 use anyhow::bail;
 use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::SubnetId;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg, can_store_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
+    },
+    ssh_access::execute_bash_command,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    add_chain_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
+    empty_subnet_update, execute_update_subnet_proposal, get_master_public_key,
+    get_signature_with_logger,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_recovery::steps::Step;
@@ -33,12 +33,6 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
-
-pub fn set_sandbox_env_vars(dir: PathBuf) {
-    set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
-    set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
-    set_var_to_path("COMPILER_BINARY", dir.join("compiler_sandbox"));
-}
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
@@ -453,47 +447,4 @@ pub(crate) fn disable_chain_key_on_subnet(
         )
         .expect("Failed to detect disabled signing.");
     }
-}
-
-/// Get the threshold public key of the given canister
-pub(crate) fn get_master_public_key(
-    canister: &MessageCanister,
-    key_id: &MasterPublicKeyId,
-    logger: &Logger,
-) -> Vec<u8> {
-    info!(
-        logger,
-        "Getting threshold public key for key id: {}.", key_id
-    );
-    let public_key = block_on(get_public_key_with_retries(key_id, canister, logger, 100)).unwrap();
-    info!(logger, "Got public key {:?}", public_key);
-    public_key
-}
-
-/// The signature test consists of getting the given canister's Chain key, comparing it to the existing key
-/// to ensure it hasn't changed, sending a sign request, and verifying the signature
-pub fn run_chain_key_signature_test(
-    canister: &MessageCanister,
-    logger: &Logger,
-    key_id: &MasterPublicKeyId,
-    existing_key: Vec<u8>,
-) {
-    info!(logger, "Run through Chain key signature test.");
-    let message_hash = vec![0xabu8; 32];
-    block_on(async {
-        let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
-            .await
-            .unwrap();
-        assert_eq!(existing_key, public_key);
-        let signature = get_signature_with_logger(
-            message_hash.clone(),
-            ECDSA_SIGNATURE_FEE,
-            key_id,
-            canister,
-            logger,
-        )
-        .await
-        .unwrap();
-        verify_signature(key_id, &message_hash, &public_key, &signature);
-    });
 }

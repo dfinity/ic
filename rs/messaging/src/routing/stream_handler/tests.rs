@@ -3,15 +3,14 @@ use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_I
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    replicated_state::{
-        LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_INVALID_RESPONSE, LABEL_VALUE_OUT_OF_MEMORY,
-    },
+    replicated_state::{LABEL_VALUE_INVALID_RESPONSE, LABEL_VALUE_OUT_OF_MEMORY},
     testing::ReplicatedStateTesting,
     CanisterState, CanisterStatus, InputQueueType, ReplicatedState, Stream,
 };
@@ -3556,14 +3555,10 @@ where
 /// Makes `count` input queue reservations for responses from `remote`.
 fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, remote: CanisterId) {
     for _ in 0..count {
+        // Note that this assumes that tests using this function induct messages matching the
+        // callback IDs generated here by the `CallContextManager` in `register_callback()`.
         let msg = test_request(*LOCAL_CANISTER, remote);
-        register_callback(
-            canister,
-            msg.sender,
-            msg.receiver,
-            msg.sender_reply_callback,
-            msg.deadline,
-        );
+        register_callback(canister, msg.sender, msg.receiver, msg.deadline);
         canister
             .push_output_request(msg.into(), UNIX_EPOCH)
             .unwrap();

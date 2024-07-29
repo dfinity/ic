@@ -17,9 +17,9 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::{
     agent::{
         http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-        EnvelopeContent, RejectCode, RejectResponse,
+        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
     },
-    Agent, AgentError, Identity, RequestId, Signature,
+    Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
@@ -983,10 +983,12 @@ pub fn assert_nodes_health_statuses(
 
 /// Asserts that the response from an agent call is rejected by the replica
 /// resulting in a [`AgentError::UncertifiedReject`], and an expected [`RejectCode`].
-pub fn assert_http_submit_fails(
-    result: Result<RequestId, AgentError>,
+pub fn assert_http_submit_fails<Output>(
+    result: Result<CallResponse<Output>, AgentError>,
     expected_reject_code: RejectCode,
-) {
+) where
+    Output: std::fmt::Debug,
+{
     match result {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
         Err(agent_error) => match agent_error {

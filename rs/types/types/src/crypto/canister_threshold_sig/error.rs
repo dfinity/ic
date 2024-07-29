@@ -333,14 +333,14 @@ pub enum ThresholdEcdsaVerifySigShareError {
 impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaSignShareError {
+pub enum ThresholdEcdsaCreateSigShareError {
     InternalError { internal_error: String },
     NotAReceiver,
     SerializationError { internal_error: String },
     SecretSharesNotFound { commitment_string: String },
     TransientInternalError { internal_error: String },
 }
-impl_display_using_debug!(ThresholdEcdsaSignShareError);
+impl_display_using_debug!(ThresholdEcdsaCreateSigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaVerifyCombinedSignatureError {
