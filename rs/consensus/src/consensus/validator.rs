@@ -882,7 +882,7 @@ impl Validator {
         let max_height = notarization_height.increment();
         let range = HeightRange::new(finalized_height.increment(), max_height);
         // Collect the min of validated block proposal ranks in the range.
-        let mut known_ranks: BTreeMap<Height, Option<Rank>> =
+        let mut known_qualified_ranks: BTreeMap<Height, Option<Rank>> =
             get_min_validated_ranks(pool_reader, &range);
 
         // It is necessary to traverse all the proposals and not only the ones with min
@@ -941,7 +941,7 @@ impl Validator {
                         // A successful verification is enough to validate this block,
                         // because from the notarization we know that the block validity
                         // was already checked.
-                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                        known_qualified_ranks.insert(proposal.height(), Some(proposal.rank()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
                     }
                     // If the parent is notarized, this block and its notarization are
@@ -954,11 +954,11 @@ impl Validator {
                 // proposals proceed to be checked normally.
             }
 
-            // Skip validation and drop the block if it has a higher rank than a known valid
-            // block. Note that this must happen after we first allow "block with
-            // notarization" validation (see above). Otherwise we may get stuck when a block
-            // maker equivocates.
-            if let Some(Some(min_rank)) = known_ranks.get(&proposal.height()) {
+            // Skip validation and drop the block if it has a higher rank than a
+            // known valid block. Note that this must happen after we first allow
+            // "block with notarization" validation (see above). Otherwise we may
+            // get stuck when a block maker equivocates.
+            if let Some(Some(min_rank)) = known_qualified_ranks.get(&proposal.height()) {
                 if proposal.rank() > *min_rank {
                     // Skip them instead of removal because we don't want to end up
                     // requesting these artifacts again.
@@ -1001,7 +1001,7 @@ impl Validator {
                 if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) =
                     &action
                 {
-                    known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                    known_qualified_ranks.insert(proposal.height(), Some(proposal.rank()));
                 }
                 change_set.push(action);
             }
