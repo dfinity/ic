@@ -77,7 +77,7 @@ impl CanisterSettings {
     }
 
     pub fn log_visibility(&self) -> Option<LogVisibility> {
-        self.log_visibility
+        self.log_visibility.clone()
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
@@ -382,7 +382,7 @@ impl ValidatedCanisterSettings {
     }
 
     pub fn log_visibility(&self) -> Option<LogVisibility> {
-        self.log_visibility
+        self.log_visibility.clone()
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
