@@ -848,25 +848,30 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
     type Error = String;
 
     fn try_from(item: pb_canister_state_bits::LogVisibilityV2) -> Result<Self, Self::Error> {
-        use pb_canister_state_bits as pb;
-        match pb::LogVisibilityEnum::try_from(item.log_visibility_enum) {
-            Ok(pb::LogVisibilityEnum::Unspecified) => Ok(Self::default()),
-            Ok(pb::LogVisibilityEnum::Controllers) => Ok(Self::Controllers),
-            Ok(pb::LogVisibilityEnum::AllowedViewers) => {
-                let allowed_viewers = item
-                    .allowed_viewers
-                    .into_iter()
-                    .map(|p| PrincipalId::try_from(p.raw).map_err(|e| e.to_string()))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(
-                    allowed_viewers,
-                )))
-            }
-            Ok(pb::LogVisibilityEnum::Public) => Ok(Self::Public),
+        match pb_canister_state_bits::LogVisibilityEnum::try_from(item.log_visibility_enum) {
             Err(err) => Err(format!(
-                "Invalid LogVisibilityEnum value: {}, decode error: {:?}",
+                "Invalid LogVisibilityEnum value: {}, decode error: {}",
                 item.log_visibility_enum, err,
             )),
+            Ok(log_visibility_enum) => {
+                let result = match log_visibility_enum {
+                    pb_canister_state_bits::LogVisibilityEnum::Unspecified => Self::default(),
+                    pb_canister_state_bits::LogVisibilityEnum::Controllers => Self::Controllers,
+                    pb_canister_state_bits::LogVisibilityEnum::AllowedViewers => {
+                        Self::AllowedViewers(BoundedAllowedViewers::new(
+                            item.allowed_viewers
+                                .iter()
+                                .map(|p| {
+                                    PrincipalId::try_from(p.raw.clone()).map_err(|e| e.to_string())
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
+                        ))
+                    }
+                    pb_canister_state_bits::LogVisibilityEnum::Public => Self::Public,
+                };
+
+                Ok(result)
+            }
         }
     }
 }
