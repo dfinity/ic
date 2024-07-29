@@ -312,10 +312,6 @@ message WasmChunkStoreMetadata {
   uint64 size = 2;
 }
 
-// TODO(EXC-1670): Migrate to LogVisibilityV2.
-// The current enum only supports i32 values, which limits the
-// storage of allowed_viewers principals. LogVisibilityV2 will 
-// support both enum values and a list of principals.
 enum LogVisibility {
   LOG_VISIBILITY_UNSPECIFIED = 0;
   LOG_VISIBILITY_CONTROLLERS = 1;
@@ -407,7 +403,7 @@ message CanisterStateBits {
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
   // Log visibility for the canister.
-  LogVisibility log_visibility = 42;  // TODO(EXC-1670): remove this field.
+  LogVisibility log_visibility = 42;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.

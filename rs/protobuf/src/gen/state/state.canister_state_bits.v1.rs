@@ -647,8 +647,6 @@ pub struct CanisterStateBits {
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     /// Log visibility for the canister.
-    ///
-    /// TODO(EXC-1670): remove this field.
     #[prost(enumeration = "LogVisibility", tag = "42")]
     pub log_visibility: i32,
     /// Log records of the canister.
@@ -815,10 +813,6 @@ impl CyclesUseCase {
         }
     }
 }
-/// TODO(EXC-1670): Migrate to LogVisibilityV2.
-/// The current enum only supports i32 values, which limits the
-/// storage of allowed_viewers principals. LogVisibilityV2 will
-/// support both enum values and a list of principals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum LogVisibility {
