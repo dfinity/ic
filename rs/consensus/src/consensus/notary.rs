@@ -18,8 +18,8 @@
 //! * A node must only issue notarization shares for rounds for which this node
 //!   is selected as a notary.
 //! * A node must only issue notarization shares for blocks that have a lower
-//!   (or equal) rank than what it has previously issued shares for in the same
-//!   round.
+//!   (or equal) rank than every non-disqualified block for which the node
+//!   has previously issued shares for in the same round.
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
