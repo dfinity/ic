@@ -683,6 +683,12 @@ impl std::fmt::Display for ApiType {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ExecutionMemoryType {
+    WasmMemory,
+    StableMemory
+}
+
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
@@ -694,6 +700,12 @@ struct MemoryUsage {
 
     /// The current amount of execution memory that the canister is using.
     current_usage: NumBytes,
+
+    /// The current amount of stable memory that the canister is using.
+    stable_memory_usage: NumBytes,
+
+    /// The current amount of Wasm memory that the canister is using.
+    wasm_memory_usage: NumBytes,
 
     /// The current amount of message memory that the canister is using.
     current_message_usage: NumBytes,
@@ -720,6 +732,7 @@ impl MemoryUsage {
         limit: NumBytes,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
+        stable_memory_usage: NumBytes,
         current_message_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
@@ -737,10 +750,16 @@ impl MemoryUsage {
                 limit
             );
         }
+        let (wasm_memory_usage, overflow) = current_usage.get().overflowing_sub(stable_memory_usage.get());
+
+        debug_assert!(!overflow);
+
         Self {
             limit,
             wasm_memory_limit,
             current_usage,
+            stable_memory_usage,
+            wasm_memory_usage: NumBytes::new(wasm_memory_usage),
             current_message_usage,
             subnet_available_memory,
             allocated_execution_memory: NumBytes::from(0),
@@ -811,6 +830,7 @@ impl MemoryUsage {
         api_type: &ApiType,
         sandbox_safe_system_state: &mut SandboxSafeSystemState,
         subnet_memory_saturation: &ResourceSaturation,
+        execution_memory_type: ExecutionMemoryType,
     ) -> HypervisorResult<()> {
         let (new_usage, overflow) = self
             .current_usage
@@ -850,9 +870,14 @@ impl MemoryUsage {
                             );
                         self.current_usage = NumBytes::from(new_usage);
                         self.allocated_execution_memory += execution_bytes;
+
+                        self.add_execution_memory(execution_bytes, execution_memory_type)?;
+
+                        sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(None, self.stable_memory_usage, self.wasm_memory_usage);
+
                         Ok(())
                     }
-                    Err(_err) => Err(HypervisorError::OutOfMemory),
+                    Err(_err) =>  Err(HypervisorError::OutOfMemory),
                 }
             }
             MemoryAllocation::Reserved(reserved_bytes) => {
@@ -868,9 +893,39 @@ impl MemoryUsage {
                     return Err(HypervisorError::OutOfMemory);
                 }
                 self.current_usage = NumBytes::from(new_usage);
+                self.add_execution_memory(execution_bytes, execution_memory_type)?;
+
+                sandbox_safe_system_state.system_state_changes.on_low_wasm_memory_hook_status.update(Some(reserved_bytes), self.stable_memory_usage, self.wasm_memory_usage);
                 Ok(())
             }
         }
+    }
+
+    fn add_execution_memory(&mut self, execution_bytes: NumBytes, execution_memory_type: ExecutionMemoryType) {
+        match execution_memory_type {
+            ExecutionMemoryType::WasmMemory => {
+                let (new_usage, overflow) = self
+                    .wasm_memory_usage
+                    .get()
+                    .overflowing_add(execution_bytes.get());
+                if overflow {
+                    return Err(HypervisorError::OutOfMemory);
+                }
+                self.wasm_memory_usage = NumBytes::new(new_usage);
+            }
+            ExecutionMemoryType::StableMemory => {
+                let (new_usage, overflow) = self
+                    .stable_memory_usage
+                    .get()
+                    .overflowing_add(execution_bytes.get());
+                if overflow {
+                    return Err(HypervisorError::OutOfMemory);
+                }
+                self.stable_memory_usage = NumBytes::new(new_usage);
+            }
+        }
+
+        debug_assert_eq!(self.current_usage.get(), self.stable_memory_usage.get() + self.wasm_memory_usage.get());
     }
 
     /// Tries to allocate the requested amount of message memory.
@@ -1013,6 +1068,9 @@ impl SystemApiImpl {
             execution_parameters.canister_memory_limit,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
+            stable_memory_usage: stable_memory.size.checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                .map(NumBytes::new)
+                .ok_or(HypervisorError::OutOfMemory)?,
             canister_current_message_memory_usage,
             subnet_available_memory,
             execution_parameters.memory_allocation,
@@ -2663,6 +2721,7 @@ impl SystemApi for SystemApiImpl {
                 &self.api_type,
                 &mut self.sandbox_safe_system_state,
                 &self.execution_parameters.subnet_memory_saturation,
+                ExecutionMemoryType::WasmMemory
             ) {
                 Ok(()) => Ok(()),
                 Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
@@ -2714,6 +2773,7 @@ impl SystemApi for SystemApiImpl {
             &self.api_type,
             &mut self.sandbox_safe_system_state,
             &self.execution_parameters.subnet_memory_saturation,
+            ExecutionMemoryType::StableMemory,
         ) {
             Ok(()) => Ok(StableGrowOutcome::Success),
             Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {

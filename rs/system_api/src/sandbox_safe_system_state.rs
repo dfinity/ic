@@ -72,6 +72,7 @@ pub struct SystemStateChanges {
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
     canister_log: CanisterLog,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 impl Default for SystemStateChanges {
@@ -87,6 +88,7 @@ impl Default for SystemStateChanges {
             requests: vec![],
             new_global_timer: None,
             canister_log: Default::default(),
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         }
     }
 }
@@ -298,6 +300,8 @@ impl SystemStateChanges {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
+
+        system_state.on_low_wasm_memory_hook_status = self.on_low_wasm_memory_hook_status;
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
@@ -1205,6 +1209,22 @@ impl SandboxSafeSystemState {
                 self.system_state_changes.reserved_cycles += cycles_to_reserve;
                 Ok(())
             }
+        }
+
+        pub fn update_on_low_wasm_memory_hook_status(
+            &mut self,
+            memory_allocation: Option<NumBytes>,
+            used_stable_memory: NumBytes,
+            used_wasm_memory: NumBytes,
+        ) {
+            self.system_state_changes
+                .on_low_wasm_memory_hook_status
+                .update(
+                    self.wasm_memory_threshold,
+                    memory_allocation,
+                    used_stable_memory,
+                    used_wasm_memory,
+                );
         }
     }
 

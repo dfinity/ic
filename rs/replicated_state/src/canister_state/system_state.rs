@@ -356,6 +356,56 @@ pub struct SystemState {
 
     /// Next local snapshot id.
     pub next_snapshot_id: u64,
+
+    /// Status of low_on_wasm_memory hook execution.
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+}
+
+/// A wrapper around the different canister statuses.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OnLowWasmMemoryHookStatus {
+    ConditionNotSatisfied,
+    Ready,
+    Executed,
+}
+
+impl OnLowWasmMemoryHookStatus {
+    fn update(
+        &mut self,
+        wasm_memory_threshold: NumBytes,
+        memory_allocation: Option<NumBytes>,
+        used_stable_memory: NumBytes,
+        used_wasm_memory: NumBytes,
+    ) {
+        // The maximum Wasm memory occupied by the canister is 4 GiB.
+        let max_wasm_capacity = NumBytes::new(4 * 1024 * 1024);
+
+        // If the canister has memory allocation, then it maximum allowed Wasm memory
+        // can be calculated as min(memory_allocation - used_stable_memory, 4 GiB).
+        let wasm_capacity = if let Some(memory_allocation) = memory_allocation{
+            std::cmp::min(memory_allocation - used_stable_memory, max_wasm_capacity)
+        } else {
+            max_wasm_capacity
+        };
+
+        let left_wasm_space = wasm_capacity - used_wasm_memory;
+
+        if left_wasm_space >= wasm_memory_threshold {
+            *self = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+        } else {
+            if *self != OnLowWasmMemoryHookStatus::Executed {
+                *self = OnLowWasmMemoryHookStatus::Ready;
+            }
+        }
+    }
+
+    fn should_schedule_hook(&self) -> bool {
+        *self == OnLowWasmMemoryHookStatus::Ready
+    }
+
+    fn execute_hook(&mut self) {
+        *self = OnLowWasmMemoryHookStatus::Executed;
+    }
 }
 
 /// A wrapper around the different canister statuses.
