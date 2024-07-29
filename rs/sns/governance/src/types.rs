@@ -369,6 +369,12 @@ impl NervousSystemParameters {
     /// hosting the SNS.
     pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING: u64 = 15;
 
+    /// This is a lower bound for `max_number_of_principals_per_neuron`.
+    /// Decreasing it below this number is problematic because SNS Swap assumes
+    /// that there are allowed to be at least 5 principals per
+    /// neuron during ClaimSwapNeuronsRequest.
+    pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR: u64 = 5;
+
     /// This is an upper bound for `max_dissolve_delay_bonus_percentage`. High values
     /// may improve the incentives when voting, but too-high values may also lead
     /// to an over-concentration of voting power. The value used by the NNS is 100.
@@ -825,11 +831,11 @@ impl NervousSystemParameters {
                     .to_string()
             })?;
 
-        if max_number_of_principals_per_neuron == 0 {
-            Err(
-                "NervousSystemParameters.max_number_of_principals_per_neuron must be greater than 0"
-                    .to_string(),
-            )
+        if max_number_of_principals_per_neuron < Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR {
+            Err(format!(
+                    "NervousSystemParameters.max_number_of_principals_per_neuron must be greater than or equal to {}",
+                    Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR
+                ))
         } else if max_number_of_principals_per_neuron
             > Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING
         {
@@ -2823,6 +2829,10 @@ pub(crate) mod tests {
                     round_duration_seconds: None,
                     ..Default::default()
                 }),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_principals_per_neuron: Some(4),
                 ..NervousSystemParameters::with_default_values()
             },
         ];

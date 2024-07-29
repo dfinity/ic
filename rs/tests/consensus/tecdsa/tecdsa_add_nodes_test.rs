@@ -53,7 +53,7 @@ use std::collections::BTreeMap;
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
 
-const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
+const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -191,7 +191,10 @@ async fn assert_metric_sum(
     log: &Logger,
 ) {
     let mut count = 0;
-    let metric_with_label = format!("{}{{key_id=\"{}\"}}", ECDSA_KEY_TRANSCRIPT_CREATED, key_id);
+    let metric_with_label = format!(
+        "{}{{key_id=\"{}\"}}",
+        MASTER_KEY_TRANSCRIPTS_CREATED, key_id
+    );
     let metrics = MetricsFetcher::new(subnet.nodes(), vec![metric_with_label.clone()]);
     loop {
         match metrics.fetch::<u64>().await {

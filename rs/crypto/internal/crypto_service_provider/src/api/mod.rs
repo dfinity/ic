@@ -3,11 +3,9 @@
 mod canister_threshold;
 mod sign;
 mod threshold;
-mod tls;
 
 pub use canister_threshold::CspCreateMEGaKeyError;
 pub use sign::{CspSigVerifier, CspSigner};
 pub use threshold::{
     threshold_sign_error::CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };
-pub use tls::CspTlsHandshakeSignerProvider;
