@@ -38,8 +38,8 @@ main() {
     log_start "$(basename $0)"
     start_setupos
     /opt/ic/bin/check-setupos-age.sh
-    /opt/ic/bin/hardware.sh
-    /opt/ic/bin/network.sh
+    #/opt/ic/bin/hardware.sh
+    #/opt/ic/bin/network.sh
     /opt/ic/bin/disk.sh
     /opt/ic/bin/hostos.sh
     /opt/ic/bin/guestos.sh
