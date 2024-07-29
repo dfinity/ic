@@ -1033,10 +1033,10 @@ mod tests {
             for i in 0..f {
                 pool.insert_validated(pool.make_equivocation_proof(Rank(i), height, &membership));
                 // We disqualify rank i, so lowest ranked proposal must be i + 1
-                // match &find_lowest_ranked_proposals(&PoolReader::new(&pool), height)[..] {
-                //     [proposal] => assert_eq!(proposal.content.as_ref().rank, Rank(i + 1)),
-                //     _ => panic!("expected exactly one proposal at the given height"),
-                // }
+                match &find_lowest_ranked_proposals(&PoolReader::new(&pool), height)[..] {
+                    [proposal] => assert_eq!(proposal.content.as_ref().rank, Rank(i + 1)),
+                    _ => panic!("expected exactly one proposal at the given height"),
+                }
             }
         });
     }
