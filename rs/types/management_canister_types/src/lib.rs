@@ -879,8 +879,8 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> &LogVisibility {
-        &self.log_visibility
+    pub fn log_visibility(&self) -> LogVisibility {
+        self.log_visibility
     }
 }
 
