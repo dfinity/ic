@@ -64,6 +64,7 @@ impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
+            visibility: item.visibility,
         }
     }
 }
@@ -81,6 +82,7 @@ impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
+            visibility: item.visibility,
         }
     }
 }
@@ -140,6 +142,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -171,6 +174,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -215,6 +219,26 @@ impl From<pb_api::neuron::DissolveState> for pb::neuron::DissolveState {
     }
 }
 
+impl From<pb::Visibility> for pb_api::Visibility {
+    fn from(item: pb::Visibility) -> Self {
+        match item {
+            pb::Visibility::Unspecified => pb_api::Visibility::Unspecified,
+            pb::Visibility::Private => pb_api::Visibility::Private,
+            pb::Visibility::Public => pb_api::Visibility::Public,
+        }
+    }
+}
+
+impl From<pb_api::Visibility> for pb::Visibility {
+    fn from(item: pb_api::Visibility) -> Self {
+        match item {
+            pb_api::Visibility::Unspecified => pb::Visibility::Unspecified,
+            pb_api::Visibility::Private => pb::Visibility::Private,
+            pb_api::Visibility::Public => pb::Visibility::Public,
+        }
+    }
+}
+
 impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
     fn from(item: pb::AbridgedNeuron) -> Self {
         Self {
@@ -233,6 +257,7 @@ impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -254,6 +279,7 @@ impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
             joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+            visibility: item.visibility,
         }
     }
 }
@@ -571,6 +597,12 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
                 pb_api::proposal::Action::CreateServiceNervousSystem(v.into())
             }
             pb::proposal::Action::InstallCode(v) => pb_api::proposal::Action::InstallCode(v.into()),
+            pb::proposal::Action::StopOrStartCanister(v) => {
+                pb_api::proposal::Action::StopOrStartCanister(v.into())
+            }
+            pb::proposal::Action::UpdateCanisterSettings(v) => {
+                pb_api::proposal::Action::UpdateCanisterSettings(v.into())
+            }
         }
     }
 }
@@ -615,6 +647,12 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
             }
             pb_api::proposal::Action::InstallCode(v) => pb::proposal::Action::InstallCode(v.into()),
+            pb_api::proposal::Action::StopOrStartCanister(v) => {
+                pb::proposal::Action::StopOrStartCanister(v.into())
+            }
+            pb_api::proposal::Action::UpdateCanisterSettings(v) => {
+                pb::proposal::Action::UpdateCanisterSettings(v.into())
+            }
         }
     }
 }
@@ -778,6 +816,21 @@ impl From<pb_api::manage_neuron::ChangeAutoStakeMaturity>
     }
 }
 
+impl From<pb::manage_neuron::SetVisibility> for pb_api::manage_neuron::SetVisibility {
+    fn from(item: pb::manage_neuron::SetVisibility) -> Self {
+        Self {
+            visibility: item.visibility,
+        }
+    }
+}
+impl From<pb_api::manage_neuron::SetVisibility> for pb::manage_neuron::SetVisibility {
+    fn from(item: pb_api::manage_neuron::SetVisibility) -> Self {
+        Self {
+            visibility: item.visibility,
+        }
+    }
+}
+
 impl From<pb::manage_neuron::Configure> for pb_api::manage_neuron::Configure {
     fn from(item: pb::manage_neuron::Configure) -> Self {
         Self {
@@ -823,6 +876,9 @@ impl From<pb::manage_neuron::configure::Operation> for pb_api::manage_neuron::co
             pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
                 pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
             }
+            pb::manage_neuron::configure::Operation::SetVisibility(v) => {
+                pb_api::manage_neuron::configure::Operation::SetVisibility(v.into())
+            }
         }
     }
 }
@@ -855,6 +911,9 @@ impl From<pb_api::manage_neuron::configure::Operation> for pb::manage_neuron::co
             }
             pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
                 pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
+            }
+            pb_api::manage_neuron::configure::Operation::SetVisibility(v) => {
+                pb::manage_neuron::configure::Operation::SetVisibility(v.into())
             }
         }
     }
@@ -2783,6 +2842,164 @@ impl From<pb_api::install_code::CanisterInstallMode> for pb::install_code::Canis
     }
 }
 
+impl From<pb::StopOrStartCanister> for pb_api::StopOrStartCanister {
+    fn from(item: pb::StopOrStartCanister) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            action: item.action,
+        }
+    }
+}
+
+impl From<pb_api::StopOrStartCanister> for pb::StopOrStartCanister {
+    fn from(item: pb_api::StopOrStartCanister) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            action: item.action,
+        }
+    }
+}
+
+impl From<pb::stop_or_start_canister::CanisterAction>
+    for pb_api::stop_or_start_canister::CanisterAction
+{
+    fn from(item: pb::stop_or_start_canister::CanisterAction) -> Self {
+        match item {
+            pb::stop_or_start_canister::CanisterAction::Unspecified => {
+                pb_api::stop_or_start_canister::CanisterAction::Unspecified
+            }
+            pb::stop_or_start_canister::CanisterAction::Stop => {
+                pb_api::stop_or_start_canister::CanisterAction::Stop
+            }
+            pb::stop_or_start_canister::CanisterAction::Start => {
+                pb_api::stop_or_start_canister::CanisterAction::Start
+            }
+        }
+    }
+}
+
+impl From<pb_api::stop_or_start_canister::CanisterAction>
+    for pb::stop_or_start_canister::CanisterAction
+{
+    fn from(item: pb_api::stop_or_start_canister::CanisterAction) -> Self {
+        match item {
+            pb_api::stop_or_start_canister::CanisterAction::Unspecified => {
+                pb::stop_or_start_canister::CanisterAction::Unspecified
+            }
+            pb_api::stop_or_start_canister::CanisterAction::Stop => {
+                pb::stop_or_start_canister::CanisterAction::Stop
+            }
+            pb_api::stop_or_start_canister::CanisterAction::Start => {
+                pb::stop_or_start_canister::CanisterAction::Start
+            }
+        }
+    }
+}
+
+impl From<pb::UpdateCanisterSettings> for pb_api::UpdateCanisterSettings {
+    fn from(item: pb::UpdateCanisterSettings) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            settings: item.settings.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb_api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
+    fn from(item: pb_api::UpdateCanisterSettings) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            settings: item.settings.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::CanisterSettings>
+    for pb_api::update_canister_settings::CanisterSettings
+{
+    fn from(item: pb::update_canister_settings::CanisterSettings) -> Self {
+        Self {
+            controllers: item.controllers.map(|x| x.into()),
+            compute_allocation: item.compute_allocation,
+            memory_allocation: item.memory_allocation,
+            freezing_threshold: item.freezing_threshold,
+            log_visibility: item.log_visibility,
+            wasm_memory_limit: item.wasm_memory_limit,
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::CanisterSettings>
+    for pb::update_canister_settings::CanisterSettings
+{
+    fn from(item: pb_api::update_canister_settings::CanisterSettings) -> Self {
+        Self {
+            controllers: item.controllers.map(|x| x.into()),
+            compute_allocation: item.compute_allocation,
+            memory_allocation: item.memory_allocation,
+            freezing_threshold: item.freezing_threshold,
+            log_visibility: item.log_visibility,
+            wasm_memory_limit: item.wasm_memory_limit,
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::Controllers>
+    for pb_api::update_canister_settings::Controllers
+{
+    fn from(item: pb::update_canister_settings::Controllers) -> Self {
+        Self {
+            controllers: item.controllers,
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::Controllers>
+    for pb::update_canister_settings::Controllers
+{
+    fn from(item: pb_api::update_canister_settings::Controllers) -> Self {
+        Self {
+            controllers: item.controllers,
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::LogVisibility>
+    for pb_api::update_canister_settings::LogVisibility
+{
+    fn from(item: pb::update_canister_settings::LogVisibility) -> Self {
+        match item {
+            pb::update_canister_settings::LogVisibility::Unspecified => {
+                pb_api::update_canister_settings::LogVisibility::Unspecified
+            }
+            pb::update_canister_settings::LogVisibility::Controllers => {
+                pb_api::update_canister_settings::LogVisibility::Controllers
+            }
+            pb::update_canister_settings::LogVisibility::Public => {
+                pb_api::update_canister_settings::LogVisibility::Public
+            }
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::LogVisibility>
+    for pb::update_canister_settings::LogVisibility
+{
+    fn from(item: pb_api::update_canister_settings::LogVisibility) -> Self {
+        match item {
+            pb_api::update_canister_settings::LogVisibility::Unspecified => {
+                pb::update_canister_settings::LogVisibility::Unspecified
+            }
+            pb_api::update_canister_settings::LogVisibility::Controllers => {
+                pb::update_canister_settings::LogVisibility::Controllers
+            }
+            pb_api::update_canister_settings::LogVisibility::Public => {
+                pb::update_canister_settings::LogVisibility::Public
+            }
+        }
+    }
+}
+
 impl From<pb::Governance> for pb_api::Governance {
     fn from(item: pb::Governance) -> Self {
         Self {
@@ -3377,6 +3594,7 @@ impl From<pb::ListNeurons> for pb_api::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }
@@ -3386,6 +3604,7 @@ impl From<pb_api::ListNeurons> for pb::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }
@@ -3709,21 +3928,6 @@ impl From<pb_api::settle_neurons_fund_participation_request::Result>
     }
 }
 
-impl From<pb::Principals> for pb_api::Principals {
-    fn from(item: pb::Principals) -> Self {
-        Self {
-            principals: item.principals,
-        }
-    }
-}
-impl From<pb_api::Principals> for pb::Principals {
-    fn from(item: pb_api::Principals) -> Self {
-        Self {
-            principals: item.principals,
-        }
-    }
-}
-
 impl From<pb::SettleNeuronsFundParticipationResponse>
     for pb_api::SettleNeuronsFundParticipationResponse
 {
@@ -3752,7 +3956,7 @@ impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
             controller: item.controller,
-            hotkeys: item.hotkeys.map(|x| x.into()),
+            hotkeys: item.hotkeys,
             is_capped: item.is_capped,
             hotkey_principal: item.hotkey_principal,
         }
@@ -3767,7 +3971,7 @@ impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
             controller: item.controller,
-            hotkeys: item.hotkeys.map(|x| x.into()),
+            hotkeys: item.hotkeys,
             is_capped: item.is_capped,
             hotkey_principal: item.hotkey_principal,
         }

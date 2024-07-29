@@ -6,10 +6,10 @@ use ic_ledger_canister_blocks_synchronizer::{
 use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, sample_data::Scribe};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
 use ic_ledger_core::{
-    approvals::AllowanceTable, balances::BalancesStore, block::BlockType, timestamp::TimeStamp,
-    tokens::CheckedAdd, Tokens,
+    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::BalancesStore,
+    block::BlockType, timestamp::TimeStamp, tokens::CheckedAdd, Tokens,
 };
-use icp_ledger::{apply_operation, AccountIdentifier, ApprovalKey, Block, Operation};
+use icp_ledger::{apply_operation, AccountIdentifier, Block, Operation};
 use rusqlite::params;
 use std::path::Path;
 
@@ -17,17 +17,15 @@ pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
     Blocks::new_persistent(path, false).unwrap()
 }
 
-type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>;
-
 #[derive(Default)]
 struct TestContext {
     pub balance_book: BalanceBook,
-    pub approvals: Approvals,
+    pub approvals: AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>,
 }
 
 impl LedgerContext for TestContext {
     type AccountId = AccountIdentifier;
-    type Approvals = Approvals;
+    type AllowancesData = HeapAllowancesData<AccountIdentifier, Tokens>;
     type BalancesStore = ClientBalancesStore;
     type Tokens = Tokens;
 
@@ -39,11 +37,11 @@ impl LedgerContext for TestContext {
         &mut self.balance_book
     }
 
-    fn approvals(&self) -> &Approvals {
+    fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
         &self.approvals
     }
 
-    fn approvals_mut(&mut self) -> &mut Approvals {
+    fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
         &mut self.approvals
     }
 
@@ -167,13 +165,13 @@ async fn store_account_balances_test() {
         if let Some(acc_str) = from_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_from = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_from, amount_local);
         }
         if let Some(acc_str) = to_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_to = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_to, amount_local);
         }
     }

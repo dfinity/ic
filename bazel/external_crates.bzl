@@ -560,8 +560,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = ICRC_1_REV,
             ),
             "ic-agent": crate.spec(
-                version = "^0.35.0",
+                version = "^0.37.1",
                 features = [
+                    "experimental_sync_call",
                     "hyper",
                     "reqwest",
                     "pem",
@@ -583,7 +584,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.1",
             ),
             "ic-cbor": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-cdk": crate.spec(
                 version = "^0.13.1",
@@ -598,10 +599,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-http-certification": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -614,13 +615,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.5",
             ),
             "ic-response-verification": crate.spec(
-                version = "2.3.0",
+                version = "2.6.0",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.35.0",
+                version = "^0.37.0",
                 features = ["raw"],
             ),
             "ic-verify-bls-signature": crate.spec(
@@ -637,7 +638,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "idna": crate.spec(
-                version = "^0.3.0",
+                version = "^1.0.2",
             ),
             "indexmap": crate.spec(
                 version = "^2.2.6",
@@ -669,12 +670,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "itertools": crate.spec(
                 version = "^0.12.0",
-            ),
-            "jemalloc-ctl": crate.spec(
-                version = "^0.3.3",
-            ),
-            "jemallocator": crate.spec(
-                version = "^0.3.2",
             ),
             "json-patch": crate.spec(
                 version = "^0.2.6",
@@ -1276,6 +1271,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "threadpool": crate.spec(
                 version = "^1.8.1",
             ),
+            "tikv-jemalloc-ctl": crate.spec(
+                version = "^0.5",
+            ),
+            "tikv-jemallocator": crate.spec(
+                version = "^0.5",
+            ),
             "time": crate.spec(
                 version = "^0.3.36",
             ),
@@ -1406,13 +1407,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.2",
             ),
             "url": crate.spec(
-                version = "^2.4.1",
+                version = "^2.5.2",
                 features = [
                     "serde",
                 ],
             ),
             "uuid": crate.spec(
-                version = "^1.3.0",
+                version = "^1.10.0",
                 features = [
                     "v4",
                     "serde",

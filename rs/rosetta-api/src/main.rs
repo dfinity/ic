@@ -66,6 +66,8 @@ struct Opt {
     not_whitelisted: bool,
     #[clap(long = "expose-metrics")]
     expose_metrics: bool,
+
+    #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
     enable_rosetta_blocks: bool,
 }
@@ -228,9 +230,18 @@ async fn main() -> std::io::Result<()> {
         not_whitelisted,
         expose_metrics,
         blockchain,
-        enable_rosetta_blocks,
         ..
     } = opt;
+
+    // Set rosetta blocks option if feature is enabled
+    #[allow(unused_mut)]
+    #[allow(unused_assignments)]
+    let mut enable_rosetta_blocks = false;
+    #[cfg(feature = "rosetta-blocks")]
+    {
+        enable_rosetta_blocks = opt.enable_rosetta_blocks;
+    }
+
     let client = ledger_client::LedgerClient::new(
         url,
         canister_id,

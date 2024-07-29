@@ -208,6 +208,24 @@ impl TestConsensusPool {
         }
     }
 
+    /// Utility function to determine the identity of the block maker with the
+    /// specified rank at a given height. Panics if this rank does not exist.
+    pub fn get_block_maker_by_rank(&self, height: Height, rank: Rank) -> NodeId {
+        let pool_reader = PoolReader::new(&self.pool);
+        let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
+        *self
+            .membership
+            .get_nodes(height)
+            .unwrap()
+            .iter()
+            .find(|node| {
+                self.membership
+                    .get_block_maker_rank(height, &prev_beacon, **node)
+                    == Ok(Some(rank))
+            })
+            .unwrap()
+    }
+
     pub fn make_next_block(&self) -> BlockProposal {
         self.make_next_block_with_rank(Rank(0))
     }
@@ -238,20 +256,8 @@ impl TestConsensusPool {
         block.context.registry_version = registry_version;
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
-
-        let height = block.height();
-        let pool_reader = PoolReader::new(&self.pool);
-        let nodes = self.membership.get_nodes(height).unwrap();
-        let signer = nodes
-            .iter()
-            .find(|node| {
-                let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
-                self.membership
-                    .get_block_maker_rank(height, &prev_beacon, **node)
-                    == Ok(Some(rank))
-            })
-            .expect("rank should exist for the current membership");
-        BlockProposal::fake(block, node_test_id(0))
+        let signer = self.get_block_maker_by_rank(block.height(), rank);
+        BlockProposal::fake(block, signer)
     }
 
     pub fn make_next_beacon(&self) -> RandomBeacon {
