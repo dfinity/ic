@@ -633,6 +633,9 @@ impl ApiState {
 
         let http_gateways = self.http_gateways.clone();
         let pocket_ic_server_port = self.port.unwrap();
+        let handle = Handle::new();
+        let shutdown_handle = handle.clone();
+        let axum_handle = handle.clone();
         spawn(async move {
             let replica_url = match http_gateway_config.forward_to {
                 HttpGatewayBackend::Replica(replica_url) => replica_url,
@@ -691,8 +694,6 @@ impl ApiState {
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
-            let handle = Handle::new();
-            let shutdown_handle = handle.clone();
             let http_gateways_for_shutdown = http_gateways.clone();
             tokio::spawn(async move {
                 loop {
@@ -714,7 +715,7 @@ impl ApiState {
                 match config {
                     Ok(config) => {
                         axum_server::from_tcp_rustls(listener, config)
-                            .handle(handle)
+                            .handle(axum_handle)
                             .serve(router)
                             .await
                             .unwrap();
@@ -728,7 +729,7 @@ impl ApiState {
                 }
             } else {
                 axum_server::from_tcp(listener)
-                    .handle(handle)
+                    .handle(axum_handle)
                     .serve(router)
                     .await
                     .unwrap();
@@ -736,6 +737,10 @@ impl ApiState {
 
             info!("Terminating HTTP gateway.");
         });
+
+        // Wait until the HTTP gateway starts listening.
+        while handle.listening().await.is_none() {}
+
         HttpGatewayInfo {
             instance_id,
             port: real_port,
