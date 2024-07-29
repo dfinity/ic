@@ -24,7 +24,7 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 threadpool = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 bytes = { workspace = true }

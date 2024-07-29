@@ -198,20 +198,11 @@ impl InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return match self.config.embedders_config.feature_flags.canister_logging {
-                        FlagStatus::Enabled => fetch_canister_logs(
-                            query.source(),
-                            state.get_ref(),
-                            FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        ),
-                        FlagStatus::Disabled => Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            format!(
-                                "{} API is not enabled on this subnet",
-                                QueryMethod::FetchCanisterLogs
-                            ),
-                        )),
-                    }
+                    return fetch_canister_logs(
+                        query.source(),
+                        state.get_ref(),
+                        FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                    );
                 }
                 Err(_) => {
                     return Err(UserError::new(

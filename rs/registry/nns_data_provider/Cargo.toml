@@ -19,7 +19,7 @@ prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-certification-test-utils = { path = "../../certification/test-utils" }

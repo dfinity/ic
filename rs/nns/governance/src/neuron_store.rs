@@ -2,7 +2,10 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::{neuron_id_range_to_u64_range, types::Neuron},
+    neuron::{
+        neuron_id_range_to_u64_range,
+        types::{normalized, Neuron},
+    },
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
@@ -552,36 +555,48 @@ impl NeuronStore {
         neuron_id: NeuronId,
         sections: NeuronSections,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
+        let main = || {
+            let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
 
-        if let Some(heap_neuron) = heap_neuron.clone() {
-            // If the neuron is active on heap, return early to avoid any operation on stable
-            // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
-            // on stable storage.
-            if !heap_neuron.is_inactive(self.now()) {
-                return Ok((heap_neuron, StorageLocation::Heap));
+            if let Some(heap_neuron) = heap_neuron.clone() {
+                // If the neuron is active on heap, return early to avoid any operation on stable
+                // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
+                // on stable storage.
+                if !heap_neuron.is_inactive(self.now()) {
+                    return Ok((heap_neuron, StorageLocation::Heap));
+                }
             }
-        }
 
-        let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store
-                .read(neuron_id, sections)
-                .ok()
-                .map(Cow::Owned)
-        });
-        match (stable_neuron, heap_neuron) {
-            (Some(stable), Some(_)) => {
-                println!(
-                    "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
-                        we are at risk of having stale copies",
-                    LOG_PREFIX, neuron_id
-                );
-                Ok((stable, StorageLocation::Stable))
+            let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
+                stable_neuron_store
+                    .read(neuron_id, sections)
+                    .ok()
+                    .map(Cow::Owned)
+            });
+
+            match (stable_neuron, heap_neuron) {
+                // 1 copy cases.
+                (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
+                (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
+
+                // 2 copy case.
+                (Some(stable), Some(_)) => {
+                    println!(
+                        "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
+                         we are at risk of having stale copies",
+                        LOG_PREFIX, neuron_id
+                    );
+                    Ok((stable, StorageLocation::Stable))
+                }
+
+                // 0 copies case.
+                (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
             }
-            (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
-            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
-            (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
-        }
+        };
+
+        let (neuron, storage_location) = main()?;
+        let neuron = normalized(neuron);
+        Ok((neuron, storage_location))
     }
 
     // Loads the entire neuron from either heap or stable storage and returns its primary storage.
@@ -791,12 +806,7 @@ impl NeuronStore {
             return Ok(neuron_clone);
         }
 
-        let is_authorized_to_vote_for_any_neuron_manager = neuron_clone
-            .neuron_managers()
-            .into_iter()
-            .any(|neuron_manager| self.is_authorized_to_vote(principal_id, neuron_manager));
-
-        if is_authorized_to_vote_for_any_neuron_manager {
+        if self.can_principal_vote_on_proposals_that_target_neuron(principal_id, &neuron_clone) {
             Ok(neuron_clone)
         } else {
             Err(NeuronStoreError::not_authorized_to_get_full_neuron(
@@ -816,6 +826,17 @@ impl NeuronStore {
             |neuron| neuron.is_authorized_to_vote(&principal_id),
         )
         .unwrap_or(false)
+    }
+
+    pub fn can_principal_vote_on_proposals_that_target_neuron(
+        &self,
+        principal_id: PrincipalId,
+        neuron: &Neuron,
+    ) -> bool {
+        neuron
+            .neuron_managers()
+            .into_iter()
+            .any(|manager_neuron_id| self.is_authorized_to_vote(principal_id, manager_neuron_id))
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,

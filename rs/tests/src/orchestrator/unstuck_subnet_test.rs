@@ -13,16 +13,17 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, deploy_guestos_to_all_subnet_nodes};
-use crate::orchestrator::utils::rw_message::{
-    can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
-    store_message_with_retries,
-};
 use crate::orchestrator::utils::upgrade::get_assigned_replica_version;
 use crate::orchestrator::utils::upgrade::UpdateImageType;
 use anyhow::bail;
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
+        install_nns_and_check_progress, store_message_with_retries,
+    },
+    ssh_access::execute_bash_command,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},

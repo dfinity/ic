@@ -51,7 +51,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "4.0.0")]
+#[clap(version = "5.0.0")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test
@@ -59,7 +59,10 @@ struct Args {
     /// the same server.
     #[clap(long)]
     pid: Option<u32>,
-    /// The port under which the PocketIC server should be started
+    /// The IP address at which the PocketIC server should listen (defaults to 127.0.0.1)
+    #[clap(long, short)]
+    ip_addr: Option<String>,
+    /// The port at which the PocketIC server should listen
     #[clap(long, short, default_value_t = 0)]
     port: u16,
     /// The file to which the PocketIC server port should be written
@@ -148,7 +151,8 @@ async fn start(runtime: Arc<Runtime>) {
         };
     }
 
-    let addr = format!("127.0.0.1:{}", args.port);
+    let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
+    let addr = format!("{}:{}", ip_addr, args.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .unwrap_or_else(|_| panic!("Failed to start PocketIC server on port {}", args.port));

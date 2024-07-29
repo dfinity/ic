@@ -167,22 +167,21 @@ pub fn verify(
         return Ok(());
     }
 
-    let verification_key = ed25519_consensus::VerificationKey::try_from(pk.0).map_err(|e| {
+    let public_key = ic_crypto_ed25519::PublicKey::deserialize_raw(&pk.0).map_err(|e| {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Ed25519,
             key_bytes: Some(pk.0.to_vec()),
             internal_error: e.to_string(),
         }
     })?;
-    let sig = ed25519_consensus::Signature::from(sig.0);
 
     let result =
-        verification_key
-            .verify(&sig, msg)
+        public_key
+            .verify_signature(msg, &sig.0)
             .map_err(|e| CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::Ed25519,
-                public_key_bytes: verification_key.to_bytes().to_vec(),
-                sig_bytes: sig.to_bytes().to_vec(),
+                public_key_bytes: public_key.serialize_raw().to_vec(),
+                sig_bytes: sig.0.to_vec(),
                 internal_error: e.to_string(),
             });
 
@@ -222,33 +221,33 @@ pub fn verify_batch(
         return Ok(());
     }
 
-    let uncached_key_signature_map_vec: Vec<_> = uncached.iter().map(|(x, _)| *x).collect();
-    let key_signature_map = uncached_key_signature_map_vec.as_slice();
+    let uncached_pks = uncached
+        .iter()
+        .map(|((pk, _sig), _)| {
+            ic_crypto_ed25519::PublicKey::deserialize_raw(&pk.0).map_err(|e| {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::Ed25519,
+                    key_bytes: Some(pk.0.to_vec()),
+                    internal_error: e.to_string(),
+                }
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let uncached_sigs: Vec<_> = uncached.iter().map(|((_pk, sig), _)| &sig.0[..]).collect();
+    let uncached_msgs: Vec<_> = uncached.iter().map(|_| msg).collect();
 
-    let mut batch_verifier = ed25519_consensus::batch::Verifier::new();
-    for (pk, sig) in key_signature_map {
-        let verification_key = ed25519_consensus::VerificationKey::try_from(pk.0).map_err(|e| {
-            CryptoError::MalformedPublicKey {
-                algorithm: AlgorithmId::Ed25519,
-                key_bytes: Some(pk.0.to_vec()),
-                internal_error: e.to_string(),
-            }
-        })?;
-        let verification_key_bytes: ed25519_consensus::VerificationKeyBytes =
-            verification_key.into();
-        let sig = ed25519_consensus::Signature::from(sig.0);
-        batch_verifier.queue((verification_key_bytes, sig, &msg));
-    }
-
-    let rng = seed.into_rng();
-    let result = batch_verifier
-        .verify(rng)
-        .map_err(|e| CryptoError::SignatureVerification {
-            algorithm: AlgorithmId::Ed25519,
-            public_key_bytes: vec![],
-            sig_bytes: vec![],
-            internal_error: e.to_string(),
-        });
+    let result = ic_crypto_ed25519::PublicKey::batch_verify(
+        uncached_msgs.as_slice(),
+        uncached_sigs.as_slice(),
+        uncached_pks.as_slice(),
+        &mut seed.into_rng(),
+    )
+    .map_err(|e| CryptoError::SignatureVerification {
+        algorithm: AlgorithmId::Ed25519,
+        public_key_bytes: vec![],
+        sig_bytes: vec![],
+        internal_error: e.to_string(),
+    });
 
     if result.is_ok() {
         for (_, entry) in uncached {
