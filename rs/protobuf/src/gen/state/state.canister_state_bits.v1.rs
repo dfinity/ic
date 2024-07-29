@@ -815,13 +815,17 @@ impl CyclesUseCase {
         }
     }
 }
+/// TODO(EXC-1670): migrate to LogVisibilityV2.
+/// Current enum can only hold i32 numbers which limits storing
+/// allowed_viwers principals. LogVisibilityV2 message will have
+/// both enum values and a list of principals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum LogVisibility {
     Unspecified = 0,
     Controllers = 1,
     Public = 2,
-    /// TODO(EXC-1670): temporary fake variant to keep serialisation roundtrip tests green.
+    /// temporary fake variant to keep serialization tests green.
     EmptyAllowedViewers = 3,
 }
 impl LogVisibility {

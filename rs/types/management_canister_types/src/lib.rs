@@ -798,7 +798,7 @@ pub enum LogVisibility {
     Public,
 }
 
-// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
+// TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     fn from(item: &LogVisibility) -> Self {
         use pb_canister_state_bits as pb;
@@ -810,7 +810,7 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     }
 }
 
-// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
+// TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
 impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
     fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
         use pb_canister_state_bits as pb;
