@@ -148,7 +148,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b894941f818cfdc7ccc4b9e60fa7e53b5042a2e8567270f9147d5591893373a"
 dependencies = [
  "futures-core",
- "paste",
+ "paste 1.0.14",
  "pin-project-lite",
 ]
 
@@ -1688,7 +1688,7 @@ dependencies = [
  "leb128",
  "num-bigint 0.4.6",
  "num-traits",
- "paste",
+ "paste 1.0.14",
  "pretty 0.12.1",
  "serde",
  "serde_bytes",
@@ -2995,7 +2995,7 @@ dependencies = [
  "ic-wasm",
  "ic-xrc-types",
  "ic0 0.18.11",
- "ic_bls12_381",
+ "ic_bls12_381 0.9.2",
  "ic_principal",
  "icrc1-test-env",
  "icrc1-test-suite",
@@ -3010,6 +3010,8 @@ dependencies = [
  "ipnet",
  "isocountry",
  "itertools 0.12.0",
+ "jemalloc-ctl",
+ "jemallocator",
  "json-patch 0.2.7",
  "json5",
  "k256",
@@ -3052,7 +3054,7 @@ dependencies = [
  "p256",
  "pairing 0.23.0",
  "parking_lot 0.12.1",
- "paste",
+ "paste 1.0.14",
  "pathdiff",
  "pcre2",
  "pem 1.1.1",
@@ -3155,8 +3157,6 @@ dependencies = [
  "thiserror",
  "thousands",
  "threadpool",
- "tikv-jemalloc-ctl",
- "tikv-jemallocator",
  "time",
  "tokio",
  "tokio-io-timeout",
@@ -5162,7 +5162,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d420b25c0091059f6c3c23a21427a81915e6e0aca3b79e0d403ed767f286a3b9"
 dependencies = [
  "hex",
- "ic_bls12_381",
+ "ic_bls12_381 0.10.0",
  "lazy_static",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -5216,6 +5216,21 @@ checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 
 [[package]]
 name = "ic_bls12_381"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb94c398e5a5bc56a8f0ff995b2679829e2bbc5f145d9c3ea58d303036e05f2"
+dependencies = [
+ "digest 0.10.7",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "pairing 0.23.0",
+ "rand_core 0.6.4",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "ic_bls12_381"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
@@ -5226,7 +5241,6 @@ dependencies = [
  "pairing 0.23.0",
  "rand_core 0.6.4",
  "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -5701,6 +5715,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
+name = "jemalloc-ctl"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c502a5ff9dd2924f1ed32ba96e3b65735d837b4bfd978d3161b1702e66aca4b7"
+dependencies = [
+ "jemalloc-sys",
+ "libc",
+ "paste 0.1.18",
+]
+
+[[package]]
+name = "jemalloc-sys"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d3b9f3f5c9b31aa0f5ed3260385ac205db665baa41d49bb8338008ae94ede45"
+dependencies = [
+ "cc",
+ "fs_extra",
+ "libc",
+]
+
+[[package]]
+name = "jemallocator"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43ae63fcfc45e99ab3d1b29a46782ad679e98436c3169d15a167a1108a724b69"
+dependencies = [
+ "jemalloc-sys",
+ "libc",
+]
+
+[[package]]
 name = "jobserver"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6115,7 +6161,7 @@ checksum = "41bcbddc10dc229d4119553cc8dc61968cdd134286a4669ba31184f8e9efa442"
 dependencies = [
  "lazy_static",
  "libc",
- "paste",
+ "paste 1.0.14",
 ]
 
 [[package]]
@@ -7438,9 +7484,28 @@ dependencies = [
 
 [[package]]
 name = "paste"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45ca20c77d80be666aef2b45486da86238fabe33e38306bd3118fe4af33fa880"
+dependencies = [
+ "paste-impl",
+ "proc-macro-hack",
+]
+
+[[package]]
+name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
+name = "paste-impl"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d95a7db200b97ef370c8e6de0088252f7e0dfff7d047a28528e47456c0fc98b6"
+dependencies = [
+ "proc-macro-hack",
+]
 
 [[package]]
 name = "pathdiff"
@@ -10755,37 +10820,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tikv-jemalloc-ctl"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "619bfed27d807b54f7f776b9430d4f8060e66ee138a28632ca898584d462c31c"
-dependencies = [
- "libc",
- "paste",
- "tikv-jemalloc-sys",
-]
-
-[[package]]
-name = "tikv-jemalloc-sys"
-version = "0.5.4+5.3.0-patched"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
-dependencies = [
- "cc",
- "libc",
-]
-
-[[package]]
-name = "tikv-jemallocator"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
-dependencies = [
- "libc",
- "tikv-jemalloc-sys",
-]
-
-[[package]]
 name = "time"
 version = "0.3.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12103,7 +12137,7 @@ dependencies = [
  "memoffset 0.9.0",
  "object 0.36.1",
  "once_cell",
- "paste",
+ "paste 1.0.14",
  "postcard",
  "psm",
  "rayon",

@@ -108,7 +108,7 @@ impl Set {
             .collect::<Vec<_>>();
 
         schema::NfListObject::Element(schema::Element {
-            family: self.family,
+            family: self.family.clone(),
             table: self.table.clone(),
             name: self.name.clone(),
             elem,

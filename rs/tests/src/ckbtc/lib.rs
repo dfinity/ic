@@ -394,16 +394,11 @@ pub(crate) async fn install_bitcoin_canister_with_network(
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
     let args = Config {
-        burn_cycles: Flag::Disabled,
-        lazily_evaluate_fee_percentiles: Flag::Disabled,
         stability_threshold: 6,
         network,
         blocks_source: Principal::management_canister(),
         syncing: Flag::Enabled,
         fees: Fees {
-            get_block_headers_base: 0,
-            get_block_headers_cycles_per_ten_instructions: 0,
-            get_block_headers_maximum: 0,
             get_utxos_base: 0,
             get_utxos_cycles_per_ten_instructions: 0,
             get_utxos_maximum: 0,
