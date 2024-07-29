@@ -9,10 +9,10 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{TokensType, Zero};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::hash::Hash;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct ApprovalKey(Account, Account);
 
 impl From<(&Account, &Account)> for ApprovalKey {
@@ -64,8 +64,8 @@ pub struct InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord,
 {
-    pub balances: BTreeMap<AccountId, Tokens>,
-    pub allowances: BTreeMap<K, Allowance<Tokens>>,
+    pub balances: HashMap<AccountId, Tokens>,
+    pub allowances: HashMap<K, Allowance<Tokens>>,
     pub total_supply: Tokens,
     pub fee_collector: Option<AccountId>,
     pub burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
@@ -73,7 +73,7 @@ where
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
+    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
     K: Into<(AccountId, AccountId)>,
     AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType + Default,
@@ -162,15 +162,15 @@ where
 
 impl<K, AccountId, Tokens> InMemoryLedger<K, AccountId, Tokens>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
+    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
     K: Into<(AccountId, AccountId)>,
     AccountId: PartialEq + Ord + Clone + Hash,
     Tokens: TokensType,
 {
     pub fn new() -> Self {
         InMemoryLedger {
-            balances: BTreeMap::new(),
-            allowances: BTreeMap::new(),
+            balances: HashMap::new(),
+            allowances: HashMap::new(),
             total_supply: Tokens::zero(),
             fee_collector: None,
             burns_without_spender: None,
