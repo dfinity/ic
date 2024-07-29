@@ -86,7 +86,7 @@ const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TEST_DURATION: Duration = Duration::from_secs(30);
+const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
 const DKG_INTERVAL: u64 = 999;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
@@ -285,12 +285,12 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 
     if cfg!(feature = "upload_perf_systest_results") {
-        let original_branch_version = env
+        let branch_version = env
             .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
             .expect("tip-of-branch IC version");
 
         rt.block_on(persist_metrics(
-            original_branch_version,
+            branch_version,
             test_metrics,
             message_size,
             rps,
@@ -429,22 +429,35 @@ async fn persist_metrics(
         "Starting to upload performance test results to {ES_URL}: {}", json_report,
     );
 
-    for i in 1..=NUM_UPLOAD_ATTEMPS {
-        info!(
-            log,
-            "Uploading performance test results attempt {}/{}", i, NUM_UPLOAD_ATTEMPS
-        );
+    let client = reqwest::Client::new();
+    let result = ic_system_test_driver::retry_with_msg_async!(
+        "Uploading performance test results attempt",
+        log,
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(10),
+        || async {
+            client
+                .post(ES_URL)
+                .json(&json_report)
+                .send()
+                .await
+                .map_err(Into::into)
+        }
+    )
+    .await;
 
-        let client = reqwest::Client::new();
-        match client.post(ES_URL).json(&json_report).send().await {
-            Ok(response) => {
-                info!(
-                    log,
-                    "Successfully uploaded performance test results: {response:?}"
-                );
-                break;
-            }
-            Err(e) => error!(log, "Failed to upload performance test results: {e:?}"),
+    match result {
+        Ok(response) => {
+            info!(
+                log,
+                "Successfully uploaded performance test results: {response:?}"
+            );
+        }
+        Err(err) => {
+            error!(
+                log,
+                "Failed to upload performance test results. Last error: {err}"
+            )
         }
     }
 }
