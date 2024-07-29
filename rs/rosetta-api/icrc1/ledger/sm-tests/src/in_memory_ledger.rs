@@ -4,7 +4,6 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1::Operation;
-use ic_icrc1_ledger::ApprovalKey;
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{TokensType, Zero};
@@ -12,6 +11,21 @@ use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
 use std::hash::Hash;
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct ApprovalKey(Account, Account);
+
+impl From<(&Account, &Account)> for ApprovalKey {
+    fn from((account, spender): (&Account, &Account)) -> Self {
+        Self(*account, *spender)
+    }
+}
+
+impl From<ApprovalKey> for (Account, Account) {
+    fn from(key: ApprovalKey) -> Self {
+        (key.0, key.1)
+    }
+}
 
 trait InMemoryLedgerState {
     type AccountId;
@@ -453,8 +467,7 @@ fn account_hash(account: &Account) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::in_memory_ledger::{InMemoryLedger, InMemoryLedgerState};
-    use ic_icrc1_ledger::ApprovalKey;
+    use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState};
     use ic_ledger_core::approvals::Allowance;
     use ic_ledger_core::timestamp::TimeStamp;
     use ic_ledger_core::tokens::CheckedSub;
