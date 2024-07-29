@@ -832,7 +832,7 @@ pub enum LogVisibility {
     Unspecified = 0,
     Controllers = 1,
     Public = 2,
-    /// TODO(EXC-1670): temporary fake variant.
+    /// TODO(EXC-1670): temporary fake variant to keep serialisation roundtrip tests green.
     EmptyAllowedViewers = 3,
 }
 impl LogVisibility {
