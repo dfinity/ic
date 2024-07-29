@@ -1,4 +1,5 @@
 use canister_test::PrincipalId;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::bootstrap::setup_and_start_nested_vms;
 use ic_system_test_driver::driver::farm::Farm;
@@ -12,7 +13,6 @@ use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::nns::add_nodes_to_subnet;
 use ic_system_test_driver::util::{block_on, get_nns_node};
-use ic_tests::orchestrator::utils::rw_message::install_nns_and_check_progress;
 use ic_types::hostos_version::HostosVersion;
 use slog::info;
 use std::str::FromStr;

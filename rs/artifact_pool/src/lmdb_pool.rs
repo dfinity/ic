@@ -7,7 +7,7 @@ use ic_interfaces::{
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
     },
-    ecdsa::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
+    idkg::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -649,7 +649,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
             }
 
             // update meta
-            let meta = if meta.max <= height_key {
+            let meta = if meta.max < height_key {
                 None
             } else {
                 tx_get_key(tx, index_db, GetOp::First)?.map(|key| Meta {
@@ -1033,12 +1033,12 @@ impl PoolArtifact for ConsensusMessage {
                 Box::new(move || match payload_type {
                     PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
                         dkg: dkg::Summary::default(),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
                         dealings: dkg::Dealings::new_empty(start_height),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                 }),
             );
@@ -2594,6 +2594,36 @@ mod tests {
                 );
                 assert_consistency(&pool);
             }
+        });
+    }
+
+    #[test]
+    fn test_purge_below_maximum_element() {
+        run_persistent_pool_test("test_purge_below_maximum_element", |config, log| {
+            const MAX_HEIGHT: Height = Height::new(10);
+            let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
+                config.clone(),
+                /*read_only=*/ false,
+                log.clone(),
+            );
+            let rb_ops = random_beacon_ops(1..=MAX_HEIGHT.get());
+            pool.mutate(rb_ops.clone());
+            assert_eq!(pool.random_beacon().size(), rb_ops.ops.len());
+
+            // purge artifacts strictly below the maximum element (at height 10)
+            let mut purge_ops = PoolSectionOps::new();
+            purge_ops.purge_below(MAX_HEIGHT);
+            pool.mutate(purge_ops);
+
+            // verify that the artifacts have been purged
+            assert_eq!(
+                pool.random_beacon().height_range(),
+                Some(HeightRange {
+                    min: MAX_HEIGHT,
+                    max: MAX_HEIGHT
+                })
+            );
+            assert_consistency(&pool);
         });
     }
 

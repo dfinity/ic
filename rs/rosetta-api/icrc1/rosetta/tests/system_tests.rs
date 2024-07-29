@@ -48,6 +48,7 @@ use rosetta_core::identifiers::*;
 use rosetta_core::miscellaneous::OperationStatus;
 pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 use rosetta_core::models::RosettaSupportedKeyPair;
+pub use rosetta_core::models::Secp256k1KeyPair;
 use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::BlockResponse;
@@ -1096,8 +1097,8 @@ fn test_construction_submit() {
 
 #[test]
 fn test_rosetta_client_construction_api_flow() {
-    let sender_keypair = EdKeypair::generate(0);
-    let receiver_keypair = EdKeypair::generate(1);
+    let sender_keypair = Secp256k1KeyPair::generate(0);
+    let receiver_keypair = Secp256k1KeyPair::generate(1);
     let rt = Runtime::new().unwrap();
     let setup = Setup::builder()
         .with_initial_balance(

@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic-server"
-version = "4.0.0"
+version = "5.0.0"
 edition = "2021"
 
 [dependencies]
@@ -12,13 +12,23 @@ backoff = { workspace = true }
 candid = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
+hyper-legacy = { package = "hyper", version = "0.14.18", features = ["full"] }
+hyper-socks2 = "^0.8.0"
+hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-util = { workspace = true }
+futures = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 serde = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
+ic-logger = { path = "../monitoring/logger" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
+ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
+ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
+ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
+ic-https-outcalls-service = { path = "../https_outcalls/service" }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true }
 ic-state-machine-tests = { path = "../state_machine_tests" }
@@ -32,6 +42,7 @@ ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-protobuf = { path = "../protobuf" }
+ic-metrics = { path = "../monitoring/metrics" }
 ic-utils-thread = { path = "../utils/thread" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-test-utilities = { path = "../test_utilities" }
@@ -60,6 +71,7 @@ wat = "1.0.52"
 flate2 = { workspace = true }
 aide = { version = "^0.13.0", features = ["axum"] }
 serde_cbor = { workspace = true }
+tonic = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]

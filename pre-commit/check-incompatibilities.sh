@@ -7,12 +7,6 @@ if [[ -n "$(git rev-parse -q --verify MERGE_HEAD)" ]]; then
     exit 0
 fi
 
-MERGE_BRANCH="master"
-
-if [[ "${ORG:-}" == "dfinity-sandbox" ]]; then
-    MERGE_BRANCH="mirroring"
-fi
-
 echo "Fetch the $MERGE_BRANCH branch"
 git fetch origin $MERGE_BRANCH:$MERGE_BRANCH
 MERGE_BASE=$(git merge-base HEAD $MERGE_BRANCH)

@@ -53,8 +53,6 @@ jobs:
             "ledger-canister_notify-method.wasm"
             "lifeline_canister.wasm"
             "nns-ui-canister.wasm"
-            "pmap_canister.wasm"
-            "proxy_canister.wasm"
             "registry-canister.wasm"
             "root-canister.wasm"
             "sns-governance-canister.wasm"

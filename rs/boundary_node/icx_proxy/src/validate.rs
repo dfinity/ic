@@ -83,7 +83,7 @@ mod tests {
     use axum::body::Body;
     use candid::Principal;
     use hyper::Uri;
-    use ic_agent::{agent::http_transport::hyper_transport::HyperReplicaV2Transport, Agent};
+    use ic_agent::{agent::http_transport::hyper_transport::HyperTransport, Agent};
 
     use crate::validate::{Validate, Validator};
 
@@ -91,7 +91,7 @@ mod tests {
     fn validate_nop() {
         let canister_id = Principal::from_text("wwc2m-2qaaa-aaaac-qaaaa-cai").unwrap();
         let url = "http://www.example.com";
-        let transport = HyperReplicaV2Transport::<Body>::create(url).unwrap();
+        let transport = HyperTransport::<Body>::create(url).unwrap();
         let agent = Agent::builder().with_transport(transport).build().unwrap();
         let validator = Validator::new();
 

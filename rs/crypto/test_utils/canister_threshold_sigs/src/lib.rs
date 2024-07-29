@@ -219,7 +219,6 @@ pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
     receivers: &IDkgReceivers,
     alg: AlgorithmId,
     key_transcript: &IDkgTranscript,
-    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> EcdsaPreSignatureQuadruple {
     let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
@@ -227,23 +226,8 @@ pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
         .nodes
         .run_idkg_and_create_and_verify_transcript(&lambda_params, rng);
 
-    let kappa_transcript = if random_unmasked_kappa {
+    let kappa_transcript = {
         let unmasked_kappa_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
-        env.nodes
-            .run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, rng)
-    } else {
-        let masked_kappa_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
-
-        let masked_kappa_transcript = env
-            .nodes
-            .run_idkg_and_create_and_verify_transcript(&masked_kappa_params, rng);
-
-        let unmasked_kappa_params = build_params_from_previous(
-            masked_kappa_params,
-            IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
-            rng,
-        );
-
         env.nodes
             .run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, rng)
     };
@@ -322,7 +306,7 @@ pub mod node {
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
         IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
         ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
         ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
@@ -574,11 +558,11 @@ pub mod node {
     }
 
     impl ThresholdEcdsaSigner for Node {
-        fn sign_share(
+        fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            ThresholdEcdsaSigner::sign_share(self.crypto_component.as_ref(), inputs)
+        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+            ThresholdEcdsaSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -627,7 +611,7 @@ pub mod node {
             &self,
             inputs: &ThresholdSchnorrSigInputs,
         ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
-            ThresholdSchnorrSigner::create_sig_share(self.crypto_component.as_ref(), inputs)
+            ThresholdSchnorrSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -1900,18 +1884,10 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     nonce: Randomness,
     derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
-    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple = generate_ecdsa_presig_quadruple(
-        env,
-        dealers,
-        receivers,
-        algorithm_id,
-        key_transcript,
-        random_unmasked_kappa,
-        rng,
-    );
+    let quadruple =
+        generate_ecdsa_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,
@@ -2034,7 +2010,7 @@ pub fn ecdsa_sig_share_from_each_receiver(
         .filter_by_receivers(&inputs)
         .map(|receiver| {
             receiver.load_tecdsa_sig_transcripts(inputs);
-            let sig_share = ThresholdEcdsaSigner::sign_share(receiver, inputs)
+            let sig_share = ThresholdEcdsaSigner::create_sig_share(receiver, inputs)
                 .expect("failed to create sig share");
             (receiver.id(), sig_share)
         })
@@ -2912,7 +2888,6 @@ pub mod ecdsa {
     pub fn environment_with_sig_inputs<R, S>(
         subnet_size_range: S,
         alg: AlgorithmId,
-        use_random_unmasked_kappa: bool,
         rng: &mut R,
     ) -> (
         CanisterThresholdSigTestEnvironment,
@@ -2945,7 +2920,6 @@ pub mod ecdsa {
             seed,
             &derivation_path,
             alg,
-            use_random_unmasked_kappa,
             rng,
         );
         (env, inputs, dealers, receivers)
