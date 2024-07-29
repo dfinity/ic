@@ -11,7 +11,7 @@ use ic_interfaces::p2p::state_sync::{
     Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
@@ -77,7 +77,7 @@ impl StateSync {
         let ro_layout = self
             .state_manager
             .state_layout
-            .checkpoint(height)
+            .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
         let state = crate::checkpoint::load_checkpoint_parallel(
             &ro_layout,
@@ -87,8 +87,22 @@ impl StateSync {
         )
         .expect("failed to recover checkpoint");
 
-        self.state_manager
-            .on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
+        if let Err(err) = ro_layout.remove_unverified_checkpoint_marker() {
+            fatal!(
+                self.log,
+                "Failed to remove the unverified checkpoint marker @height {}: {}",
+                height,
+                err
+            );
+        }
+
+        self.state_manager.on_synced_checkpoint(
+            state,
+            ro_layout,
+            manifest,
+            meta_manifest,
+            root_hash,
+        );
 
         let height = self.state_manager.states.read().last_advertised;
         let ids = self.get_all_validated_ids_by_height(height);
@@ -110,8 +124,11 @@ impl StateSync {
                 if metadata.root_hash().map(|v| v.get_ref()) == Some(&msg_id.hash) {
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root =
-                        self.state_manager.state_layout.checkpoint(*height).ok()?;
+                    let checkpoint_root = self
+                        .state_manager
+                        .state_layout
+                        .checkpoint_verified(*height)
+                        .ok()?;
                     let state_sync_file_group = match &metadata.state_sync_file_group {
                         Some(value) => value.clone(),
                         None => {
@@ -173,7 +190,11 @@ impl StateSync {
                     let metadata = states.states_metadata.get(&h)?;
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root = self.state_manager.state_layout.checkpoint(h).ok()?;
+                    let checkpoint_root = self
+                        .state_manager
+                        .state_layout
+                        .checkpoint_verified(h)
+                        .ok()?;
                     let msg = StateSyncMessage {
                         height: h,
                         root_hash: metadata.root_hash()?.clone(),

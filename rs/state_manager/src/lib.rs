@@ -97,6 +97,10 @@ const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_c
 const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
     "state_sync_chunk_id_usage_nearing_limits";
 
+/// Critical error tracking that manifest computation accidentally includes the unverified checkpoint marker file.
+const MANIFEST_COMPUTATION_INCLUDING_MARKER_CRITICAL: &str =
+    "state_manager_manifest_computation_including_marker_critical";
+
 /// Critical error tracking broken soft invariants encountered upon checkpoint loading.
 /// See note [Replicated State Invariants].
 pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
@@ -166,6 +170,7 @@ pub struct ManifestMetrics {
     file_group_chunks: IntGauge,
     sub_manifest_chunks: IntGauge,
     chunk_id_usage_nearing_limits_critical: IntCounter,
+    manifest_computation_including_marker_critical: IntCounter,
 }
 
 #[derive(Clone)]
@@ -362,7 +367,7 @@ impl StateManagerMetrics {
 
         let checkpoints_on_disk_count = metrics_registry.int_gauge(
             "state_manager_checkpoints_on_disk_count",
-            "Number of checkpoints on disk, independent of if they are loaded or not.",
+            "Number of verified checkpoints on disk, independent of if they are loaded or not.",
         );
 
         let last_computed_manifest_height = metrics_registry.int_gauge(
@@ -521,6 +526,8 @@ impl ManifestMetrics {
             sub_manifest_chunks,
             chunk_id_usage_nearing_limits_critical: metrics_registry
                 .error_counter(CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS),
+            manifest_computation_including_marker_critical: metrics_registry
+                .error_counter(MANIFEST_COMPUTATION_INCLUDING_MARKER_CRITICAL),
         }
     }
 }
@@ -823,25 +830,22 @@ fn load_checkpoint(
     metrics: &StateManagerMetrics,
     own_subnet_type: SubnetType,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<ReplicatedState, CheckpointError> {
+) -> Result<(ReplicatedState, CheckpointLayout<ReadOnly>), CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
-    state_layout
-        .checkpoint(height)
-        .map_err(|e| e.into())
-        .and_then(|layout| {
-            let _timer = metrics
-                .checkpoint_op_duration
-                .with_label_values(&["recover"])
-                .start_timer();
-            checkpoint::load_checkpoint(
-                &layout,
-                own_subnet_type,
-                &metrics.checkpoint_metrics,
-                Some(&mut thread_pool),
-                Arc::clone(&fd_factory),
-            )
-        })
+    let cp_layout = state_layout.checkpoint_verified(height)?;
+    let _timer = metrics
+        .checkpoint_op_duration
+        .with_label_values(&["recover"])
+        .start_timer();
+    let state = checkpoint::load_checkpoint(
+        &cp_layout,
+        own_subnet_type,
+        &metrics.checkpoint_metrics,
+        Some(&mut thread_pool),
+        Arc::clone(&fd_factory),
+    )?;
+    Ok((state, cp_layout))
 }
 
 #[cfg(debug_assertions)]
@@ -1412,24 +1416,36 @@ impl StateManagerImpl {
         info!(log, "Loading metadata took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
-        let checkpoint_heights = state_layout
-            .checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
-
-        for h in checkpoint_heights {
-            let cp_layout = state_layout.checkpoint_untracked(h).unwrap_or_else(|err| {
+        // Archive unverified checkpoints.
+        let unfiltered_checkpoint_heights = state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| {
                 fatal!(
-                    log,
-                    "Failed to create untracked checkpoint layout @{}: {}",
-                    h,
+                    &log,
+                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
                     err
                 )
             });
-            if cp_layout.unverified_checkpoint_marker().exists() {
-                info!(log, "Archiving unverified checkpoint {} ", h);
-                state_layout
-                    .archive_checkpoint(h)
-                    .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+
+        for h in unfiltered_checkpoint_heights {
+            match state_layout.checkpoint_verification_status(h) {
+                // If the checkpoint is verified, we don't need to do anything.
+                Ok(true) => {}
+                // If the checkpoint is unverified, we archive it.
+                Ok(false) => {
+                    info!(log, "Archiving unverified checkpoint {}", h);
+                    state_layout
+                        .archive_checkpoint(h)
+                        .unwrap_or_else(|err| fatal!(&log, "{:?}", err))
+                }
+                Err(err) => {
+                    fatal!(
+                        log,
+                        "Failed to retrieve the checkpoint status @{} from disk: {}",
+                        h,
+                        err
+                    )
+                }
             }
         }
 
@@ -1494,14 +1510,16 @@ impl StateManagerImpl {
         let states = checkpoint_heights
             .iter()
             .map(|height| {
-                let cp_layout = state_layout.checkpoint(*height).unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to create checkpoint layout @{}: {}",
-                        height,
-                        err
-                    )
-                });
+                let cp_layout = state_layout
+                    .checkpoint_verified(*height)
+                    .unwrap_or_else(|err| {
+                        fatal!(
+                            log,
+                            "Failed to create checkpoint layout @{}: {}",
+                            height,
+                            err
+                        )
+                    });
                 let state = checkpoint::load_checkpoint_parallel(
                     &cp_layout,
                     own_subnet_type,
@@ -1852,7 +1870,7 @@ impl StateManagerImpl {
                     .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
             );
 
-            let checkpoint_layout = layout.checkpoint(height).unwrap();
+            let checkpoint_layout = layout.checkpoint_verified(height).unwrap();
 
             let metadata = metadatas.remove(&height);
 
@@ -1999,11 +2017,12 @@ impl StateManagerImpl {
     fn on_synced_checkpoint(
         &self,
         state: ReplicatedState,
-        height: Height,
+        cp_layout: CheckpointLayout<ReadOnly>,
         manifest: Manifest,
         meta_manifest: Arc<MetaManifest>,
         root_hash: CryptoHashOfState,
     ) {
+        let height = cp_layout.height();
         if self
             .state_layout
             .diverged_checkpoint_heights()
@@ -2073,7 +2092,7 @@ impl StateManagerImpl {
         states.states_metadata.insert(
             height,
             StateMetadata {
-                checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                checkpoint_layout: Some(cp_layout),
                 bundled_manifest: Some(BundledManifest {
                     root_hash,
                     manifest,
@@ -2345,7 +2364,7 @@ impl StateManagerImpl {
                     Some((base_manifest, *base_height))
                 })
                 .and_then(|(base_manifest, base_height)| {
-                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint(base_height) {
+                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint_verified(base_height) {
                         // If `lsmt_status` is enabled, then `dirty_pages` is not needed, as each file is either completely
                         // new, or identical (same inode) to before.
                         let dirty_pages = match self.lsmt_status {
@@ -2399,10 +2418,10 @@ impl StateManagerImpl {
                     height
                 );
 
-                let checkpointed_state = self
+                let (cp_verified, checkpointed_state) = self
                     .state_layout
-                    .checkpoint(height)
-                    .map_err(|e| e.into())
+                    .checkpoint_in_verification(height)
+                    .map_err(CheckpointError::from)
                     .and_then(|layout| {
                         let _timer = self
                             .metrics
@@ -2410,12 +2429,16 @@ impl StateManagerImpl {
                             .with_label_values(&["recover"])
                             .start_timer();
 
-                        checkpoint::load_checkpoint_parallel(
+                        let state = checkpoint::load_checkpoint_parallel(
                             &layout,
                             self.own_subnet_type,
                             &self.metrics.checkpoint_metrics,
                             self.get_fd_factory(),
-                        )
+                        )?;
+                        layout
+                            .remove_unverified_checkpoint_marker()
+                            .map_err(CheckpointError::from)?;
+                        Ok((layout, state))
                     })
                     .unwrap_or_else(|err| {
                         fatal!(
@@ -2426,7 +2449,7 @@ impl StateManagerImpl {
                         )
                     });
                 (
-                    self.state_layout.checkpoint(height).unwrap(),
+                    cp_verified,
                     checkpointed_state,
                     // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
                     HasDowngrade::Yes,
@@ -2496,12 +2519,11 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-            let checkpoint_layout = self.state_layout.checkpoint(height).unwrap();
             // With lsmt, we do not need the defrag.
             // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: checkpoint_layout.clone(),
+                    checkpoint_layout: cp_layout.clone(),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
                     is_initializing_tip: false,
                 }]
@@ -2516,7 +2538,7 @@ impl StateManagerImpl {
                 tip_requests,
                 checkpointed_state,
                 state_metadata: StateMetadata {
-                    checkpoint_layout: Some(checkpoint_layout),
+                    checkpoint_layout: Some(cp_layout.clone()),
                     bundled_manifest: None,
                     state_sync_file_group: None,
                 },
@@ -2791,11 +2813,30 @@ impl StateManager for StateManagerImpl {
                           "Copying checkpoint {} with root hash {:?} under new height {}",
                           checkpoint_height, root_hash, height);
 
+                    match self.state_layout.checkpoint_verification_status(checkpoint_height) {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            warn!(self.log,
+                                "Unverified checkpoint @{} is not expected to be found in states metadata.",
+                                checkpoint_height
+                            );
+                            return;
+                        }
+                        Err(_) => {
+                            warn!(self.log,
+                                "Checkpoint @{} does not exist but it is found in states metadata.",
+                                checkpoint_height
+                            );
+                            return;
+                        }
+                    }
+
+                    // Clone the checkpoint if it is verified.
                     match self.state_layout.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
-                            let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
+                            let (state, cp_layout) = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
                                 .expect("failed to load checkpoint");
-                            self.on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
+                            self.on_synced_checkpoint(state, cp_layout, manifest, meta_manifest, root_hash);
                             return;
                         }
                         Err(e) => {
@@ -2970,10 +3011,10 @@ impl StateManager for StateManagerImpl {
     ///    the latest checkpoint ≤ H passed to `remove_states_below`.
     ///  * *LSH* stands for "Latest State Height". This is the latest state that
     ///    the state manager has.
-    ///  * *LCH* stands for "Latest Checkpoint Height*. This is the height of
+    ///  * *LCH* stands for "Latest Checkpoint Height". This is the height of
     ///    the latest checkpoint that the state manager created.
     ///  * *CHS* stands for "CHeckpoint Heights". These are heights of all the
-    ///    checkpoints available.
+    ///    verified checkpoints available.
     ///
     /// # Heuristic
     ///
@@ -3010,7 +3051,7 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().drain(..).collect();
+        let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().into_iter().collect();
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
@@ -3244,7 +3285,17 @@ impl StateManager for StateManagerImpl {
 
     fn report_diverged_checkpoint(&self, height: Height) {
         let mut states = self.states.write();
-        let heights = self.checkpoint_heights();
+        // Unverified checkpoints should also be considered when removing checkpoints higher than the diverged height.
+        let heights = self
+            .state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    &self.log,
+                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                    err
+                )
+            });
 
         info!(self.log, "Moving diverged checkpoint @{}", height);
         if let Err(err) = self.state_layout.mark_checkpoint_diverged(height) {
@@ -3376,7 +3427,7 @@ impl StateReader for StateManagerImpl {
                 self.own_subnet_type,
                 Arc::clone(&self.get_fd_factory()),
             ) {
-                Ok(state) => Ok(Labeled::new(height, Arc::new(state))),
+                Ok((state, _)) => Ok(Labeled::new(height, Arc::new(state))),
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
                 Err(err) => {
                     self.metrics
@@ -3617,6 +3668,8 @@ pub enum CheckpointError {
     Persistence(PersistenceError),
     /// Trying to remove the last checkpoint.
     LatestCheckpoint(Height),
+    /// Checkpoint for the requested height is unverified.
+    CheckpointUnverified(Height),
 }
 
 impl std::error::Error for CheckpointError {
@@ -3670,6 +3723,9 @@ impl std::fmt::Display for CheckpointError {
                 "Trying to remove the latest checkpoint at height @{}",
                 height
             ),
+            CheckpointError::CheckpointUnverified(height) => {
+                write!(f, "Checkpoint at height @{} is unverified", height)
+            }
         }
     }
 }
@@ -3698,6 +3754,7 @@ impl From<LayoutError> for CheckpointError {
             LayoutError::NotFound(h) => CheckpointError::NotFound(h),
             LayoutError::AlreadyExists(h) => CheckpointError::AlreadyExists(h),
             LayoutError::LatestCheckpoint(h) => CheckpointError::LatestCheckpoint(h),
+            LayoutError::CheckpointUnverified(h) => CheckpointError::CheckpointUnverified(h),
         }
     }
 }

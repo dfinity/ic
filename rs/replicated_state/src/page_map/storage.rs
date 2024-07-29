@@ -181,7 +181,7 @@ impl Storage {
         let mut base_overlays = Vec::<OverlayFile>::new();
         let mut overlays = Vec::<OverlayFile>::new();
         for path in overlay_paths.iter() {
-            let overlay = OverlayFile::load(path).unwrap();
+            let overlay = OverlayFile::load(path)?;
             let start_page_index = overlay
                 .index_iter()
                 .next()
