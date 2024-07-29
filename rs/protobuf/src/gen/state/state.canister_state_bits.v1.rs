@@ -815,10 +815,10 @@ impl CyclesUseCase {
         }
     }
 }
-/// TODO(EXC-1670): migrate to LogVisibilityV2.
-/// Current enum can only hold i32 numbers which limits storing
-/// allowed_viwers principals. LogVisibilityV2 message will have
-/// both enum values and a list of principals.
+/// TODO(EXC-1670): Migrate to LogVisibilityV2.
+/// The current enum only supports i32 values, which limits the
+/// storage of allowed_viewers principals. LogVisibilityV2 will
+/// support both enum values and a list of principals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum LogVisibility {
