@@ -11,7 +11,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, Message, Summary},
+        dkg::{self, Dealings, Summary},
         Block, BlockPayload,
     },
     crypto::{
@@ -133,79 +133,83 @@ pub(crate) fn validate_payload(
 
     let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
 
-    if payload.is_summary() {
-        if !is_dkg_start_height {
-            return Err(InvalidDkgPayloadReason::DkgSummaryAtNonStartHeight(current_height).into());
+    match payload {
+        BlockPayload::Summary(summary_payload) => {
+            if !is_dkg_start_height {
+                return Err(
+                    InvalidDkgPayloadReason::DkgSummaryAtNonStartHeight(current_height).into(),
+                );
+            }
+            let expected_summary = payload_builder::create_summary_payload(
+                subnet_id,
+                registry_client,
+                crypto,
+                pool_reader,
+                last_dkg_summary,
+                &parent,
+                registry_version,
+                state_manager,
+                validation_context,
+                ic_logger::replica_logger::no_op_logger(),
+            )?;
+            if summary_payload.dkg != expected_summary {
+                return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
+                    expected_summary,
+                    summary_payload.dkg.clone(),
+                )
+                .into());
+            }
+            Ok(())
         }
-        let expected_summary = payload_builder::create_summary_payload(
-            subnet_id,
-            registry_client,
-            crypto,
-            pool_reader,
-            last_dkg_summary,
-            &parent,
-            registry_version,
-            state_manager,
-            validation_context,
-            ic_logger::replica_logger::no_op_logger(),
-        )?;
-        if payload.as_summary().dkg != expected_summary {
-            return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
-                expected_summary,
-                payload.as_summary().dkg.clone(),
-            )
-            .into());
-        }
-        Ok(())
-    } else {
-        if is_dkg_start_height {
-            return Err(InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into());
-        }
-        let max_dealings_per_block =
-            dbg!(registry_client.get_dkg_dealings_per_block(subnet_id, registry_version))
-                .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
-                .unwrap_or_else(|| {
-                    panic!(
-                        "No subnet record found for registry version={} and subnet_id={}",
-                        registry_version, subnet_id
-                    )
-                });
+        BlockPayload::Data(data_payload) => {
+            if is_dkg_start_height {
+                return Err(
+                    InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into(),
+                );
+            }
+            let max_dealings_per_block =
+                dbg!(registry_client.get_dkg_dealings_per_block(subnet_id, registry_version))
+                    .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "No subnet record found for registry version={} and subnet_id={}",
+                            registry_version, subnet_id
+                        )
+                    });
 
-        validate_dealings_payload(
-            crypto,
-            pool_reader,
-            dkg_pool,
-            last_dkg_summary,
-            payload.dkg_interval_start_height(),
-            &payload.as_data().dealings.messages,
-            max_dealings_per_block,
-            &parent,
-            metrics,
-        )
+            validate_dealings_payload(
+                crypto,
+                pool_reader,
+                dkg_pool,
+                last_dkg_summary,
+                &data_payload.dealings,
+                max_dealings_per_block,
+                &parent,
+                metrics,
+            )
+        }
     }
 }
 
 // Validates the payload containing dealings.
-#[allow(clippy::too_many_arguments)]
 fn validate_dealings_payload(
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
     last_summary: &Summary,
-    start_height: Height,
-    messages: &[Message],
+    dealings: &Dealings,
     max_dealings_per_payload: usize,
     parent: &Block,
     metrics: &IntCounterVec,
 ) -> ValidationResult<PayloadValidationError> {
-    if start_height != parent.payload.as_ref().dkg_interval_start_height() {
+    if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
         return Err(InvalidDkgPayloadReason::DkgStartHeightDoesNotMatchParentBlock.into());
     }
 
-    if messages.len() > max_dealings_per_payload {
+    if dealings.messages.len() > max_dealings_per_payload {
         return Err(InvalidDkgPayloadReason::TooManyDealings {
             limit: max_dealings_per_payload,
-            actual: messages.len(),
+            actual: dealings.messages.len(),
         }
         .into());
     }
@@ -215,49 +219,38 @@ fn validate_dealings_payload(
 
     // Check that all messages have a valid DKG config from the summary and the
     // dealer is valid, then verify each dealing.
-    for (message, config) in messages
-        .iter()
-        .map(|m| (m, last_summary.configs.get(&m.content.dkg_id)))
-    {
+    for message in &dealings.messages {
         metrics.with_label_values(&["total"]).inc();
+
         // Skip the rest if already present in DKG pool
         if dkg_pool.validated_contains(message) {
             metrics.with_label_values(&["dkg_pool_hit"]).inc();
             continue;
         }
 
-        match config {
-            None => {
-                return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
-            }
-            Some(config) => {
-                let dealer_id = message.signature.signer;
-                // If the dealer is not in the set of dealers, reject.
-                if !config.dealers().get().contains(&dealer_id) {
-                    return Err(InvalidDkgPayloadReason::InvalidDealer(dealer_id).into());
-                }
+        let Some(config) = last_summary.configs.get(&message.content.dkg_id) else {
+            return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
+        };
 
-                // If the dealer created a dealing already, reject.
-                if dealers_from_chain
-                    .get(&config.dkg_id())
-                    .map(|dealers| dealers.contains(&dealer_id))
-                    .unwrap_or(false)
-                {
-                    return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
-                }
-
-                // Verify the signature.
-                crypto.verify(message, last_summary.registry_version)?;
-
-                // Verify the dealing.
-                ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
-                    crypto,
-                    config,
-                    message.signature.signer,
-                    &message.content.dealing,
-                )?;
-            }
+        let dealer_id = message.signature.signer;
+        // If the dealer is not in the set of dealers, reject.
+        if !config.dealers().get().contains(&dealer_id) {
+            return Err(InvalidDkgPayloadReason::InvalidDealer(dealer_id).into());
         }
+
+        // If the dealer created a dealing already, reject.
+        if dealers_from_chain
+            .get(&config.dkg_id())
+            .is_some_and(|dealers| dealers.contains(&dealer_id))
+        {
+            return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
+        }
+
+        // Verify the signature.
+        crypto.verify(message, last_summary.registry_version)?;
+
+        // Verify the dealing.
+        crypto.verify_dealing(config, message.signature.signer, &message.content.dealing)?;
     }
 
     Ok(())
@@ -275,7 +268,10 @@ mod tests {
     };
     use ic_types::{
         batch::BatchPayload,
-        consensus::{dkg, dkg::DealingContent, idkg, DataPayload, Payload},
+        consensus::{
+            dkg::{self, DealingContent, Message},
+            idkg, DataPayload, Payload,
+        },
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         RegistryVersion,
     };
@@ -362,11 +358,11 @@ mod tests {
     fn validate_dealings_payload_when_valid_passes_test() {
         assert_eq!(
             validate_payload_test_case(
-                /*dealings_to_validate*/ vec![fake_dkg_message(SUBNET_1, NODE_1)],
+                /*dealings_to_validate=*/ vec![fake_dkg_message(SUBNET_1, NODE_1)],
                 /*parents_dealings=*/ vec![],
                 /*max_dealings_per_block=*/ 1,
                 SUBNET_1,
-                &[NODE_1],
+                /*committee=*/ &[NODE_1],
             ),
             Ok(())
         );
@@ -377,11 +373,11 @@ mod tests {
         // The dkg dealing will have a wrong id, because we are using a wrong subnet id.
         assert_eq!(
             validate_payload_test_case(
-                /*dealings_to_validate*/ vec![fake_dkg_message(SUBNET_2, NODE_1)],
+                /*dealings_to_validate=*/ vec![fake_dkg_message(SUBNET_2, NODE_1)],
                 /*parents_dealings=*/ vec![],
                 /*max_dealings_per_block=*/ 1,
                 SUBNET_1,
-                &[NODE_1],
+                /*committee=*/ &[NODE_1],
             ),
             Err(PayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::MissingDkgConfigForDealing
@@ -393,11 +389,11 @@ mod tests {
     fn validate_dealings_payload_when_invalid_dealer_fails_test() {
         assert_eq!(
             validate_payload_test_case(
-                /*dealings_to_validate*/ vec![fake_dkg_message(SUBNET_1, NODE_2)],
+                /*dealings_to_validate=*/ vec![fake_dkg_message(SUBNET_1, NODE_2)],
                 /*parents_dealings=*/ vec![],
                 /*max_dealings_per_block=*/ 1,
                 SUBNET_1,
-                &[NODE_1],
+                /*committee=*/ &[NODE_1],
             ),
             Err(PayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::InvalidDealer(NODE_2)
@@ -421,7 +417,7 @@ mod tests {
                 ],
                 /*max_dealings_per_block=*/ 2,
                 SUBNET_1,
-                &[NODE_1, NODE_2, NODE_3],
+                /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
             Err(PayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::DealerAlreadyDealt(NODE_2)
@@ -443,7 +439,7 @@ mod tests {
                 /*parents_dealings=*/ vec![],
                 /*max_dealings_per_block=*/ 2,
                 SUBNET_1,
-                &[NODE_1, NODE_2, NODE_3],
+                /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
             Err(PayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::TooManyDealings {
