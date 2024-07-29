@@ -1530,7 +1530,7 @@ impl StateManagerImpl {
                     fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
                 });
 
-                (*height, state)
+                (cp_layout, state)
             })
             .collect();
 
@@ -1854,7 +1854,7 @@ impl StateManagerImpl {
         metrics: &StateManagerMetrics,
         layout: &StateLayout,
         mut metadatas: BTreeMap<Height, StateMetadata>,
-        states: Vec<(Height, ReplicatedState)>,
+        states: Vec<(CheckpointLayout<ReadOnly>, ReplicatedState)>,
     ) -> PopulatedMetadata {
         let mut checkpoint_layouts_to_compute_manifest = Vec::<CheckpointLayout<ReadOnly>>::new();
 
@@ -1863,14 +1863,13 @@ impl StateManagerImpl {
         let mut snapshots_with_checkpoint_layouts: Vec<(Snapshot, CheckpointLayout<ReadOnly>)> =
             Default::default();
 
-        for (height, state) in states {
+        for (checkpoint_layout, state) in states {
+            let height = checkpoint_layout.height();
             certifications_metadata.insert(
                 height,
                 Self::compute_certification_metadata(metrics, log, &state)
                     .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
             );
-
-            let checkpoint_layout = layout.checkpoint_verified(height).unwrap();
 
             let metadata = metadatas.remove(&height);
 
