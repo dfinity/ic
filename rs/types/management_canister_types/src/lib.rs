@@ -873,9 +873,7 @@ impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
                         ))
                     }
                     pb_canister_state_bits::LogVisibilityEnum::Public => Self::Public,
-                };
-
-                result
+                }
             }
         }
     }
