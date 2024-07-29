@@ -565,7 +565,7 @@ pub fn setup_router(
         if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_subnet {
             route = RateLimit::try_from(rl)
                 .unwrap()
-                .add_subnet_rate_limiting(route)
+                .add_subnet_rate_limiting(route);
         }
 
         route
