@@ -54,7 +54,7 @@ pub(crate) enum DkgPayloadValidationFailure {
     /// Crypto related errors.
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
-    FailedToGetMaxDealingsPerBlock(Option<RegistryClientError>),
+    FailedToGetMaxDealingsPerBlock(RegistryClientError),
 }
 
 /// Dkg errors.
@@ -120,9 +120,9 @@ pub(crate) fn validate_payload(
     metrics: &IntCounterVec,
 ) -> ValidationResult<PayloadValidationError> {
     let current_height = parent.height.increment();
-    let registry_version = pool_reader
+    let registry_version = dbg!(pool_reader
         .registry_version(current_height)
-        .expect("Couldn't get the registry version.");
+        .expect("Couldn't get the registry version."));
 
     let last_summary_block = pool_reader
         .dkg_summary_block(&parent)
@@ -161,10 +161,15 @@ pub(crate) fn validate_payload(
         if is_dkg_start_height {
             return Err(InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into());
         }
-        let max_dealings_per_block = registry_client
-            .get_dkg_dealings_per_block(subnet_id, registry_version)
-            .map_err(|err| DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock(Some(err)))?
-            .ok_or_else(|| DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock(None))?;
+        let max_dealings_per_block =
+            dbg!(registry_client.get_dkg_dealings_per_block(subnet_id, registry_version))
+                .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
+                .unwrap_or_else(|| {
+                    panic!(
+                        "No subnet record found for registry version={} and subnet_id={}",
+                        registry_version, subnet_id
+                    )
+                });
 
         validate_dealings_payload(
             crypto,
@@ -261,11 +266,13 @@ fn validate_dealings_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2,
+    };
     use ic_types::{
         batch::BatchPayload,
         consensus::{dkg, dkg::DealingContent, idkg, DataPayload, Payload},
@@ -353,22 +360,13 @@ mod tests {
 
     #[test]
     fn validate_dealings_payload_when_valid_passes_test() {
-        let content = DealingContent::new(
-            NiDkgDealing::dummy_dealing_for_tests(0),
-            NiDkgId {
-                start_block_height: Height::from(0),
-                dealer_subnet: subnet_test_id(0),
-                dkg_tag: NiDkgTag::HighThreshold,
-                target_subnet: NiDkgTargetSubnet::Local,
-            },
-        );
-        let messages = vec![Message::fake(content, node_test_id(0))];
-
         assert_eq!(
-            test_validate_dealings_payload(
-                &messages,
+            validate_payload_test_case(
+                /*dealings_to_validate*/ vec![fake_dkg_message(SUBNET_1, NODE_1)],
                 /*parents_dealings=*/ vec![],
-                /*max_dealings_per_block=*/ 1
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                &[NODE_1],
             ),
             Ok(())
         );
@@ -376,23 +374,14 @@ mod tests {
 
     #[test]
     fn validate_dealings_payload_when_wrong_dkg_id_fails_test() {
-        let content = DealingContent::new(
-            NiDkgDealing::dummy_dealing_for_tests(0),
-            NiDkgId {
-                // Make the id invalid by changing the height
-                start_block_height: Height::from(1),
-                dealer_subnet: subnet_test_id(0),
-                dkg_tag: NiDkgTag::HighThreshold,
-                target_subnet: NiDkgTargetSubnet::Local,
-            },
-        );
-        let messages = vec![Message::fake(content, node_test_id(0))];
-
+        // The dkg dealing will have a wrong id, because we are using a wrong subnet id.
         assert_eq!(
-            test_validate_dealings_payload(
-                &messages,
+            validate_payload_test_case(
+                /*dealings_to_validate*/ vec![fake_dkg_message(SUBNET_2, NODE_1)],
                 /*parents_dealings=*/ vec![],
-                /*max_dealings_per_block=*/ 1
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                &[NODE_1],
             ),
             Err(PayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::MissingDkgConfigForDealing
@@ -402,104 +391,98 @@ mod tests {
 
     #[test]
     fn validate_dealings_payload_when_invalid_dealer_fails_test() {
-        let content = DealingContent::new(
-            NiDkgDealing::dummy_dealing_for_tests(0),
-            NiDkgId {
-                start_block_height: Height::from(0),
-                dealer_subnet: subnet_test_id(0),
-                dkg_tag: NiDkgTag::HighThreshold,
-                target_subnet: NiDkgTargetSubnet::Local,
-            },
-        );
-        let messages = vec![Message::fake(content, node_test_id(1))];
-
         assert_eq!(
-            test_validate_dealings_payload(
-                &messages,
+            validate_payload_test_case(
+                /*dealings_to_validate*/ vec![fake_dkg_message(SUBNET_1, NODE_2)],
                 /*parents_dealings=*/ vec![],
-                /*max_dealings_per_block=*/ 1
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                &[NODE_1],
             ),
             Err(PayloadValidationError::InvalidArtifact(
-                InvalidDkgPayloadReason::InvalidDealer(node_test_id(1))
+                InvalidDkgPayloadReason::InvalidDealer(NODE_2)
             ))
         );
     }
 
     #[test]
     fn validate_dealings_payload_when_existing_dealer_fails_test() {
-        let content = DealingContent::new(
-            NiDkgDealing::dummy_dealing_for_tests(0),
-            NiDkgId {
-                start_block_height: Height::from(0),
-                dealer_subnet: subnet_test_id(0),
-                dkg_tag: NiDkgTag::HighThreshold,
-                target_subnet: NiDkgTargetSubnet::Local,
-            },
-        );
-        let messages = vec![Message::fake(content, node_test_id(0))];
-
         assert_eq!(
-            test_validate_dealings_payload(
-                &messages,
-                /*parents_dealings=*/ messages.clone(),
-                /*max_dealings_per_block=*/ 1
+            validate_payload_test_case(
+                /*dealings_to_validate=*/
+                vec![
+                    fake_dkg_message(SUBNET_1, NODE_1),
+                    fake_dkg_message(SUBNET_1, NODE_2)
+                ],
+                /*parents_dealings=*/
+                vec![
+                    fake_dkg_message(SUBNET_1, NODE_2),
+                    fake_dkg_message(SUBNET_1, NODE_3)
+                ],
+                /*max_dealings_per_block=*/ 2,
+                SUBNET_1,
+                &[NODE_1, NODE_2, NODE_3],
             ),
             Err(PayloadValidationError::InvalidArtifact(
-                InvalidDkgPayloadReason::DealerAlreadyDealt(node_test_id(0))
+                InvalidDkgPayloadReason::DealerAlreadyDealt(NODE_2)
             ))
         );
     }
 
     #[test]
     fn validate_dealings_payload_when_too_many_dealings_fails_test() {
-        let content = DealingContent::new(
-            NiDkgDealing::dummy_dealing_for_tests(0),
-            NiDkgId {
-                start_block_height: Height::from(0),
-                dealer_subnet: subnet_test_id(0),
-                dkg_tag: NiDkgTag::HighThreshold,
-                target_subnet: NiDkgTargetSubnet::Local,
-            },
-        );
         let messages = vec![
-            Message::fake(content.clone(), node_test_id(0)),
-            Message::fake(content, node_test_id(1)),
+            fake_dkg_message(SUBNET_1, NODE_1),
+            fake_dkg_message(SUBNET_1, NODE_2),
+            fake_dkg_message(SUBNET_1, NODE_3),
         ];
 
         assert_eq!(
-            test_validate_dealings_payload(
-                &messages,
+            validate_payload_test_case(
+                messages,
                 /*parents_dealings=*/ vec![],
-                /*max_dealings_per_block=*/ 1
+                /*max_dealings_per_block=*/ 2,
+                SUBNET_1,
+                &[NODE_1, NODE_2, NODE_3],
             ),
             Err(PayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::TooManyDealings {
-                    limit: 1,
-                    actual: 2
+                    limit: 2,
+                    actual: 3
                 }
             ))
         );
     }
 
-    /// Configures all the dependencies and calls [`validate_dealings_payload`] with
-    /// `dealings_to_validate` and `max_dealings_per_payload` as arguments.
-    ///
-    /// Assumptions:
-    /// 1. subnet_id = subnet_test_id(0),
-    /// 2. nodes = [node_test_id(0)]
-    /// 3. last summary height = 0
-    fn test_validate_dealings_payload(
-        dealings_to_validate: &[Message],
+    /// Configures all the dependencies and calls [`validate_payload`] with
+    /// `dealings_to_validate` as an argument.
+    fn validate_payload_test_case(
+        dealings_to_validate: Vec<Message>,
         parent_dealings: Vec<Message>,
-        max_dealings_per_payload: usize,
+        max_dealings_per_payload: u64,
+        subnet_id: SubnetId,
+        committee: &[NodeId],
     ) -> ValidationResult<PayloadValidationError> {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let registry_version = 1;
+
             let Dependencies {
                 crypto,
                 pool,
                 dkg_pool,
+                registry,
+                state_manager,
                 ..
-            } = dependencies(pool_config, /*nodes_count=*/ 1);
+            } = dependencies_with_subnet_params(
+                pool_config.clone(),
+                subnet_id,
+                vec![(
+                    registry_version,
+                    SubnetRecordBuilder::from(committee)
+                        .with_dkg_dealings_per_block(max_dealings_per_payload)
+                        .build(),
+                )],
+            );
 
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
@@ -510,23 +493,48 @@ mod tests {
                     idkg: idkg::Payload::default(),
                 }),
             );
-            let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
-            let last_summary = last_summary_block.payload.as_ref().as_summary();
 
-            let result = validate_dealings_payload(
+            let context = ValidationContext {
+                registry_version: RegistryVersion::from(registry_version),
+                certified_height: Height::from(0),
+                time: ic_types::time::UNIX_EPOCH,
+            };
+
+            let block_payload = BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dealings: dkg::Dealings::new(Height::from(0), dealings_to_validate),
+                idkg: idkg::Payload::default(),
+            });
+
+            let result = validate_payload(
+                subnet_id,
+                registry.as_ref(),
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
                 dkg_pool.read().unwrap().deref(),
-                &last_summary.dkg,
-                Height::from(0),
-                dealings_to_validate,
-                max_dealings_per_payload,
-                &parent,
+                parent.clone(),
+                &block_payload,
+                state_manager.as_ref(),
+                &context,
                 &mock_metrics(),
             );
 
             result
         })
+    }
+
+    fn fake_dkg_message(subnet_id: SubnetId, dealer_id: NodeId) -> Message {
+        let content = DealingContent::new(
+            NiDkgDealing::dummy_dealing_for_tests(0),
+            NiDkgId {
+                start_block_height: Height::from(0),
+                dealer_subnet: subnet_id,
+                dkg_tag: NiDkgTag::HighThreshold,
+                target_subnet: NiDkgTargetSubnet::Local,
+            },
+        );
+
+        Message::fake(content, dealer_id)
     }
 
     fn mock_metrics() -> IntCounterVec {
