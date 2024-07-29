@@ -622,13 +622,13 @@ fn canister_state_log_visibility_round_trip() {
     // }
 
     for (initial, expected) in [
-        (LogVisibility::Controllers, pb::LogVisibility::Controllers),
+        (LogVisibility::Controllers, LogVisibility::Controllers),
         (
             // TODO(EXC-1670): allowed_viewers is temporary mapped to controllers.
             LogVisibility::AllowedViewers(Default::default()),
-            pb::LogVisibility::Controllers,
+            LogVisibility::Controllers,
         ),
-        (LogVisibility::Public, pb::LogVisibility::Public),
+        (LogVisibility::Public, LogVisibility::Public),
     ] {
         let encoded = pb::LogVisibility::from(&initial);
         let round_trip = LogVisibility::from(encoded);
