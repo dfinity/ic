@@ -942,7 +942,8 @@ impl EccPoint {
     /// Constant-time multiscalar multiplication using Pippenger's algorithm
     ///
     /// Return
-    /// point_scalar_pairs[1].0 * point_scalar_pairs[1].1 + point_scalar_pairs[n].0 * point_scalar_pairs[n].1
+    /// point_scalar_pairs[0].0 * point_scalar_pairs[1].1 + ...
+    /// \+ point_scalar_pairs[n].0 * point_scalar_pairs[n].1
     /// where .0 is a point and .1 is a scalar
     ///
     /// # Errors
