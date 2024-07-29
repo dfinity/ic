@@ -179,17 +179,17 @@ impl std::fmt::Display for IngressInductionError {
             IngressInductionError::CanisterOutOfCycles(err) => write!(f, "{}", err),
             IngressInductionError::CanisterMethodNotFound(method) => write!(
                 f,
-                "Cannot enqueue management message. Method {} is unknown.",
+                "Cannot enqueue management message because {} method is unknown.",
                 method
             ),
             IngressInductionError::SubnetMethodNotAllowed(method) => write!(
                 f,
-                "Cannot enqueue management message. Method {} is not allowed to be called via ingress messages.",
+                "Cannot enqueue management message because {} method is not allowed to be called via ingress messages.",
                 method
             ),
             IngressInductionError::InvalidManagementPayload => write!(
                 f,
-                "Cannot enqueue management message. Candid payload is invalid."
+                "Cannot enqueue management message because its Candid payload is invalid."
             ),
             IngressInductionError::IngressHistoryFull { capacity } => {
                 write!(f, "Maximum ingress history capacity {} reached", capacity)
