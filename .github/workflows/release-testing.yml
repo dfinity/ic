@@ -157,3 +157,9 @@ jobs:
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           cd gitlab-ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
+  trigger-qualifier-workflow:
+    uses: dfinity/dre/.github/workflows/qualify.yaml.yml@main
+    with:
+      version: ${{ github.event.workflow_run.head_sha }}
+    # secrets:
+    #   envPAT: ${{ secrets.envPAT }}
