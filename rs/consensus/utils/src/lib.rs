@@ -1031,7 +1031,7 @@ mod tests {
                 [b] if b.content.as_ref().rank == Rank(0)
             );
             for i in 0..f {
-                pool.insert_validated(pool.make_equivocation_proof(Rank(i), height, &membership));
+                pool.insert_validated(pool.make_equivocation_proof(Rank(i), height));
                 // We disqualify rank i, so lowest ranked proposal must be i + 1
                 match &find_lowest_ranked_proposals(&PoolReader::new(&pool), height)[..] {
                     [proposal] => assert_eq!(proposal.content.as_ref().rank, Rank(i + 1)),

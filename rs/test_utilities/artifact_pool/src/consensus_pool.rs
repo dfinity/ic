@@ -271,25 +271,9 @@ impl TestConsensusPool {
     }
 
     /// Creates an equivocation proof for the given height and rank. Make sure
-    /// The proof
-    /// can only be validated if the node was actually a block maker of that height.
-    pub fn make_equivocation_proof(
-        &self,
-        rank: Rank,
-        height: Height,
-        membership: &Membership,
-    ) -> EquivocationProof {
-        let pool_reader = PoolReader::new(self);
-        let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
-        let signer = *membership
-            .get_nodes(height)
-            .unwrap()
-            .iter()
-            .find(|node| {
-                membership.get_block_maker_rank(height, &prev_beacon, **node) == Ok(Some(rank))
-            })
-            .expect("rank should exist for the current membership");
-
+    /// the rank is valid, otherwise this function panics.
+    pub fn make_equivocation_proof(&self, rank: Rank, height: Height) -> EquivocationProof {
+        let signer = self.get_block_maker_by_rank(height, rank);
         EquivocationProof {
             signer,
             version: self
