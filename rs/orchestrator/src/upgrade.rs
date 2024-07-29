@@ -182,22 +182,30 @@ impl Upgrade {
                         // If this CUP was created by a remote subnet, then it is a genesis/recovery CUP
                         // This is the only case in the branch where we can trust the subnet ID of the
                         // latest registry version.
-                        NiDkgTargetSubnet::Remote(_) => self
-                            .registry
-                            .get_subnet_id(latest_registry_version)
-                            .map_err(|err| {
-                                OrchestratorError::UpgradeError(format!(
-                                    "Couldn't determine the subnet id from registry: {:?}",
-                                    err
-                                ))
-                            })?,
+                        NiDkgTargetSubnet::Remote(_) => {
+                            match self.registry.get_subnet_id(latest_registry_version) {
+                                Ok(subnet_id) => subnet_id,
+                                Err(OrchestratorError::NodeUnassignedError(_, _)) => {
+                                    self.metrics.master_public_key_changed_errors.reset();
+                                    remove_node_state(
+                                        self.replica_config_file.clone(),
+                                        self.cup_provider.get_cup_path(),
+                                        self.orchestrator_data_directory.clone(),
+                                    )
+                                    .map_err(OrchestratorError::UpgradeError)?;
+                                    info!(self.logger, "Subnet state removed");
+                                    return Ok(None);
+                                }
+                                Err(other) => return Err(other),
+                            }
+                        }
                     };
                     (subnet_id, maybe_proto, None)
                 }
                 (None, None) => match self.registry.get_subnet_id(latest_registry_version) {
                     Ok(subnet_id) => {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
-                        (subnet_id, maybe_proto, None)
+                        (subnet_id, None, None)
                     }
                     // If no subnet is assigned to the node id, we're unassigned.
                     _ => {
@@ -427,7 +435,7 @@ impl Upgrade {
         old_cup_height: Option<Height>,
     ) {
         let new_height = cup.content.height();
-        if !cup.is_signed() && Some(new_height) > old_cup_height {
+        if !cup.is_signed() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
             info!(
                 self.logger,
                 "Found higher unsigned CUP, restarting replica for subnet recovery..."
