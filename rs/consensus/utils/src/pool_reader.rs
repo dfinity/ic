@@ -797,8 +797,9 @@ pub mod test {
             let f = 3;
             let Dependencies { mut pool, .. } = dependencies(pool_config, replicas);
 
-            // Half the block proposals will be validated, the other half stay
-            // unvalidated.
+            // Because `TestConsensusPool::advance_round` alternates between
+            // putting blocks in validated and unvalidated pools for each rank,
+            // we expect (f+1)/2 blocks in the unvalidated pool.
             let mut round = pool
                 .prepare_round()
                 .with_replicas(replicas as u32)
