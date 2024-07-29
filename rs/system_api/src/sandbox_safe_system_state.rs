@@ -60,7 +60,7 @@ pub enum CallbackUpdate {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
-    pub(super) callback_updates: Vec<CallbackUpdate>,
+    pub callback_updates: Vec<CallbackUpdate>,
     cycles_balance_change: CyclesBalanceChange,
     // The cycles that move from the main balance to the reserved balance.
     // Invariant: `cycles_balance_change` contains
