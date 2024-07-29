@@ -8,7 +8,7 @@ use super::{
     PageValidation, ALLOCATED_PAGES,
 };
 use cvt::{cvt, cvt_r};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, HUGE_PAGE_SIZE, PAGE_SIZE};
+use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::NumOsPages;
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
@@ -19,8 +19,11 @@ use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+#[cfg(target_os = "linux")]
+use ic_sys::HUGE_PAGE_SIZE;
 /// The minimum number of huge pages where the actual huge page optimization
 /// will kick in. This corresponds to 64 MiB of memory (because the huge page size is 2 MiB)
+#[cfg(target_os = "linux")]
 const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
 
 const MIN_PAGES_TO_FREE: usize = 10000;
