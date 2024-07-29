@@ -320,7 +320,6 @@ enum LogVisibility {
   LOG_VISIBILITY_UNSPECIFIED = 0;
   LOG_VISIBILITY_CONTROLLERS = 1;
   LOG_VISIBILITY_PUBLIC = 2;
-  LOG_VISIBILITY_EMPTY_ALLOWED_VIEWERS = 3;  // temporary fake variant to keep serialization tests green.
 }
 
 message CanisterLogRecord {

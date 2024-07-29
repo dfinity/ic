@@ -613,11 +613,27 @@ fn canister_state_callback_round_trip() {
 fn canister_state_log_visibility_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-    for initial in LogVisibility::iter() {
+    // TODO(EXC-1670): temporarely disabled during migration to `pb::LogVisibilityV2`.
+    // for initial in LogVisibility::iter() {
+    //     let encoded = pb::LogVisibility::from(&initial);
+    //     let round_trip = LogVisibility::from(encoded);
+
+    //     assert_eq!(initial, round_trip);
+    // }
+
+    for (initial, expected) in [
+        (LogVisibility::Controllers, pb::LogVisibility::Controllers),
+        (
+            // TODO(EXC-1670): allowed_viewers is temporary mapped to controllers.
+            LogVisibility::AllowedViewers(Default::default()),
+            pb::LogVisibility::Controllers,
+        ),
+        (LogVisibility::Public, pb::LogVisibility::Public),
+    ] {
         let encoded = pb::LogVisibility::from(&initial);
         let round_trip = LogVisibility::from(encoded);
 
-        assert_eq!(initial, round_trip);
+        assert_eq!(round_trip, expected);
     }
 }
 

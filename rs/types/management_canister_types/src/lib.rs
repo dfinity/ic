@@ -804,7 +804,7 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
         use pb_canister_state_bits as pb;
         match item {
             LogVisibility::Controllers => pb::LogVisibility::Controllers,
-            LogVisibility::AllowedViewers(_) => pb::LogVisibility::EmptyAllowedViewers,
+            LogVisibility::AllowedViewers(_) => pb::LogVisibility::Controllers,
             LogVisibility::Public => pb::LogVisibility::Public,
         }
     }
@@ -817,7 +817,6 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
         match item {
             pb::LogVisibility::Unspecified => Self::default(),
             pb::LogVisibility::Controllers => Self::Controllers,
-            pb::LogVisibility::EmptyAllowedViewers => Self::AllowedViewers(Default::default()),
             pb::LogVisibility::Public => Self::Public,
         }
     }
@@ -879,8 +878,8 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> LogVisibility {
-        self.log_visibility
+    pub fn log_visibility(&self) -> &LogVisibility {
+        &self.log_visibility
     }
 }
 
