@@ -1035,7 +1035,6 @@ prop_compose! {
         update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
         threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
-        ecdsa_signature_agreements in any::<u64>(),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
@@ -1046,7 +1045,6 @@ prop_compose! {
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
         metrics.threshold_signature_agreements = threshold_signature_agreements;
-        metrics.ecdsa_signature_agreements = ecdsa_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(

@@ -26,13 +26,16 @@ jobs:
           CHANNEL="eng-idx-alerts"
           FULL_MESSAGE="nothing"
 
-          if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
-            CHANNEL="release-management-alerts"
-          fi
           if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
             FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
+          fi
+
+          if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
+            CHANNEL="release-management-alerts"
+            COMMIT="${{ github.event.workflow_run.head_sha }}"
+            FULL_MESSAGE="${FULL_MESSAGE} commit: ${COMMIT}"
           fi
 
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
