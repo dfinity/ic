@@ -555,14 +555,6 @@ pub struct WasmChunkStoreMetadata {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct LogVisibilityV2 {
-    #[prost(enumeration = "LogVisibilityEnum", tag = "1")]
-    pub log_visibility_enum: i32,
-    #[prost(message, repeated, tag = "2")]
-    pub allowed_viewers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterLogRecord {
     #[prost(uint64, tag = "1")]
     pub idx: u64,
@@ -680,9 +672,6 @@ pub struct CanisterStateBits {
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
-    /// Log visibility for the canister.
-    #[prost(message, optional, tag = "51")]
-    pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -855,38 +844,6 @@ impl LogVisibility {
             "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
             "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
             "LOG_VISIBILITY_EMPTY_ALLOWED_VIEWERS" => Some(Self::EmptyAllowedViewers),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum LogVisibilityEnum {
-    Unspecified = 0,
-    Controllers = 1,
-    AllowedViewers = 2,
-    Public = 3,
-}
-impl LogVisibilityEnum {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            LogVisibilityEnum::Unspecified => "LOG_VISIBILITY_ENUM_UNSPECIFIED",
-            LogVisibilityEnum::Controllers => "LOG_VISIBILITY_ENUM_CONTROLLERS",
-            LogVisibilityEnum::AllowedViewers => "LOG_VISIBILITY_ENUM_ALLOWED_VIEWERS",
-            LogVisibilityEnum::Public => "LOG_VISIBILITY_ENUM_PUBLIC",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "LOG_VISIBILITY_ENUM_UNSPECIFIED" => Some(Self::Unspecified),
-            "LOG_VISIBILITY_ENUM_CONTROLLERS" => Some(Self::Controllers),
-            "LOG_VISIBILITY_ENUM_ALLOWED_VIEWERS" => Some(Self::AllowedViewers),
-            "LOG_VISIBILITY_ENUM_PUBLIC" => Some(Self::Public),
             _ => None,
         }
     }
