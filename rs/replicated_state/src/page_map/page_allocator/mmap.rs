@@ -9,7 +9,6 @@ use super::{
 };
 use cvt::{cvt, cvt_r};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_types::NumOsPages;
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
@@ -21,6 +20,8 @@ use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "linux")]
 use ic_sys::HUGE_PAGE_SIZE;
+#[cfg(target_os = "linux")]
+use ic_types::NumOsPages;
 /// The minimum number of huge pages where the actual huge page optimization
 /// will kick in. This corresponds to 64 MiB of memory (because the huge page size is 2 MiB)
 #[cfg(target_os = "linux")]
