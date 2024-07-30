@@ -32,7 +32,7 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
         with:
-          context: ${{ github.workspace}}${{inputs.context }}
+          context: ${{ github.workspace}}/.github/minimal-runner-image
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/minimal-runner-image:${{ env.TAG }}
