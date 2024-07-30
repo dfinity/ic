@@ -789,6 +789,7 @@ pub enum LogVisibility {
     Public = 2,
 }
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     fn from(item: &LogVisibility) -> Self {
         match item {
@@ -798,12 +799,65 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     }
 }
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
     fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
         match item {
             pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
             pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
             pb_canister_state_bits::LogVisibility::Public => Self::Public,
+        }
+    }
+}
+
+impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
+    fn from(item: &LogVisibility) -> Self {
+        use pb_canister_state_bits as pb;
+        match item {
+            LogVisibility::Controllers => pb::LogVisibilityV2 {
+                log_visibility_enum: pb::LogVisibilityEnum::Controllers.into(),
+                allowed_viewers: Default::default(),
+            },
+            LogVisibility::AllowedViewers(principals) => pb::LogVisibilityV2 {
+                log_visibility_enum: pb::LogVisibilityEnum::AllowedViewers.into(),
+                allowed_viewers: principals
+                    .get()
+                    .iter()
+                    .map(|c| (*c).into())
+                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                    .clone(),
+            },
+            LogVisibility::Public => pb::LogVisibilityV2 {
+                log_visibility_enum: pb::LogVisibilityEnum::Public.into(),
+                allowed_viewers: Default::default(),
+            },
+        }
+    }
+}
+
+impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
+    fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
+        use pb_canister_state_bits as pb;
+        match pb::LogVisibilityEnum::try_from(item.log_visibility_enum) {
+            Err(err) => panic!(
+                "Invalid LogVisibilityEnum value: {}, decode error: {}",
+                item.log_visibility_enum, err,
+            ),
+            Ok(log_visibility_enum) => match log_visibility_enum {
+                pb::LogVisibilityEnum::Unspecified => Self::default(),
+                pb::LogVisibilityEnum::Controllers => Self::Controllers,
+                pb::LogVisibilityEnum::AllowedViewers => {
+                    Self::AllowedViewers(BoundedAllowedViewers::new(
+                        item.allowed_viewers
+                            .iter()
+                            .map(|p| {
+                                PrincipalId::try_from(p.raw.clone()).expect("Invalid PrincipalId")
+                            })
+                            .collect(),
+                    ))
+                }
+                pb::LogVisibilityEnum::Public => Self::Public,
+            },
         }
     }
 }

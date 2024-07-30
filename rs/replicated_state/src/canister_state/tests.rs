@@ -619,6 +619,13 @@ fn canister_state_log_visibility_round_trip() {
 
         assert_eq!(initial, round_trip);
     }
+
+    for initial in LogVisibility::iter() {
+        let encoded = pb::LogVisibilityV2::from(&initial);
+        let round_trip = LogVisibility::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
 }
 
 #[test]
