@@ -270,6 +270,27 @@ impl TestConsensusPool {
         RandomTape::fake(RandomTapeContent::new(finalized_height))
     }
 
+    /// Creates an equivocation proof for the given height and rank. Make sure
+    /// the rank is valid, otherwise this function panics.
+    pub fn make_equivocation_proof(&self, rank: Rank, height: Height) -> EquivocationProof {
+        let signer = self.get_block_maker_by_rank(height, rank);
+        EquivocationProof {
+            signer,
+            version: self
+                .pool
+                .validated()
+                .highest_catch_up_package()
+                .content
+                .version,
+            height,
+            subnet_id: self.subnet_id,
+            hash1: CryptoHashOf::new(CryptoHash(vec![1, 2, 3])),
+            signature1: BasicSigOf::new(BasicSig(vec![])),
+            hash2: CryptoHashOf::new(CryptoHash(vec![4, 5, 6])),
+            signature2: BasicSigOf::new(BasicSig(vec![])),
+        }
+    }
+
     pub fn make_catch_up_package(&self, height: Height) -> CatchUpPackage {
         let finalization = self
             .pool
