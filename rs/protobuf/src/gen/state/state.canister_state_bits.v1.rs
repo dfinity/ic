@@ -557,7 +557,7 @@ pub struct WasmChunkStoreMetadata {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogVisibilityAllowedViewers {
     #[prost(message, repeated, tag = "1")]
-    pub allowed_viewers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    pub principals: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

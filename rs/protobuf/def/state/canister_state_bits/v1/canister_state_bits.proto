@@ -324,7 +324,7 @@ enum LogVisibility {
 }
 
 message LogVisibilityAllowedViewers {
-  repeated types.v1.PrincipalId allowed_viewers = 1;
+  repeated types.v1.PrincipalId principals = 1;
 }
 
 message LogVisibilityV2 {

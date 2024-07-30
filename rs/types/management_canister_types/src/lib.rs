@@ -836,7 +836,7 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
             LogVisibility::AllowedViewers(principals) => pb::LogVisibilityV2 {
                 log_visibility: Some(pb::log_visibility_v2::LogVisibility::AllowedViewers(
                     pb::LogVisibilityAllowedViewers {
-                        allowed_viewers: principals
+                        principals: principals
                             .get()
                             .iter()
                             .map(|c| (*c).into())
@@ -859,7 +859,7 @@ impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
                 pb::log_visibility_v2::LogVisibility::Public(_) => Self::Public,
                 pb::log_visibility_v2::LogVisibility::AllowedViewers(data) => {
                     Self::AllowedViewers(BoundedAllowedViewers::new(
-                        data.allowed_viewers
+                        data.principals
                             .iter()
                             .map(|p| {
                                 PrincipalId::try_from(p.raw.clone()).expect("Invalid PrincipalId")
