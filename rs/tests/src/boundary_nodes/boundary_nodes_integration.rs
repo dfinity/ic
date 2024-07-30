@@ -2238,21 +2238,21 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             method: Method::POST,
             expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/query"),
-            allowed_methods: "POST".into(),
+            allowed_methods: "HEAD, POST".into(),
         },
         TestCase {
             name: "call OPTIONS".into(),
             method: Method::POST,
             expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/call"),
-            allowed_methods: "POST".into(),
+            allowed_methods: "HEAD, POST".into(),
         },
         TestCase {
-            name: "read_status OPTIONS".into(),
+            name: "read_state OPTIONS".into(),
             method: Method::POST,
             expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/read_state"),
-            allowed_methods: "POST".into(),
+            allowed_methods: "HEAD, POST".into(),
         },
     ];
 
