@@ -780,7 +780,7 @@ impl Payload<'_> for UninstallCodeArgs {}
 ///    public;
 /// }
 /// ```
-#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
@@ -902,8 +902,8 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> LogVisibility {
-        self.log_visibility
+    pub fn log_visibility(&self) -> &LogVisibility {
+        &self.log_visibility
     }
 }
 
