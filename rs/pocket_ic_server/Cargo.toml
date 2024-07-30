@@ -56,7 +56,8 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
-ic-http-gateway = { path = "/home/martin/http-gateway/packages/ic-http-gateway" }
+ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3" }
+#ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "715d95b8816b53828381bfca1d3c713e4b4eaf89" }
 ic-gateway = { path = "/home/martin/ic-gateway" }
 hex = { workspace = true }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }

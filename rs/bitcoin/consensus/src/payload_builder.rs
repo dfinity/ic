@@ -4,8 +4,10 @@ mod parse;
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(test, feature = "proptest"))]
-mod proptests;
+// TODO: This module does not compile, and was not caught by the compiler
+// as it was behind a non-existent feature flag.
+// #[cfg(all(test, feature = "proptest"))]
+// mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network;

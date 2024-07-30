@@ -518,12 +518,6 @@ pub mod specialise {
     use super::*;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20_internal_types;
 
-    /// An error during specialisation
-    #[derive(Debug)]
-    pub struct SpecialisationError {
-        _unexpected_type_name: &'static str,
-    }
-
     /// Converts a secret key into a forward secure secret key set.
     ///
     /// # Errors

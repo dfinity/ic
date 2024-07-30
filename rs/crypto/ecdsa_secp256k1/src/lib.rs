@@ -539,6 +539,7 @@ pub enum RecoveryError {
 /// 2. `(r, -y)`
 /// 3. `(r + n, y' )`
 /// 4. `(r + n, -y')`
+///
 /// where `y`, `y'` are computed from the affine x-coordinate together with the curve equation and `n` is the order of the curve.
 /// Note that because the affine coordinates are over `𝔽ₚ`, where `p > n` but `p` and `n` are somewhat close from each other,
 /// the last 2 possibilities often do not exist, see [`RecoveryId::is_x_reduced`].

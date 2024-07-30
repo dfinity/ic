@@ -461,14 +461,14 @@ impl BackupHelper {
         let ic_admin = self.binary_file("ic-replay", replica_version);
         let mut cmd = Command::new(ic_admin);
         cmd.arg("--data-root")
-            .arg(&self.data_dir())
+            .arg(self.data_dir())
             .arg("--subnet-id")
-            .arg(&self.subnet_id.to_string())
-            .arg(&self.ic_config_file_local(replica_version))
+            .arg(self.subnet_id.to_string())
+            .arg(self.ic_config_file_local(replica_version))
             .arg("restore-from-backup")
-            .arg(&self.local_store_dir())
-            .arg(&self.spool_root_dir())
-            .arg(&replica_version.to_string())
+            .arg(self.local_store_dir())
+            .arg(self.spool_root_dir())
+            .arg(replica_version.to_string())
             .arg(start_height.to_string())
             .stdout(Stdio::piped());
         debug!(self.log, "[#{}] Will execute: {:?}", self.thread_id, cmd);

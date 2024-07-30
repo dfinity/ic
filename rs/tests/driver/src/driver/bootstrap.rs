@@ -646,7 +646,7 @@ fn configure_setupos_image(
         .arg("--cpu-mode")
         .arg(cpu_mode)
         .arg("--nns-url")
-        .arg(&nns_url.to_string())
+        .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
         .env(path_key, &new_path);

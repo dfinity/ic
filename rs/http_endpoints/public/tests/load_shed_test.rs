@@ -319,7 +319,7 @@ fn test_load_shedding_pprof() {
 /// Test scenario:
 /// 1. Set the concurrency limiter for the call service, `max_call_concurrent_requests`, to 1.
 /// 2. Send an ingress message where we wait with responding for the update call
-/// inside the ingress filter service handle.
+///    inside the ingress filter service handle.
 /// 3. Concurrently make another update call, and assert it hits the load shedder.
 #[test]
 fn test_load_shedding_update_call() {

@@ -1228,7 +1228,7 @@ dependencies = [
  "bitflags 2.6.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.12.0",
  "lazy_static",
  "lazycell",
  "log",
@@ -2630,6 +2630,7 @@ checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 [[package]]
 name = "codecs"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "apache-avro",
  "bytes 1.6.1",
@@ -2640,7 +2641,7 @@ dependencies = [
  "influxdb-line-protocol",
  "memchr",
  "once_cell",
- "ordered-float 4.2.1",
+ "ordered-float 4.2.2",
  "prost",
  "prost-reflect",
  "regex",
@@ -2828,7 +2829,6 @@ dependencies = [
  "reqwest 0.12.5",
  "serde_json",
  "slog",
- "tests",
  "tokio",
  "url",
 ]
@@ -3955,7 +3955,7 @@ dependencies = [
 [[package]]
 name = "discower_bowndary"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic.git#9ff9f96b038b38f56deda1ade528fe6ac3fa7794"
+source = "git+https://github.com/dfinity/ic.git#29e7b09ed6b317f67b83aff463e9fe3ad6bf5449"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4246,6 +4246,7 @@ checksum = "c34f04666d835ff5d62e058c3995147c06f42fe86ff053337632bca83e42702d"
 [[package]]
 name = "enrichment"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "arc-swap",
  "chrono",
@@ -7331,6 +7332,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-btc-replica-types",
  "ic-config",
+ "ic-consensus",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-constants",
@@ -7377,6 +7379,7 @@ dependencies = [
  "ic-types",
  "phantom_newtype",
  "prometheus",
+ "proptest",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -9216,6 +9219,7 @@ dependencies = [
 [[package]]
 name = "ic-http-gateway"
 version = "0.0.0"
+source = "git+https://github.com/dfinity/http-gateway?rev=a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3#a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3"
 dependencies = [
  "bytes 1.6.1",
  "candid",
@@ -9340,6 +9344,7 @@ dependencies = [
  "ic-types",
  "mockall",
  "prometheus",
+ "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
@@ -11895,6 +11900,7 @@ dependencies = [
 name = "ic-replicated-state"
 version = "0.9.0"
 dependencies = [
+ "arbitrary",
  "assert_matches",
  "bit-vec",
  "criterion",
@@ -14046,20 +14052,34 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "canister-test",
  "ic-agent",
  "ic-base-types",
+ "ic-canister-client",
+ "ic-config",
+ "ic-http-utils",
+ "ic-management-canister-types",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic_consensus_threshold_sig_system_test_utils",
  "leb128",
  "openssh-keys",
+ "prost",
  "rand 0.8.5",
  "registry-canister",
  "reqwest 0.12.5",
  "rsa",
  "slog",
  "ssh2",
+ "tempfile",
  "tokio",
  "url",
 ]
@@ -14071,6 +14091,7 @@ dependencies = [
  "anyhow",
  "candid",
  "canister-test",
+ "chrono",
  "futures 0.3.30",
  "ic-agent",
  "ic-base-types",
@@ -14091,6 +14112,7 @@ dependencies = [
  "registry-canister",
  "reqwest 0.12.5",
  "serde_cbor",
+ "serde_json",
  "slog",
  "tokio",
  "url",
@@ -16007,7 +16029,7 @@ dependencies = [
  "indexmap 2.2.6",
  "metrics",
  "num_cpus",
- "ordered-float 4.2.1",
+ "ordered-float 4.2.2",
  "quanta",
  "radix_trie",
  "sketches-ddsketch",
@@ -17013,7 +17035,7 @@ dependencies = [
  "lazy_static",
  "once_cell",
  "opentelemetry 0.23.0",
- "ordered-float 4.2.1",
+ "ordered-float 4.2.2",
  "percent-encoding",
  "rand 0.8.5",
  "thiserror",
@@ -17107,9 +17129,9 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "4.2.1"
+version = "4.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19ff2cf528c6c03d9ed653d6c4ce1dc0582dc4af309790ad92f07c1cd551b0be"
+checksum = "4a91171844676f8c7990ce64959210cd2eaef32c2612c50f9fae9f8aaa6065a6"
 dependencies = [
  "num-traits",
 ]
@@ -18196,7 +18218,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.12.0",
  "proc-macro2 1.0.75",
  "quote 1.0.35",
  "syn 2.0.48",
@@ -19652,9 +19674,9 @@ checksum = "976295e77ce332211c0d24d92c0e83e50f5c5f046d11082cea19f3df13a3562d"
 
 [[package]]
 name = "rustls-platform-verifier"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e3beb939bcd33c269f4bf946cc829fcd336370267c4a927ac0399c84a3151a1"
+checksum = "93bda3f493b9abe5b93b3e7e3ecde0df292f2bd28c0296b90586ee0055ff5123"
 dependencies = [
  "core-foundation",
  "core-foundation-sys",
@@ -19673,9 +19695,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-platform-verifier-android"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84e217e7fdc8466b5b35d30f8c0a30febd29173df4a3a0c2115d306b9c4117ad"
+checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
@@ -20168,11 +20190,12 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.120"
+version = "1.0.121"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e0d21c9a8cae1235ad58a00c11cb40d4b1e5c784f1ef2c537876ed6ffd8b7c5"
+checksum = "4ab380d7d9f22ef3f21ad3e6c1ebe8e4fc7a2000ccba2e4d71fc96f15b2cb609"
 dependencies = [
  "itoa",
+ "memchr",
  "ryu",
  "serde",
 ]
@@ -22037,21 +22060,21 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.16"
+version = "0.8.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81967dd0dd2c1ab0bc3468bd7caecc32b8a4aa47d0c8c695d8c2b2108168d62c"
+checksum = "7a44eede9b727419af8095cb2d72fab15487a541f54647ad4414b34096ee4631"
 dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.22.17",
+ "toml_edit 0.22.18",
 ]
 
 [[package]]
 name = "toml_datetime"
-version = "0.6.7"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8fb9f64314842840f1d940ac544da178732128f1c78c21772e876579e0da1db"
+checksum = "0dd7358ecb8fc2f8d014bf86f6f638ce72ba252a2c3a2572f2a795f1d23efb41"
 dependencies = [
  "serde",
 ]
@@ -22069,9 +22092,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.17"
+version = "0.22.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d9f8729f5aea9562aac1cc0441f5d6de3cff1ee0c5d67293eeca5eb36ee7c16"
+checksum = "1490595c74d930da779e944f5ba2ecdf538af67df1a9848cbd156af43c1b7cf0"
 dependencies = [
  "indexmap 2.2.6",
  "serde",
@@ -22561,7 +22584,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
@@ -22605,9 +22628,9 @@ checksum = "497961ef93d974e23eb6f433eb5fe1b7930b659f06d12dec6fc44a8f554c0bba"
 
 [[package]]
 name = "typetag"
-version = "0.2.16"
+version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "661d18414ec032a49ece2d56eee03636e43c4e8d577047ab334c0ba892e29aaf"
+checksum = "1f7ec175048b96728c30152928c52161bfcc8ea2bd3fb7ed4ccb7dec060b2834"
 dependencies = [
  "erased-serde 0.4.5",
  "inventory",
@@ -22618,9 +22641,9 @@ dependencies = [
 
 [[package]]
 name = "typetag-impl"
-version = "0.2.16"
+version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac73887f47b9312552aa90ef477927ff014d63d1920ca8037c6c1951eab64bb1"
+checksum = "84b5474fd169a5b02b6782b56bbbbff27e85947d4488e5501123687db3148647"
 dependencies = [
  "proc-macro2 1.0.75",
  "quote 1.0.35",
@@ -22907,6 +22930,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 [[package]]
 name = "vector-api-client"
 version = "0.1.2"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "anyhow",
  "chrono",
@@ -22927,6 +22951,7 @@ dependencies = [
 [[package]]
 name = "vector-buffers"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "async-recursion",
  "async-stream",
@@ -22959,6 +22984,7 @@ dependencies = [
 [[package]]
 name = "vector-common"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "async-stream",
  "bytes 1.6.1",
@@ -22970,7 +22996,7 @@ dependencies = [
  "indexmap 2.2.6",
  "metrics",
  "nom",
- "ordered-float 4.2.1",
+ "ordered-float 4.2.2",
  "paste",
  "pin-project",
  "ryu",
@@ -22990,6 +23016,7 @@ dependencies = [
 [[package]]
 name = "vector-config"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -23003,7 +23030,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.9.0",
  "snafu 0.7.5",
- "toml 0.8.16",
+ "toml 0.8.17",
  "tracing",
  "url",
  "vector-config-common",
@@ -23014,6 +23041,7 @@ dependencies = [
 [[package]]
 name = "vector-config-common"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "convert_case 0.6.0",
  "darling 0.20.3",
@@ -23029,6 +23057,7 @@ dependencies = [
 [[package]]
 name = "vector-config-macros"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "darling 0.20.3",
  "proc-macro2 1.0.75",
@@ -23041,6 +23070,7 @@ dependencies = [
 [[package]]
 name = "vector-core"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "async-trait",
  "bitmask-enum",
@@ -23064,7 +23094,7 @@ dependencies = [
  "no-proxy",
  "once_cell",
  "openssl",
- "ordered-float 4.2.1",
+ "ordered-float 4.2.2",
  "parking_lot 0.12.3",
  "pin-project",
  "prost",
@@ -23084,7 +23114,7 @@ dependencies = [
  "tokio",
  "tokio-openssl",
  "tokio-util",
- "toml 0.8.16",
+ "toml 0.8.17",
  "tonic 0.10.2",
  "tracing",
  "tracing-core",
@@ -23104,6 +23134,7 @@ dependencies = [
 [[package]]
 name = "vector-lib"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "codecs",
  "enrichment",
@@ -23119,6 +23150,7 @@ dependencies = [
 [[package]]
 name = "vector-lookup"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "serde",
  "vector-config",
@@ -23129,6 +23161,7 @@ dependencies = [
 [[package]]
 name = "vector-stream"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "async-stream",
  "futures 0.3.30",
@@ -23146,6 +23179,7 @@ dependencies = [
 [[package]]
 name = "vector-tap"
 version = "0.1.0"
+source = "git+https://github.com/mraszyk/vector.git?rev=703243ee7d9895106f59b2dc470ecb6dca8a4457#703243ee7d9895106f59b2dc470ecb6dca8a4457"
 dependencies = [
  "colored",
  "futures-util",
@@ -23227,7 +23261,7 @@ dependencies = [
  "ofb",
  "once_cell",
  "onig",
- "ordered-float 4.2.1",
+ "ordered-float 4.2.2",
  "paste",
  "peeking_take_while 1.0.0",
  "percent-encoding",

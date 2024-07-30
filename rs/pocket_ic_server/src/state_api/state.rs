@@ -7,13 +7,11 @@ use crate::pocket_ic::{
 };
 use crate::InstanceId;
 use crate::{OpId, Operation};
-use fqdn::{Fqdn, fqdn};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
+use fqdn::{fqdn, Fqdn};
 use futures::future::Shared;
-//use hyper::header::{HeaderValue, HOST};
-//use hyper::Version;
 use hyper_legacy::{client::connect::HttpConnector, Client};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
@@ -32,7 +30,7 @@ use ic_types::{canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES, CanisterId, Subn
 use pocket_ic::common::rest::{
     CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
     CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    MockCanisterHttpResponse, Topology,
+    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
@@ -104,8 +102,8 @@ pub struct ApiState {
     sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
-    // status of HTTP gateway (true = running, false = stopped)
-    http_gateways: Arc<RwLock<Vec<bool>>>,
+    // HTTP gateway infos (`None` = stopped)
+    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
 }
 
 #[derive(Default)]
@@ -471,21 +469,17 @@ impl ApiState {
     pub async fn create_http_gateway(
         &self,
         http_gateway_config: HttpGatewayConfig,
-    ) -> (InstanceId, u16) {
+    ) -> HttpGatewayInfo {
         use crate::state_api::routes::verify_cbor_content_header;
-        use axum::extract::{DefaultBodyLimit, Path, /*Request as AxumRequest,*/ State};
+        use axum::extract::{DefaultBodyLimit, Path, State};
         use axum::middleware::from_fn_with_state;
-        //use axum::handler::Handler;
-        //use axum::middleware::{self, Next};
-        //use axum::response::Response as AxumResponse;
         use axum::routing::{get, post};
         use axum::Router;
         use http_body_util::Full;
         use hyper::body::{Bytes, Incoming};
         use hyper::header::CONTENT_TYPE;
-        use hyper::{Method, Request, Response, StatusCode, /*Uri*/};
+        use hyper::{Method, Request, Response, StatusCode};
         use hyper_util::client::legacy::{connect::HttpConnector, Client};
-        //use std::str::FromStr;
 
         async fn handler_status(
             State(replica_url): State<String>,
@@ -588,19 +582,32 @@ impl ApiState {
             .await
         }
 
-        let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("[::]:{}", port);
+        let ip_addr = http_gateway_config
+            .ip_addr
+            .unwrap_or("127.0.0.1".to_string());
+        let port = http_gateway_config.port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
         let real_port = listener.local_addr().unwrap().port();
 
         let mut http_gateways = self.http_gateways.write().await;
-        http_gateways.push(true);
-        let instance_id = http_gateways.len() - 1;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        http_gateways.push(Some(http_gateway_details));
         drop(http_gateways);
 
         let http_gateways = self.http_gateways.clone();
         let pocket_ic_server_port = self.port.unwrap();
+        let handle = Handle::new();
+        let shutdown_handle = handle.clone();
+        let axum_handle = handle.clone();
         spawn(async move {
             let replica_url = match http_gateway_config.forward_to {
                 HttpGatewayBackend::Replica(replica_url) => replica_url,
@@ -616,35 +623,18 @@ impl ApiState {
                 .build()
                 .unwrap();
             agent.fetch_root_key().await.unwrap();
-            /*
-            let replica_uri = Uri::from_str(&replica_url).unwrap();
-            let replicas = vec![(agent, replica_uri)];
-            let gateway_domains = http_gateway_config
-                .domains
-                .unwrap_or(vec!["localhost".to_string()]);
-            let aliases: Vec<String> = vec![];
-            let suffixes: Vec<String> = gateway_domains;
-            let resolver = ResolverState {
-                dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
-            };
-            let validator = Validator::default();
-            let app_state = AppState::new_for_testing(replicas, resolver, validator);
-            let fallback_handler = agent_handler.with_state(app_state);
-            */
             let client = ic_http_gateway::HttpGatewayClientBuilder::new()
-              .with_agent(agent)
-              .build().unwrap();
-            let state_handler = Arc::new(ic_gateway::HandlerState::new(
-                client,
-                true,
-            ));
+                .with_agent(agent)
+                .build()
+                .unwrap();
+            let state_handler = Arc::new(ic_gateway::HandlerState::new(client, true));
 
             struct NoopCustomDomainResolver;
 
             impl ic_gateway::ResolvesDomain for NoopCustomDomainResolver {
-               fn resolve(&self, _host: &Fqdn) -> Option<ic_gateway::DomainLookup> {
-                 None
-               }
+                fn resolve(&self, _host: &Fqdn) -> Option<ic_gateway::DomainLookup> {
+                    None
+                }
             }
 
             let domain_resolver = Arc::new(ic_gateway::DomainResolver::new(
@@ -676,32 +666,34 @@ impl ApiState {
                     post(handler_read_state)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
-                //.fallback_service(fallback_handler)
-      .fallback(
-        post(ic_gateway::handler)
-            .get(ic_gateway::handler)
-            .put(ic_gateway::handler)
-            .layer(ic_gateway::layer(&[
-                Method::HEAD,
-                Method::GET,
-                Method::POST,
-                Method::OPTIONS,
-            ]))
-            .with_state(state_handler)
-      )
+                .fallback(
+                    post(ic_gateway::handler)
+                        .get(ic_gateway::handler)
+                        .put(ic_gateway::handler)
+                        .delete(ic_gateway::handler)
+                        .layer(ic_gateway::layer(&[
+                            Method::HEAD,
+                            Method::GET,
+                            Method::POST,
+                            Method::PUT,
+                            Method::DELETE,
+                        ]))
+                        .with_state(state_handler),
+                )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .layer(from_fn_with_state(domain_resolver, ic_gateway::validate_middleware))
+                .layer(from_fn_with_state(
+                    domain_resolver,
+                    ic_gateway::validate_middleware,
+                ))
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
-            let handle = Handle::new();
-            let shutdown_handle = handle.clone();
             let http_gateways_for_shutdown = http_gateways.clone();
             tokio::spawn(async move {
                 loop {
                     let guard = http_gateways_for_shutdown.read().await;
-                    if !guard[instance_id] {
+                    if guard[instance_id].is_none() {
                         shutdown_handle.shutdown();
                         break;
                     }
@@ -718,7 +710,7 @@ impl ApiState {
                 match config {
                     Ok(config) => {
                         axum_server::from_tcp_rustls(listener, config)
-                            .handle(handle)
+                            .handle(axum_handle)
                             .serve(router)
                             .await
                             .unwrap();
@@ -726,13 +718,13 @@ impl ApiState {
                     Err(e) => {
                         error!("TLS config could not be created: {:?}", e);
                         let mut guard = http_gateways.write().await;
-                        guard[instance_id] = false;
+                        guard[instance_id] = None;
                         return;
                     }
                 }
             } else {
                 axum_server::from_tcp(listener)
-                    .handle(handle)
+                    .handle(axum_handle)
                     .serve(router)
                     .await
                     .unwrap();
@@ -740,13 +732,20 @@ impl ApiState {
 
             info!("Terminating HTTP gateway.");
         });
-        (instance_id, real_port)
+
+        // Wait until the HTTP gateway starts listening.
+        while handle.listening().await.is_none() {}
+
+        HttpGatewayInfo {
+            instance_id,
+            port: real_port,
+        }
     }
 
     pub async fn stop_http_gateway(&self, instance_id: InstanceId) {
         let mut http_gateways = self.http_gateways.write().await;
         if instance_id < http_gateways.len() {
-            http_gateways[instance_id] = false;
+            http_gateways[instance_id] = None;
         }
     }
 
@@ -964,17 +963,27 @@ impl ApiState {
         res
     }
 
+    pub async fn list_http_gateways(&self) -> Vec<HttpGatewayDetails> {
+        self.http_gateways
+            .read()
+            .await
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
     /// An operation bound to an instance (a Computation) can update the PocketIC state.
     ///
     /// * If the instance is busy executing an operation, the call returns [UpdateReply::Busy]
-    /// immediately. In that case, the state label and operation id contained in the result
-    /// indicate that the instance is busy with a previous operation.
+    ///   immediately. In that case, the state label and operation id contained in the result
+    ///   indicate that the instance is busy with a previous operation.
     ///
     /// * If the instance is available and the computation exceeds a (short) timeout,
-    /// [UpdateReply::Busy] is returned.
+    ///   [UpdateReply::Busy] is returned.
     ///
     /// * If the computation finished within the timeout, [UpdateReply::Output] is returned
-    /// containing the result.
+    ///   containing the result.
     ///
     /// Operations are _not_ queued by default. Thus, if the instance is busy with an existing operation,
     /// the client has to retry until the operation is done. Some operations for which the client

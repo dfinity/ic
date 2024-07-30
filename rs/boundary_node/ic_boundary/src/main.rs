@@ -4,6 +4,7 @@ use tikv_jemallocator::Jemalloc;
 
 use crate::cli::Cli;
 
+#[cfg(feature = "tls")]
 mod acme;
 mod bouncer;
 mod cache;

@@ -105,11 +105,6 @@ impl NeuronStoreError {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct NeuronNotFound {
-    neuron_id: NeuronId,
-}
-
 impl Display for NeuronStoreError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
