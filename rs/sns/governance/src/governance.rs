@@ -1089,6 +1089,7 @@ impl Governance {
     ///   the initial neuron claim that we didn't know about.
     /// - The transfer of funds previously failed for some reason (e.g. the
     ///   ledger was unavailable or broken).
+    ///
     /// The ledger canister still guarantees that a transaction cannot
     /// transfer, i.e., disburse, more than what was in the neuron's account
     /// on the ledger.
@@ -4692,8 +4693,8 @@ impl Governance {
     ///
     /// This method:
     /// * collects all proposals in state ReadyToSettle, that is, proposals that
-    /// can no longer accept votes for the purpose of rewards and that have
-    /// not yet been considered in a reward event
+    ///   can no longer accept votes for the purpose of rewards and that have
+    ///   not yet been considered in a reward event
     /// * associates those proposals to the new reward event and cleans their ballots
     fn distribute_rewards(&mut self, supply: Tokens) {
         log!(INFO, "distribute_rewards. Supply: {:?}", supply);
@@ -9637,14 +9638,14 @@ mod tests {
 
     /// Main Narrative:
     ///
-    ///   1. There are three neurons. One votes directly. The other two follow the (direct) voter.
-    ///   2. The difference between the two follower neurons is what they follow on:
-    ///     a. catch-all/fallback: This neuron does nothing on critical proposals.
-    ///     b. TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
-    ///   3. There are two proposals that the (direct) voter neuron votes on:
-    ///     A. Motion: Here, only the first follower neuron follows.
-    ///     B. TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
-    ///        the first follower neuron uses catch-all/fallback following.
+    /// 1. There are three neurons. One votes directly. The other two follow the (direct) voter.
+    /// 2. The difference between the two follower neurons is what they follow on:
+    ///   * catch-all/fallback: This neuron does nothing on critical proposals.
+    ///   * TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
+    /// 3. There are two proposals that the (direct) voter neuron votes on:
+    ///   * Motion: Here, only the first follower neuron follows.
+    ///   * TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
+    ///     the first follower neuron uses catch-all/fallback following.
     ///
     /// What the first follower neuron does is the most interesting, because what we are trying to
     /// demonstrate here is that catch-all/fallback following applies iff the proposal is

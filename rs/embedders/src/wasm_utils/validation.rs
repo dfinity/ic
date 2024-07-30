@@ -1131,9 +1131,9 @@ fn test_extract_section_name() {
 ///      * `icp:public`
 ///      * `icp:private`
 /// * Checks that no more than `max_custom_sections` are defined in the
-/// module.
+///   module.
 /// * Checks that the size of a custom section does not exceed
-/// `max_custom_section_size`.
+///   `max_custom_section_size`.
 ///
 /// Returns the validated custom sections.
 fn validate_custom_section(

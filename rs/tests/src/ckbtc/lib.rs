@@ -311,7 +311,7 @@ pub(crate) async fn install_minter(
     install_rust_canister_from_path(
         canister,
         env.get_dependency_path(
-            &env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
+            env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
         ),
         Some(Encode!(&minter_arg).unwrap()),
     )
@@ -336,7 +336,7 @@ pub(crate) async fn install_kyt(
     install_rust_canister_from_path(
         kyt_canister,
         env.get_dependency_path(
-            &env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
+            env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
         ),
         Some(Encode!(&kyt_init_args).unwrap()),
     )

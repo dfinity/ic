@@ -1931,7 +1931,7 @@ async fn test_no_voting_after_deadline() {
 /// - There are six neurons: 1-6.
 ///
 /// - Every neuron has the same stake of 10 ICP, but no dissolution
-/// period specified.
+///   period specified.
 //
 ///
 /// - Neuron 1 follows 2, 3, and 4 on topic `ManageNeuron`.
@@ -4921,6 +4921,7 @@ fn test_cant_disburse_without_paying_fees() {
 /// * 2. the caller is not the neuron's controller.
 /// * 3. the parent neuron would be left with less than the minimum stake.
 /// * 4. the child neuron would have less than the minimum stake.
+///
 /// In all these cases it must thus hold that:
 /// * the correct error is returned
 /// * the parent neuron is unchanged
@@ -5564,7 +5565,7 @@ fn test_neuron_spawn_with_subaccount() {
 
 /// Checks that:
 /// * Specifying a percentage_to_spawn different from 100 lead to the proper fractional maturity
-/// to be spawned.
+///   to be spawned.
 #[test]
 fn test_neuron_spawn_partial_exact() {
     assert_neuron_spawn_partial(240_000_000, 60, 144_000_000, 96_000_000);

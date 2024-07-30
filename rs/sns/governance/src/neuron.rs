@@ -173,6 +173,7 @@ impl Neuron {
     ///   and is applied against the total voting power of the neuron. It is represented
     ///   as a percent in the range of 0 and 100 where 0 will result in 0 voting power,
     ///   and 100 will result in unadjusted voting power.
+    ///
     /// max_dissolve_delay_seconds and max_neuron_age_for_age_bonus are defined in
     /// the nervous system parameters.
     pub fn voting_power(
