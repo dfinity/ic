@@ -7,4 +7,3 @@ pub mod unassigned_node_upgrade_test;
 pub mod unstuck_subnet_test;
 pub mod upgrade_downgrade;
 pub mod upgrade_with_alternative_urls;
-pub mod utils;
