@@ -443,6 +443,7 @@ pub struct ExecutionState {
     /// - it is "shallow-copied" when cloning the execution state
     /// - all execution states cloned from each other (and also having the same
     ///   wasm_binary) share the same compilation cache object
+    ///
     /// The latter property ensures that compilation for queries is cached
     /// properly when loading a state from checkpoint.
     pub wasm_binary: Arc<WasmBinary>,

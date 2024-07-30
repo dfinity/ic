@@ -1374,6 +1374,7 @@ where
     /// 1. Direct participation from 0 till (200 / 0.7) ICP: {} // no neurons are above threshold
     /// 2. Direct participation from (200 / 0.7) ICP till (200 / 0.3) ICP: { N1 }
     /// 3. Direct participation from (200 / 0.3) ICP till +inf: { N1, N2 }
+    ///
     /// Explanation for the `(200 / 0.7)` value above. When direct participation is 200 / 0.7,
     /// the ideal matching is also 200 / 0.7 (per the ideal matching function). Thus, N1 tries
     /// to participate at (200 / 0.7) * 0.7 = 200, which is enough to reach the threshold.

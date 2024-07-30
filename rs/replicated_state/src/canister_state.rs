@@ -588,7 +588,7 @@ impl CanisterState {
 /// - `ContinueLong`: the canister has a long-running execution and will
 ///   continue it.
 /// - `ContinueInstallCode`: the canister has a long-running execution of
-/// `install_code` subnet message and will continue it.
+///   `install_code` subnet message and will continue it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NextExecution {
     None,
