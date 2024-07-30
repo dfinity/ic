@@ -22,11 +22,12 @@ use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_interfaces::{
-    batch_payload::IntoMessages,
+    batch_payload::{IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
-    consensus::PayloadBuilder as ConsensusPayloadBuilder,
+    consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
@@ -138,7 +139,7 @@ pub use ic_types::{
     messages::{CallbackId, HttpRequestError, MessageId},
     signature::BasicSignature,
     time::Time,
-    CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
+    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
 use ic_xnet_payload_builder::{
     certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError},
@@ -580,6 +581,100 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
     fn garbage_collect_slice(&self, _subnet_id: SubnetId, _stream_position: ExpectedIndices) {}
 }
 
+/// A custom `QueryStatsPayloadBuilderImpl` that uses a single
+/// `QueryStatsPayloadBuilderImpl` to retrieve total query stats
+/// and turns them into a collection of fractional query stats
+/// for each node of the corresponding subnet.
+/// Those fractional query stats are stored in the field `pending_payloads`
+/// until they become part of a block and get `purge`d.
+struct PocketQueryStatsPayloadBuilderImpl {
+    query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
+    node_ids: Vec<NodeId>,
+    pending_payloads: RwLock<Vec<QueryStatsPayload>>,
+}
+
+impl PocketQueryStatsPayloadBuilderImpl {
+    pub(crate) fn new(
+        query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
+        node_ids: Vec<NodeId>,
+    ) -> Self {
+        Self {
+            query_stats_payload_builder,
+            node_ids,
+            pending_payloads: RwLock::new(Vec::new()),
+        }
+    }
+
+    pub(crate) fn purge(&self, payload: &QueryStatsPayload) {
+        assert!(self.pending_payloads.read().unwrap().contains(payload));
+        self.pending_payloads
+            .write()
+            .unwrap()
+            .retain(|p| p != payload);
+    }
+}
+
+impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
+    fn build_payload(
+        &self,
+        height: Height,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
+        if let Some(payload) = self.pending_payloads.read().unwrap().iter().next() {
+            return payload.serialize_with_limit(max_size);
+        }
+        let serialized_payload = self.query_stats_payload_builder.build_payload(
+            height,
+            max_size,
+            past_payloads,
+            context,
+        );
+        let num_nodes = self.node_ids.len();
+        if let Some(payload) = QueryStatsPayload::deserialize(&serialized_payload).unwrap() {
+            assert!(self.node_ids.contains(&payload.proposer));
+            *self.pending_payloads.write().unwrap() = self
+                .node_ids
+                .iter()
+                .map(|node_id| {
+                    let mut payload = payload.clone();
+                    payload.proposer = *node_id;
+                    // scale down the stats by the number of nodes
+                    // since they'll be aggregated across all nodes
+                    payload.stats = payload
+                        .stats
+                        .into_iter()
+                        .map(|mut s| {
+                            s.stats.num_calls /= num_nodes as u32;
+                            s.stats.num_instructions /= num_nodes as u64;
+                            s.stats.ingress_payload_size /= num_nodes as u64;
+                            s.stats.egress_payload_size /= num_nodes as u64;
+                            s
+                        })
+                        .collect();
+                    payload
+                })
+                .collect();
+        }
+        if let Some(payload) = self.pending_payloads.read().unwrap().iter().next() {
+            payload.serialize_with_limit(max_size)
+        } else {
+            vec![]
+        }
+    }
+
+    fn validate_payload(
+        &self,
+        _height: Height,
+        _proposal_context: &ProposalContext,
+        _payload: &[u8],
+        _past_payloads: &[PastPayload],
+    ) -> Result<(), PayloadValidationError> {
+        Ok(())
+    }
+}
+
 /// A replica node of the subnet with the corresponding `StateMachine`.
 pub struct StateMachineNode {
     pub node_id: NodeId,
@@ -652,6 +747,7 @@ pub struct StateMachine {
     pub ingress_watcher_handle: IngressWatcherHandle,
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
+    query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -1046,6 +1142,7 @@ impl StateMachineBuilder {
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),
             sm.canister_http_payload_builder.clone(),
+            sm.query_stats_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1161,10 +1258,15 @@ impl StateMachine {
             .write()
             .unwrap()
             .apply_changes(changeset);
+        let query_stats = QueryStatsPayload::deserialize(&batch_payload.query_stats).unwrap();
+        if let Some(ref query_stats) = query_stats {
+            self.query_stats_payload_builder.purge(query_stats);
+        }
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
-            .with_consensus_responses(http_responses);
+            .with_consensus_responses(http_responses)
+            .with_query_stats(query_stats);
 
         // Push responses to ECDSA management canister calls into `PayloadBuilder`.
         let sign_with_ecdsa_contexts = state
@@ -1494,6 +1596,18 @@ impl StateMachine {
             RandomStateKind::Deterministic,
         ));
 
+        let query_stats_payload_builder = execution_services
+            .query_stats_payload_builder
+            .into_payload_builder(
+                state_manager.clone(),
+                nodes[0].node_id,
+                replica_logger.clone(),
+            );
+        let pocket_query_stats_payload_builder = Arc::new(PocketQueryStatsPayloadBuilderImpl::new(
+            query_stats_payload_builder,
+            nodes.iter().map(|n| n.node_id).collect(),
+        ));
+
         Self {
             subnet_id,
             subnet_type,
@@ -1536,6 +1650,7 @@ impl StateMachine {
             consensus_pool_cache,
             canister_http_pool,
             canister_http_payload_builder,
+            query_stats_payload_builder: pocket_query_stats_payload_builder,
         }
     }
 
