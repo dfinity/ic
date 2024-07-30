@@ -144,6 +144,7 @@ jobs:
   trigger-qualifier-workflow:
     uses: dfinity/dre/.github/workflows/qualify.yaml@main
     with:
-      version: ${{ github.event.workflow_call.head_sha }}
+      version: ${{ env.CI_COMMIT_SHA }}
+      #${{ github.event.workflow_call.head_sha }}
     # secrets:
     #   envPAT: ${{ secrets.envPAT }}
