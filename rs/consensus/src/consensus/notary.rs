@@ -26,7 +26,7 @@
 use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, get_adjusted_notary_delay,
+    find_lowest_ranked_non_disqualified_proposals, get_adjusted_notary_delay,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
 };
@@ -88,7 +88,7 @@ impl Notary {
                 return notarization_shares;
             }
             let height = notarized_height.increment();
-            for proposal in find_lowest_ranked_proposals(pool, height) {
+            for proposal in find_lowest_ranked_non_disqualified_proposals(pool, height) {
                 if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank()) {
                     if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
                         let block = proposal.as_ref();

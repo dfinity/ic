@@ -273,8 +273,11 @@ pub fn get_adjusted_notary_delay_from_settings(
 }
 
 /// Return the validated block proposals with the lowest rank at height `h` that
-/// has not been disqualified, if there are any. Else return `None`.
-pub fn find_lowest_ranked_proposals(pool: &PoolReader<'_>, h: Height) -> Vec<BlockProposal> {
+/// have not been disqualified, if there are any. Else, return an empty Vec.
+pub fn find_lowest_ranked_non_disqualified_proposals(
+    pool: &PoolReader<'_>,
+    h: Height,
+) -> Vec<BlockProposal> {
     let disqualified: BTreeSet<NodeId> = pool
         .pool()
         .validated()
@@ -283,26 +286,21 @@ pub fn find_lowest_ranked_proposals(pool: &PoolReader<'_>, h: Height) -> Vec<Blo
         .map(|proof| proof.signer)
         .collect();
 
-    let (_, best_proposals) = pool
+    let mut best_proposals = vec![];
+    for proposal in pool
         .pool()
         .validated()
         .block_proposal()
         .get_by_height(h)
-        .fold(
-            (None, Vec::new()),
-            |(mut best_rank, mut best_proposals), proposal| {
-                // Only consider non-equivocating blockmakers
-                if !disqualified.contains(&proposal.signature.signer) {
-                    if best_rank.is_none() || best_rank.unwrap() > proposal.rank() {
-                        best_rank = Some(proposal.rank());
-                        best_proposals = vec![proposal];
-                    } else if Some(proposal.rank()) == best_rank {
-                        best_proposals.push(proposal);
-                    }
-                }
-                (best_rank, best_proposals)
-            },
-        );
+        .filter(|proposal| !disqualified.contains(&proposal.signature.signer))
+    {
+        let best_rank = best_proposals.first().map(HasRank::rank);
+        if !best_rank.is_some_and(|rank| rank <= proposal.rank()) {
+            best_proposals = vec![proposal];
+        } else if Some(proposal.rank()) == best_rank {
+            best_proposals.push(proposal);
+        }
+    }
     best_proposals
 }
 
@@ -1014,22 +1012,26 @@ mod tests {
 
             let height = Height::new(1);
 
-            // We fill the validated pool with blocks from every rank and
-            // incrementally disqualify the lowest qualified rank. Each time
-            // we assert that it's ignored by [`find_lowest_ranked_proposals`].
+            // We fill the validated pool with blocks from every rank and incrementally
+            // disqualify the lowest qualified rank. Each time we assert that it's
+            // ignored by [`find_lowest_ranked_non_disqualified_proposals`].
             let f = get_faults_tolerated(SUBNET_SIZE as usize) as u64;
             for i in 0..f + 1 {
                 pool.insert_validated(pool.make_next_block_with_rank(Rank(i)));
             }
 
             assert_matches!(
-                &find_lowest_ranked_proposals(&PoolReader::new(&pool), height)[..],
+                &find_lowest_ranked_non_disqualified_proposals(&PoolReader::new(&pool), height)[..],
                 [b] if b.content.as_ref().rank == Rank(0)
             );
             for i in 0..f {
                 pool.insert_validated(pool.make_equivocation_proof(Rank(i), height));
                 // We disqualify rank i, so lowest ranked proposal must be i + 1
-                match &find_lowest_ranked_proposals(&PoolReader::new(&pool), height)[..] {
+                match &find_lowest_ranked_non_disqualified_proposals(
+                    &PoolReader::new(&pool),
+                    height,
+                )[..]
+                {
                     [proposal] => assert_eq!(proposal.content.as_ref().rank, Rank(i + 1)),
                     _ => panic!("expected exactly one proposal at the given height"),
                 }

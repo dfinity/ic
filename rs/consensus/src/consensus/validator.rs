@@ -14,7 +14,8 @@ use crate::{
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript,
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, get_oldest_idkg_state_registry_version, is_time_to_make_block,
+    find_lowest_ranked_non_disqualified_proposals, get_oldest_idkg_state_registry_version,
+    is_time_to_make_block,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
@@ -604,7 +605,7 @@ fn get_min_validated_ranks(
             let height = Height::from(h);
             (
                 height,
-                find_lowest_ranked_proposals(pool, height)
+                find_lowest_ranked_non_disqualified_proposals(pool, height)
                     .first()
                     .map(|block| block.rank()),
             )
@@ -882,6 +883,7 @@ impl Validator {
         let max_height = notarization_height.increment();
         let range = HeightRange::new(finalized_height.increment(), max_height);
         // Collect the min of validated block proposal ranks in the range.
+        // Ignores disqualified ranks.
         let mut known_qualified_ranks: BTreeMap<Height, Option<Rank>> =
             get_min_validated_ranks(pool_reader, &range);
 

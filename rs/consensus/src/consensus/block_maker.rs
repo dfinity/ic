@@ -9,8 +9,9 @@ use crate::{
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
-    find_lowest_ranked_proposals, get_block_hash_string, get_notarization_delay_settings,
-    get_subnet_record, is_time_to_make_block, membership::Membership, pool_reader::PoolReader,
+    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
+    get_notarization_delay_settings, get_subnet_record, is_time_to_make_block,
+    membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -172,7 +173,7 @@ impl BlockMaker {
         height: Height,
         rank: Rank,
     ) -> bool {
-        if let Some(block) = find_lowest_ranked_proposals(pool, height).first() {
+        if let Some(block) = find_lowest_ranked_non_disqualified_proposals(pool, height).first() {
             return block.rank() < rank;
         }
         false
