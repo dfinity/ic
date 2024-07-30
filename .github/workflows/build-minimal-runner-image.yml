@@ -35,5 +35,5 @@ jobs:
           context: ${{ github.workspace}}${{inputs.context }}
           push: true
           tags: |
-            ghcr.io/${{ inputs.org }}/${{ inputs.image-name }}:${{ env.TAG }}
-            ghcr.io/${{ inputs.org }}/${{ inputs.image-name }}:latest
+            ghcr.io/${{ github.repository_owner }}/minimal-runner-image:${{ env.TAG }}
+            ghcr.io/${{ github.repository_owner }}/minimal-runner-image:latest
