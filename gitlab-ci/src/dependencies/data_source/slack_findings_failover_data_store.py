@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Dict, List, Set
 
 from data_source.findings_failover_data_store import FindingsFailoverDataStore
-from data_source.slack_findings_failover.data import SlackProjectInfo
+from data_source.slack_findings_failover.data import SlackProjectInfo, VULNERABILITY_THRESHOLD_SCORE
 from data_source.slack_findings_failover.parse_format import parse_finding_project
 from data_source.slack_findings_failover.scan_result import SlackScanResult
 from data_source.slack_findings_failover.vuln_info import VulnerabilityInfo, SlackVulnerabilityInfo
@@ -112,6 +112,12 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                 if vuln_by_vuln_id[vuln.id].vulnerability != vuln:
                     raise RuntimeError(f"vulnerability with same id but different values found in current findings: {vuln} {vuln_by_vuln_id[vuln.id].vulnerability}")
                 vuln_by_vuln_id[vuln.id].finding_by_id[finding.id()] = finding
+
+        # remove vulns with too low score
+        vuln_ids = vuln_by_vuln_id.keys()
+        for vid in vuln_ids:
+            if vuln_by_vuln_id[vid].vulnerability.score < VULNERABILITY_THRESHOLD_SCORE:
+                del vuln_by_vuln_id[vid]
 
         slack_vuln_by_vuln_id = SlackVulnerabilityLoader(self.slack_api_by_channel).load_findings()
         for vuln_info in slack_vuln_by_vuln_id.values():

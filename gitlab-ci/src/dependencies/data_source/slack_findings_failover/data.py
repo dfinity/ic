@@ -7,6 +7,7 @@ from model.finding import Finding
 VULNERABILITY_HEADER = "Vulnerability Info"
 VULNERABILITY_MSG_AUTHOR = "U047BLM1V42"
 VULNERABILITY_MSG_FIXED_REACTION = "fixed"
+VULNERABILITY_THRESHOLD_SCORE = 7
 
 
 class SlackVulnerabilityEventType(Enum):

@@ -48,10 +48,16 @@ class TrivyResultParser(abc.ABC):
 
     @staticmethod
     def __score(vulnerability: typing.Dict[str, typing.Any]) -> int:
+        scores = []
         if "CVSS" in vulnerability:
             if "nvd" in vulnerability["CVSS"]:
                 if "V3Score" in vulnerability["CVSS"]["nvd"]:
-                    return round(vulnerability["CVSS"]["nvd"]["V3Score"])
+                    scores.append(round(vulnerability["CVSS"]["nvd"]["V3Score"]))
+            if "redhat" in vulnerability["CVSS"]:
+                if "V3Score" in vulnerability["CVSS"]["redhat"]:
+                    scores.append(round(vulnerability["CVSS"]["redhat"]["V3Score"]))
+        if len(scores) > 0:
+            return max(scores)
         return -1
 
     @staticmethod
