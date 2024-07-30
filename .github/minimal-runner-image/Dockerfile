@@ -10,7 +10,9 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
 USER runner
 
 # Install rustup and cargo
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
-    /bin/bash -c "source $HOME/.cargo/env && rustup default stable"
+ARG RUST_VERSION=1.79.0
+RUN curl --fail https://sh.rustup.rs -sSf \
+    | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
+    rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu
 
 CMD ["/bin/bash"]
