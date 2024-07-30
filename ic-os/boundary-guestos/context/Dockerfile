@@ -25,8 +25,8 @@ WORKDIR /tmp
 
 # Download and verify ic-gateway
 RUN \
-    curl -L -O https://boundary-nodes.s3.eu-central-1.amazonaws.com/ic-gateway_0.1.38_amd64.deb && \
-    echo "5b8fdb769f0692137cd9119b9d865b8f1750edaf  ic-gateway_0.1.38_amd64.deb" | shasum -c
+    curl -L -O https://boundary-nodes.s3.eu-central-1.amazonaws.com/ic-gateway_0.1.39_amd64.deb && \
+    echo "c214dee71b08107388e69fbd01c7cd24a8c72c2b  ic-gateway_0.1.39_amd64.deb" | shasum -c
 
 #
 # Second build stage:
@@ -56,9 +56,9 @@ FROM image-${BUILD_TYPE}
 
 USER root:root
 
-COPY --from=download /tmp/ic-gateway_0.1.38_amd64.deb /tmp/ic-gateway_0.1.38_amd64.deb
-RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.38_amd64.deb && \
-    rm /tmp/ic-gateway_0.1.38_amd64.deb
+COPY --from=download /tmp/ic-gateway_0.1.39_amd64.deb /tmp/ic-gateway_0.1.39_amd64.deb
+RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.39_amd64.deb && \
+    rm /tmp/ic-gateway_0.1.39_amd64.deb
 
 RUN mkdir -p /boot/config \
              /boot/efi \
