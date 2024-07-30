@@ -284,14 +284,16 @@ fn test_compute_metrics() {
         not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
         not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 234000000.0 },
         // Some garbage values, because this test was written before this feature.
-        non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(
-        ),
+        non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+        public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
     };
     assert_eq!(
         NeuronMetrics {
             // Some garbage values, because this test was written before this feature.
-            non_self_authenticating_controller_neuron_subset_metrics:
-                NeuronSubsetMetrics::default(),
+            non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(
+            ),
+            public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+
             ..metrics
         },
         expected_metrics,
@@ -381,10 +383,9 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
     let controller_of_neuron_1 = PrincipalId::new_user_test_id(0x1337_CAFE);
     assert!(!controller_of_neuron_1.is_self_authenticating());
 
-    let controller_of_neuron_2 = PrincipalId::from_str(
-        "ubktz-haghv-fqsdh-23fhi-3urex-bykoz-pvpfd-5rs6w-qpo3t-nf2dv-oae",
-    )
-    .unwrap();
+    let controller_of_neuron_2 =
+        PrincipalId::from_str("ubktz-haghv-fqsdh-23fhi-3urex-bykoz-pvpfd-5rs6w-qpo3t-nf2dv-oae")
+            .unwrap();
     assert!(controller_of_neuron_2.is_self_authenticating());
 
     let controller_of_neuron_3 = PrincipalId::from_str(
@@ -467,7 +468,7 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
         (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
     );
 
-    // Step 1.3: Assemble neurons into collection
+    // Step 1.3: Assemble neurons into collection.
 
     let neuron_store = NeuronStore::new(btreemap! {
         1 => neuron_1,
@@ -486,6 +487,139 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
     // Step 3: Inspect results.
     assert_eq!(
         non_self_authenticating_controller_neuron_subset_metrics,
+        NeuronSubsetMetrics {
+            count: 2,
+
+            total_staked_e8s: 300_000_100,
+            total_staked_maturity_e8s_equivalent: 303_000_101,
+            total_maturity_e8s_equivalent: 330_000_110,
+
+            // Voting power.
+            total_voting_power: voting_power_1 + voting_power_3,
+
+            // Broken out by dissolve delay (rounded down to the nearest multiple of 6
+            // months).
+
+            // Analogous to the vanilla count field.
+            count_buckets: hashmap! {
+                8  => 1, // 1 neuron with 4 year dissolve delay.
+                16 => 1, // 1 neuron with 8 year dissolve delay.
+            },
+
+            // ICP-like resources.
+            staked_e8s_buckets: hashmap! {
+                8  => 300_000_000,
+                16 => 100,
+            },
+            staked_maturity_e8s_equivalent_buckets: hashmap! {
+                8  => 303_000_000,
+                16 => 101,
+            },
+            maturity_e8s_equivalent_buckets: hashmap! {
+                8  => 330_000_000,
+                16 => 110,
+            },
+
+            // Analogous to total_voting_power.
+            voting_power_buckets: hashmap! {
+                8  => voting_power_3,
+                16 => voting_power_1,
+            },
+        },
+    );
+}
+
+/// Tests rollups related to public neurons.
+///
+/// There are three neurons in this test. Two of them are public, and one is
+/// private. Of course, the private one does not contribute to the totals.
+///
+/// (If you are familiar with the cast in the previous test, the neurons here
+/// should look pretty familiar.)
+#[test]
+fn test_compute_neuron_metrics_public_neurons() {
+    // Step 1: Prepare the world.
+
+    let now_seconds = 1718213756;
+
+    // Step 1.2: Construct neurons (as described in the docstring).
+
+    let neuron_1 = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        // Total voting power bonus: 2x * 1.125x = 2.25x
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 8 * ONE_YEAR_SECONDS, // 100% (equivlanetly, 2x) dissolve delay bonus
+            aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
+        },
+        now_seconds - 10 * ONE_YEAR_SECONDS,
+    )
+    .with_cached_neuron_stake_e8s(100)
+    .with_staked_maturity_e8s_equivalent(101)
+    .with_maturity_e8s_equivalent(110)
+    .with_visibility(Some(Visibility::Public))
+    .build();
+
+    let neuron_2 = NeuronBuilder::new(
+        NeuronId { id: 2 },
+        Subaccount::try_from([2_u8; 32].as_ref()).unwrap(),
+        PrincipalId::new_user_test_id(2),
+        // Total voting power bonus: 1.75x
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 6 * ONE_YEAR_SECONDS, // 75% dissolve delay bonus.
+            aging_since_timestamp_seconds: now_seconds,   // no age bonus.
+        },
+        now_seconds - 10 * ONE_YEAR_SECONDS,
+    )
+    .with_cached_neuron_stake_e8s(200_000)
+    .with_staked_maturity_e8s_equivalent(202_000)
+    .with_maturity_e8s_equivalent(220_000)
+    .build();
+
+    let neuron_3 = NeuronBuilder::new(
+        NeuronId { id: 3 },
+        Subaccount::try_from([3_u8; 32].as_ref()).unwrap(),
+        PrincipalId::new_user_test_id(3),
+        // Total voting power bonus: 1.5x * 1.25x = 1.875x
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 4 * ONE_YEAR_SECONDS, // 50% (equivalently, 1.5x) dissolve delay bonus
+            aging_since_timestamp_seconds: now_seconds - 4 * ONE_YEAR_SECONDS, // 25% (equivalently 1.25x) age bonus
+        },
+        now_seconds - 10 * ONE_YEAR_SECONDS,
+    )
+    .with_cached_neuron_stake_e8s(300_000_000)
+    .with_staked_maturity_e8s_equivalent(303_000_000)
+    .with_maturity_e8s_equivalent(330_000_000)
+    .with_visibility(Some(Visibility::Public))
+    .build();
+
+    let voting_power_1 = neuron_1.voting_power(now_seconds);
+    let voting_power_3 = neuron_3.voting_power(now_seconds);
+    assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
+    assert_eq!(
+        voting_power_3,
+        (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
+    );
+
+    // Step 1.3: Assemble neurons into collection.
+
+    let neuron_store = NeuronStore::new(btreemap! {
+        1 => neuron_1,
+        2 => neuron_2,
+        3 => neuron_3,
+    });
+
+    // Step 2: Call code under test.
+
+    let NeuronMetrics {
+        public_neuron_subset_metrics,
+        ..
+    } = neuron_store.compute_neuron_metrics(now_seconds, E8);
+
+    // Step 3: Inspect results.
+    assert_eq!(
+        public_neuron_subset_metrics,
         NeuronSubsetMetrics {
             count: 2,
 

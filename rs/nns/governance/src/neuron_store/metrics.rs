@@ -1,5 +1,8 @@
 use super::NeuronStore;
-use crate::{neuron_store::Neuron, pb::v1::NeuronState, storage::with_stable_neuron_store};
+use crate::{
+    neuron_store::Neuron, pb::v1::NeuronState, pb::v1::Visibility,
+    storage::with_stable_neuron_store,
+};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
@@ -52,14 +55,14 @@ pub(crate) struct NeuronMetrics {
     pub(crate) not_dissolving_neurons_e8s_buckets_seed: HashMap<u64, f64>,
     pub(crate) not_dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
 
-    // Metrics for Neurons with a Non-Self-Authenticating Controller. Much of
-    // the above could also be done like this, but we leave such refactoring as
-    // an exercise to the reader.
+    // Much of the above could also be done like this, but we leave such refactoring as an exercise
+    // to the reader.
     pub(crate) non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics,
+    pub(crate) public_neuron_subset_metrics: NeuronSubsetMetrics,
 }
 
 impl NeuronMetrics {
-    fn increment_non_self_authenticating_controller_metrics(
+    fn increment_non_self_authenticating_controller_neuron_subset_metrics(
         &mut self,
         now_seconds: u64,
         neuron: &Neuron,
@@ -76,6 +79,16 @@ impl NeuronMetrics {
         }
 
         self.non_self_authenticating_controller_neuron_subset_metrics
+            .increment(now_seconds, neuron);
+    }
+
+    fn increment_public_neuron_subset_metrics(&mut self, now_seconds: u64, neuron: &Neuron) {
+        let is_public = neuron.visibility == Some(Visibility::Public);
+        if !is_public {
+            return;
+        }
+
+        self.public_neuron_subset_metrics
             .increment(now_seconds, neuron);
     }
 }
@@ -177,7 +190,11 @@ impl NeuronStore {
         };
 
         for neuron in self.heap_neurons.values() {
-            metrics.increment_non_self_authenticating_controller_metrics(now_seconds, neuron);
+            metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
+                now_seconds,
+                neuron,
+            );
+            metrics.increment_public_neuron_subset_metrics(now_seconds, neuron);
 
             metrics.total_staked_e8s += neuron.minted_stake_e8s();
             metrics.total_staked_maturity_e8s_equivalent +=

@@ -1286,6 +1286,7 @@ pub struct NeuronBuilder {
     not_for_profit: bool,
     joined_community_fund_timestamp_seconds: Option<u64>,
     neuron_type: Option<i32>,
+    visibility: Option<Visibility>,
 
     // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
     #[cfg(test)]
@@ -1325,6 +1326,7 @@ impl NeuronBuilder {
             not_for_profit: false,
             joined_community_fund_timestamp_seconds: None,
             neuron_type: None,
+            visibility: None,
 
             #[cfg(test)]
             neuron_fees_e8s: 0,
@@ -1446,6 +1448,12 @@ impl NeuronBuilder {
         self
     }
 
+    #[cfg(test)] // To satisfy clippy. Feel free to use in production code.
+    pub fn with_visibility(mut self, visibility: Option<Visibility>) -> Self {
+        self.visibility = visibility;
+        self
+    }
+
     pub fn build(self) -> Neuron {
         let NeuronBuilder {
             id,
@@ -1473,6 +1481,7 @@ impl NeuronBuilder {
             staked_maturity_e8s_equivalent,
             #[cfg(test)]
             known_neuron_data,
+            visibility,
         } = self;
 
         let auto_stake_maturity = if auto_stake_maturity {
@@ -1492,7 +1501,6 @@ impl NeuronBuilder {
         let staked_maturity_e8s_equivalent = None;
         #[cfg(not(test))]
         let known_neuron_data = None;
-        let visibility = None; // Behave like before we added visibility.
 
         Neuron {
             id,
