@@ -805,7 +805,7 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
         match item {
             LogVisibility::Controllers => pb::LogVisibility::Controllers,
             LogVisibility::Public => pb::LogVisibility::Public,
-            LogVisibility::AllowedViewers(_) => pb::LogVisibility::AllowedViewers,
+            LogVisibility::AllowedViewers(_) => pb::LogVisibility::EmptyAllowedViewers,
         }
     }
 }
@@ -818,7 +818,7 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
             pb::LogVisibility::Unspecified => Self::default(),
             pb::LogVisibility::Controllers => Self::Controllers,
             pb::LogVisibility::Public => Self::Public,
-            pb::LogVisibility::AllowedViewers => Self::AllowedViewers(Default::default()),
+            pb::LogVisibility::EmptyAllowedViewers => Self::AllowedViewers(Default::default()),
         }
     }
 }
