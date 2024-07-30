@@ -256,7 +256,8 @@ impl TestConsensusPool {
         block.context.registry_version = registry_version;
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
-        BlockProposal::fake(block, node_test_id(0))
+        let signer = self.get_block_maker_by_rank(block.height(), rank);
+        BlockProposal::fake(block, signer)
     }
 
     pub fn make_next_beacon(&self) -> RandomBeacon {
