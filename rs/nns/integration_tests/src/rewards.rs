@@ -77,7 +77,11 @@ fn test_node_provider_rewards() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid = match result.expect("Error making proposal").command.unwrap() {
+        let pid = match result
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             _ => panic!("Invalid response"),
         };
@@ -131,7 +135,11 @@ fn test_node_provider_rewards() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid = match result.expect("Error making proposal").command.unwrap() {
+        let pid = match result
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             _ => panic!("Invalid response"),
         };

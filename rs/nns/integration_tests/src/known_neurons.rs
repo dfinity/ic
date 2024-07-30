@@ -102,7 +102,11 @@ fn test_known_neurons() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid_1 = match result_1.expect("Error making proposal").command.unwrap() {
+        let pid_1 = match result_1
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => {
                 panic!(
@@ -111,7 +115,11 @@ fn test_known_neurons() {
                 )
             }
         };
-        let pid_2 = match result_2.expect("Error making proposal").command.unwrap() {
+        let pid_2 = match result_2
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => {
                 panic!(

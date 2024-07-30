@@ -83,7 +83,11 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid = match result.expect("Error making proposal").command.unwrap() {
+        let pid = match result
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => panic!(
                 "Cannot find proposal id in response. The response is: {:?}",
