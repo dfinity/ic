@@ -29,8 +29,10 @@ use ic_nervous_system_governance::index::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::{AccountIdentifier, Subaccount};
+use std::collections::BTreeSet;
 use std::{
     borrow::Cow,
+    cmp::Ordering,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::{Deref, RangeBounds},
@@ -201,6 +203,41 @@ pub struct NeuronsFundNeuron {
     pub maturity_equivalent_icp_e8s: u64,
     pub controller: PrincipalId,
     pub hotkeys: Vec<PrincipalId>,
+}
+
+impl NeuronsFundNeuron {
+    /// The number of hotkeys for each Neurons' Fund neuron must be limited due to SNS constraints,
+    /// i.e., an SNS cannot represent arbitrarily-big sets of hotkeys using SNS neuron permissions.
+    /// Concretely, this value should be less than or equal
+    /// `MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR` - 2
+    /// because two permissions will be used for the NNS Governance and the NNS neuron controller.
+    const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 4;
+
+    /// Returns up to `MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON` elements out of `hotkeys`.
+    ///
+    /// Priority is given to *self-authenticating* principals; if there are too few such principals,
+    /// the function picks the remaining elements in the order in which they appear in the original
+    /// vector.
+    pub fn pick_most_important_hotkeys(hotkeys: &Vec<PrincipalId>) -> Vec<PrincipalId> {
+        let mut unique_hotkeys = hotkeys
+            .iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        unique_hotkeys.sort_by(|left_hotkey, right_hotkey| {
+            if !left_hotkey.is_self_authenticating() && right_hotkey.is_self_authenticating() {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            }
+        });
+        unique_hotkeys
+            .into_iter()
+            .take(Self::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON)
+            .cloned()
+            .collect()
+    }
 }
 
 enum StorageLocation {
@@ -741,8 +778,7 @@ impl NeuronStore {
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
             id: n.id(),
             controller: n.controller(),
-            // TODO(NNS1-3198): This should be replaced with a call to `n.hotkeys()`
-            hotkeys: Vec::new(),
+            hotkeys: NeuronsFundNeuron::pick_most_important_hotkeys(&n.hot_keys),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
         .into_iter()
