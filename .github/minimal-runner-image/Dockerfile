@@ -9,6 +9,9 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
 
 USER runner
 
+# Set PATH for runner user
+ENV PATH=/ic/bin:/home/runner/.cargo/bin:/home/runner/.local/bin:$PATH
+
 # Install rustup and cargo
 ARG RUST_VERSION=1.79.0
 RUN curl --fail https://sh.rustup.rs -sSf \
