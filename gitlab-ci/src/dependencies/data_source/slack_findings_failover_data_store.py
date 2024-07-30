@@ -114,7 +114,7 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                 vuln_by_vuln_id[vuln.id].finding_by_id[finding.id()] = finding
 
         # remove vulns with too low score
-        vuln_ids = vuln_by_vuln_id.keys()
+        vuln_ids = list(vuln_by_vuln_id.keys())
         for vid in vuln_ids:
             if vuln_by_vuln_id[vid].vulnerability.score < VULNERABILITY_THRESHOLD_SCORE:
                 del vuln_by_vuln_id[vid]
