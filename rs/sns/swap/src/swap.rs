@@ -1823,6 +1823,7 @@ impl Swap {
             let reply = sns_governance_client
                 .claim_swap_neurons(ClaimSwapNeuronsRequest {
                     neuron_parameters: batch,
+                    neuron_recipes: None,
                 })
                 .await;
 
