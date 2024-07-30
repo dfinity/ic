@@ -2018,6 +2018,25 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
+        // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
+        // First try to decode `log_visibility_v2` and if it fails, fallback to `log_visibility`.
+        // This should populate `allowed_viewers` correctly with the list of principals.
+        let log_visibility: LogVisibility = match try_from_option_field(
+            value.log_visibility_v2,
+            "CanisterStateBits::log_visibility_v2",
+        ) {
+            Ok(log_visibility_v2) => log_visibility_v2,
+            Err(_) => pb_canister_state_bits::LogVisibility::try_from(value.log_visibility)
+                .map_err(|_| ProxyDecodeError::ValueOutOfRange {
+                    typ: "LogVisibility",
+                    err: format!(
+                        "Unexpected value of log visibility: {}",
+                        value.log_visibility
+                    ),
+                })?
+                .into(),
+        };
+
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -2084,17 +2103,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility: LogVisibility::from(
-                pb_canister_state_bits::LogVisibility::try_from(value.log_visibility).map_err(
-                    |_| ProxyDecodeError::ValueOutOfRange {
-                        typ: "LogVisibility",
-                        err: format!(
-                            "Unexpected value of log visibility: {}",
-                            value.log_visibility
-                        ),
-                    },
-                )?,
-            ),
+            log_visibility,
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value
