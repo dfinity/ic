@@ -148,7 +148,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b894941f818cfdc7ccc4b9e60fa7e53b5042a2e8567270f9147d5591893373a"
 dependencies = [
  "futures-core",
- "paste 1.0.14",
+ "paste",
  "pin-project-lite",
 ]
 
@@ -1695,7 +1695,7 @@ dependencies = [
  "leb128",
  "num-bigint 0.4.6",
  "num-traits",
- "paste 1.0.14",
+ "paste",
  "pretty 0.12.1",
  "serde",
  "serde_bytes",
@@ -2332,7 +2332,6 @@ dependencies = [
  "reqwest 0.12.5",
  "serde_json",
  "slog",
- "tests",
  "tokio",
  "url",
 ]
@@ -5506,8 +5505,6 @@ dependencies = [
  "ic-types",
  "indoc",
  "instant-acme",
- "jemalloc-ctl",
- "jemallocator",
  "lazy_static",
  "little-loadshedder",
  "maxminddb",
@@ -5534,6 +5531,8 @@ dependencies = [
  "strum 0.26.2",
  "tempfile",
  "thiserror",
+ "tikv-jemalloc-ctl",
+ "tikv-jemallocator",
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-util",
@@ -6860,7 +6859,7 @@ dependencies = [
  "itertools 0.12.0",
  "lazy_static",
  "pairing 0.23.0",
- "paste 1.0.14",
+ "paste",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.10.8",
@@ -6981,7 +6980,7 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-protobuf",
  "ic-types",
- "paste 1.0.14",
+ "paste",
  "proptest",
  "strum 0.26.2",
 ]
@@ -7134,7 +7133,7 @@ dependencies = [
  "lazy_static",
  "num-traits",
  "p256",
- "paste 1.0.14",
+ "paste",
  "rand 0.8.5",
  "serde",
  "serde_bytes",
@@ -8967,7 +8966,7 @@ dependencies = [
  "icrc-ledger-types",
  "mockall",
  "num-traits",
- "paste 1.0.14",
+ "paste",
  "proptest",
  "scopeguard",
  "scraper",
@@ -8993,7 +8992,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "ic-universal-canister",
  "icrc-ledger-types",
- "paste 1.0.14",
+ "paste",
  "proptest",
 ]
 
@@ -10676,8 +10675,6 @@ dependencies = [
  "ic-types",
  "ic-xnet-endpoint",
  "ic-xnet-payload-builder",
- "jemalloc-ctl",
- "jemallocator",
  "libc",
  "nix 0.24.3",
  "num_cpus",
@@ -10691,6 +10688,8 @@ dependencies = [
  "regex",
  "slog",
  "tempfile",
+ "tikv-jemalloc-ctl",
+ "tikv-jemallocator",
  "tokio",
  "tracing",
  "tracing-flame",
@@ -12911,20 +12910,34 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "canister-test",
  "ic-agent",
  "ic-base-types",
+ "ic-canister-client",
+ "ic-config",
+ "ic-http-utils",
+ "ic-management-canister-types",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic_consensus_threshold_sig_system_test_utils",
  "leb128",
  "openssh-keys",
+ "prost",
  "rand 0.8.5",
  "registry-canister",
  "reqwest 0.12.5",
  "rsa",
  "slog",
  "ssh2",
+ "tempfile",
  "tokio",
  "url",
 ]
@@ -12936,6 +12949,7 @@ dependencies = [
  "anyhow",
  "candid",
  "canister-test",
+ "chrono",
  "futures",
  "ic-agent",
  "ic-base-types",
@@ -12956,6 +12970,7 @@ dependencies = [
  "registry-canister",
  "reqwest 0.12.5",
  "serde_cbor",
+ "serde_json",
  "slog",
  "tokio",
  "url",
@@ -13318,7 +13333,6 @@ dependencies = [
  "ic-response-verification",
  "ic-utils 0.37.0",
  "itertools 0.12.0",
- "jemallocator",
  "maxminddb",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -13331,6 +13345,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tikv-jemallocator",
  "tokio",
  "tokio-test",
  "tokio-util",
@@ -13671,38 +13686,6 @@ name = "itoa"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
-
-[[package]]
-name = "jemalloc-ctl"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c502a5ff9dd2924f1ed32ba96e3b65735d837b4bfd978d3161b1702e66aca4b7"
-dependencies = [
- "jemalloc-sys",
- "libc",
- "paste 0.1.18",
-]
-
-[[package]]
-name = "jemalloc-sys"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d3b9f3f5c9b31aa0f5ed3260385ac205db665baa41d49bb8338008ae94ede45"
-dependencies = [
- "cc",
- "fs_extra",
- "libc",
-]
-
-[[package]]
-name = "jemallocator"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43ae63fcfc45e99ab3d1b29a46782ad679e98436c3169d15a167a1108a724b69"
-dependencies = [
- "jemalloc-sys",
- "libc",
-]
 
 [[package]]
 name = "jobserver"
@@ -14232,7 +14215,7 @@ checksum = "41bcbddc10dc229d4119553cc8dc61968cdd134286a4669ba31184f8e9efa442"
 dependencies = [
  "lazy_static",
  "libc",
- "paste 1.0.14",
+ "paste",
 ]
 
 [[package]]
@@ -15035,7 +15018,7 @@ dependencies = [
  "libc",
  "libnss",
  "local-ip-address",
- "paste 1.0.14",
+ "paste",
 ]
 
 [[package]]
@@ -15736,28 +15719,9 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45ca20c77d80be666aef2b45486da86238fabe33e38306bd3118fe4af33fa880"
-dependencies = [
- "paste-impl",
- "proc-macro-hack",
-]
-
-[[package]]
-name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
-
-[[package]]
-name = "paste-impl"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d95a7db200b97ef370c8e6de0088252f7e0dfff7d047a28528e47456c0fc98b6"
-dependencies = [
- "proc-macro-hack",
-]
 
 [[package]]
 name = "pbkdf2"
@@ -19685,6 +19649,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "tikv-jemalloc-ctl"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "619bfed27d807b54f7f776b9430d4f8060e66ee138a28632ca898584d462c31c"
+dependencies = [
+ "libc",
+ "paste",
+ "tikv-jemalloc-sys",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.5.4+5.3.0-patched"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
+]
+
+[[package]]
 name = "time"
 version = "0.3.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21062,7 +21057,7 @@ dependencies = [
  "memoffset 0.9.0",
  "object 0.36.1",
  "once_cell",
- "paste 1.0.14",
+ "paste",
  "postcard",
  "psm",
  "rayon",

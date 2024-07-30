@@ -638,7 +638,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 1);
+            } = dependencies(pool_config, 10);
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -658,6 +658,7 @@ mod tests {
 
             // Height 1 - two block proposals, one notarization, one finalization.
             // We will later instruct purger not to consider this height.
+            pool.insert_validated(pool.make_next_beacon());
             let finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(0));
             let non_finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(1));
             pool.insert_validated(finalized_block_proposal_1.clone());
@@ -665,6 +666,7 @@ mod tests {
             pool.notarize(&finalized_block_proposal_1);
             pool.finalize(&finalized_block_proposal_1);
             // Height 2 - three block proposals, two notarizations, one finalization
+            pool.insert_validated(pool.make_next_beacon());
             let finalized_block_proposal_2 = pool.make_next_block_with_rank(Rank(0));
             let non_finalized_block_proposal_2_0 = pool.make_next_block_with_rank(Rank(1));
             let non_finalized_block_proposal_2_1 = pool.make_next_block_with_rank(Rank(2));
@@ -676,6 +678,7 @@ mod tests {
             pool.finalize(&finalized_block_proposal_2);
             // Height 3 - two block proposals, two notarizations, no finalizations.
             // The purger should not consider this height as it hasn't been finalized yet.
+            pool.insert_validated(pool.make_next_beacon());
             let finalized_block_proposal_3_0 = pool.make_next_block_with_rank(Rank(0));
             let finalized_block_proposal_3_1 = pool.make_next_block_with_rank(Rank(1));
             pool.insert_validated(finalized_block_proposal_3_0.clone());
