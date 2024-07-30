@@ -1219,10 +1219,6 @@ where
     where
         F: Fn(&str) -> Result<T, String>,
     {
-        if !dir.exists() {
-            return Ok(());
-        }
-
         let entries = dir.read_dir().map_err(|err| LayoutError::IoError {
             path: dir.to_path_buf(),
             message: "Failed to read directory".to_string(),
@@ -1260,10 +1256,14 @@ where
         Ok(())
     }
 
-    let mut ids = Vec::new();
-    collect_subdirs_recursive(dir, depth, &transform, &mut ids)?;
-    ids.sort();
-    Ok(ids)
+    if !dir.exists() {
+        return Ok(Vec::default());
+    }
+
+    let mut transformed_subdirs = Vec::new();
+    collect_subdirs_recursive(dir, depth, &transform, &mut transformed_subdirs)?;
+    transformed_subdirs.sort();
+    Ok(transformed_subdirs)
 }
 
 /// Helper for parsing hex representations of canister IDs, used for the
@@ -1445,7 +1445,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
-    /// List of all snapshots in the checkpoint.
+    /// Lists all snapshots in the checkpoint.
     pub fn snapshot_ids(&self) -> Result<Vec<SnapshotId>, LayoutError> {
         let snapshots_dir = self.root.join(SNAPSHOTS_DIR);
         Permissions::check_dir(&snapshots_dir)?;
@@ -2511,6 +2511,8 @@ where
     match thread_pool {
         Some(thread_pool) => {
             let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
+                // We keep directories writeable to make sure we can rename
+                // them or delete the files.
                 std::fs::create_dir_all(&op.dst)
             });
             results.into_iter().try_for_each(identity)?;
@@ -2567,9 +2569,6 @@ fn copy_checkpoint_file(
     }
 
     copy_file_and_set_permissions(log, src, dst, dst_permissions)?;
-
-    // We keep the directory writable though to make sure we can rename
-    // them or delete the files.
 
     match fsync {
         FSync::Yes => sync_path(dst),
