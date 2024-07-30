@@ -323,16 +323,16 @@ enum LogVisibility {
   LOG_VISIBILITY_EMPTY_ALLOWED_VIEWERS = 3;
 }
 
-enum LogVisibilityEnum {
-  LOG_VISIBILITY_ENUM_UNSPECIFIED = 0;
-  LOG_VISIBILITY_ENUM_CONTROLLERS = 1;
-  LOG_VISIBILITY_ENUM_ALLOWED_VIEWERS = 2;
-  LOG_VISIBILITY_ENUM_PUBLIC = 3;
+message LogVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId allowed_viewers = 1;
 }
 
 message LogVisibilityV2 {
-  LogVisibilityEnum log_visibility_enum = 1;
-  repeated types.v1.PrincipalId allowed_viewers = 2;
+  oneof log_visibility {
+    int32 controllers = 1;
+    int32 public = 2;
+    LogVisibilityAllowedViewers allowed_viewers = 3;
+  }
 }
 
 message CanisterLogRecord {
