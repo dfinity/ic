@@ -813,8 +813,7 @@ pub async fn agent_with_client_identity(
     Ok(a)
 }
 
-/// Creates an agent that routes ingress messages to the 
-/// asynchronous V2 call endpoint.
+/// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
 pub async fn agent_using_call_v2_endpoint(
     url: &str,
     addr_mapping: IpAddr,
