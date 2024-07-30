@@ -2,7 +2,6 @@ type Cycles = nat;
 type BlockIndex = nat64;
 type log_visibility = variant {
   controllers;
-  allowed_viewers : vec principal;
   public;
 };
 type CanisterSettings = record {

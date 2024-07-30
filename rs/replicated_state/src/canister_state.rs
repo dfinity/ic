@@ -153,8 +153,8 @@ impl CanisterState {
         &self.system_state.controllers
     }
 
-    pub fn log_visibility(&self) -> &LogVisibility {
-        &self.system_state.log_visibility
+    pub fn log_visibility(&self) -> LogVisibility {
+        self.system_state.log_visibility
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.

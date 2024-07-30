@@ -773,12 +773,6 @@ impl UninstallCodeArgs {
 
 impl Payload<'_> for UninstallCodeArgs {}
 
-/// Maximum number of allowed log viewers (specified in the interface spec).
-const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
-
-pub type BoundedAllowedViewers =
-    BoundedVec<MAX_ALLOWED_LOG_VIEWERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
-
 /// Log visibility for a canister.
 /// ```text
 /// variant {
@@ -793,8 +787,6 @@ pub enum LogVisibility {
     #[serde(rename = "controllers")]
     Controllers,
     #[serde(rename = "allowed_viewers")]
-    AllowedViewers(BoundedAllowedViewers),
-    #[serde(rename = "public")]
     Public,
 }
 
@@ -804,7 +796,6 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
         use pb_canister_state_bits as pb;
         match item {
             LogVisibility::Controllers => pb::LogVisibility::Controllers,
-            LogVisibility::AllowedViewers(_) => pb::LogVisibility::Controllers,
             LogVisibility::Public => pb::LogVisibility::Public,
         }
     }
@@ -830,15 +821,6 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
                 log_visibility_enum: pb::LogVisibilityEnum::Controllers.into(),
                 allowed_viewers: Default::default(),
             },
-            LogVisibility::AllowedViewers(principals) => pb::LogVisibilityV2 {
-                log_visibility_enum: pb::LogVisibilityEnum::AllowedViewers.into(),
-                allowed_viewers: principals
-                    .get()
-                    .iter()
-                    .map(|c| (*c).into())
-                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                    .clone(),
-            },
             LogVisibility::Public => pb::LogVisibilityV2 {
                 log_visibility_enum: pb::LogVisibilityEnum::Public.into(),
                 allowed_viewers: Default::default(),
@@ -858,16 +840,6 @@ impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
             Ok(log_visibility_enum) => match log_visibility_enum {
                 pb::LogVisibilityEnum::Unspecified => Self::default(),
                 pb::LogVisibilityEnum::Controllers => Self::Controllers,
-                pb::LogVisibilityEnum::AllowedViewers => {
-                    Self::AllowedViewers(BoundedAllowedViewers::new(
-                        item.allowed_viewers
-                            .iter()
-                            .map(|p| {
-                                PrincipalId::try_from(p.raw.clone()).expect("Invalid PrincipalId")
-                            })
-                            .collect(),
-                    ))
-                }
                 pb::LogVisibilityEnum::Public => Self::Public,
             },
         }
@@ -930,8 +902,8 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> &LogVisibility {
-        &self.log_visibility
+    pub fn log_visibility(&self) -> LogVisibility {
+        self.log_visibility
     }
 }
 

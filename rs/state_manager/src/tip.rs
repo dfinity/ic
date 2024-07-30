@@ -897,7 +897,7 @@ fn serialize_canister_to_tip(
                 .metadata()
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
-            log_visibility: canister_state.system_state.log_visibility.clone(),
+            log_visibility: canister_state.system_state.log_visibility,
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
