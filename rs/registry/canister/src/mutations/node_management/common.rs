@@ -1,5 +1,4 @@
-use std::default::Default;
-use std::str::FromStr;
+use std::{default::Default, str::FromStr};
 
 use crate::{common::LOG_PREFIX, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
@@ -12,8 +11,11 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
     FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
 };
-use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
-use ic_registry_transport::{delete, insert, update};
+use ic_registry_transport::{
+    delete, insert,
+    pb::v1::{RegistryMutation, RegistryValue},
+    update,
+};
 use ic_types::crypto::KeyPurpose;
 use prost::Message;
 use std::convert::TryFrom;
@@ -224,18 +226,20 @@ fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
 ) -> Vec<(String, T)> {
+    let prefix_bytes = prefix.as_bytes();
+    let start = prefix_bytes.to_vec();
+
     registry
         .store
-        .iter()
-        // Get the most recent value for all keys that start with this prefix...
-        .filter(|(k, _)| k.starts_with(prefix.as_bytes()))
+        .range(start..)
+        .take_while(|(k, _)| k.starts_with(prefix_bytes))
         .map(|(k, v)| (k, v.back().unwrap()))
         // ...skipping any that have been deleted...
         .filter(|(_, v)| !v.deletion_marker)
         // ...and repack them into a tuple of (ID, value).
         .map(|(k, v)| {
             let id = k
-                .strip_prefix(prefix.as_bytes())
+                .strip_prefix(prefix_bytes)
                 .and_then(|v| std::str::from_utf8(v).ok())
                 .unwrap()
                 .to_string();

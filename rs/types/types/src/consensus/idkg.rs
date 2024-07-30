@@ -1,4 +1,4 @@
-//! Defines types used for threshold ECDSA key generation.
+//! Defines types used for threshold master key generation.
 
 use crate::artifact::{IdentifiableArtifact, PbArtifact};
 pub use crate::consensus::idkg::common::{
@@ -228,8 +228,8 @@ impl IDkgPayload {
     /// to require ongoing signature requests to finish before we can let nodes
     /// move off a subnet.
     ///
-    /// Note that we do not consider available quadruples here because it would
-    /// prevent nodes from leaving when the quadruples are not consumed.
+    /// Note that we do not consider available pre-signatures here because it would
+    /// prevent nodes from leaving when the pre-signatures are not consumed.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> Option<RegistryVersion> {
         // Both current key transcript and next_in_creation are considered.
         let idkg_transcripts = &self.idkg_transcripts;
@@ -362,9 +362,9 @@ impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MasterKeyTranscript {
-    /// The ECDSA key transcript used for the current interval.
+    /// The key transcript used for the current interval.
     pub current: Option<UnmaskedTranscriptWithAttributes>,
-    /// Progress of creating the next ECDSA key transcript.
+    /// Progress of creating the next key transcript.
     pub next_in_creation: KeyTranscriptCreation,
     /// Master key Id allowing different signature schemes.
     pub master_key_id: MasterPublicKeyId,
@@ -533,7 +533,7 @@ impl TryFrom<&pb::MasterKeyTranscript> for MasterKeyTranscript {
     }
 }
 
-/// The creation of an ecdsa key transcript goes through one of the three paths below:
+/// The creation of a master key transcript goes through one of the three paths below:
 /// 1. Begin -> RandomTranscript -> ReshareOfMasked -> Created
 /// 2. Begin -> ReshareOfUnmasked -> Created
 /// 3. XnetReshareOfUnmaskedParams -> Created (xnet bootstrapping from initial dealings)
@@ -745,7 +745,7 @@ impl IDkgUIDGenerator {
     }
 }
 
-/// The ECDSA artifact.
+/// The IDKG artifact.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgMessage {
     Dealing(SignedIDkgDealing),
@@ -1787,8 +1787,6 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
             ongoing_xnet_reshares,
             xnet_reshare_agreements,
             key_transcripts,
-            // Kept for backwards compatibility
-            generalized_pre_signatures: true,
         }
     }
 }
@@ -1934,7 +1932,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
 ///
 /// Processing/updates for a particular entity like TranscriptId is scattered across
 /// several paths, called from different contexts (e.g)
-///     - IDkgPreSigner builds the dealings/support shares (ECDSA component context),
+///     - IDkgPreSigner builds the dealings/support shares (IDKG component context),
 ///       across several calls to on_state_change()
 ///     - IDkgTranscriptBuilder builds the verified dealings/transcripts (payload builder context),
 ///       across possibly several calls to get_completed_transcript()
@@ -1978,7 +1976,7 @@ pub trait IDkgStats: Send + Sync {
     fn record_sig_share_aggregation(&self, request_id: &RequestId, duration: Duration);
 }
 
-/// IDkgObject should be implemented by the ECDSA message types
+/// IDkgObject should be implemented by the IDKG message types
 /// (e.g) Dealing, DealingSupport, etc
 pub trait IDkgObject: CryptoHashable + Clone + Sized {
     /// Returns the artifact prefix.

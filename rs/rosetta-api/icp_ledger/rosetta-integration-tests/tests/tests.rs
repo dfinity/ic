@@ -6,7 +6,8 @@ use ic_icrc_rosetta_client::RosettaClient;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_rosetta_api::convert;
 use ic_rosetta_api::models::{
-    NetworkIdentifier, NetworkListResponse, NetworkStatusResponse, PartialBlockIdentifier,
+    BlockIdentifier, CallResponse, NetworkIdentifier, NetworkListResponse, NetworkStatusResponse,
+    PartialBlockIdentifier, QueryBlockRangeRequest, QueryBlockRangeResponse, TransactionIdentifier,
 };
 use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
 use ic_sender_canister_lib::{SendArg, SendResult};
@@ -16,8 +17,10 @@ use icp_ledger::{
 use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use num_traits::cast::ToPrimitive;
 use pocket_ic::WasmResult;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::thread::sleep;
@@ -109,6 +112,17 @@ impl RosettaTestingClient {
             .unwrap_or_else(|| panic!("Block with id {id:?} not found"))
     }
 
+    async fn block_transaction(
+        &self,
+        block_id: BlockIdentifier,
+        tx_id: TransactionIdentifier,
+    ) -> Result<rosetta_core::response_types::BlockTransactionResponse, Error> {
+        let network = self.network_or_panic().await;
+        self.rosetta_client
+            .block_transaction(network, block_id.clone(), tx_id.clone())
+            .await
+    }
+
     async fn network_list_or_panic(&self) -> NetworkListResponse {
         self.rosetta_client
             .network_list()
@@ -159,6 +173,14 @@ impl RosettaTestingClient {
             sleep(DURATION_BETWEEN_ATTEMPTS);
             network_status = self.network_status_or_panic().await;
         }
+    }
+
+    pub async fn call_or_panic(&self, method: String, arg: ObjectMap) -> CallResponse {
+        let network_identifier = self.network_or_panic().await;
+        self.rosetta_client
+            .call(network_identifier, method, arg)
+            .await
+            .expect("Unable to call method")
     }
 }
 
@@ -594,4 +616,354 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
             .unwrap(),
         );
     }
+}
+
+#[tokio::test]
+async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
+    let env = TestEnv::setup_or_panic(true).await;
+
+    // Rosetta block 0 contains transaction 0
+    env.pocket_ic.stop_progress().await;
+
+    // Create block 1 and Rosetta Block 1
+    env.icrc1_transfers(vec![
+        // create block 1 and Rosetta Block 1
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(1u64),
+        },
+        // Create block 2 with the same transaction as block 1.
+        // This must create a new Rosetta Block at index 2
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(1u64),
+        },
+        // Create block 3 with a different transaction than the one in block 2.
+        // block 3 will therefore go inside Rosetta Block 2
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(2u64),
+        },
+        // Create block 4 with the same transaction as block 2.
+        // This must create a new Rosetta Block at index 3
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(1u64),
+        },
+    ])
+    .await;
+
+    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let rosetta_block1_expected_time_millis =
+        rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
+
+    env.pocket_ic.auto_progress().await;
+
+    env.rosetta.wait_or_panic_until_synced_up_to(4).await;
+
+    // check block 1
+    let block0 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await;
+    let block1 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(1),
+            hash: None,
+        })
+        .await;
+    assert_eq!(block1.block_identifier.index, 1);
+    assert_eq!(block1.parent_block_identifier, block0.block_identifier);
+    assert_eq!(block1.timestamp, rosetta_block1_expected_time_millis);
+    assert_eq!(block1.metadata, None);
+    assert_eq!(
+        block1.transactions,
+        vec![convert::to_rosetta_core_transaction(
+            /* block_index: */ 1,
+            Transaction {
+                operation: Operation::Transfer {
+                    from: AccountIdentifier::new(env.sender_id.into(), None),
+                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                    amount: Tokens::from_e8s(1u64),
+                    fee: DEFAULT_TRANSFER_FEE,
+                    spender: None,
+                },
+                memo: Memo(0),
+                created_at_time: None,
+                icrc1_memo: None,
+            },
+            rosetta_block1_expected_time_ts,
+            "ICP"
+        )
+        .unwrap()]
+    );
+
+    // check block 2
+    let block2 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(2),
+            hash: None,
+        })
+        .await;
+    assert_eq!(block2.block_identifier.index, 2);
+    assert_eq!(block2.parent_block_identifier, block1.block_identifier);
+    assert_eq!(block2.timestamp, rosetta_block1_expected_time_millis);
+    assert_eq!(block2.metadata, None);
+    assert_eq!(
+        block2.transactions,
+        vec![
+            convert::to_rosetta_core_transaction(
+                /* block_index: */ 2,
+                Transaction {
+                    operation: Operation::Transfer {
+                        from: AccountIdentifier::new(env.sender_id.into(), None),
+                        to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                        amount: Tokens::from_e8s(1u64),
+                        fee: DEFAULT_TRANSFER_FEE,
+                        spender: None,
+                    },
+                    memo: Memo(0),
+                    created_at_time: None,
+                    icrc1_memo: None,
+                },
+                rosetta_block1_expected_time_ts,
+                "ICP"
+            )
+            .unwrap(),
+            convert::to_rosetta_core_transaction(
+                /* block_index: */ 3,
+                Transaction {
+                    operation: Operation::Transfer {
+                        from: AccountIdentifier::new(env.sender_id.into(), None),
+                        to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                        amount: Tokens::from_e8s(2u64),
+                        fee: DEFAULT_TRANSFER_FEE,
+                        spender: None,
+                    },
+                    memo: Memo(0),
+                    created_at_time: None,
+                    icrc1_memo: None,
+                },
+                rosetta_block1_expected_time_ts,
+                "ICP"
+            )
+            .unwrap()
+        ]
+    );
+
+    // check block 3
+    let block3 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(3),
+            hash: None,
+        })
+        .await;
+    assert_eq!(block3.block_identifier.index, 3);
+    assert_eq!(block3.parent_block_identifier, block2.block_identifier);
+    assert_eq!(block3.timestamp, rosetta_block1_expected_time_millis);
+    assert_eq!(block3.metadata, None);
+    assert_eq!(
+        block3.transactions,
+        vec![convert::to_rosetta_core_transaction(
+            /* block_index: */ 4,
+            Transaction {
+                operation: Operation::Transfer {
+                    from: AccountIdentifier::new(env.sender_id.into(), None),
+                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                    amount: Tokens::from_e8s(1u64),
+                    fee: DEFAULT_TRANSFER_FEE,
+                    spender: None,
+                },
+                memo: Memo(0),
+                created_at_time: None,
+                icrc1_memo: None,
+            },
+            rosetta_block1_expected_time_ts,
+            "ICP"
+        )
+        .unwrap()]
+    );
+}
+
+#[tokio::test]
+async fn test_query_block_range() {
+    let env = TestEnv::setup_or_panic(false).await;
+    env.pocket_ic.auto_progress().await;
+
+    let minter = test_identity()
+        .sender()
+        .expect("test identity sender not found!");
+    let mut block_indices: Vec<Nat> = vec![];
+    for i in 0..100u64 {
+        let mint_arg = TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(i),
+        };
+        let arg = Encode!(&mint_arg).unwrap();
+        block_indices.push(
+            env.pocket_ic
+                .update_call(env.ledger_id, minter, "icrc1_transfer", arg)
+                .await
+                .expect("Unable to submit call")
+                .unwrap_as::<Result<BlockIndex, TransferError>>()
+                .expect("Error performing icrc1_transfer"),
+        );
+    }
+
+    env.rosetta
+        .wait_or_panic_until_synced_up_to(block_indices.last().unwrap().0.to_u64().unwrap())
+        .await;
+
+    let response: QueryBlockRangeResponse = env
+        .rosetta
+        .call_or_panic(
+            "query_block_range".to_owned(),
+            ObjectMap::try_from(QueryBlockRangeRequest {
+                highest_block_index: 100,
+                number_of_blocks: 10,
+            })
+            .unwrap(),
+        )
+        .await
+        .result
+        .try_into()
+        .unwrap();
+
+    assert_eq!(response.blocks.len(), 10);
+}
+
+#[tokio::test]
+async fn test_block_transaction() {
+    let env = TestEnv::setup_or_panic(true).await;
+    env.pocket_ic.stop_progress().await;
+    assert!(env
+        .rosetta
+        .block_transaction(
+            BlockIdentifier {
+                index: 100,
+                hash: "INVALID_HASH".to_owned()
+            },
+            TransactionIdentifier {
+                hash: "INVALID_TX_HASH".to_owned()
+            }
+        )
+        .await
+        .unwrap_err()
+        .0
+        .message
+        .contains("Block not found"));
+
+    // We are creating a second rosetta block that contains 4 transactions with each having an unique tx hash
+    env.icrc1_transfers(vec![
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: Some(1.into()),
+            amount: Nat::from(1u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: Some(2.into()),
+            amount: Nat::from(1u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            fee: None,
+            created_at_time: None,
+            memo: Some(3.into()),
+            amount: Nat::from(2u64),
+        },
+        TransferArg {
+            from_subaccount: None,
+            to: Account::from(Principal::anonymous()),
+            memo: Some(4.into()),
+            created_at_time: None,
+            fee: None,
+            amount: Nat::from(1u64),
+        },
+    ])
+    .await;
+    env.pocket_ic.auto_progress().await;
+    env.rosetta.wait_or_panic_until_synced_up_to(4).await;
+
+    // We try to fetch the RosettaBlock we just created earlier
+    let rosetta_core::objects::Block {
+        block_identifier,
+        transactions,
+        ..
+    } = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(1),
+            hash: None,
+        })
+        .await;
+
+    let transaction = env
+        .rosetta
+        .block_transaction(
+            block_identifier.clone(),
+            transactions[0].transaction_identifier.clone(),
+        )
+        .await
+        .unwrap()
+        .transaction;
+    assert!(transaction == transactions[0]);
+
+    let transaction = env
+        .rosetta
+        .block_transaction(
+            block_identifier.clone(),
+            transactions[1].transaction_identifier.clone(),
+        )
+        .await
+        .unwrap()
+        .transaction;
+    assert!(transaction == transactions[1]);
+
+    assert!(env
+        .rosetta
+        .block_transaction(
+            block_identifier,
+            TransactionIdentifier {
+                hash: "INVALID_TX_HASH".to_owned()
+            }
+        )
+        .await
+        .unwrap_err()
+        .0
+        .message
+        .contains("Invalid transaction id"));
 }

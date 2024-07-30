@@ -45,7 +45,7 @@ pub(crate) const DEFAULT_MIN_SANDBOX_COUNT: usize = 500;
 
 /// Sandbox process eviction ensures that the number of sandbox processes is
 /// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 2_000;
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 1_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
@@ -100,9 +100,6 @@ pub struct FeatureFlags {
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
     pub wasm_native_stable_memory: FlagStatus,
-    // TODO(IC-272): remove this flag once the feature is enabled by default.
-    /// Indicates whether canister logging feature is enabled or not.
-    pub canister_logging: FlagStatus,
     /// Indicates whether the support for 64 bit main memory is enabled
     pub wasm64: FlagStatus,
     // TODO(IC-1674): remove this flag once the feature is enabled by default.
@@ -116,7 +113,6 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
-            canister_logging: FlagStatus::Enabled,
             wasm64: FlagStatus::Disabled,
             best_effort_responses: FlagStatus::Disabled,
         }

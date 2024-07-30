@@ -36,7 +36,7 @@ icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-sha3 = "0.9.1"
+sha3 = { workspace = true }
 
 [dev-dependencies]
 ic-nns-gtc-protobuf-generator = { path = "./protobuf_generator" }

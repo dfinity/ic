@@ -1,13 +1,15 @@
 use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
 use crate::rosetta_block::RosettaBlock;
 use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
+use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
-use rusqlite::{named_params, params, OptionalExtension, Row};
+use rusqlite::{named_params, params, CachedStatement, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
@@ -26,7 +28,7 @@ mod database_access {
     };
     use ic_ledger_hash_of::HashOf;
     use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{named_params, params, types::Null, Connection, Error, Statement};
+    use rusqlite::{named_params, params, types::Null, Connection, Statement};
 
     pub fn push_hashed_block(
         con: &mut Connection,
@@ -276,15 +278,17 @@ mod database_access {
         }
     }
 
-    fn read_hashed_block(
-        con: &mut Connection,
-        command: &str,
-    ) -> Result<Vec<Result<HashedBlock, Error>>, BlockStoreError> {
-        let mut stmt = con.prepare(command).map_err(|e| e.to_string())?;
-        let block = stmt
-            .query_map(params![], |row| HashedBlock::try_from(row))
-            .map_err(|e| e.to_string())?;
-        Ok(block.collect())
+    pub fn read_hashed_blocks<P>(
+        stmt: &mut Statement,
+        params: P,
+    ) -> Result<Vec<HashedBlock>, BlockStoreError>
+    where
+        P: rusqlite::Params,
+    {
+        stmt.query_map(params, |row| HashedBlock::try_from(row))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<HashedBlock>, rusqlite::Error>>()
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
     }
 
     pub fn get_transaction_hash(
@@ -356,22 +360,21 @@ mod database_access {
         con: &mut Connection,
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = match verified {
+        let mut stmt = con.prepare_cached(&match verified {
             Some(verified) => format!("SELECT hash, block, parent_hash, idx, timestamp from blocks WHERE verified = {} ORDER BY idx ASC Limit 2",verified),
             None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx ASC Limit 2".to_string()
-        };
-        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
         match blocks.next() {
             Some(genesis_block) => match blocks.next() {
                 Some(first_block) => {
-                    let block = first_block.map_err(|e| BlockStoreError::Other(e.to_string()))?;
-                    if block.index > 1 {
-                        Ok(block)
+                    if first_block.index > 1 {
+                        Ok(first_block)
                     } else {
-                        Ok(genesis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
+                        Ok(genesis_block)
                     }
                 }
-                None => Ok(genesis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?),
+                None => Ok(genesis_block),
             },
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
@@ -382,15 +385,13 @@ mod database_access {
         con: &mut Connection,
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = match verified {
+        let mut stmt = con.prepare_cached(&match verified {
             Some(verified) => format!("SELECT hash, block, parent_hash, idx, timestamp from blocks WHERE verified = {} ORDER BY idx DESC Limit 1",verified),
             None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx DESC Limit 1".to_string()
-        };
-        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
         match blocks.next() {
-            Some(first_block) => {
-                Ok(first_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
-            }
+            Some(first_block) => Ok(first_block),
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
@@ -1172,29 +1173,14 @@ impl Blocks {
         if range.end > range.start
             && database_access::contains_block(&mut connection, &range.start).unwrap_or(false)
         {
-            let mut stmt = connection
-                .prepare(
-                    "SELECT hash, block, parent_hash, idx, timestamp FROM blocks WHERE idx >= ? AND idx < ?",
-                )
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-            let mut blocks = stmt
-                .query_map(params![range.start, range.end], |row| {
-                    Ok(HashedBlock {
-                        hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                        block: row.get(1).map(EncodedBlock::from_vec)?,
-                        parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                            opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                        })?,
-                        index: row.get(3)?,
-                        timestamp: iso8601_to_timestamp(row.get(4)?),
-                    })
-                })
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-            let mut res = Vec::new();
-            while let Some(hb) = blocks.next().map(|block| block.unwrap()) {
-                res.push(hb)
-            }
-            Ok(res)
+            let mut stmt = connection.prepare_cached(r#"SELECT hash, block, parent_hash, idx, timestamp FROM blocks WHERE idx >= :start AND idx < :end"#).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            database_access::read_hashed_blocks(
+                &mut stmt,
+                named_params! {
+                    ":start":range.start,
+                    ":end":range.end
+                },
+            )
         } else {
             Err(BlockStoreError::Other(format!(
                 "Given block range {}-{} is not allowed or not found in the block store",
@@ -1360,7 +1346,7 @@ impl Blocks {
     fn get_next_rosetta_block_indices(
         &self,
     ) -> Result<Option<RosettaBlockIndices>, BlockStoreError> {
-        let connection = self
+        let connection: std::sync::MutexGuard<rusqlite::Connection> = self
             .connection
             .lock()
             .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
@@ -1402,56 +1388,156 @@ impl Blocks {
                 }),
         };
 
-        let mut num_rosetta_blocks_created = 0;
-        let mut block_indices = next_block_indices.first_block_index..=certified_tip_index;
-        let block_index = match block_indices.next() {
-            None => return Ok(()),
-            Some(index) => index,
-        };
+        // Keep track of how many rosetta blocks are being created
+        let num_rosetta_blocks_created = RefCell::new(0);
+
+        // We do not want duplicate transactions that were created in the same consensus round to be added to the same rosetta block. For this we keep track of the already added tx hashes for each rosetta block
+        // We store all transactions for a single rosetta block in the values of this hashmap
+        let icp_transactions_per_rosetta_block = RefCell::new(HashMap::new());
+
+        // A list of all icp block indices that we need to convert to rosetta blocks
+        let block_indices = next_block_indices.first_block_index..=certified_tip_index;
+
+        // We fetch the first icp block to extract the timestamp, the first icp transaction and the first parent_hash of the first rosetta block created
+        let current_rosetta_block_index = RefCell::new(next_block_indices.rosetta_block_index);
         let Block {
             parent_hash,
             timestamp,
-            transaction,
-        } = Block::decode(self.get_hashed_block(&block_index)?.block)?;
+            ..
+        } = Block::decode(
+            self.get_hashed_block(&next_block_indices.first_block_index)?
+                .block,
+        )?;
 
-        let mut rosetta_block = RosettaBlock {
-            index: next_block_indices.rosetta_block_index,
-            parent_hash: parent_hash.map(|h| h.into_bytes()),
-            timestamp,
-            transactions: [(block_index, transaction)].into_iter().collect(),
-        };
-        for block_index in block_indices {
-            let block = self.get_hashed_block(&block_index)?;
-            let transaction = Block::decode(block.block)?.transaction;
-            // TODO: check for duplicates too and create new rosetta block if there are
-            if block.timestamp == rosetta_block.timestamp {
-                rosetta_block.transactions.insert(block_index, transaction);
-            } else {
-                let next_rosetta_block_index = rosetta_block.index + 1;
-                let parent_hash = rosetta_block.hash();
-                num_rosetta_blocks_created += 1;
-                self.store_rosetta_block(rosetta_block)?;
-                rosetta_block = RosettaBlock {
-                    index: next_rosetta_block_index,
-                    parent_hash: Some(parent_hash),
-                    timestamp: block.timestamp,
-                    transactions: [(block_index, transaction)].into_iter().collect(),
-                }
-            }
-        }
-        num_rosetta_blocks_created += 1;
-        let last_rosetta_block_index = rosetta_block.index;
-        self.store_rosetta_block(rosetta_block)?;
+        let current_rosetta_block_parent_hash = RefCell::new(parent_hash);
+        let current_rosetta_block_timestamp = RefCell::new(timestamp);
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
 
-        info!(
-            "Created {num_rosetta_blocks_created} Rosetta Block{}. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {last_rosetta_block_index}",
-            if num_rosetta_blocks_created > 1 {
-                "s"
-            } else {
-                ""
-            },
-            next_block_indices.first_block_index..=certified_tip_index,
+        let sql_tx = connection
+            .transaction()
+            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
+
+        let mut insert_rosetta_block_stmt = sql_tx
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
+                VALUES (:idx, :hash, :timestamp)"#,
+            )
+            .unwrap();
+        let mut insert_rosetta_block_transaction_stmt = sql_tx
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
+        VALUES (:idx, :block_idx)"#,
+            )
+            .unwrap();
+
+        let mut select_hashed_blocks_stmt = sql_tx
+            .prepare_cached(
+                r#"SELECT hash, block, parent_hash, idx, timestamp
+           FROM blocks WHERE idx >= :start AND idx <= :end"#,
+            )
+            .unwrap();
+
+        // We cannot iterate over all blocks at once so we batch them into 100000 blocks per iteration round.
+        // This way we only load 100000 blocks into memory at a time
+        const ROSETTA_BLOCKS_PROCESSED_PER_ROUND: u64 = 100000;
+        let mut hashed_block_idx_interval = std::ops::RangeInclusive::new(
+            *block_indices.start(),
+            std::cmp::min(
+                *block_indices.end(),
+                block_indices
+                    .start()
+                    .saturating_add(ROSETTA_BLOCKS_PROCESSED_PER_ROUND),
+            ),
         );
+
+        // A helper function to store the current rosetta block and reset the fields
+        let mut flush_transactions =
+            |current_icp_block_timestamp: TimeStamp| -> Result<(), BlockStoreError> {
+                // We want the transactions to be sorted by their icp block index
+                let mut transactions: Vec<(u64, Transaction)> = icp_transactions_per_rosetta_block
+                    .take()
+                    .into_values()
+                    .collect();
+                transactions.sort_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
+                let rosetta_block = RosettaBlock {
+                    index: *current_rosetta_block_index.borrow(),
+                    parent_hash: current_rosetta_block_parent_hash
+                        .borrow()
+                        .map(|hash| hash.into_bytes()),
+                    timestamp: *current_rosetta_block_timestamp.borrow(),
+                    transactions: transactions.into_iter().collect(),
+                };
+
+                // Set the fields to the next rosetta block
+                *current_rosetta_block_index.borrow_mut() += 1;
+                *num_rosetta_blocks_created.borrow_mut() += 1;
+                current_rosetta_block_parent_hash.replace(Some(HashOf::new(rosetta_block.hash())));
+                current_rosetta_block_timestamp.replace(current_icp_block_timestamp);
+                icp_transactions_per_rosetta_block.replace(HashMap::new());
+
+                self.store_rosetta_block(
+                    rosetta_block,
+                    &mut insert_rosetta_block_stmt,
+                    &mut insert_rosetta_block_transaction_stmt,
+                )?;
+                Ok(())
+            };
+
+        loop {
+            // We extract the icp block indices from the current interval
+            let hashed_blocks = database_access::read_hashed_blocks(
+                &mut select_hashed_blocks_stmt,
+                named_params! {
+                    ":start":hashed_block_idx_interval.start(),
+                    ":end":hashed_block_idx_interval.end()
+                },
+            )?;
+
+            for block in hashed_blocks.into_iter() {
+                let transaction = Block::decode(block.block)?.transaction;
+                let transaction_hash = transaction.hash();
+                if icp_transactions_per_rosetta_block
+                    .borrow()
+                    .contains_key(&transaction_hash)
+                    || block.timestamp != *current_rosetta_block_timestamp.borrow()
+                {
+                    // The break out criteria for when a rosetta block should be created is either when there are multiple transactions with the same transaction hash that were produced in the same consensus round (i.e. same block timestamp) or if the block timestamp changes (i.e. a new consensus round has started)
+                    flush_transactions(block.timestamp)?;
+                }
+
+                (*icp_transactions_per_rosetta_block.borrow_mut())
+                    .insert(transaction_hash, (block.index, transaction));
+            }
+
+            if *hashed_block_idx_interval.end() == *block_indices.end() {
+                // It is possible that we have reached the end of the block indices but still have transactions that need to be added to a rosetta block
+                flush_transactions(current_rosetta_block_timestamp.clone().into_inner())?;
+                break;
+            }
+
+            // We update the interval to the next batch of blocks
+            hashed_block_idx_interval = std::ops::RangeInclusive::new(
+                hashed_block_idx_interval.end().saturating_add(1),
+                std::cmp::min(
+                    hashed_block_idx_interval
+                        .end()
+                        .saturating_add(ROSETTA_BLOCKS_PROCESSED_PER_ROUND),
+                    *block_indices.end(),
+                ),
+            );
+        }
+
+        // We need to free up the prepared statements before we commit the transaction
+        drop(insert_rosetta_block_stmt);
+        drop(insert_rosetta_block_transaction_stmt);
+        drop(select_hashed_blocks_stmt);
+        sql_tx.commit().unwrap();
+
+        tracing::debug!(
+           "Created {} Rosetta Blocks. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {}",num_rosetta_blocks_created.into_inner(), next_block_indices.first_block_index..=certified_tip_index,current_rosetta_block_index.into_inner().saturating_sub(1));
 
         Ok(())
     }
@@ -1459,25 +1545,12 @@ impl Blocks {
     pub(crate) fn store_rosetta_block(
         &self,
         rosetta_block: RosettaBlock,
+        insert_rosetta_block_stmt: &mut CachedStatement,
+        insert_rosetta_block_transaction_stmt: &mut CachedStatement,
     ) -> Result<(), BlockStoreError> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-
-        let transaction = connection
-            .transaction()
-            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
-
         // Store the metainfo of the rosetta block
         {
-            let mut statement = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
-                                VALUES (:idx, :hash, :timestamp)"#,
-                )
-                .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
-            let _ = statement
+            let _ = insert_rosetta_block_stmt
                 .execute(named_params! {
                     ":idx": rosetta_block.index,
                     ":hash": rosetta_block.hash(),
@@ -1488,16 +1561,8 @@ impl Blocks {
 
         // Store the blocks that form this rosetta block
         {
-            let mut statement = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
-                    VALUES (:idx, :block_idx)"#,
-                )
-                .map_err(|e| {
-                    format!("Unable to insert into rosetta_blocks_transactions table: {e:?}")
-                })?;
             for block_index in rosetta_block.transactions.keys() {
-                let _ = statement
+                let _ = insert_rosetta_block_transaction_stmt
                     .execute(named_params! {
                         ":idx": rosetta_block.index,
                         ":block_idx": block_index,
@@ -1508,9 +1573,6 @@ impl Blocks {
             }
         }
 
-        transaction.commit().map_err(|e| {
-            format!("Error while finishing the transaction to store a rosetta block: {e:?}")
-        })?;
         Ok(())
     }
 
@@ -1588,6 +1650,13 @@ impl Blocks {
             transactions.insert(block_index, transaction);
         }
         Ok(transactions)
+    }
+
+    pub fn contains_block(&self, block_idx: &BlockIndex) -> Result<bool, BlockStoreError> {
+        let mut connection = self.connection.lock().map_err(|e| {
+            BlockStoreError::Other(format!("Unable to acquire the connection mutex: {e:?}"))
+        })?;
+        database_access::contains_block(&mut connection, block_idx)
     }
 }
 
@@ -1670,7 +1739,34 @@ mod tests {
         let mut blocks = Blocks::new_in_memory(true).unwrap();
         blocks.push(&hashed_block0).unwrap();
         blocks.push(&hashed_block1).unwrap();
-        blocks.store_rosetta_block(rosetta_block.clone()).unwrap();
+        let mut connection = blocks.connection.lock().unwrap();
+        let transaction = connection.transaction().unwrap();
+
+        let mut insert_rosetta_block_stmt = transaction
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
+        VALUES (:idx, :hash, :timestamp)"#,
+            )
+            .unwrap();
+        let mut insert_rosetta_block_transaction_stmt = transaction
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
+VALUES (:idx, :block_idx)"#,
+            )
+            .unwrap();
+
+        blocks
+            .store_rosetta_block(
+                rosetta_block.clone(),
+                &mut insert_rosetta_block_stmt,
+                &mut insert_rosetta_block_transaction_stmt,
+            )
+            .unwrap();
+
+        drop(insert_rosetta_block_stmt);
+        drop(insert_rosetta_block_transaction_stmt);
+        transaction.commit().unwrap();
+        drop(connection);
         let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
         assert_eq!(rosetta_block, actual_rosetta_block);
     }

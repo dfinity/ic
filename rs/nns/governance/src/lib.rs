@@ -155,7 +155,6 @@ mod garbage_collection;
 pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
-pub mod init;
 mod known_neuron_index;
 mod migrations;
 mod neuron;
@@ -717,7 +716,9 @@ pub fn encode_metrics(
         {
             non_self_authenticating_controller_neuron_subset_metrics.encode(
                 "non_self_authenticating_controller",
-                "have a controller that is not self-authenticating",
+                "have a controller that is not self-authenticating with \
+                 one exception: neurons controlled by the genesis token \
+                 canister are not counted here.",
                 w,
             )?;
         }

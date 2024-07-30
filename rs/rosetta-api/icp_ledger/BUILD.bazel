@@ -205,6 +205,7 @@ rust_ic_test_suite(
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     deps = [
+        # Keep sorted.
         ":icp_ledger",
         "//rs/nns/constants",
         "//rs/nns/test_utils/golden_nns_state",

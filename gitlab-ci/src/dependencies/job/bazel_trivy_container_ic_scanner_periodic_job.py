@@ -3,35 +3,12 @@ import logging
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from integration.slack.slack_default_notification_handler import SlackDefaultNotificationHandler
 from integration.slack.slack_trivy_finding_notification_handler import SlackTrivyFindingNotificationHandler
-from model.project import Project
-from model.repository import Repository
-from model.team import Team
+from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_for_trivy, get_ic_repo_merge_request_base_url
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_trivy_dependency_manager import BazelTrivyContainer
 from scanner.scanner_job_type import ScannerJobType
-
-REPOS_TO_SCAN = [
-    Repository(
-        "ic",
-        "https://gitlab.com/dfinity-lab/public/ic",
-        [
-            Project(
-                name="boundary-guestos",
-                path="ic/ic-os/boundary-guestos/envs/prod",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/context",
-                owner=Team.BOUNDARY_NODE_TEAM,
-            ),
-            Project(
-                name="guestos",
-                path="ic/ic-os/guestos/envs/prod",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/guestos/context",
-                owner=Team.NODE_TEAM,
-            ),
-        ],
-    )
-]
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
@@ -51,6 +28,8 @@ if __name__ == "__main__":
         notify_on_finding_deleted=notify_on_finding_deleted,
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
+        merge_request_base_url= get_ic_repo_merge_request_base_url(),
+        ci_pipeline_base_url= get_ic_repo_ci_pipeline_base_url(),
         notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()]
     )
     notifier = NotificationCreator(config)
@@ -61,4 +40,4 @@ if __name__ == "__main__":
         JiraFindingDataSource(finding_data_source_subscribers),
         scanner_subscribers,
     )
-    scanner_job.do_periodic_scan(REPOS_TO_SCAN)
+    scanner_job.do_periodic_scan(get_ic_repo_for_trivy())

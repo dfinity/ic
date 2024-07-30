@@ -42,9 +42,6 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// The SHA-256 hash of the Prometheus VM disk image.
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
-///
-/// Please also keep this in sync with the PROMETHEUS_VM_DISK_IMG_SHA256 variable in:
-/// /scalability/common/farm.py.
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
     "419f884458cb8158c12b294e8d79d355c836188d416f9b6dd7b63abd08cb9f94";
 

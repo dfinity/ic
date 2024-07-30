@@ -26,7 +26,7 @@ slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
