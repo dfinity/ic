@@ -201,6 +201,14 @@ impl PrincipalId {
         bytes.push(0xfe); // internal marker for user test ids
         Self::new_opaque(&bytes[..])
     }
+    /// Generates as many user test ids as requested, starting from `starting_index`.
+    /// ```rust
+    /// // generate 3 test IDs, with indices starting at 55:
+    /// let [id1, id2, id3] = PrincipalId::new_user_test_ids(55);
+    /// ```
+    pub fn new_user_test_ids<const N: usize>(starting_index: u64) -> [Self; N] {
+        core::array::from_fn(|i| Self::new_user_test_id(starting_index + i as u64))
+    }
     pub fn new_node_test_id(n: u64) -> Self {
         let mut bytes = n.to_le_bytes().to_vec();
         bytes.push(0xfd); // internal marker for node test ids
