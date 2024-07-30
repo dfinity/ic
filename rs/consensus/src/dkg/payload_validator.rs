@@ -55,6 +55,7 @@ pub(crate) enum DkgPayloadValidationFailure {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
     FailedToGetMaxDealingsPerBlock(RegistryClientError),
+    FailedToGetRegistryVersion,
 }
 
 /// Dkg errors.
@@ -122,7 +123,7 @@ pub(crate) fn validate_payload(
     let current_height = parent.height.increment();
     let registry_version = pool_reader
         .registry_version(current_height)
-        .expect("Couldn't get the registry version.");
+        .ok_or_else(|| DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
 
     let last_summary_block = pool_reader
         .dkg_summary_block(&parent)
@@ -137,7 +138,7 @@ pub(crate) fn validate_payload(
         BlockPayload::Summary(summary_payload) => {
             if !is_dkg_start_height {
                 return Err(
-                    InvalidDkgPayloadReason::DkgSummaryAtNonStartHeight(current_height).into(),
+                    InvalidDkgPayloadReasonn::DkgSummaryAtNonStartHeight(current_height).into(),
                 );
             }
             let expected_summary = payload_builder::create_summary_payload(
