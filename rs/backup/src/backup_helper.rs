@@ -653,22 +653,26 @@ impl BackupHelper {
             .map_err(|err| format!("Error creating timestamp file: {:?}", err))?;
         file.write_all(now_str.as_bytes())
             .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
-
         self.log_disk_stats()
     }
 
     pub(crate) fn log_disk_stats(&self) -> Result<(), String> {
         let mut stats = Vec::new();
-        for (dir, threshold) in &[
-            (&self.root_dir, self.hot_disk_resource_threshold_percentage),
+        for (dir, threshold, storage_type) in [
+            (
+                &self.root_dir,
+                self.hot_disk_resource_threshold_percentage,
+                "hot",
+            ),
             (
                 &self.cold_storage_dir,
                 self.cold_disk_resource_threshold_percentage,
+                "cold",
             ),
         ] {
-            let space = self.get_disk_stats(dir, *threshold, DiskStats::Space)?;
-            let inodes = self.get_disk_stats(dir, *threshold, DiskStats::Inodes)?;
-            stats.push((dir.as_path(), space, inodes));
+            let space = self.get_disk_stats(dir, threshold, DiskStats::Space)?;
+            let inodes = self.get_disk_stats(dir, threshold, DiskStats::Inodes)?;
+            stats.push((dir.as_path(), space, inodes, storage_type));
         }
         self.notification_client
             .push_metrics_disk_stats(stats.as_slice());
