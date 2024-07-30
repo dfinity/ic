@@ -15,7 +15,8 @@ use crate::Memory;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLogRecord, LogVisibility,
+    BoundedAllowedViewers, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
+    CanisterLogRecord, LogVisibility,
 };
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::{
@@ -626,6 +627,16 @@ fn canister_state_log_visibility_round_trip() {
 
         assert_eq!(initial, round_trip);
     }
+
+    // Check `allowed_viewers` case with non-empty principals.
+    let initial = LogVisibility::AllowedViewers(BoundedAllowedViewers::new(vec![
+        user_test_id(1).get(),
+        user_test_id(2).get(),
+    ]));
+    let encoded = pb::LogVisibilityV2::from(&initial);
+    let round_trip = LogVisibility::from(encoded);
+
+    assert_eq!(initial, round_trip);
 }
 
 #[test]
