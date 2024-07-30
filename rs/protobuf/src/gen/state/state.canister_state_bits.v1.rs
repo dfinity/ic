@@ -813,7 +813,7 @@ impl CyclesUseCase {
         }
     }
 }
-/// TODO(EXC-1670): Migrate to LogVisibilityV2.
+/// TODO(EXC-1670): Migrate to pb_canister_state_bits::LogVisibilityV2.
 /// The current enum only supports i32 values, which limits the
 /// storage of allowed_viewers principals. LogVisibilityV2 will
 /// support both enum values and a list of principals.
