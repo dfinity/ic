@@ -314,7 +314,7 @@ message WasmChunkStoreMetadata {
 
 // TODO(EXC-1670): Migrate to LogVisibilityV2.
 // The current enum only supports i32 values, which limits the
-// storage of allowed_viewers principals. LogVisibilityV2 will 
+// storage of allowed_viewers principals. LogVisibilityV2 will
 // support both enum values and a list of principals.
 enum LogVisibility {
   LOG_VISIBILITY_UNSPECIFIED = 0;
