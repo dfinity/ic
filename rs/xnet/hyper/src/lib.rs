@@ -289,7 +289,7 @@ fn tls_bind_with_connection_type(
 /// and `SO_REUSEPORT` flags.
 ///
 /// Setting the flags after binding to the port has no effect.
-fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxError> {
+pub fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxError> {
     use socket2::{Domain, Protocol, SockAddr, Socket, Type};
     let domain = match addr {
         SocketAddr::V4(_) => Domain::IPV4,
