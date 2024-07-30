@@ -350,11 +350,15 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
-        "manual",
+        "system_test_benchmark",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -366,7 +370,10 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:chrono",
         "@crate_index//:futures",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
