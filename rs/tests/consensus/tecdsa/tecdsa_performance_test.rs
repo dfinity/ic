@@ -58,9 +58,7 @@ use ic_system_test_driver::driver::{
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
-    },
+    test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
@@ -153,7 +151,6 @@ pub fn setup(env: TestEnv) {
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();

@@ -1,10 +1,11 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "tecdsa_complaint_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -31,6 +32,7 @@ system_test(
 
 system_test(
     name = "tecdsa_add_nodes_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -58,6 +60,7 @@ system_test(
 
 system_test(
     name = "tschnorr_message_sizes_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -81,6 +84,7 @@ system_test(
 
 system_test(
     name = "tecdsa_remove_nodes_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -106,6 +110,7 @@ system_test(
 
 system_test(
     name = "tecdsa_key_rotation_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -128,6 +133,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_fails_without_cycles_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -154,6 +160,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_from_nns_without_cycles_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -176,6 +183,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_from_other_subnet_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -199,6 +207,7 @@ system_test(
 
 system_test(
     name = "tecdsa_two_signing_subnets_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -228,6 +237,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_life_cycle_test",
+    env = NNS_CANISTER_ENV,
     # Remove when CON-937 is resolved
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -256,6 +266,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_same_subnet_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -278,6 +289,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_timeout_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -313,6 +325,7 @@ system_test(
         "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
         "//conditions:default": [],
     }),
+    env = NNS_CANISTER_ENV,
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
