@@ -780,7 +780,7 @@ impl Payload<'_> for UninstallCodeArgs {}
 ///    public;
 /// }
 /// ```
-#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
