@@ -878,7 +878,7 @@ fn test_query_stats_live() {
 
         let ic00 = ManagementCanister::create(&agent);
 
-        let mut query_stats = ic00
+        let query_stats = ic00
             .canister_status(&canister_id)
             .await
             .unwrap()
@@ -887,7 +887,7 @@ fn test_query_stats_live() {
         assert_eq!(query_stats.num_calls_total, candid::Nat::from(0_u64));
 
         let mut n: u64 = 0;
-        while query_stats.num_calls_total == 0_u64 {
+        loop {
             // Make one query call per app subnet node.
             for _ in 0..13 {
                 agent
@@ -908,7 +908,6 @@ fn test_query_stats_live() {
             if query_stats.num_calls_total != current_query_stats.num_calls_total {
                 break;
             }
-            query_stats = current_query_stats;
         }
     })
 }
