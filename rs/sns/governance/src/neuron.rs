@@ -61,6 +61,18 @@ impl Neuron {
         NeuronPermissionType::ManageVotingPermission,
     ];
 
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_CONTROLLER:
+        &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::ManageVotingPermission,
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
+    ];
+
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_HOTKEY: &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
+    ];
+
     // Utility methods on neurons.
 
     /// Returns the neuron's state.
@@ -779,6 +791,10 @@ impl NeuronId {
         subaccount[0] = id.len().try_into().unwrap();
         subaccount[1..1 + id.len()].copy_from_slice(id);
         NeuronId::from(subaccount)
+    }
+
+    pub fn test_neuron_ids<const N: usize>() -> [NeuronId; N] {
+        core::array::from_fn(|i| NeuronId::new_test_neuron_id(10 + i as u64))
     }
 }
 
