@@ -20,7 +20,7 @@ system_test(
 
 system_test(
     name = "memory_safety_test",
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
