@@ -39,7 +39,7 @@ use crate::{
     proposal::ValidGenericNervousSystemFunction,
 };
 use async_trait::async_trait;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
@@ -49,7 +49,7 @@ use ic_nervous_system_common::{
     ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
-use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
+use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage, Principals};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
 };
@@ -2037,152 +2037,6 @@ impl From<NeuronIds> for Vec<NeuronId> {
     }
 }
 
-// TODO(NNS1-3198): All of this can be removed once NeuronParameters is no longer used.
-impl NeuronParameters {
-    pub(crate) fn validate(
-        &self,
-        neuron_minimum_stake_e8s: u64,
-        max_followees_per_function: u64,
-    ) -> Result<(), String> {
-        let mut defects = vec![];
-
-        let Self {
-            neuron_id,
-            controller,
-            stake_e8s,
-            dissolve_delay_seconds,
-            hotkey: _,
-            source_nns_neuron_id: _,
-            followees,
-        } = self;
-
-        if neuron_id.is_none() {
-            defects.push("Missing neuron_id".to_string());
-        }
-
-        if controller.is_none() {
-            defects.push("Missing controller".to_string());
-        }
-
-        if let Some(stake_e8s) = stake_e8s {
-            if *stake_e8s < neuron_minimum_stake_e8s {
-                defects.push(format!(
-                    "Provided stake_e8s ({}) is less than the required neuron_minimum_stake_e8s({})",
-                    stake_e8s, neuron_minimum_stake_e8s
-                ));
-            }
-        } else {
-            defects.push("Missing stake_e8s".to_string());
-        }
-
-        if dissolve_delay_seconds.is_none() {
-            defects.push("Missing dissolve_delay_seconds".to_string());
-        }
-
-        if followees.len() as u64 > max_followees_per_function {
-            defects.push(format!(
-                "Provided number of followees ({}) exceeds the maximum \
-                number of followees per function ({})",
-                followees.len(),
-                max_followees_per_function
-            ));
-        }
-
-        if !defects.is_empty() {
-            Err(format!(
-                "Could not claim neuron for controller {:?} with NeuronId {:?} due to: {}",
-                controller,
-                neuron_id,
-                defects.join("\n"),
-            ))
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Determines if the requested Neuron is being claimed on behalf of a CommunityFund
-    /// participant in the Sale.
-    pub(crate) fn is_community_fund_neuron(&self) -> bool {
-        self.source_nns_neuron_id.is_some()
-    }
-
-    pub(crate) fn get_controller_or_panic(&self) -> PrincipalId {
-        *self
-            .controller
-            .as_ref()
-            .expect("Expected the controller to be present in NeuronParameters")
-    }
-
-    pub(crate) fn get_dissolve_delay_seconds_or_panic(&self) -> u64 {
-        *self
-            .dissolve_delay_seconds
-            .as_ref()
-            .expect("Expected the dissolve_delay_seconds to be present in NeuronParameters")
-    }
-
-    pub(crate) fn get_stake_e8s_or_panic(&self) -> u64 {
-        *self
-            .stake_e8s
-            .as_ref()
-            .expect("Expected the stake_e8s to be present in NeuronParameters")
-    }
-
-    pub(crate) fn get_neuron_id_or_panic(&self) -> &NeuronId {
-        self.neuron_id
-            .as_ref()
-            .expect("Expected NeuronId to be present in NeuronParameters")
-    }
-
-    pub(crate) fn construct_permissions_or_panic(
-        &self,
-        neuron_claimer_permissions: NeuronPermissionList,
-    ) -> Vec<NeuronPermission> {
-        let mut permissions = vec![];
-        let controller = self.get_controller_or_panic();
-
-        permissions.push(NeuronPermission::new(
-            &controller,
-            neuron_claimer_permissions.permissions,
-        ));
-
-        // Note: self.hotkey is actually the NNS neuron's controller.
-        // This confusing naming is rectified in the type that will replace this one, NeuronRecipe.
-        if let Some(nns_neuron_controller) = self.hotkey {
-            permissions.push(NeuronPermission::new(
-                &nns_neuron_controller,
-                Neuron::PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_CONTROLLER
-                    .iter()
-                    .map(|p| *p as i32)
-                    .collect(),
-            ))
-        }
-
-        permissions
-    }
-
-    /// Adds `self.followees` entries in `base_followees` that are
-    /// keyed by `function_ids_to_follow`.
-    pub(crate) fn construct_followees(&self) -> BTreeMap<u64, Followees> {
-        if self.followees.is_empty() {
-            BTreeMap::new()
-        } else {
-            let catch_all = u64::from(&Action::Unspecified(Empty {}));
-            let followees = Followees {
-                followees: self.followees.clone(),
-            };
-            btreemap! { catch_all => followees }
-        }
-    }
-
-    pub(crate) fn construct_auto_staking_maturity(&self) -> Option<bool> {
-        if self.is_community_fund_neuron() {
-            Some(true)
-        } else {
-            None
-        }
-    }
-}
-
 impl NeuronRecipe {
     pub(crate) fn validate(
         &self,
@@ -2445,16 +2299,6 @@ impl ClaimSwapNeuronsResponse {
 }
 
 impl SwapNeuron {
-    pub(crate) fn from_neuron_parameters(
-        neuron_parameters: &NeuronParameters,
-        claimed_swap_neuron_status: ClaimedSwapNeuronStatus,
-    ) -> Self {
-        SwapNeuron {
-            id: neuron_parameters.neuron_id.clone(),
-            status: claimed_swap_neuron_status as i32,
-        }
-    }
-
     pub(crate) fn from_neuron_recipe(
         neuron_recipe: NeuronRecipe,
         claimed_swap_neuron_status: ClaimedSwapNeuronStatus,
@@ -2661,6 +2505,59 @@ impl UpgradeSnsControlledCanister {
         self.mode
             .and_then(|mode| ic_protobuf::types::v1::CanisterInstallMode::try_from(mode).ok())
             .unwrap_or(ic_protobuf::types::v1::CanisterInstallMode::Upgrade)
+    }
+}
+
+// TODO(NNS1-3198): Remove this function after `NeuronParameters` is made obsolete.
+impl From<Vec<NeuronParameters>> for NeuronRecipes {
+    fn from(src: Vec<NeuronParameters>) -> Self {
+        let neuron_recipes = src
+            .into_iter()
+            .map(
+                |NeuronParameters {
+                     neuron_id,
+                     controller,
+                     hotkey,
+                     stake_e8s,
+                     dissolve_delay_seconds,
+                     source_nns_neuron_id,
+                     followees,
+                 }| {
+                    let followees = Some(NeuronIds {
+                        neuron_ids: followees,
+                    });
+                    let participant = if let Some(source_nns_neuron_id) = source_nns_neuron_id {
+                        let nns_neuron_id = Some(source_nns_neuron_id);
+
+                        // Historical misnomer.
+                        let nns_neuron_controller = hotkey;
+
+                        // NNS neurons' hotkeys cannot be specified in the legacy `NeuronParameters` struct.
+                        let nns_neuron_hotkeys = Some(Principals { principals: vec![] });
+
+                        Some(neuron_recipe::Participant::NeuronsFund(
+                            neuron_recipe::NeuronsFund {
+                                nns_neuron_id,
+                                nns_neuron_controller,
+                                nns_neuron_hotkeys,
+                            },
+                        ))
+                    } else {
+                        Some(neuron_recipe::Participant::Direct(neuron_recipe::Direct {}))
+                    };
+                    NeuronRecipe {
+                        neuron_id,
+                        controller,
+                        stake_e8s,
+                        dissolve_delay_seconds,
+                        participant,
+                        followees,
+                    }
+                },
+            )
+            .collect();
+
+        Self { neuron_recipes }
     }
 }
 
@@ -2909,7 +2806,6 @@ pub(crate) mod tests {
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-    use ic_nervous_system_proto::pb::v1::Principals;
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashset};
     use std::convert::TryInto;

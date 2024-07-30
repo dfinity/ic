@@ -3887,158 +3887,80 @@ impl Governance {
 
         let mut swap_neurons = vec![];
 
-        // `request.neuron_parameters` is deprecated. For now,
-        // we will support both as long as only one is specified
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove this once neuron_parameters is removed.
-        match (request.neuron_recipes, &request.neuron_parameters[..]) {
-            (Some(NeuronRecipes { neuron_recipes }), []) => {
-                for neuron_recipe in neuron_recipes {
-                    match neuron_recipe.validate(
-                        neuron_minimum_stake_e8s,
-                        max_followees_per_function,
-                        max_number_of_principals_per_neuron,
-                    ) {
-                        Ok(_) => (),
-                        Err(err) => {
-                            log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
-                            swap_neurons.push(SwapNeuron::from_neuron_recipe(
-                                neuron_recipe,
-                                ClaimedSwapNeuronStatus::Invalid,
-                            ));
-                            continue;
-                        }
-                    }
+        // TODO(NNS1-3198): Simplify this code after `NeuronParameters` is made obsolete.
+        let neuron_recipes_from_new_source = request.neuron_recipes;
+        let neuron_recipes_from_legacy_source =
+            Some(NeuronRecipes::from(request.neuron_parameters));
+        let neuron_recipes = neuron_recipes_from_new_source
+            .or(neuron_recipes_from_legacy_source)
+            .unwrap_or_default();
 
-                    // It's safe to get all fields in NeuronRecipe because of the previous validation.
-                    let neuron_id = neuron_recipe.get_neuron_id_or_panic();
-
-                    // Skip this neuron if it was previously claimed.
-                    if self.proto.neurons.contains_key(&neuron_id.to_string()) {
-                        swap_neurons.push(SwapNeuron::from_neuron_recipe(
-                            neuron_recipe,
-                            ClaimedSwapNeuronStatus::AlreadyExists,
-                        ));
-                        continue;
-                    }
-
-                    let neuron = Neuron {
-                        id: Some(neuron_id.clone()),
-                        permissions: neuron_recipe
-                            .construct_permissions_or_panic(neuron_claimer_permissions.clone()),
-                        cached_neuron_stake_e8s: neuron_recipe.get_stake_e8s_or_panic(),
-                        neuron_fees_e8s: 0,
-                        created_timestamp_seconds: now,
-                        aging_since_timestamp_seconds: now,
-                        followees: neuron_recipe.construct_followees(),
-                        maturity_e8s_equivalent: 0,
-                        dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                            neuron_recipe.get_dissolve_delay_seconds_or_panic(),
-                        )),
-                        voting_power_percentage_multiplier:
-                            DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-                        source_nns_neuron_id: neuron_recipe.source_nns_neuron_id(),
-                        staked_maturity_e8s_equivalent: None,
-                        auto_stake_maturity: neuron_recipe.construct_auto_staking_maturity(),
-                        vesting_period_seconds: None,
-                        disburse_maturity_in_progress: vec![],
-                    };
-
-                    // Add the neuron to the various data structures and indexes to support neurons. This
-                    // method may fail if the memory limits of Governance have been reached, which is a
-                    // recoverable error. The swap canister can retry claiming after GC or upgrades
-                    // of SNS Governance.
-                    match self.add_neuron(neuron) {
-                        Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_recipe(
-                            neuron_recipe,
-                            ClaimedSwapNeuronStatus::Success,
-                        )),
-                        Err(err) => {
-                            log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
-                            swap_neurons.push(SwapNeuron::from_neuron_recipe(
-                                neuron_recipe,
-                                ClaimedSwapNeuronStatus::MemoryExhausted,
-                            ))
-                        }
-                    }
+        for neuron_recipe in Vec::<_>::from(neuron_recipes) {
+            match neuron_recipe.validate(
+                neuron_minimum_stake_e8s,
+                max_followees_per_function,
+                max_number_of_principals_per_neuron,
+            ) {
+                Ok(_) => (),
+                Err(err) => {
+                    log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                        neuron_recipe,
+                        ClaimedSwapNeuronStatus::Invalid,
+                    ));
+                    continue;
                 }
             }
-            // Handle the deprecated neuron_parameters.
-            // TODO(NNS1-3198): Remove this branch
-            (None, neuron_parameters) => {
-                for neuron_parameter in neuron_parameters {
-                    match neuron_parameter
-                        .validate(neuron_minimum_stake_e8s, max_followees_per_function)
-                    {
-                        Ok(_) => (),
-                        Err(err) => {
-                            log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
-                            swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                                neuron_parameter,
-                                ClaimedSwapNeuronStatus::Invalid,
-                            ));
-                            continue;
-                        }
-                    }
 
-                    // It's safe to get all fields in NeuronParameters because of the previous validation.
-                    let neuron_id = neuron_parameter.get_neuron_id_or_panic();
+            // It's safe to get all fields in NeuronRecipe because of the previous validation.
+            let neuron_id = neuron_recipe.get_neuron_id_or_panic();
 
-                    // Skip this neuron if it was previously claimed.
-                    if self.proto.neurons.contains_key(&neuron_id.to_string()) {
-                        swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                            neuron_parameter,
-                            ClaimedSwapNeuronStatus::AlreadyExists,
-                        ));
-                        continue;
-                    }
-
-                    let neuron = Neuron {
-                        id: Some(neuron_id.clone()),
-                        permissions: neuron_parameter
-                            .construct_permissions_or_panic(neuron_claimer_permissions.clone()),
-                        cached_neuron_stake_e8s: neuron_parameter.get_stake_e8s_or_panic(),
-                        neuron_fees_e8s: 0,
-                        created_timestamp_seconds: now,
-                        aging_since_timestamp_seconds: now,
-                        followees: neuron_parameter.construct_followees(),
-                        maturity_e8s_equivalent: 0,
-                        dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                            neuron_parameter.get_dissolve_delay_seconds_or_panic(),
-                        )),
-                        voting_power_percentage_multiplier:
-                            DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-                        source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
-                        staked_maturity_e8s_equivalent: None,
-                        auto_stake_maturity: neuron_parameter.construct_auto_staking_maturity(),
-                        vesting_period_seconds: None,
-                        disburse_maturity_in_progress: vec![],
-                    };
-
-                    // Add the neuron to the various data structures and indexes to support neurons. This
-                    // method may fail if the memory limits of Governance have been reached, which is a
-                    // recoverable error. The swap canister can retry claiming after GC or upgrades
-                    // of SNS Governance.
-                    match self.add_neuron(neuron) {
-                        Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                            neuron_parameter,
-                            ClaimedSwapNeuronStatus::Success,
-                        )),
-                        Err(err) => {
-                            log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
-                            swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                                neuron_parameter,
-                                ClaimedSwapNeuronStatus::MemoryExhausted,
-                            ))
-                        }
-                    }
-                }
+            // Skip this neuron if it was previously claimed.
+            if self.proto.neurons.contains_key(&neuron_id.to_string()) {
+                swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                    neuron_recipe,
+                    ClaimedSwapNeuronStatus::AlreadyExists,
+                ));
+                continue;
             }
-            // If both are set, just fail
-            (Some(_), [..]) => {
-                log!(ERROR, "Failed to claim Swap Neuron due to both neuron_parameters and recipes being set in the ClaimSwapNeuronsRequest.");
-                return ClaimSwapNeuronsResponse {
-                    claim_swap_neurons_result: None,
-                };
+
+            let neuron = Neuron {
+                id: Some(neuron_id.clone()),
+                permissions: neuron_recipe
+                    .construct_permissions_or_panic(neuron_claimer_permissions.clone()),
+                cached_neuron_stake_e8s: neuron_recipe.get_stake_e8s_or_panic(),
+                neuron_fees_e8s: 0,
+                created_timestamp_seconds: now,
+                aging_since_timestamp_seconds: now,
+                followees: neuron_recipe.construct_followees(),
+                maturity_e8s_equivalent: 0,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    neuron_recipe.get_dissolve_delay_seconds_or_panic(),
+                )),
+                voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+                source_nns_neuron_id: neuron_recipe.source_nns_neuron_id(),
+                staked_maturity_e8s_equivalent: None,
+                auto_stake_maturity: neuron_recipe.construct_auto_staking_maturity(),
+                vesting_period_seconds: None,
+                disburse_maturity_in_progress: vec![],
+            };
+
+            // Add the neuron to the various data structures and indexes to support neurons. This
+            // method may fail if the memory limits of Governance have been reached, which is a
+            // recoverable error. The swap canister can retry claiming after GC or upgrades
+            // of SNS Governance.
+            match self.add_neuron(neuron) {
+                Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                    neuron_recipe,
+                    ClaimedSwapNeuronStatus::Success,
+                )),
+                Err(err) => {
+                    log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                        neuron_recipe,
+                        ClaimedSwapNeuronStatus::MemoryExhausted,
+                    ))
+                }
             }
         }
 
