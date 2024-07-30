@@ -88,7 +88,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
         &state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
-        &proposal,
+        &proposal.into(),
     );
     let proposal_id = if let CommandResponse::MakeProposal(resp) =
         proposal_submission_response.command.as_ref().unwrap()
@@ -188,7 +188,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
         &state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
-        &proposal,
+        &proposal.into(),
     );
 
     let proposal_id = if let CommandResponse::MakeProposal(resp) =
@@ -288,7 +288,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_id,
-        &proposal,
+        &proposal.into(),
     );
 
     state_machine.tick();

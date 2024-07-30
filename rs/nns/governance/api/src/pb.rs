@@ -1,10 +1,11 @@
 use crate::pb::v1::{
-    governance_error::ErrorType, manage_neuron_response, GovernanceError, ManageNeuronResponse,
-    NetworkEconomics, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
-    XdrConversionRate,
+    governance_error::ErrorType, manage_neuron_response, neuron::DissolveState, GovernanceError,
+    ManageNeuronResponse, NetworkEconomics, Neuron, NeuronState, NeuronsFundEconomics,
+    NeuronsFundMatchedFundingCurveCoefficients, XdrConversionRate,
 };
 use ic_nervous_system_proto::pb::v1::{Decimal, Percentage};
 use icp_ledger::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
+use std::fmt;
 
 #[allow(clippy::all)]
 #[path = "./ic_nns_governance.pb.v1.rs"]
@@ -37,6 +38,12 @@ impl GovernanceError {
             error_type: error_type as i32,
             error_message: message.to_string(),
         }
+    }
+}
+
+impl fmt::Display for GovernanceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}: {}", self.error_type(), self.error_message)
     }
 }
 
@@ -104,4 +111,62 @@ impl XdrConversionRate {
             xdr_permyriad_per_icp: Some(10_000),
         }
     }
+}
+
+// The following methods are conceptually methods for the API type of the neuron.
+impl Neuron {
+    pub fn state(&self, now_seconds: u64) -> NeuronState {
+        if self.spawn_at_timestamp_seconds.is_some() {
+            return NeuronState::Spawning;
+        }
+        match self.dissolve_state {
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
+                if dissolve_delay_seconds > 0 {
+                    NeuronState::NotDissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            Some(DissolveState::WhenDissolvedTimestampSeconds(
+                when_dissolved_timestamp_seconds,
+            )) => {
+                if when_dissolved_timestamp_seconds > now_seconds {
+                    NeuronState::Dissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            None => NeuronState::Dissolved,
+        }
+    }
+
+    pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
+        match self.dissolve_state {
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
+                dissolve_delay_seconds
+            }
+            Some(DissolveState::WhenDissolvedTimestampSeconds(
+                when_dissolved_timestamp_seconds,
+            )) => when_dissolved_timestamp_seconds.saturating_sub(now_seconds),
+            None => 0,
+        }
+    }
+
+    pub fn stake_e8s(&self) -> u64 {
+        neuron_stake_e8s(
+            self.cached_neuron_stake_e8s,
+            self.neuron_fees_e8s,
+            self.staked_maturity_e8s_equivalent,
+        )
+    }
+}
+
+fn neuron_stake_e8s(
+    cached_neuron_stake_e8s: u64,
+    neuron_fees_e8s: u64,
+    staked_maturity_e8s_equivalent: Option<u64>,
+) -> u64 {
+    cached_neuron_stake_e8s
+        .saturating_sub(neuron_fees_e8s)
+        .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
 }

@@ -1,6 +1,4 @@
-use crate::pb::v1::{
-    neuron::DissolveState, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronType,
-};
+use crate::pb::v1::{NeuronInfo, NeuronType};
 use ic_nns_common::pb::v1::NeuronId;
 use std::ops::RangeBounds;
 
@@ -17,54 +15,6 @@ fn neuron_stake_e8s(
     cached_neuron_stake_e8s
         .saturating_sub(neuron_fees_e8s)
         .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
-}
-
-// The following methods are conceptually methods for the API type of the neuron.
-impl NeuronProto {
-    pub fn state(&self, now_seconds: u64) -> NeuronState {
-        if self.spawn_at_timestamp_seconds.is_some() {
-            return NeuronState::Spawning;
-        }
-        match self.dissolve_state {
-            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
-                if dissolve_delay_seconds > 0 {
-                    NeuronState::NotDissolving
-                } else {
-                    NeuronState::Dissolved
-                }
-            }
-            Some(DissolveState::WhenDissolvedTimestampSeconds(
-                when_dissolved_timestamp_seconds,
-            )) => {
-                if when_dissolved_timestamp_seconds > now_seconds {
-                    NeuronState::Dissolving
-                } else {
-                    NeuronState::Dissolved
-                }
-            }
-            None => NeuronState::Dissolved,
-        }
-    }
-
-    pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
-        match self.dissolve_state {
-            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
-                dissolve_delay_seconds
-            }
-            Some(DissolveState::WhenDissolvedTimestampSeconds(
-                when_dissolved_timestamp_seconds,
-            )) => when_dissolved_timestamp_seconds.saturating_sub(now_seconds),
-            None => 0,
-        }
-    }
-
-    pub fn stake_e8s(&self) -> u64 {
-        neuron_stake_e8s(
-            self.cached_neuron_stake_e8s,
-            self.neuron_fees_e8s,
-            self.staked_maturity_e8s_equivalent,
-        )
-    }
 }
 
 /// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
@@ -162,8 +112,7 @@ mod tests {
         }
     }
 
-    use proptest::prelude::*;
-    use proptest::proptest;
+    use proptest::{prelude::*, proptest};
 
     proptest! {
         #[test]
