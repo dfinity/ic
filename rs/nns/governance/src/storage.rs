@@ -27,8 +27,8 @@ const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
 const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
 const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
 
-const NP_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
-const NP_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
+const NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
+const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
 
 pub mod neuron_indexes;
 pub mod neurons;
@@ -55,7 +55,7 @@ struct State {
     // Neuron indexes stored in stable storage.
     stable_neuron_indexes: neuron_indexes::StableNeuronIndexes<VM>,
 
-    np_rewards_log: StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>,
+    node_provider_rewards_log: StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>,
 }
 
 impl State {
@@ -99,11 +99,11 @@ impl State {
             .build()
         });
 
-        let np_rewards_log = MEMORY_MANAGER.with(|memory_manager| {
+        let node_provider_rewards_log = MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
             StableLog::init(
-                memory_manager.get(NP_REWARDS_LOG_INDEX_MEMORY_ID),
-                memory_manager.get(NP_REWARDS_LOG_DATA_MEMORY_ID),
+                memory_manager.get(NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID),
+                memory_manager.get(NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID),
             )
             .expect("Failed to initialize stable log for NP Rewards")
         });
@@ -113,7 +113,7 @@ impl State {
             audit_events_log,
             stable_neuron_store,
             stable_neuron_indexes,
-            np_rewards_log,
+            node_provider_rewards_log,
         }
     }
 
@@ -175,12 +175,12 @@ pub(crate) fn with_stable_neuron_indexes_mut<R>(
     })
 }
 
-pub(crate) fn with_np_rewards_log<R>(
+pub(crate) fn with_node_provider_rewards_log<R>(
     f: impl FnOnce(&StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>) -> R,
 ) -> R {
     STATE.with(|state| {
-        let np_rewards_log = &state.borrow().np_rewards_log;
-        f(np_rewards_log)
+        let node_provider_rewards_log = &state.borrow().node_provider_rewards_log;
+        f(node_provider_rewards_log)
     })
 }
 

@@ -6,9 +6,11 @@ use std::borrow::Cow;
 #[path = "../gen/ic_nns_governance.pb.v1.rs"]
 pub mod v1;
 
+// These are not exposed outside of the crate, to avoid dependencies from other crates.
+// They should not be exposed in the API.
 #[allow(clippy::all)]
 #[path = "../gen/ic_nns_governance.pb.storage.rs"]
-pub mod storage;
+pub(crate) mod storage;
 
 mod conversions;
 mod convert_struct_to_enum;

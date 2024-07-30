@@ -3,7 +3,7 @@ use crate::{
         storage::{archived_monthly_node_provider_rewards, ArchivedMonthlyNodeProviderRewards},
         v1::MonthlyNodeProviderRewards,
     },
-    storage::with_np_rewards_log,
+    storage::with_node_provider_rewards_log,
 };
 
 pub(crate) fn record_node_provider_rewards(most_recent_rewards: MonthlyNodeProviderRewards) {
@@ -15,13 +15,13 @@ pub(crate) fn record_node_provider_rewards(most_recent_rewards: MonthlyNodeProvi
         )),
     };
 
-    with_np_rewards_log(|log| {
+    with_node_provider_rewards_log(|log| {
         log.append(&rewards).expect("TODO: panic message");
     })
 }
 
 pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProviderRewards> {
-    with_np_rewards_log(|log| {
+    with_node_provider_rewards_log(|log| {
         let len = log.len();
         if len == 0 {
             return None;
