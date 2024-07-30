@@ -2258,12 +2258,12 @@ impl NeuronRecipe {
     /// keyed by `function_ids_to_follow`.
     pub(crate) fn construct_followees(&self) -> BTreeMap<u64, Followees> {
         let Some(followees) = &self.followees else {
-            return BTreeMap::new();
+            return btreemap! {};
         };
         let followees = &followees.neuron_ids;
 
         if followees.is_empty() {
-            BTreeMap::new()
+            btreemap! {}
         } else {
             let catch_all = u64::from(&Action::Unspecified(Empty {}));
             let followees = Followees {
@@ -3558,67 +3558,109 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn test_neuron_recipe_validate() {
-        let neuron_minimum_stake_e8s = E8S_PER_TOKEN;
-        let max_followees_per_function = 1;
-        let max_number_of_principals_per_neuron = 5;
+    mod neuron_recipe_validate_tests {
+        use super::*;
 
-        // Assert that the defaults are valid
-        NeuronRecipe::validate_default_direct_participant()
-            .validate(
-                neuron_minimum_stake_e8s,
-                max_followees_per_function,
-                max_number_of_principals_per_neuron,
-            )
-            .unwrap();
-        NeuronRecipe::validate_default_neurons_fund()
-            .validate(
-                neuron_minimum_stake_e8s,
-                max_followees_per_function,
-                max_number_of_principals_per_neuron,
-            )
-            .unwrap();
+        const NEURON_MINIMUM_STAKE_E8S: u64 = E8S_PER_TOKEN;
+        const MAX_FOLLOWEES_PER_FUNCTION: u64 = 1;
+        const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON: u64 = 5;
 
-        let invalid_neuron_recipes = vec![
-            // Common invalid cases
-            NeuronRecipe {
+        fn validate_recipe(recipe: &NeuronRecipe) -> Result<(), String> {
+            recipe.validate(
+                NEURON_MINIMUM_STAKE_E8S,
+                MAX_FOLLOWEES_PER_FUNCTION,
+                MAX_NUMBER_OF_PRINCIPALS_PER_NEURON,
+            )
+        }
+
+        #[test]
+        fn test_default_direct_participant_is_valid() {
+            validate_recipe(&NeuronRecipe::validate_default_direct_participant()).unwrap();
+        }
+
+        #[test]
+        fn test_default_neurons_fund_is_valid() {
+            validate_recipe(&NeuronRecipe::validate_default_neurons_fund()).unwrap();
+        }
+
+        #[test]
+        fn test_invalid_missing_controller() {
+            let recipe = NeuronRecipe {
                 controller: None,
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_missing_neuron_id() {
+            let recipe = NeuronRecipe {
                 neuron_id: None,
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_missing_stake() {
+            let recipe = NeuronRecipe {
                 stake_e8s: None,
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
-                stake_e8s: Some(neuron_minimum_stake_e8s - 1),
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_low_stake() {
+            let recipe = NeuronRecipe {
+                stake_e8s: Some(NEURON_MINIMUM_STAKE_E8S - 1),
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_missing_dissolve_delay() {
+            let recipe = NeuronRecipe {
                 dissolve_delay_seconds: None,
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_missing_followees() {
+            let recipe = NeuronRecipe {
                 followees: None,
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_too_many_followees() {
+            let recipe = NeuronRecipe {
                 followees: Some(NeuronIds::from(vec![
                     NeuronId::new_test_neuron_id(1),
                     NeuronId::new_test_neuron_id(2),
                 ])),
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_missing_participant() {
+            let recipe = NeuronRecipe {
                 participant: None,
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            // NeuronsFund specific invalid cases
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_neurons_fund_missing_nns_neuron_id() {
+            let recipe = NeuronRecipe {
                 participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
                     nns_neuron_id: None,
                     nns_neuron_controller: Some(PrincipalId::new_user_test_id(13847)),
@@ -3627,8 +3669,13 @@ pub(crate) mod tests {
                     ])),
                 })),
                 ..NeuronRecipe::validate_default_neurons_fund()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_neurons_fund_missing_controller() {
+            let recipe = NeuronRecipe {
                 participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
                     nns_neuron_id: Some(2),
                     nns_neuron_controller: None,
@@ -3637,16 +3684,26 @@ pub(crate) mod tests {
                     ])),
                 })),
                 ..NeuronRecipe::validate_default_neurons_fund()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_neurons_fund_missing_hotkeys() {
+            let recipe = NeuronRecipe {
                 participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
                     nns_neuron_id: Some(2),
                     nns_neuron_controller: Some(PrincipalId::new_user_test_id(13847)),
                     nns_neuron_hotkeys: None,
                 })),
                 ..NeuronRecipe::validate_default_neurons_fund()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap_err();
+        }
+
+        #[test]
+        fn test_invalid_neurons_fund_too_many_hotkeys() {
+            let recipe = NeuronRecipe {
                 participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
                     nns_neuron_id: Some(2),
                     nns_neuron_controller: Some(PrincipalId::new_user_test_id(13847)),
@@ -3659,53 +3716,35 @@ pub(crate) mod tests {
                     ])),
                 })),
                 ..NeuronRecipe::validate_default_neurons_fund()
-            },
-        ];
-
-        // Assert all invalid neuron recipes produce an error
-        for (index, neuron_recipe) in invalid_neuron_recipes.iter().enumerate() {
-            assert!(
-                neuron_recipe
-                    .validate(
-                        neuron_minimum_stake_e8s,
-                        max_followees_per_function,
-                        max_number_of_principals_per_neuron
-                    )
-                    .is_err(),
-                "Test case {} should have failed validation",
-                index
-            );
+            };
+            validate_recipe(&recipe).unwrap_err();
         }
 
-        let valid_neuron_recipes = vec![
-            // Valid Direct participant
-            NeuronRecipe::validate_default_direct_participant(),
-            // Valid NeuronsFund participant
-            NeuronRecipe::validate_default_neurons_fund(),
-            // Edge cases that should still be valid
-            NeuronRecipe {
+        #[test]
+        fn test_valid_zero_dissolve_delay() {
+            let recipe = NeuronRecipe {
                 dissolve_delay_seconds: Some(0),
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
+            };
+            validate_recipe(&recipe).unwrap();
+        }
+
+        #[test]
+        fn test_valid_empty_followees() {
+            let recipe = NeuronRecipe {
                 followees: Some(NeuronIds::from(vec![])),
                 ..NeuronRecipe::validate_default_direct_participant()
-            },
-            NeuronRecipe {
-                stake_e8s: Some(neuron_minimum_stake_e8s),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            },
-        ];
+            };
+            validate_recipe(&recipe).unwrap();
+        }
 
-        // Assert all valid neuron recipes produce valid results
-        for (index, neuron_recipe) in valid_neuron_recipes.iter().enumerate() {
-            neuron_recipe
-                .validate(
-                    neuron_minimum_stake_e8s,
-                    max_followees_per_function,
-                    max_number_of_principals_per_neuron,
-                )
-                .unwrap_or_else(|err| panic!("Validation failed for test case {}: {}", index, err));
+        #[test]
+        fn test_valid_minimum_stake() {
+            let recipe = NeuronRecipe {
+                stake_e8s: Some(NEURON_MINIMUM_STAKE_E8S),
+                ..NeuronRecipe::validate_default_neurons_fund()
+            };
+            validate_recipe(&recipe).unwrap();
         }
     }
 
@@ -3789,99 +3828,88 @@ pub(crate) mod tests {
         );
     }
 
-    #[test]
-    fn test_neuron_recipe_construct_followees() {
-        // Create some test NeuronIds
-        let b0 = NeuronId::new_test_neuron_id(10);
-        let b1 = NeuronId::new_test_neuron_id(11);
-        let b2 = NeuronId::new_test_neuron_id(12);
-        let b3 = NeuronId::new_test_neuron_id(13);
+    mod neuron_recipe_construct_followees_tests {
+        use super::*;
 
-        // Action for followees
-        let w = u64::from(&Action::Unspecified(Empty {}));
+        #[test]
+        fn test_direct_participant_empty_followees() {
+            let [b0] = NeuronId::test_neuron_ids();
+            let recipe = NeuronRecipe {
+                followees: Some(NeuronIds::from(vec![])),
+                neuron_id: Some(b0.clone()),
+                ..NeuronRecipe::validate_default_direct_participant()
+            };
+            assert_eq!(recipe.construct_followees(), btreemap! {});
+        }
 
-        // Test cases
-        let test_cases = vec![
-            // Case 1: Empty followees list (Direct participant)
-            (
-                NeuronRecipe {
-                    followees: Some(NeuronIds::from(vec![])),
-                    neuron_id: Some(b0.clone()),
-                    ..NeuronRecipe::validate_default_direct_participant()
-                },
-                btreemap! {},
-                "b0 (Direct, empty followees)",
-            ),
-            // Case 2: Single followee (Direct participant)
-            (
-                NeuronRecipe {
-                    followees: Some(NeuronIds::from(vec![b0.clone()])),
-                    neuron_id: Some(b1.clone()),
-                    ..NeuronRecipe::validate_default_direct_participant()
-                },
-                btreemap! {
-                    w => Followees { followees: vec![b0.clone()] },
-                },
-                "b1 (Direct, single followee)",
-            ),
-            // Case 3: Multiple followees (Direct participant)
-            (
-                NeuronRecipe {
-                    followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone()])),
-                    neuron_id: Some(b2.clone()),
-                    ..NeuronRecipe::validate_default_direct_participant()
-                },
-                btreemap! {
-                    w => Followees { followees: vec![b0.clone(), b1.clone()] },
-                },
-                "b2 (Direct, multiple followees)",
-            ),
-            // Case 4: Empty followees list (NeuronsFund participant)
-            (
-                NeuronRecipe {
-                    followees: Some(NeuronIds::from(vec![])),
-                    neuron_id: Some(b3.clone()),
-                    ..NeuronRecipe::validate_default_neurons_fund()
-                },
-                btreemap! {},
-                "b3 (NeuronsFund, empty followees)",
-            ),
-            // Case 5: Single followee (NeuronsFund participant)
-            (
-                NeuronRecipe {
-                    followees: Some(NeuronIds::from(vec![b1.clone()])),
-                    neuron_id: Some(b3.clone()),
-                    ..NeuronRecipe::validate_default_neurons_fund()
-                },
-                btreemap! {
-                    w => Followees { followees: vec![b1.clone()] },
-                },
-                "b3 (NeuronsFund, single followee)",
-            ),
-            // Case 6: Multiple followees (NeuronsFund participant)
-            (
-                NeuronRecipe {
-                    followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone(), b2.clone()])),
-                    neuron_id: Some(b3.clone()),
-                    ..NeuronRecipe::validate_default_neurons_fund()
-                },
-                btreemap! {
-                    w => Followees { followees: vec![b0.clone(), b1.clone(), b2.clone()] },
-                },
-                "b3 (NeuronsFund, multiple followees)",
-            ),
-        ];
-
-        // Run tests
-        for (index, (neuron_recipe, expected_followees, description)) in
-            test_cases.into_iter().enumerate()
-        {
+        #[test]
+        fn test_direct_participant_single_followee() {
+            let [b0, b1] = NeuronId::test_neuron_ids();
+            let w = u64::from(&Action::Unspecified(Empty {}));
+            let recipe = NeuronRecipe {
+                followees: Some(NeuronIds::from(vec![b0.clone()])),
+                neuron_id: Some(b1.clone()),
+                ..NeuronRecipe::validate_default_direct_participant()
+            };
             assert_eq!(
-                neuron_recipe.construct_followees(),
-                expected_followees,
-                "Test case {} failed: {}",
-                index,
-                description,
+                recipe.construct_followees(),
+                btreemap! { w => Followees { followees: vec![b0.clone()] } }
+            );
+        }
+
+        #[test]
+        fn test_direct_participant_multiple_followees() {
+            let [b0, b1, b2] = NeuronId::test_neuron_ids();
+            let w = u64::from(&Action::Unspecified(Empty {}));
+            let recipe = NeuronRecipe {
+                followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone()])),
+                neuron_id: Some(b2.clone()),
+                ..NeuronRecipe::validate_default_direct_participant()
+            };
+            assert_eq!(
+                recipe.construct_followees(),
+                btreemap! { w => Followees { followees: vec![b0.clone(), b1.clone()] } }
+            );
+        }
+
+        #[test]
+        fn test_neurons_fund_empty_followees() {
+            let [b1] = NeuronId::test_neuron_ids();
+            let recipe = NeuronRecipe {
+                followees: Some(NeuronIds::from(vec![])),
+                neuron_id: Some(b1.clone()),
+                ..NeuronRecipe::validate_default_neurons_fund()
+            };
+            assert_eq!(recipe.construct_followees(), btreemap! {});
+        }
+
+        #[test]
+        fn test_neurons_fund_single_followee() {
+            let [b0, b1] = NeuronId::test_neuron_ids();
+            let w = u64::from(&Action::Unspecified(Empty {}));
+            let recipe = NeuronRecipe {
+                followees: Some(NeuronIds::from(vec![b0.clone()])),
+                neuron_id: Some(b1.clone()),
+                ..NeuronRecipe::validate_default_neurons_fund()
+            };
+            assert_eq!(
+                recipe.construct_followees(),
+                btreemap! { w => Followees { followees: vec![b0.clone()] } }
+            );
+        }
+
+        #[test]
+        fn test_neurons_fund_multiple_followees() {
+            let [b0, b1, b2, b3] = NeuronId::test_neuron_ids();
+            let w = u64::from(&Action::Unspecified(Empty {}));
+            let recipe = NeuronRecipe {
+                followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone(), b2.clone()])),
+                neuron_id: Some(b3.clone()),
+                ..NeuronRecipe::validate_default_neurons_fund()
+            };
+            assert_eq!(
+                recipe.construct_followees(),
+                btreemap! { w => Followees { followees: vec![b0.clone(), b1.clone(), b2.clone()] } }
             );
         }
     }

@@ -2518,6 +2518,8 @@ pub struct GetModeResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClaimSwapNeuronsRequest {
+    /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
+    /// each NeuronRecipe, one neuron will be created.
     #[prost(message, optional, tag = "2")]
     pub neuron_recipes: ::core::option::Option<claim_swap_neurons_request::NeuronRecipes>,
     /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
@@ -2607,10 +2609,13 @@ pub mod claim_swap_neurons_request {
         #[allow(clippy::derive_partial_eq_without_eq)]
         #[derive(Clone, PartialEq, ::prost::Message)]
         pub struct NeuronsFund {
+            /// The neuron ID of the NNS neuron that participated in the Neurons' Fund.
             #[prost(uint64, optional, tag = "1")]
             pub nns_neuron_id: ::core::option::Option<u64>,
+            /// The controller of the NNS neuron that participated in the Neurons' Fund.
             #[prost(message, optional, tag = "2")]
             pub nns_neuron_controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+            /// The hotkeys of the NNS neuron that participated in the Neurons' Fund.
             #[prost(message, optional, tag = "3")]
             pub nns_neuron_hotkeys:
                 ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,

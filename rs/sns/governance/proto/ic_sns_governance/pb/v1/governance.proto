@@ -2006,8 +2006,11 @@ message ClaimSwapNeuronsRequest {
   message NeuronRecipe {
     // The info that for a participant in the Neurons' Fund
     message NeuronsFund {
+      // The neuron ID of the NNS neuron that participated in the Neurons' Fund.
       optional uint64 nns_neuron_id = 1;
+      // The controller of the NNS neuron that participated in the Neurons' Fund.
       optional ic_base_types.pb.v1.PrincipalId nns_neuron_controller = 2;
+      // The hotkeys of the NNS neuron that participated in the Neurons' Fund.
       optional ic_nervous_system.pb.v1.Principals nns_neuron_hotkeys = 3;
     }
 
@@ -2039,6 +2042,8 @@ message ClaimSwapNeuronsRequest {
     repeated NeuronRecipe neuron_recipes = 1;
   }
 
+  // The set of parameters that define the neurons created in `claim_swap_neurons`. For
+  // each NeuronRecipe, one neuron will be created.
   optional NeuronRecipes neuron_recipes = 2;
 
   // The set of parameters that define the neurons created in `claim_swap_neurons`. For

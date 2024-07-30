@@ -792,6 +792,10 @@ impl NeuronId {
         subaccount[1..1 + id.len()].copy_from_slice(id);
         NeuronId::from(subaccount)
     }
+
+    pub fn test_neuron_ids<const N: usize>() -> [NeuronId; N] {
+        core::array::from_fn(|i| NeuronId::new_test_neuron_id(10 + i as u64))
+    }
 }
 
 impl From<Subaccount> for NeuronId {
