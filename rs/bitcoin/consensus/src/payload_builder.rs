@@ -6,7 +6,7 @@ mod tests;
 
 // TODO: This module does not compile, and was not caught by the compiler
 // as it was behind a non-existent feature flag.
-// #[cfg(test)]
+// #[cfg(all(test, feature = "proptest"))]
 // mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
