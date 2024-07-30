@@ -783,8 +783,8 @@ pub type BoundedAllowedViewers =
 /// ```text
 /// variant {
 ///    controllers;
-///    allowed_viewers: vec principal;
 ///    public;
+///    allowed_viewers: vec principal;
 /// }
 /// ```
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
@@ -792,10 +792,10 @@ pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
     Controllers,
-    #[serde(rename = "allowed_viewers")]
-    AllowedViewers(BoundedAllowedViewers),
     #[serde(rename = "public")]
     Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
 }
 
 // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
@@ -804,8 +804,8 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
         use pb_canister_state_bits as pb;
         match item {
             LogVisibility::Controllers => pb::LogVisibility::Controllers,
-            LogVisibility::AllowedViewers(_) => pb::LogVisibility::Controllers,
             LogVisibility::Public => pb::LogVisibility::Public,
+            LogVisibility::AllowedViewers(_) => pb::LogVisibility::Controllers,
         }
     }
 }
