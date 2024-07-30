@@ -323,6 +323,18 @@ enum LogVisibility {
   LOG_VISIBILITY_EMPTY_ALLOWED_VIEWERS = 3;
 }
 
+enum LogVisibilityEnum {
+  LOG_VISIBILITY_ENUM_UNSPECIFIED = 0;
+  LOG_VISIBILITY_ENUM_CONTROLLERS = 1;
+  LOG_VISIBILITY_ENUM_ALLOWED_VIEWERS = 2;
+  LOG_VISIBILITY_ENUM_PUBLIC = 3;
+}
+
+message LogVisibilityV2 {
+  LogVisibilityEnum log_visibility_enum = 1;
+  repeated types.v1.PrincipalId allowed_viewers = 2;
+}
+
 message CanisterLogRecord {
   uint64 idx = 1;
   uint64 timestamp_nanos = 2;
@@ -408,7 +420,7 @@ message CanisterStateBits {
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
   // Log visibility for the canister.
-  LogVisibility log_visibility = 42;
+  LogVisibility log_visibility = 42; // TODO(EXC-1670): remove this field.
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.
@@ -424,4 +436,6 @@ message CanisterStateBits {
   int64 priority_credit = 48;
   LongExecutionMode long_execution_mode = 49;
   optional uint64 wasm_memory_threshold = 50;
+  // Log visibility for the canister.
+  LogVisibilityV2 log_visibility_v2 = 51;
 }
