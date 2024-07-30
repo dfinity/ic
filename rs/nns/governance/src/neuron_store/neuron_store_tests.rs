@@ -848,7 +848,6 @@ fn test_pick_most_important_hotkeys_plenty_self_authenticating() {
         new_self_authenticating_principal_id(3),
         new_self_authenticating_principal_id(4),
         new_self_authenticating_principal_id(5),
-        new_self_authenticating_principal_id(6),
     ];
 
     assert_eq!(
@@ -858,8 +857,7 @@ fn test_pick_most_important_hotkeys_plenty_self_authenticating() {
             // #2 dropped as a non-self-authenticating principal.
             new_self_authenticating_principal_id(3),
             new_self_authenticating_principal_id(4),
-            new_self_authenticating_principal_id(5),
-            // #6 dropped as there are already sufficiently-many hotkeys.
+            // #5 dropped as there are already sufficiently-many hotkeys.
         ],
     );
 }
@@ -871,14 +869,12 @@ fn test_pick_most_important_hotkeys_few_self_authenticating() {
         new_self_authenticating_principal_id(2),
         new_non_self_authenticating_principal_id(3),
         new_non_self_authenticating_principal_id(4),
-        new_self_authenticating_principal_id(5),
     ];
 
     assert_eq!(
         NeuronsFundNeuron::pick_most_important_hotkeys(&hot_keys),
         vec![
             new_self_authenticating_principal_id(2),
-            new_self_authenticating_principal_id(5),
             new_non_self_authenticating_principal_id(1),
             new_non_self_authenticating_principal_id(3),
         ],

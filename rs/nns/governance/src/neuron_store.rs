@@ -209,7 +209,7 @@ impl NeuronsFundNeuron {
     /// Concretely, this value should be less than or equal
     /// `MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR` - 2
     /// because two permissions will be used for the NNS Governance and the NNS neuron controller.
-    const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 4;
+    const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 3;
 
     /// Returns up to `MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON` elements out of `hotkeys`.
     ///
@@ -217,8 +217,6 @@ impl NeuronsFundNeuron {
     /// the function picks the remaining elements in the order in which they appear in the original
     /// vector.
     pub fn pick_most_important_hotkeys(hotkeys: &Vec<PrincipalId>) -> Vec<PrincipalId> {
-        println!("hotkeys = {:#?}", hotkeys);
-
         // Remove duplicates while preserving the order.
         let mut unique_hotkeys = vec![];
         let mut non_self_auth_hotkeys = vec![];
@@ -240,8 +238,6 @@ impl NeuronsFundNeuron {
             }
         }
 
-        println!("unique_hotkeys = {:#?}", unique_hotkeys);
-
         // If there is space in `unique_hotkeys`, fill it up using `non_self_auth_hotkeys`.
         while unique_hotkeys.len() < Self::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON
             && !non_self_auth_hotkeys.is_empty()
@@ -249,8 +245,6 @@ impl NeuronsFundNeuron {
             let non_self_authenticating_hotkey = non_self_auth_hotkeys.remove(0);
             unique_hotkeys.push(non_self_authenticating_hotkey);
         }
-
-        println!("unique_hotkeys = {:#?}", unique_hotkeys);
 
         unique_hotkeys
     }
