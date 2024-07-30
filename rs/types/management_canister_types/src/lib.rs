@@ -777,7 +777,6 @@ impl Payload<'_> for UninstallCodeArgs {}
 /// ```text
 /// variant {
 ///    controllers;
-///    allowed_viewers: vec principal;
 ///    public;
 /// }
 /// ```
@@ -785,9 +784,9 @@ impl Payload<'_> for UninstallCodeArgs {}
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
-    Controllers,
-    #[serde(rename = "allowed_viewers")]
-    Public,
+    Controllers = 1,
+    #[serde(rename = "public")]
+    Public = 2,
 }
 
 // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
@@ -841,6 +840,7 @@ impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
                 pb::LogVisibilityEnum::Unspecified => Self::default(),
                 pb::LogVisibilityEnum::Controllers => Self::Controllers,
                 pb::LogVisibilityEnum::Public => Self::Public,
+                pb::LogVisibilityEnum::AllowedViewers => Self::default(),
             },
         }
     }
