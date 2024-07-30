@@ -165,8 +165,8 @@ impl BlockMaker {
         }
     }
 
-    /// Return true if the validated pool contains a better (lower ranked) block
-    /// proposal than the given rank, for the given height.
+    /// Return true if the validated pool contains a better (lower ranked & not
+    /// disqualified) block proposal than the given rank, for the given height.
     fn is_better_block_proposal_available(
         &self,
         pool: &PoolReader<'_>,
