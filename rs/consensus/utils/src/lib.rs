@@ -1010,11 +1010,7 @@ mod tests {
     fn test_ignore_disqualified_ranks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             const SUBNET_SIZE: u64 = 10;
-            let Dependencies {
-                mut pool,
-                membership,
-                ..
-            } = dependencies(pool_config, SUBNET_SIZE);
+            let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
 
             let height = Height::new(1);
 
