@@ -29,10 +29,8 @@ use ic_nervous_system_governance::index::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::{AccountIdentifier, Subaccount};
-use std::collections::BTreeSet;
 use std::{
     borrow::Cow,
-    cmp::Ordering,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::{Deref, RangeBounds},
@@ -219,24 +217,42 @@ impl NeuronsFundNeuron {
     /// the function picks the remaining elements in the order in which they appear in the original
     /// vector.
     pub fn pick_most_important_hotkeys(hotkeys: &Vec<PrincipalId>) -> Vec<PrincipalId> {
-        let mut unique_hotkeys = hotkeys
-            .iter()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        println!("hotkeys = {:#?}", hotkeys);
 
-        unique_hotkeys.sort_by(|left_hotkey, right_hotkey| {
-            if !left_hotkey.is_self_authenticating() && right_hotkey.is_self_authenticating() {
-                Ordering::Greater
-            } else {
-                Ordering::Less
+        // Remove duplicates while preserving the order.
+        let mut unique_hotkeys = vec![];
+        let mut non_self_auth_hotkeys = vec![];
+        let mut observed = HashSet::new();
+        for hotkey in hotkeys {
+            if !observed.contains(hotkey) {
+                observed.insert(*hotkey);
+                // Collect hotkeys that are self-authenticating; save non_self_auth_hotkeys for
+                // later, in case there is still space for some of them.
+                if hotkey.is_self_authenticating() {
+                    unique_hotkeys.push(*hotkey);
+                } else {
+                    non_self_auth_hotkeys.push(*hotkey);
+                }
             }
-        });
+            // Limit how many hotkeys may be collected.
+            if unique_hotkeys.len() == Self::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON {
+                break;
+            }
+        }
+
+        println!("unique_hotkeys = {:#?}", unique_hotkeys);
+
+        // If there is space in `unique_hotkeys`, fill it up using `non_self_auth_hotkeys`.
+        while unique_hotkeys.len() < Self::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON
+            && !non_self_auth_hotkeys.is_empty()
+        {
+            let non_self_authenticating_hotkey = non_self_auth_hotkeys.remove(0);
+            unique_hotkeys.push(non_self_authenticating_hotkey);
+        }
+
+        println!("unique_hotkeys = {:#?}", unique_hotkeys);
+
         unique_hotkeys
-            .into_iter()
-            .take(Self::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON)
-            .cloned()
-            .collect()
     }
 }
 
