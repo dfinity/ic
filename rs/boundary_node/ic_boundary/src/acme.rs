@@ -7,33 +7,29 @@ use instant_acme::{
 };
 
 use crate::core::{WithRetry, WithThrottle};
-pub struct OrderHandle(#[allow(dead_code)] instant_acme::Order);
+pub struct OrderHandle(instant_acme::Order);
 
 #[derive(Debug)]
 pub struct ChallengeResponse {
     #[allow(dead_code)]
     pub token: String,
-    #[allow(dead_code)]
     pub key_authorization: String,
 }
 
 #[async_trait]
 pub trait Order: Sync + Send {
     // TODO: Only used in specific configurations.
-    #[allow(dead_code)]
     async fn order(&self, name: &str) -> Result<(OrderHandle, ChallengeResponse), Error>;
 }
 
 #[async_trait]
 pub trait Ready: Sync + Send {
     // TODO: Only used in specific configurations.
-    #[allow(dead_code)]
     async fn ready(&self, order: &mut OrderHandle) -> Result<(), Error>;
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum FinalizeError {
-    #[allow(dead_code)]
     #[error("order not ready: {0}")]
     OrderNotReady(String),
 
@@ -48,11 +44,9 @@ pub trait Finalize: Sync + Send {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ObtainError {
-    #[allow(dead_code)]
     #[error("order not valid: {0}")]
     OrderNotValid(String),
 
-    #[allow(dead_code)]
     #[error("certificate not ready")]
     CertificateNotReady,
 
@@ -65,7 +59,6 @@ pub trait Obtain: Sync + Send {
     async fn obtain(&mut self, order: &mut OrderHandle) -> Result<String, ObtainError>;
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct Acme {
     account: Account,
@@ -182,7 +175,6 @@ impl Obtain for Acme {
     }
 }
 
-#[allow(dead_code)]
 fn get_challenge(
     authorizations: Vec<Authorization>,
     typ: ChallengeType,

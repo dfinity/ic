@@ -724,6 +724,7 @@ impl<T: Run> Run for WithMetrics<T> {
     }
 }
 
+#[cfg(feature = "tls")]
 pub struct WithRetry<T>(
     pub T,
     pub Duration, // attempt_interval
