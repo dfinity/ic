@@ -123,7 +123,7 @@ pub(crate) fn validate_payload(
     let current_height = parent.height.increment();
     let registry_version = pool_reader
         .registry_version(current_height)
-        .ok_or_else(|| DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
+        .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
 
     let last_summary_block = pool_reader
         .dkg_summary_block(&parent)
