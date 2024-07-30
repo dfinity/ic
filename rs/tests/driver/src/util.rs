@@ -813,6 +813,19 @@ pub async fn agent_with_client_identity(
     Ok(a)
 }
 
+pub async fn agent_using_call_v2_endpoint(url: &str) -> Result<Agent, AgentError> {
+    let identity = get_identity();
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestTransport::create(url)?)
+        .with_identity(identity)
+        .build()
+        .unwrap();
+    agent.fetch_root_key().await?;
+
+    Ok(agent)
+}
+
 // Creates an identity to be used with `Agent`.
 pub fn random_ed25519_identity() -> BasicIdentity {
     let rng = ring::rand::SystemRandom::new();

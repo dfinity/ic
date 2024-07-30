@@ -33,7 +33,9 @@ use ic_system_test_driver::{
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::{agent_observes_canister_module, assert_create_agent, block_on},
+    util::{
+        agent_observes_canister_module, agent_using_call_v2_endpoint, assert_create_agent, block_on,
+    },
 };
 use std::{env, iter, net::SocketAddrV6, time::Duration};
 
@@ -2898,7 +2900,11 @@ pub fn canister_routing_test(env: TestEnv) {
             .unwrap()
             .get_snapshot()
             .unwrap();
-        boundary_node.build_default_agent()
+
+        block_on(agent_using_call_v2_endpoint(
+            boundary_node.get_public_url().as_ref(),
+        ))
+        .expect("Agent can be created")
     };
     info!(
         log,
