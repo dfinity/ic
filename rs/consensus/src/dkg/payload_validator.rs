@@ -138,7 +138,7 @@ pub(crate) fn validate_payload(
         BlockPayload::Summary(summary_payload) => {
             if !is_dkg_start_height {
                 return Err(
-                    InvalidDkgPayloadReasonn::DkgSummaryAtNonStartHeight(current_height).into(),
+                    InvalidDkgPayloadReason::DkgSummaryAtNonStartHeight(current_height).into(),
                 );
             }
             let expected_summary = payload_builder::create_summary_payload(
