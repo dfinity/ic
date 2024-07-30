@@ -7,6 +7,10 @@ on:
       - '.github/workflows/build-minimal-runner-image.yml'
       - '.github/minimal-runner-image/**'
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-upload-minimal-image:
     runs-on: ubuntu-latest
