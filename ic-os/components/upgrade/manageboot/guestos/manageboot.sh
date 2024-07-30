@@ -116,7 +116,7 @@ Usage:
       bootloader to use it on next boot. (Caller will still have to
       reboot on next opportunity).
       The new system image can be given in two different ways:
-      - as a singe .tar (or .tar.gz) file containing two files
+      - as a singe .tar (or .tar.zst) file containing two files
         named "boot.img" and "root.img"
       - as two filenames: first the "boot" partition
         image, then the "root" partition image.
