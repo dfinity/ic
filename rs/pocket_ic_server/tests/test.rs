@@ -846,7 +846,7 @@ fn test_query_stats() {
 fn test_query_stats_live() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
 
-    // Create live PocketIC instance with one NNS subnet and one app subnet.
+    // Create PocketIC instance with one NNS subnet and one app subnet.
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
