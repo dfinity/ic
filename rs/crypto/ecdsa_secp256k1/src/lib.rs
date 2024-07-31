@@ -95,7 +95,7 @@ impl DerivationPath {
             .expect("HMAC-SHA-512 should accept 256 bit key");
 
         hmac.update(input);
-        hmac.update(&idx);
+        hmac.update(idx);
 
         let hmac_output: [u8; 64] = hmac.finalize().into_bytes().into();
 
@@ -151,7 +151,7 @@ impl DerivationPath {
     ) -> (AffinePoint, Scalar, [u8; 32]) {
         let mut offset = Scalar::ZERO;
         let mut pt = pt;
-        let mut chain_code = chain_code.clone();
+        let mut chain_code = *chain_code;
 
         for idx in self.path() {
             let (next_chain_code, next_offset, next_pt) = Self::ckd_pub(&idx.0, pt, &chain_code);
