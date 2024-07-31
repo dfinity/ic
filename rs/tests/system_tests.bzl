@@ -18,7 +18,10 @@ def _run_system_test(ctx):
         is_executable = True,
         content = """#!/bin/bash
             set -eEuo pipefail
-            RUNFILES="$PWD"
+            # We export RUNFILES such that the from_location_specified_by_env_var() function in
+            # rs/rust_canisters/canister_test/src/canister.rs can find canisters
+            # relative to the $RUNFILES directory.
+            export RUNFILES="$PWD"
             KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
             VERSION_FILE="$(cat $VERSION_FILE_PATH)"
             cd "$TEST_TMPDIR"
