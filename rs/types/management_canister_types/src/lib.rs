@@ -809,6 +809,7 @@ impl From<LogVisibilityV2> for LogVisibility {
         match item {
             LogVisibilityV2::Controllers => LogVisibility::Controllers,
             LogVisibilityV2::Public => LogVisibility::Public,
+            // Fall back to the controllers value.
             LogVisibilityV2::AllowedViewers(_) => LogVisibility::Controllers,
         }
     }
