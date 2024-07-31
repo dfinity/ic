@@ -1,6 +1,6 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
-use crate::pb::storage::ArchivedMonthlyNodeProviderRewards;
+use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_stable_structures::{

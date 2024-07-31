@@ -1,7 +1,7 @@
 use crate::{
-    pb::{
-        storage::{archived_monthly_node_provider_rewards, ArchivedMonthlyNodeProviderRewards},
-        v1::MonthlyNodeProviderRewards,
+    pb::v1::{
+        archived_monthly_node_provider_rewards, ArchivedMonthlyNodeProviderRewards,
+        MonthlyNodeProviderRewards,
     },
     storage::with_node_provider_rewards_log,
 };
