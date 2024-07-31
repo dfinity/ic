@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 RUN apt -yq update && \
-    apt -yq install --no-install-recommends git curl wget ca-certificates sudo build-essential
+    apt -yq install --no-install-recommends git curl wget ca-certificates sudo build-essential jq
 
 RUN groupadd -g 1001 runner && useradd -ms /bin/bash -u 1001 -g 1001 runner && \
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
