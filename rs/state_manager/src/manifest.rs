@@ -873,13 +873,31 @@ pub fn compute_manifest(
     max_chunk_size: u32,
     opt_manifest_delta: Option<ManifestDelta>,
 ) -> Result<Manifest, CheckpointError> {
-    let files = {
+    let mut files = {
         let mut files = Vec::new();
         files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
         // We sort the table to make sure that the table is the same on all replicas
         files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files
     };
+
+    #[cfg(debug_assertions)]
+    let files_to_check_in_debug_mode = files.clone();
+
+    // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
+    // If it accidentally exists, the marker file should be excluded from manifest computation and a critical alert will be raised.
+    // Note that in the future if we allow computing manifest before removing the marker, the critical alert should be adjusted accordingly.
+    if !checkpoint.is_checkpoint_verified() {
+        metrics.manifest_computation_including_marker_critical.inc();
+        files.retain(|FileWithSize(p, _)| {
+            checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
+        });
+    }
+
+    debug_assert!(!files_to_check_in_debug_mode
+        .iter()
+        .any(|FileWithSize(p, _)| checkpoint.raw_path().join(p)
+            == checkpoint.unverified_checkpoint_marker()));
 
     let chunk_actions = match opt_manifest_delta {
         Some(manifest_delta) => {
@@ -910,17 +928,6 @@ pub fn compute_manifest(
         }
         None => default_hash_plan(&files, max_chunk_size),
     };
-
-    // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
-    // To account for possible changes in the checkpointing order, ensure the marker file is ignored if it already exists and
-    // not accidentally counted when building the file table chunk table.
-    debug_assert!(!files
-        .iter()
-        .any(|FileWithSize(p, _)| *p == checkpoint.unverified_checkpoint_marker()));
-    // Note the condition statement should be adjusted accordingly if in the future we allow computing manifest before removing the marker.
-    if !checkpoint.is_checkpoint_verified() {
-        metrics.manifest_computation_including_marker_critical.inc();
-    }
 
     #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
