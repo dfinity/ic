@@ -255,12 +255,15 @@ SNS_CANISTER_WASM_PROVIDERS = {
 }
 
 def canister_runtime_deps_impl(canister_wasm_providers, qualifying_canisters):
-    """Returns the runtime dependencies for a canister suite paired with a set of environment variables pointing to the WASMs.
+    """
+    Return the canister runtime dependencies.
 
     Args:
-      name: base name to use for the rule providing the canister WASM.
       canister_wasm_providers: dict with (canister names as keys) and (values representing WASM-producing rules, tip-of-branch or mainnet).
       qualifying_canisters: list of canisters to be qualified for the release, i.e., these should be built from the current branch.
+
+    Returns:
+      the runtime dependencies for a canister suite paired with a set of environment variables pointing to the WASMs.
     """
     for cname in qualifying_canisters:
         if cname not in canister_wasm_providers.keys():
