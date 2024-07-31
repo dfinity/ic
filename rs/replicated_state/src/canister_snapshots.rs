@@ -60,6 +60,21 @@ impl CanisterSnapshots {
         self.snapshots.get(&snapshot_id)
     }
 
+    /// Returns a mutable reference of the canister snapshot identified by `snapshot_id`.
+    pub fn get_mut(&mut self, snapshot_id: SnapshotId) -> Option<&mut Arc<CanisterSnapshot>> {
+        self.snapshots.get_mut(&snapshot_id)
+    }
+
+    /// Iterate over all snapshots.
+    pub fn iter(&self) -> impl Iterator<Item = (&SnapshotId, &Arc<CanisterSnapshot>)> {
+        self.snapshots.iter()
+    }
+
+    /// Mutably iterate over all snapshots.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&SnapshotId, &mut Arc<CanisterSnapshot>)> {
+        self.snapshots.iter_mut()
+    }
+
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     ///
     /// Additionally, adds a new item to the `unflushed_changes`
@@ -321,6 +336,14 @@ impl CanisterSnapshot {
 
     pub fn certified_data(&self) -> &Vec<u8> {
         &self.certified_data
+    }
+
+    pub fn chunk_store_mut(&mut self) -> &mut WasmChunkStore {
+        &mut self.chunk_store
+    }
+
+    pub fn execution_snapshot_mut(&mut self) -> &mut ExecutionStateSnapshot {
+        &mut self.execution_snapshot
     }
 }
 
