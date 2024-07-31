@@ -7754,6 +7754,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             non_self_authenticating_controller_neuron_subset_metrics,
+            public_neuron_subset_metrics,
         } = self
             .neuron_store
             .compute_neuron_metrics(now, self.economics().neuron_minimum_stake_e8s);
@@ -7762,9 +7763,12 @@ impl Governance {
             Some(non_self_authenticating_controller_neuron_subset_metrics.total_staked_e8s);
         let total_voting_power_non_self_authenticating_controller =
             Some(non_self_authenticating_controller_neuron_subset_metrics.total_voting_power);
+
         let non_self_authenticating_controller_neuron_subset_metrics = Some(
             NeuronSubsetMetricsPb::from(non_self_authenticating_controller_neuron_subset_metrics),
         );
+        let public_neuron_subset_metrics =
+            Some(NeuronSubsetMetricsPb::from(public_neuron_subset_metrics));
 
         GovernanceCachedMetrics {
             timestamp_seconds: now,
@@ -7802,11 +7806,11 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
-
-            // Non-self-authenticating neurons.
             total_staked_e8s_non_self_authenticating_controller,
             total_voting_power_non_self_authenticating_controller,
+
             non_self_authenticating_controller_neuron_subset_metrics,
+            public_neuron_subset_metrics,
         }
     }
 
