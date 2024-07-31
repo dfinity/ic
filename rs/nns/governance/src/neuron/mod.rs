@@ -1,4 +1,6 @@
-use crate::pb::v1::{NeuronInfo, NeuronType};
+use crate::pb::v1::{
+    neuron::DissolveState, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronType,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use std::ops::RangeBounds;
 
@@ -15,6 +17,34 @@ fn neuron_stake_e8s(
     cached_neuron_stake_e8s
         .saturating_sub(neuron_fees_e8s)
         .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
+}
+
+// The following methods are conceptually methods for the API type of the neuron.
+impl NeuronProto {
+    pub fn state(&self, now_seconds: u64) -> NeuronState {
+        if self.spawn_at_timestamp_seconds.is_some() {
+            return NeuronState::Spawning;
+        }
+        match self.dissolve_state {
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
+                if dissolve_delay_seconds > 0 {
+                    NeuronState::NotDissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            Some(DissolveState::WhenDissolvedTimestampSeconds(
+                when_dissolved_timestamp_seconds,
+            )) => {
+                if when_dissolved_timestamp_seconds > now_seconds {
+                    NeuronState::Dissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            None => NeuronState::Dissolved,
+        }
+    }
 }
 
 /// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods

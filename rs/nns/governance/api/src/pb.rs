@@ -1,7 +1,8 @@
 use crate::pb::v1::{
-    governance_error::ErrorType, manage_neuron_response, neuron::DissolveState, GovernanceError,
-    ManageNeuronResponse, NetworkEconomics, Neuron, NeuronState, NeuronsFundEconomics,
-    NeuronsFundMatchedFundingCurveCoefficients, XdrConversionRate,
+    governance::migration::MigrationStatus, governance_error::ErrorType, manage_neuron_response,
+    neuron::DissolveState, GovernanceError, ManageNeuronResponse, NetworkEconomics, Neuron,
+    NeuronState, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
+    XdrConversionRate,
 };
 use ic_nervous_system_proto::pb::v1::{Decimal, Percentage};
 use icp_ledger::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
@@ -169,4 +170,13 @@ fn neuron_stake_e8s(
     cached_neuron_stake_e8s
         .saturating_sub(neuron_fees_e8s)
         .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
+}
+
+impl MigrationStatus {
+    pub fn is_terminal(self) -> bool {
+        match self {
+            Self::Unspecified | Self::InProgress => false,
+            Self::Succeeded | Self::Failed => true,
+        }
+    }
 }
