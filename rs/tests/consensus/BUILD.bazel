@@ -345,7 +345,14 @@ system_test(
 system_test(
     name = "consensus_performance",
     additional_colocate_tags = [
-        "system_test_benchmark",
+        # TODO: when both the //rs/tests/consensus/tecdsa:tecdsa_performance_test
+        # and this test have the system_test_benchmark label they both run in parallel
+        # on the daily system-tests-benchmarks-nightly job causing them to use more vCPUs
+        # then are available in our performance cluster (28 hosts * 64 vCPUs = 1792 vCPUs).
+        # So for now we don't run this test on CI. We can later figure out how to run
+        # these tests sequentially.
+        # "system_test_benchmark",
+        "manual",
     ],
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
