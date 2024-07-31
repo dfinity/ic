@@ -773,12 +773,6 @@ impl UninstallCodeArgs {
 
 impl Payload<'_> for UninstallCodeArgs {}
 
-/// Maximum number of allowed log viewers (specified in the interface spec).
-const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
-
-pub type BoundedAllowedViewers =
-    BoundedVec<MAX_ALLOWED_LOG_VIEWERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
-
 // TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 /// Log visibility for a canister.
 /// ```text
@@ -830,6 +824,12 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
         }
     }
 }
+
+/// Maximum number of allowed log viewers (specified in the interface spec).
+const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
+
+pub type BoundedAllowedViewers =
+    BoundedVec<MAX_ALLOWED_LOG_VIEWERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
 
 /// Log visibility for a canister.
 /// ```text
