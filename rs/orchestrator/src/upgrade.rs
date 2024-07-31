@@ -192,14 +192,7 @@ impl Upgrade {
                                     // Otherwise we would have left the subnet before upgrading. This means
                                     // we will trust the registry and go ahead with removing the node's state
                                     // including the broken local CUP.
-                                    self.metrics.master_public_key_changed_errors.reset();
-                                    remove_node_state(
-                                        self.replica_config_file.clone(),
-                                        self.cup_provider.get_cup_path(),
-                                        self.orchestrator_data_directory.clone(),
-                                    )
-                                    .map_err(OrchestratorError::UpgradeError)?;
-                                    info!(self.logger, "Subnet state removed");
+                                    self.remove_state()?;
                                     return Ok(None);
                                 }
                                 Err(other) => return Err(other),
@@ -273,16 +266,8 @@ impl Upgrade {
             subnet_id,
             &latest_cup,
         ) {
-            // Reset the key changed errors counter to not raise alerts in other subnets
-            self.metrics.master_public_key_changed_errors.reset();
             self.stop_replica()?;
-            remove_node_state(
-                self.replica_config_file.clone(),
-                self.cup_provider.get_cup_path(),
-                self.orchestrator_data_directory.clone(),
-            )
-            .map_err(OrchestratorError::UpgradeError)?;
-            info!(self.logger, "Subnet state removed");
+            self.remove_state()?;
             return Ok(None);
         }
 
@@ -369,6 +354,19 @@ impl Upgrade {
                 reexec_current_process(&self.logger);
             }
         }
+        Ok(())
+    }
+
+    fn remove_state(&self) -> OrchestratorResult<()> {
+        // Reset the key changed errors counter to not raise alerts in other subnets
+        self.metrics.master_public_key_changed_errors.reset();
+        remove_node_state(
+            self.replica_config_file.clone(),
+            self.cup_provider.get_cup_path(),
+            self.orchestrator_data_directory.clone(),
+        )
+        .map_err(OrchestratorError::UpgradeError)?;
+        info!(self.logger, "Subnet state removed");
         Ok(())
     }
 
