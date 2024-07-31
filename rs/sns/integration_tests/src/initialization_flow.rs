@@ -245,7 +245,7 @@ impl SnsInitializationFlowTestSetup {
         };
 
         let response =
-            nns_governance_make_proposal(&self.state_machine, sender, neuron_id, &proposal.into());
+            nns_governance_make_proposal(&self.state_machine, sender, neuron_id, &proposal);
 
         match response.command {
             Some(manage_neuron_response::Command::MakeProposal(make_proposal_response)) => {
