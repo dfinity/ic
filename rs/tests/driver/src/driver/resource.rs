@@ -481,7 +481,7 @@ pub fn build_empty_image(tmp_dir: &Path, out_file_name: &str) -> anyhow::Result<
 
     let mut tar_file = File::open(tar_path)?;
     let compressed_img_file = File::create(&compressed_img_path)?;
-    let mut encoder = ZstEncoder::new(compressed_img_file, 0)?;
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut tar_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
