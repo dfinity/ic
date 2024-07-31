@@ -669,7 +669,7 @@ fn configure_setupos_image(
 
     let mut img_file = File::open(&uncompressed_image)?;
     let configured_image_file = File::create(configured_image.clone())?;
-    let mut encoder = Encoder::new(compressed_img_file, 0)?;
+    let mut encoder = Encoder::new(configured_image_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
