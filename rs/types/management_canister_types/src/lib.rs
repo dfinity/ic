@@ -791,7 +791,7 @@ pub enum LogVisibility {
 }
 
 // Ensure forward compatibility with the new `LogVisibilityV2`.
-// First read the old `LogVisibility``, if it fails (eg for `LogVisibilityV2::AllowedViewers`),
+// First read the old `LogVisibility`, if it fails (eg for `LogVisibilityV2::AllowedViewers`),
 // try to read the new `LogVisibilityV2`.
 impl Payload<'_> for LogVisibility {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
