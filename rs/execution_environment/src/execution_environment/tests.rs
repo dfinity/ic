@@ -1300,12 +1300,12 @@ fn canister_snapshots_after_split() {
         .with_caller(subnet_a, caller_canister)
         .build();
 
-    // Create two canisters.
+    // Create two universal canisters.
     let canister_id_1 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
         .unwrap();
     let canister_id_2 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
         .unwrap();
 
     // Set controllers.
@@ -1363,6 +1363,13 @@ fn canister_snapshots_after_split() {
             .len(),
         1
     );
+
+    // Simulate that there's a checkpoint right before starting the subnet split.
+    // For the purpose of this test, we need to clear heap_delta_estimate and
+    // expected_compiled_wasms cache (a subnet split assumes it happens after a
+    // checkpoint round where these two happen among other things).
+    test.state_mut().metadata.heap_delta_estimate = NumBytes::from(0);
+    test.state_mut().metadata.expected_compiled_wasms.clear();
 
     // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
     let routing_table = RoutingTable::try_from(btreemap! {
