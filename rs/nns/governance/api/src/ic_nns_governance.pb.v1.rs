@@ -1630,7 +1630,6 @@ pub mod neurons_fund_snapshot {
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
-        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
         #[prost(message, repeated, tag = "7")]
         pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
         /// Deprecated. Please use `controller` instead (not `hotkeys`!)

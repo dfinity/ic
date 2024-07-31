@@ -289,7 +289,7 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPortionPb {
             maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
             controller: Some(neuron.controller),
             is_capped: Some(neuron.is_capped),
-            hotkeys: Vec::new(), // TODO(NNS1-3199): populate hotkeys
+            hotkeys: neuron.hotkeys,
             hotkey_principal: Some(neuron.controller),
         }
     }
