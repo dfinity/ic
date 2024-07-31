@@ -37,7 +37,6 @@ use crate::{
         manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
         neuron::Followees,
         neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
-        proposal,
         proposal::Action,
         reward_node_provider::{RewardMode, RewardToAccount},
         settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
@@ -889,10 +888,18 @@ impl Proposal {
             .map_or(false, |a| a.allowed_when_resources_are_low())
     }
 
-    fn omit_large_fields(self) -> Self {
+    fn clone_for_response(&self, selection: ProposalFieldsSelection) -> Proposal {
         Proposal {
-            action: self.action.map(|action| action.omit_large_fields()),
-            ..self
+            // Fields we always clone entirely.
+            title: self.title.clone(),
+            summary: self.summary.clone(),
+            url: self.url.clone(),
+
+            // We selectively clone fields based on the selection.
+            action: self
+                .action
+                .as_ref()
+                .map(|action| action.clone_for_response(selection)),
         }
     }
 }
@@ -939,31 +946,139 @@ impl Action {
         }
     }
 
-    fn omit_large_fields(self) -> Self {
+    fn clone_for_response(&self, selection: ProposalFieldsSelection) -> Action {
+        let include_large_fields = match (selection, self) {
+            (ProposalFieldsSelection::All, _) => true,
+            (ProposalFieldsSelection::NoLargeFields, _) => false,
+            (
+                ProposalFieldsSelection::OnlyAllowLargeFieldsInCreateServiceNervousSystem,
+                Action::CreateServiceNervousSystem(_),
+            ) => true,
+            (ProposalFieldsSelection::OnlyAllowLargeFieldsInCreateServiceNervousSystem, _) => false,
+        };
+
         match self {
             Action::CreateServiceNervousSystem(create_service_nervous_system) => {
-                Action::CreateServiceNervousSystem(CreateServiceNervousSystem {
-                    ledger_parameters: create_service_nervous_system.ledger_parameters.map(
-                        |ledger_parameters| LedgerParameters {
-                            token_logo: None,
-                            ..ledger_parameters
-                        },
-                    ),
-                    logo: None,
-                    ..create_service_nervous_system
-                })
+                Action::CreateServiceNervousSystem(
+                    create_service_nervous_system.clone_for_response(include_large_fields),
+                )
             }
-            Action::ExecuteNnsFunction(mut execute_nns_function) => {
-                if execute_nns_function.payload.len()
-                    > EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX
-                {
-                    execute_nns_function.payload.clear();
-                }
-                Action::ExecuteNnsFunction(execute_nns_function)
-            }
-            action => action,
+            Action::ExecuteNnsFunction(execute_nns_function) => Action::ExecuteNnsFunction(
+                execute_nns_function.clone_for_response(include_large_fields),
+            ),
+            action => action.clone(),
         }
     }
+}
+
+impl CreateServiceNervousSystem {
+    pub fn clone_for_response(&self, include_large_fields: bool) -> Self {
+        let Self {
+            name,
+            description,
+            url,
+            fallback_controller_principal_ids,
+            dapp_canisters,
+            initial_token_distribution,
+            swap_parameters,
+            governance_parameters,
+            ledger_parameters,
+            logo,
+        } = self;
+
+        // Trivial clones for non-large fields.
+        let name = name.clone();
+        let description = description.clone();
+        let url = url.clone();
+        let fallback_controller_principal_ids = fallback_controller_principal_ids.clone();
+        let dapp_canisters = dapp_canisters.clone();
+        let initial_token_distribution = initial_token_distribution.clone();
+        let swap_parameters = swap_parameters.clone();
+        let governance_parameters = governance_parameters.clone();
+
+        // Selective clones for large fields.
+        let logo = if include_large_fields {
+            logo.clone()
+        } else {
+            None
+        };
+        let ledger_parameters = ledger_parameters
+            .as_ref()
+            .map(|ledger_parameters| ledger_parameters.clone_for_response(include_large_fields));
+
+        Self {
+            name,
+            description,
+            url,
+            fallback_controller_principal_ids,
+            dapp_canisters,
+            initial_token_distribution,
+            swap_parameters,
+            governance_parameters,
+            ledger_parameters,
+            logo,
+        }
+    }
+}
+
+impl LedgerParameters {
+    pub fn clone_for_response(&self, include_large_fields: bool) -> Self {
+        let Self {
+            transaction_fee,
+            token_name,
+            token_symbol,
+            token_logo,
+        } = self;
+
+        let transaction_fee = transaction_fee.clone();
+        let token_name = token_name.clone();
+        let token_symbol = token_symbol.clone();
+        let token_logo = if include_large_fields {
+            token_logo.clone()
+        } else {
+            None
+        };
+
+        Self {
+            transaction_fee,
+            token_name,
+            token_symbol,
+            token_logo,
+        }
+    }
+}
+
+impl ExecuteNnsFunction {
+    pub fn clone_for_response(&self, include_large_fields: bool) -> Self {
+        let Self {
+            nns_function,
+            payload,
+        } = self;
+
+        let nns_function = *nns_function;
+        let payload = if include_large_fields
+            || payload.len() <= EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX
+        {
+            payload.clone()
+        } else {
+            Vec::new()
+        };
+
+        Self {
+            nns_function,
+            payload,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Copy)]
+enum ProposalFieldsSelection {
+    // Return all fields.
+    All,
+    // Do not return large fields, except for ones within CreateServiceNervousSystem.
+    OnlyAllowLargeFieldsInCreateServiceNervousSystem,
+    // Do not return any large fields.
+    NoLargeFields,
 }
 
 impl ProposalData {
@@ -1274,15 +1389,6 @@ impl ProposalData {
             ));
         };
         Ok(neurons_fund_data)
-    }
-}
-
-impl ProposalInfo {
-    fn omit_large_fields(self) -> Self {
-        ProposalInfo {
-            proposal: self.proposal.map(|proposal| proposal.omit_large_fields()),
-            ..self
-        }
     }
 }
 
@@ -3514,7 +3620,12 @@ impl Governance {
                 let caller_neurons: HashSet<NeuronId> =
                     self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
                 let now = self.env.now();
-                Some(self.proposal_data_to_info(pd, &caller_neurons, now, false))
+                Some(self.proposal_data_to_info(
+                    pd,
+                    &caller_neurons,
+                    now,
+                    ProposalFieldsSelection::All,
+                ))
             }
         }
     }
@@ -3601,7 +3712,14 @@ impl Governance {
             self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
         let now = self.env.now();
         self.get_pending_proposals_data()
-            .map(|data| self.proposal_data_to_info(data, &caller_neurons, now, true))
+            .map(|data| {
+                self.proposal_data_to_info(
+                    data,
+                    &caller_neurons,
+                    now,
+                    ProposalFieldsSelection::NoLargeFields,
+                )
+            })
             .collect()
     }
 
@@ -3637,7 +3755,7 @@ impl Governance {
         data: &ProposalData,
         caller_neurons: &HashSet<NeuronId>,
         now_seconds: u64,
-        multi_query: bool,
+        selection: ProposalFieldsSelection,
     ) -> ProposalInfo {
         // Calculate derived fields
         let topic = data.topic();
@@ -3645,24 +3763,10 @@ impl Governance {
         let voting_period_seconds = self.voting_period_seconds()(topic);
         let reward_status = data.reward_status(now_seconds, voting_period_seconds);
 
-        // If this is part of a "multi" query and an ExecuteNnsFunction
-        // proposal then remove the payload if the payload is larger
-        // than EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX.
-        let proposal = if multi_query {
-            if let Some(
-                proposal @ Proposal {
-                    action: Some(proposal::Action::ExecuteNnsFunction(_)),
-                    ..
-                },
-            ) = data.proposal.clone()
-            {
-                Some(proposal.omit_large_fields())
-            } else {
-                data.proposal.clone()
-            }
-        } else {
-            data.proposal.clone()
-        };
+        let proposal = data
+            .proposal
+            .as_ref()
+            .map(|proposal| proposal.clone_for_response(selection));
 
         /// Remove all ballots except the ballots belonging to a neuron present
         /// in `except_from`.
@@ -3829,19 +3933,17 @@ impl Governance {
             .filter(|(_, x)| proposal_matches_request(x))
             .take(limit);
 
+        let proposal_fields_selection = if req.omit_large_fields() {
+            ProposalFieldsSelection::NoLargeFields
+        } else {
+            ProposalFieldsSelection::OnlyAllowLargeFieldsInCreateServiceNervousSystem
+        };
         let proposal_info = proposals
             .map(|(_, y)| y)
-            .map(|pd| self.proposal_data_to_info(pd, &caller_neurons, now, true))
+            .map(|pd| {
+                self.proposal_data_to_info(pd, &caller_neurons, now, proposal_fields_selection)
+            })
             .collect::<Vec<_>>();
-
-        let proposal_info = if req.omit_large_fields() {
-            proposal_info
-                .into_iter()
-                .map(|data| data.omit_large_fields())
-                .collect()
-        } else {
-            proposal_info
-        };
 
         ListProposalInfoResponse { proposal_info }
     }
