@@ -50,7 +50,7 @@ class SlackVulnerabilityInfo:
             else:
                 self.finding_by_id[s_finding.id()] = s_finding
 
-    def get_diff_for_add(self, info_by_project: Dict[str, SlackProjectInfo]) -> List[SlackVulnerabilityEvent]:
+    def get_events_for_add(self, info_by_project: Dict[str, SlackProjectInfo]) -> List[SlackVulnerabilityEvent]:
         res = []
         all_channels = self.__get_channel_ids_of_current_findings(info_by_project)
         for channel in all_channels:
@@ -66,7 +66,7 @@ class SlackVulnerabilityInfo:
                 res.append(SlackVulnerabilityEvent.dep_added(self.vulnerability.id, channel, s_finding.id(), projects))
         return res
 
-    def get_diff_for_remove(self, info_by_project: Dict[str, SlackProjectInfo], repository: str, scanner: str) -> List[SlackVulnerabilityEvent]:
+    def get_events_for_remove(self, info_by_project: Dict[str, SlackProjectInfo], repository: str, scanner: str) -> List[SlackVulnerabilityEvent]:
         res = []
         channels_to_keep = set()
         for s_finding in self.finding_by_id.values():

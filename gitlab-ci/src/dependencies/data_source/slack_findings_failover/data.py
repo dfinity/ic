@@ -16,8 +16,6 @@ class SlackVulnerabilityEventType(Enum):
     VULN_CHANGED = 3
     DEP_ADDED = 4
     DEP_REMOVED = 5
-    PROJ_ADDED = 6
-    PROJ_REMOVED = 7
 
 
 @dataclass

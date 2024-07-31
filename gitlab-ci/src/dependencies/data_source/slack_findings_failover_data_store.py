@@ -6,7 +6,6 @@ from typing import Dict, List, Set
 
 from data_source.findings_failover_data_store import FindingsFailoverDataStore
 from data_source.slack_findings_failover.data import SlackProjectInfo, VULNERABILITY_THRESHOLD_SCORE
-from data_source.slack_findings_failover.parse_format import parse_finding_project
 from data_source.slack_findings_failover.scan_result import SlackScanResult
 from data_source.slack_findings_failover.vuln_info import VulnerabilityInfo, SlackVulnerabilityInfo
 from data_source.slack_findings_failover.vuln_load import SlackVulnerabilityLoader
@@ -28,24 +27,29 @@ SLACK_OAUTH_TOKEN = os.environ.get("SLACK_PSEC_BOT_OAUTH_TOKEN")
 if SLACK_OAUTH_TOKEN is None:
     logging.error("SLACK_OAUTH_TOKEN not set, can't use slack failover store")
 
-FAILOVER_FINDING_IDS = {('ic', 'BAZEL_TRIVY_CS', 'linux-libc-dev'), ('ic', 'BAZEL_TRIVY_CS', 'linux-modules-5.15.0')}
+FAILOVER_FINDING_IDS = {("ic", "BAZEL_TRIVY_CS", "linux-libc-dev"), ("ic", "BAZEL_TRIVY_CS", "linux-modules-5.15.0")}
 
 
 class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
     slack_api_by_channel: Dict[str, SlackApi] = {}
     project_by_path: Dict[str, Project] = {}
+    slack_loader: SlackVulnerabilityLoader
+    slack_store: SlackVulnerabilityStore
 
     def __init__(
         self,
         projects: List[Project],
         slack_api: SlackApi = None,
+        slack_loader: SlackVulnerabilityLoader = None,
+        slack_store: SlackVulnerabilityStore = None
     ):
         for proj in projects:
             if proj.owner and proj.owner not in SUPPORTED_TEAMS:
                 raise RuntimeError(f"Project {proj.name} has owner {proj.owner} which is not supported")
-            for owner in proj.owner_by_path.values():
-                if owner not in SUPPORTED_TEAMS:
-                    raise RuntimeError(f"Project {proj.name} has path owner {owner} which is not supported")
+            for owners in proj.owner_by_path.values():
+                for owner in owners:
+                    if owner not in SUPPORTED_TEAMS:
+                        raise RuntimeError(f"Project {proj.name} has path owner {owner} which is not supported")
         for proj in projects:
             self.project_by_path[proj.path] = deepcopy(proj)
 
@@ -54,6 +58,9 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                 self.slack_api_by_channel[channel.channel_id] = slack_api
             elif channel.channel_id not in self.slack_api_by_channel:
                 self.slack_api_by_channel[channel.channel_id] = SlackApi(channel, SLACK_LOG_TO_CONSOLE, SLACK_OAUTH_TOKEN)
+
+        self.slack_loader = slack_loader if slack_loader else SlackVulnerabilityLoader(self.slack_api_by_channel)
+        self.slack_store = slack_store if slack_store else SlackVulnerabilityStore(self.slack_api_by_channel)
 
     def __info_by_project(self, projects: Set[str]) -> Dict[str, SlackProjectInfo]:
         res = {}
@@ -72,7 +79,7 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                         risk_assessors[cid] = set()
                     risk_assessors[cid].add(SLACK_TEAM_GROUP_ID[proj.owner])
                 for sub_path, teams in proj.owner_by_path.items():
-                    if not transformed_proj.startswith(f"{proj.path}/{sub_path}"):
+                    if not transformed_proj.startswith(sub_path):
                         continue
                     for team in teams:
                         cid = SLACK_CHANNEL_CONFIG_BY_TEAM[team].channel_id
@@ -91,13 +98,8 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
     def can_handle(self, finding: Finding) -> bool:
         is_failover_finding = (finding.repository, finding.scanner, finding.vulnerable_dependency.id) in FAILOVER_FINDING_IDS
         if is_failover_finding:
-            # check that all projects are known, if not raise an exception (configuration error)
-            for proj in finding.projects:
-                proj_parts = parse_finding_project(proj)
-                if not proj_parts:
-                    raise RuntimeError(f"could not parse project {proj} of finding {finding.id()}")
-                if proj_parts[1] not in self.project_by_path:
-                    raise RuntimeError(f"unknown project path {proj_parts[1]} of finding {finding.id()}, known paths: {self.project_by_path.keys()}")
+            # check that all projects are known if not raise an exception (configuration error)
+            self.__info_by_project(set(finding.projects))
         return is_failover_finding
 
     def store_findings(self, repository: str, scanner: str, current_findings: List[Finding]):
@@ -119,13 +121,12 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
             if vuln_by_vuln_id[vid].vulnerability.score < VULNERABILITY_THRESHOLD_SCORE:
                 del vuln_by_vuln_id[vid]
 
-        slack_vuln_by_vuln_id = SlackVulnerabilityLoader(self.slack_api_by_channel).load_findings()
+        slack_vuln_by_vuln_id = self.slack_loader.load_findings()
         for vuln_info in slack_vuln_by_vuln_id.values():
             for finding in vuln_info.finding_by_id.values():
                 projects.update(finding.projects)
 
         info_by_project = self.__info_by_project(projects)
-        store = SlackVulnerabilityStore(self.slack_api_by_channel, info_by_project)
         scan_result_by_channel: Dict[str, SlackScanResult] = {}
         for proj_info in info_by_project.values():
             for chan in proj_info.channels:
@@ -135,16 +136,16 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
         # check found vulns against stored vulns to find added or changed vulns
         for vuln_info in vuln_by_vuln_id.values():
             if vuln_info.vulnerability.id in slack_vuln_by_vuln_id:
-                diffs = slack_vuln_by_vuln_id[vuln_info.vulnerability.id].update_with(vuln_info, info_by_project, repository, scanner)
-                store.handle_events(diffs, scan_result_by_channel, slack_vuln_by_vuln_id[vuln_info.vulnerability.id])
+                events = slack_vuln_by_vuln_id[vuln_info.vulnerability.id].update_with(vuln_info, info_by_project, repository, scanner)
+                self.slack_store.handle_events(events, scan_result_by_channel, slack_vuln_by_vuln_id[vuln_info.vulnerability.id], info_by_project)
             else:
                 svi = SlackVulnerabilityInfo.from_vuln_info(vuln_info)
-                store.handle_events(svi.get_diff_for_add(info_by_project), scan_result_by_channel, svi)
+                self.slack_store.handle_events(svi.get_events_for_add(info_by_project), scan_result_by_channel, svi, info_by_project)
 
         # check stored vulns against found vulns to find removed vulns
         for slack_vuln_info in slack_vuln_by_vuln_id.values():
             if slack_vuln_info.vulnerability.id not in vuln_by_vuln_id:
-                store.handle_events(slack_vuln_info.get_diff_for_remove(info_by_project, repository, scanner), scan_result_by_channel, slack_vuln_info)
+                self.slack_store.handle_events(slack_vuln_info.get_events_for_remove(info_by_project, repository, scanner), scan_result_by_channel, slack_vuln_info, info_by_project)
 
         # publish scan results for each channel
         for channel_id, scan_result in scan_result_by_channel.items():
