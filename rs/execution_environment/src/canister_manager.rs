@@ -28,7 +28,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshot,
+    canister_snapshots::{CanisterSnapshot, CanisterSnapshotError},
     canister_state::{
         execution_state::Memory,
         system_state::{
@@ -1890,7 +1890,8 @@ impl CanisterManager {
         }
 
         // Create new snapshot.
-        let new_snapshot = CanisterSnapshot::from(canister, state.time());
+        let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
+            .map_err(CanisterManagerError::from)?;
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
@@ -1992,41 +1993,38 @@ impl CanisterManager {
         let (_old_execution_state, mut system_state, scheduler_state) =
             canister.clone().into_parts();
 
-        let (instructions_used, new_execution_state) = match snapshot.execution_snapshot() {
-            Some(execution_snapshot) => {
-                let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
-                let compilation_cost_handling = if state
-                    .metadata
-                    .expected_compiled_wasms
-                    .contains(&new_wasm_hash)
-                {
-                    CompilationCostHandling::CountReducedAmount
-                } else {
-                    CompilationCostHandling::CountFullAmount
-                };
+        let (instructions_used, new_execution_state) = {
+            let execution_snapshot = snapshot.execution_snapshot();
+            let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
+            let compilation_cost_handling = if state
+                .metadata
+                .expected_compiled_wasms
+                .contains(&new_wasm_hash)
+            {
+                CompilationCostHandling::CountReducedAmount
+            } else {
+                CompilationCostHandling::CountFullAmount
+            };
 
-                let (instructions_used, new_execution_state) =
-                    self.hypervisor.create_execution_state(
-                        execution_snapshot.wasm_binary.clone(),
-                        "NOT_USED".into(),
-                        canister_id,
-                        round_limits,
-                        compilation_cost_handling,
-                    );
+            let (instructions_used, new_execution_state) = self.hypervisor.create_execution_state(
+                execution_snapshot.wasm_binary.clone(),
+                "NOT_USED".into(),
+                canister_id,
+                round_limits,
+                compilation_cost_handling,
+            );
 
-                let mut new_execution_state = match new_execution_state {
-                    Ok(execution_state) => execution_state,
-                    Err(err) => {
-                        let err = CanisterManagerError::from((canister_id, err));
-                        return (instructions_used, Err(err));
-                    }
-                };
+            let mut new_execution_state = match new_execution_state {
+                Ok(execution_state) => execution_state,
+                Err(err) => {
+                    let err = CanisterManagerError::from((canister_id, err));
+                    return (instructions_used, Err(err));
+                }
+            };
 
-                new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
-                new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
-                (instructions_used, Some(new_execution_state))
-            }
-            None => (NumInstructions::new(0), None),
+            new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
+            new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
+            (instructions_used, Some(new_execution_state))
         };
 
         system_state.wasm_chunk_store = snapshot.chunk_store().clone();
@@ -2227,6 +2225,9 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    CanisterSnapshotExecutionStateNotFound {
+        canister_id: CanisterId,
+    },
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -2273,6 +2274,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::CanisterSnapshotNotFound { .. }
             | CanisterManagerError::CanisterHeapDeltaRateLimited { .. }
             | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
+            | CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. }
             | CanisterManagerError::LongExecutionAlreadyInProgress { .. }
             | CanisterManagerError::MissingUpgradeOptionError { .. }
             | CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
@@ -2556,6 +2558,14 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
+            CanisterSnapshotExecutionStateNotFound {canister_id} => {
+                Self::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Failed to create snapshot for empty canister {}:", canister_id,
+                    )
+                )
+            }
             LongExecutionAlreadyInProgress { canister_id } => {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2579,6 +2589,16 @@ impl From<CanisterManagerError> for UserError {
                         "Invalid upgrade option: {}", message
                     )
                 )
+            }
+        }
+    }
+}
+
+impl From<CanisterSnapshotError> for CanisterManagerError {
+    fn from(err: CanisterSnapshotError) -> Self {
+        match err {
+            CanisterSnapshotError::EmptyExecutionState(canister_id) => {
+                CanisterManagerError::CanisterSnapshotExecutionStateNotFound { canister_id }
             }
         }
     }

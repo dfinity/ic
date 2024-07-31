@@ -1,11 +1,10 @@
-use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
-use ic_wasm_types::CanisterModule;
-
 use crate::{
     canister_state::execution_state::Memory,
     canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
     PageMap,
 };
+use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_wasm_types::CanisterModule;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -233,9 +232,7 @@ pub struct CanisterSnapshot {
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
     chunk_store: WasmChunkStore,
-    /// May not exist depending on whether or not the canister has
-    /// an actual `ExecutionState`.
-    execution_snapshot: Option<ExecutionStateSnapshot>,
+    execution_snapshot: ExecutionStateSnapshot,
 }
 
 impl CanisterSnapshot {
@@ -245,7 +242,7 @@ impl CanisterSnapshot {
         canister_version: u64,
         certified_data: Vec<u8>,
         chunk_store: WasmChunkStore,
-        execution_snapshot: Option<ExecutionStateSnapshot>,
+        execution_snapshot: ExecutionStateSnapshot,
         size: NumBytes,
     ) -> CanisterSnapshot {
         Self {
@@ -259,26 +256,31 @@ impl CanisterSnapshot {
         }
     }
 
-    pub fn from(canister: &CanisterState, taken_at_timestamp: Time) -> Self {
-        let execution_snapshot =
-            canister
-                .execution_state
-                .as_ref()
-                .map(|execution_state| ExecutionStateSnapshot {
-                    wasm_binary: execution_state.wasm_binary.binary.clone(),
-                    stable_memory: PageMemory::from(&execution_state.stable_memory),
-                    wasm_memory: PageMemory::from(&execution_state.wasm_memory),
-                });
+    pub fn from_canister(
+        canister: &CanisterState,
+        taken_at_timestamp: Time,
+    ) -> Result<Self, CanisterSnapshotError> {
+        let canister_id = canister.canister_id();
 
-        Self {
-            canister_id: canister.canister_id(),
+        let execution_state = canister
+            .execution_state
+            .as_ref()
+            .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
+        let execution_snapshot = ExecutionStateSnapshot {
+            wasm_binary: execution_state.wasm_binary.binary.clone(),
+            stable_memory: PageMemory::from(&execution_state.stable_memory),
+            wasm_memory: PageMemory::from(&execution_state.wasm_memory),
+        };
+
+        Ok(CanisterSnapshot {
+            canister_id,
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version,
             certified_data: canister.system_state.certified_data.clone(),
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
             size: canister.snapshot_memory_usage(),
-        }
+        })
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -297,26 +299,20 @@ impl CanisterSnapshot {
         self.size
     }
 
-    pub fn execution_snapshot(&self) -> Option<&ExecutionStateSnapshot> {
-        self.execution_snapshot.as_ref()
+    pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
+        &self.execution_snapshot
     }
 
-    pub fn stable_memory(&self) -> Option<&PageMemory> {
-        self.execution_snapshot
-            .as_ref()
-            .map(|exec| &exec.stable_memory)
+    pub fn stable_memory(&self) -> &PageMemory {
+        &self.execution_snapshot.stable_memory
     }
 
-    pub fn wasm_memory(&self) -> Option<&PageMemory> {
-        self.execution_snapshot
-            .as_ref()
-            .map(|exec| &exec.wasm_memory)
+    pub fn wasm_memory(&self) -> &PageMemory {
+        &self.execution_snapshot.wasm_memory
     }
 
-    pub fn canister_module(&self) -> Option<&CanisterModule> {
-        self.execution_snapshot
-            .as_ref()
-            .map(|exec| &exec.wasm_binary)
+    pub fn canister_module(&self) -> &CanisterModule {
+        &self.execution_snapshot.wasm_binary
     }
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
@@ -326,6 +322,13 @@ impl CanisterSnapshot {
     pub fn certified_data(&self) -> &Vec<u8> {
         &self.certified_data
     }
+}
+
+/// Errors that can occur when trying to create a `CanisterSnapshot` from a canister.
+#[derive(Debug)]
+pub enum CanisterSnapshotError {
+    ///  The canister is missing the execution state because it's empty (newly created or uninstalled).
+    EmptyExecutionState(CanisterId),
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.
@@ -366,7 +369,7 @@ mod tests {
             0,
             vec![],
             WasmChunkStore::new_for_testing(),
-            Some(execution_snapshot),
+            execution_snapshot,
             NumBytes::from(0),
         );
 

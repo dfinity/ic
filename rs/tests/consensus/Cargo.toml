@@ -83,3 +83,6 @@ path = "catch_up_possible_test.rs"
 [[bin]]
 name = "ic-systest-catch-up-loop-prevention-test"
 path = "catch_up_loop_prevention_test.rs"
+
+[features]
+upload_perf_systest_results = []
