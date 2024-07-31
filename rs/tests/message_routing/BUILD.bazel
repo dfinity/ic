@@ -20,6 +20,9 @@ system_test(
 
 system_test(
     name = "rejoin_test",
+    env = {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -34,6 +37,9 @@ system_test(
 
 system_test(
     name = "rejoin_test_large_state",
+    env = {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -49,6 +55,9 @@ system_test(
 
 system_test(
     name = "state_sync_malicious_chunk_test",
+    env = {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
+    },
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -68,6 +77,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
         "//rs/replicated_state:replicated_state_test_binary",
+        "//testnet:mainnet_revisions",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )

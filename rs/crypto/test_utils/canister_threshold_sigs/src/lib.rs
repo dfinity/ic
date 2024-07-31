@@ -1170,6 +1170,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least one node to be dealers.
     /// - Choose a random subset with at least one node to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.
@@ -1179,6 +1180,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least `min_num_dealers` nodes to be dealers.
     /// - Choose a random subset with at least `min_num_receivers` nodes to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.

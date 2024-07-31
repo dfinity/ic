@@ -20,5 +20,4 @@ pub mod nns_tests;
 pub mod orchestrator;
 pub mod rosetta_test;
 pub mod rosetta_tests;
-pub mod tecdsa;
 pub mod wasm_generator_test;

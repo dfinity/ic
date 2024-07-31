@@ -133,7 +133,7 @@ pub fn generate_tls_keys(vault: &dyn CspVault, node: NodeId) -> TlsPublicKeyCert
 ///
 /// # Errors
 /// * [`NodeKeyGenerationError::TransientInternalError`] if a transient internal error occurs, e.g.,
-/// an RPC error communicating with the remote vault.
+///   an RPC error communicating with the remote vault.
 pub fn generate_node_keys_once(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,

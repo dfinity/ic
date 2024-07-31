@@ -344,22 +344,22 @@ impl Orchestrator {
     /// Starts four asynchronous tasks:
     ///
     /// 1. One that constantly monitors for a new CUP pointing to a newer
-    /// replica version and executes the upgrade to this version if such a
-    /// CUP was found.
+    ///    replica version and executes the upgrade to this version if such a
+    ///    CUP was found.
     ///
     /// 2. Second task is doing two things sequentially. First, it  monitors the
-    /// registry for new SSH readonly keys and deploys the detected keys
-    /// into OS. Second, it monitors the registry for new data centers. If a
-    /// new data center is added, orchestrator will generate a new firewall
-    /// configuration allowing access from the IP range specified in the DC
-    /// record.
+    ///    registry for new SSH readonly keys and deploys the detected keys
+    ///    into OS. Second, it monitors the registry for new data centers. If a
+    ///    new data center is added, orchestrator will generate a new firewall
+    ///    configuration allowing access from the IP range specified in the DC
+    ///    record.
     ///
     /// 3. Third task starts listening for incoming requests to the orchestrator
-    /// dashboard.
+    ///    dashboard.
     ///
     /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
-    /// and it is also time to rotate the iDKG encryption key, instruct crypto
-    /// to do the rotation and attempt to register the rotated key.
+    ///    and it is also time to rotate the iDKG encryption key, instruct crypto
+    ///    to do the rotation and attempt to register the rotated key.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,

@@ -360,7 +360,7 @@ def test_on_merge_request_changes_no_findings(jira_lib_mock):
     fake_bazel.get_findings.return_value = []
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan("ic")
+    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -409,7 +409,7 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan("ic")
+    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -447,7 +447,7 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
     jira_lib_mock.commit_has_block_exception.return_value = "commit string"
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan("ic")
+    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -491,7 +491,7 @@ def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gith
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_merge_request_scan("ic")
+        scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     assert e.type == SystemExit
     assert e.value.code == 1
 
@@ -529,7 +529,7 @@ def test_on_merge_request_job_failed(jira_lib_mock):
     fake_bazel.has_dependencies_changed.side_effect = OSError("Call failed")
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    scanner_job.do_merge_request_scan("ic")
+    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     sub1.on_scan_job_failed.assert_called_once()
     sub2.on_scan_job_failed.assert_called_once()
     sub1.on_scan_job_succeeded.assert_not_called()
@@ -543,7 +543,7 @@ def test_on_release_scan_no_findings(jira_lib_mock):
     fake_bazel.get_findings.return_value = []
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     sub1.on_scan_job_succeeded.assert_called_once()
     sub2.on_scan_job_succeeded.assert_called_once()
     sub1.on_scan_job_failed.assert_not_called()
@@ -590,7 +590,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan("ic")
+        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -644,7 +644,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -696,7 +696,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan("ic")
+        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -749,7 +749,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     sub1.on_scan_job_succeeded.assert_called_once()
@@ -798,7 +798,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan("ic")
+        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -852,7 +852,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -890,7 +890,7 @@ def test_on_release_scan_new_findings(jira_lib_mock):
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan("ic")
+        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -930,7 +930,7 @@ def test_on_release_scan_new_findings_with_exception(jira_lib_mock):
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -949,7 +949,7 @@ def test_on_release_scan_job_failed(jira_lib_mock):
     fake_bazel.get_findings.side_effect = OSError("Call failed")
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")]))
     sub1.on_scan_job_succeeded.assert_not_called()
     sub2.on_scan_job_succeeded.assert_not_called()
     sub1.on_scan_job_failed.assert_called_once()

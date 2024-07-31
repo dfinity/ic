@@ -42,6 +42,10 @@ use anyhow::Result;
 use futures::future::join_all;
 use ic_consensus_system_test_utils::{
     limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
+    subnet::enable_chain_key_signing_on_subnet,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    run_chain_key_signature_test, ChainSignatureRequest,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
@@ -67,10 +71,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
-use ic_tests::orchestrator::utils::subnet_recovery::{
-    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
-};
-use ic_tests::tecdsa::ChainSignatureRequest;
 use ic_types::Height;
 use slog::{error, info};
 use std::fs::create_dir_all;
@@ -105,9 +105,9 @@ const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 // Requests will be sent to each key in round robin order.
 fn make_key_ids() -> Vec<MasterPublicKeyId> {
     vec![
-        ic_tests::tecdsa::make_ecdsa_key_id(),
-        // ic_tests::tecdsa::make_bip340_key_id(),
-        // ic_tests::tecdsa::make_eddsa_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
     ]
 }
 
