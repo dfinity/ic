@@ -140,7 +140,7 @@ where
         if let Some(fee) = fee {
             if let Some(spender) = spender {
                 if from != spender {
-                    self.decrease_allowance(from, spender, &amount, Some(fee));
+                    self.decrease_allowance(from, spender, amount, Some(fee));
                 }
             }
         }
@@ -149,13 +149,31 @@ where
 
     fn validate_invariants(&self) {
         let mut balances_total = Self::Tokens::default();
-        for (_account, amount) in &self.balances {
+        for amount in self.balances.values() {
             balances_total = balances_total.checked_add(amount).unwrap();
             assert_ne!(amount, &Tokens::zero());
         }
         assert_eq!(self.total_supply, balances_total);
-        for (_key, allowance) in &self.allowances {
+        for allowance in self.allowances.values() {
             assert_ne!(&allowance.amount, &Tokens::zero());
+        }
+    }
+}
+
+impl<K, AccountId, Tokens> Default for InMemoryLedger<K, AccountId, Tokens>
+where
+    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
+    K: Into<(AccountId, AccountId)>,
+    AccountId: PartialEq + Ord + Clone + Hash,
+    Tokens: TokensType,
+{
+    fn default() -> Self {
+        InMemoryLedger {
+            balances: HashMap::new(),
+            allowances: HashMap::new(),
+            total_supply: Tokens::zero(),
+            fee_collector: None,
+            burns_without_spender: None,
         }
     }
 }
@@ -167,16 +185,6 @@ where
     AccountId: PartialEq + Ord + Clone + Hash,
     Tokens: TokensType,
 {
-    pub fn new() -> Self {
-        InMemoryLedger {
-            balances: HashMap::new(),
-            allowances: HashMap::new(),
-            total_supply: Tokens::zero(),
-            fee_collector: None,
-            burns_without_spender: None,
-        }
-    }
-
     fn decrease_allowance(
         &mut self,
         from: &AccountId,
@@ -215,7 +223,7 @@ where
     fn decrease_balance(&mut self, from: &AccountId, amount: &Tokens) {
         let old_balance = self
             .balances
-            .get(&from)
+            .get(from)
             .unwrap_or_else(|| panic!("Account not found",));
         let new_balance = old_balance
             .checked_sub(amount)
@@ -260,7 +268,7 @@ where
                 key,
                 Allowance {
                     amount: amount.clone(),
-                    expires_at: expires_at.map(|e| TimeStamp::from_nanos_since_unix_epoch(e)),
+                    expires_at: expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                     arrived_at,
                 },
             );
@@ -268,7 +276,7 @@ where
     }
 
     fn increase_balance(&mut self, to: &AccountId, amount: &Tokens) {
-        let new_balance = match self.balances.get(&to) {
+        let new_balance = match self.balances.get(to) {
             None => amount.clone(),
             Some(old_balance) => old_balance
                 .checked_add(amount)
@@ -325,10 +333,10 @@ where
 
 impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     fn new_from_icrc1_ledger_blocks(
-        blocks: &Vec<ic_icrc1::Block<Tokens>>,
+        blocks: &[ic_icrc1::Block<Tokens>],
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
     ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-        let mut state = InMemoryLedger::new();
+        let mut state = InMemoryLedger::default();
         state.burns_without_spender = burns_without_spender;
         for (index, block) in blocks.iter().enumerate() {
             if let Some(fee_collector) = block.fee_collector {
@@ -388,13 +396,13 @@ pub fn verify_ledger_state(
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
 ) {
     println!("verifying state of ledger {}", ledger_id);
-    let blocks = get_all_ledger_and_archive_blocks(&env, ledger_id);
+    let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
     println!("retrieved all ledger and archive blocks");
     let expected_ledger_state =
         InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks, burns_without_spender);
     println!("recreated expected ledger state");
-    let actual_num_approvals = parse_metric(&env, ledger_id, "ledger_num_approvals");
-    let actual_num_balances = parse_metric(&env, ledger_id, "ledger_balance_store_entries");
+    let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
+    let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
     assert_eq!(
         expected_ledger_state.balances.len() as u64,
         actual_num_balances,
@@ -415,13 +423,9 @@ pub fn verify_ledger_state(
     );
     for (account, balance) in expected_ledger_state.balances.iter() {
         let actual_balance = Decode!(
-            &env.query(
-                ledger_id,
-                "icrc1_balance_of",
-                Encode!(&Account::from(account.clone())).unwrap()
-            )
-            .expect("failed to query balance")
-            .bytes(),
+            &env.query(ledger_id, "icrc1_balance_of", Encode!(&*account).unwrap())
+                .expect("failed to query balance")
+                .bytes(),
             Nat
         )
         .expect("failed to decode balance_of response");
@@ -443,7 +447,7 @@ pub fn verify_ledger_state(
             account_hash(&from),
             account_hash(&spender)
         );
-        let actual_allowance = get_allowance(&env, ledger_id, from, spender);
+        let actual_allowance = get_allowance(env, ledger_id, from, spender);
         assert_eq!(
             allowance.amount,
             Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
@@ -467,7 +471,7 @@ fn account_hash(account: &Account) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState};
+    use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState, Tokens};
     use ic_ledger_core::approvals::Allowance;
     use ic_ledger_core::timestamp::TimeStamp;
     use ic_ledger_core::tokens::CheckedSub;
@@ -477,16 +481,13 @@ mod tests {
     #[test]
     fn should_increase_balance_and_total_supply_with_mint() {
         const MINT_AMOUNT: u64 = 1_000_000;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let to = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
+        let amount = Tokens::from(MINT_AMOUNT);
         in_memory_ledger.process_mint(&to, &amount);
         in_memory_ledger.validate_invariants();
         assert_eq!(in_memory_ledger.balances.len(), 1);
@@ -505,13 +506,13 @@ mod tests {
             ApprovalKey,
             Account,
             crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        > = InMemoryLedger::default();
         let to = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
-        let burn_amount = super::Tokens::from(BURN_AMOUNT);
+        let amount = Tokens::from(MINT_AMOUNT);
+        let burn_amount = Tokens::from(BURN_AMOUNT);
         in_memory_ledger.process_mint(&to, &amount);
         in_memory_ledger.validate_invariants();
         let expected_balance = amount.checked_sub(&burn_amount).unwrap();
@@ -532,14 +533,14 @@ mod tests {
             ApprovalKey,
             Account,
             crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        > = InMemoryLedger::default();
         let to = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
-        let burn_amount = super::Tokens::from(BURN_AMOUNT);
-        let expected_total_supply = super::Tokens::from(0);
+        let amount = Tokens::from(MINT_AMOUNT);
+        let burn_amount = Tokens::from(BURN_AMOUNT);
+        let expected_total_supply = Tokens::from(0u64);
         in_memory_ledger.process_mint(&to, &amount);
         in_memory_ledger.validate_invariants();
 
@@ -560,7 +561,7 @@ mod tests {
             ApprovalKey,
             Account,
             crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        > = InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -569,9 +570,9 @@ mod tests {
             owner: PrincipalId::new_user_test_id(546).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
-        let transfer_amount = super::Tokens::from(TRANSFER_AMOUNT);
-        let fee = super::Tokens::from(10_000);
+        let amount = Tokens::from(MINT_AMOUNT);
+        let transfer_amount = Tokens::from(TRANSFER_AMOUNT);
+        let fee = Tokens::from(10_000u64);
         in_memory_ledger.process_mint(&account1, &amount);
         in_memory_ledger.validate_invariants();
         in_memory_ledger.process_transfer(
@@ -608,7 +609,7 @@ mod tests {
             ApprovalKey,
             Account,
             crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        > = InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -617,9 +618,9 @@ mod tests {
             owner: PrincipalId::new_user_test_id(546).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
-        let transfer_amount = super::Tokens::from(TRANSFER_AMOUNT);
-        let fee = super::Tokens::from(10_000);
+        let amount = Tokens::from(MINT_AMOUNT);
+        let transfer_amount = Tokens::from(TRANSFER_AMOUNT);
+        let fee = Tokens::from(10_000u64);
         in_memory_ledger.process_mint(&account1, &amount);
         in_memory_ledger.validate_invariants();
         in_memory_ledger.process_transfer(
@@ -631,7 +632,7 @@ mod tests {
         );
         in_memory_ledger.validate_invariants();
 
-        assert_eq!(in_memory_ledger.total_supply, super::Tokens::from(0));
+        assert_eq!(in_memory_ledger.total_supply, Tokens::from(0u64));
         assert!(in_memory_ledger.balances.is_empty());
     }
 
@@ -643,7 +644,7 @@ mod tests {
             ApprovalKey,
             Account,
             crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        > = InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -652,9 +653,9 @@ mod tests {
             owner: PrincipalId::new_user_test_id(546).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
-        let approve_amount = super::Tokens::from(APPROVE_AMOUNT);
-        let fee = super::Tokens::from(10_000);
+        let amount = Tokens::from(MINT_AMOUNT);
+        let approve_amount = Tokens::from(APPROVE_AMOUNT);
+        let fee = Tokens::from(10_000u64);
         in_memory_ledger.process_mint(&account1, &amount);
         in_memory_ledger.validate_invariants();
         in_memory_ledger.process_approve(
@@ -679,7 +680,7 @@ mod tests {
         assert_eq!(Some(&expected_balance1), actual_balance1);
         let allowance_key = ApprovalKey::from((&account1, &account2));
         let account2_allowance = in_memory_ledger.allowances.get(&allowance_key);
-        let expected_allowance2: Allowance<super::Tokens> = Allowance {
+        let expected_allowance2: Allowance<Tokens> = Allowance {
             amount: approve_amount,
             expires_at: None,
             arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
@@ -696,7 +697,7 @@ mod tests {
             ApprovalKey,
             Account,
             crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        > = InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -705,10 +706,10 @@ mod tests {
             owner: PrincipalId::new_user_test_id(546).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
-        let approve_amount = super::Tokens::from(APPROVE_AMOUNT);
-        let another_approve_amount = super::Tokens::from(ANOTHER_APPROVE_AMOUNT);
-        let fee = super::Tokens::from(10_000);
+        let amount = Tokens::from(MINT_AMOUNT);
+        let approve_amount = Tokens::from(APPROVE_AMOUNT);
+        let another_approve_amount = Tokens::from(ANOTHER_APPROVE_AMOUNT);
+        let fee = Tokens::from(10_000u64);
         in_memory_ledger.process_mint(&account1, &amount);
         in_memory_ledger.validate_invariants();
         in_memory_ledger.process_approve(
@@ -743,7 +744,7 @@ mod tests {
         assert_eq!(Some(&expected_balance1), actual_balance1);
         let allowance_key = ApprovalKey::from((&account1, &account2));
         let account2_allowance = in_memory_ledger.allowances.get(&allowance_key);
-        let expected_allowance2: Allowance<super::Tokens> = Allowance {
+        let expected_allowance2: Allowance<Tokens> = Allowance {
             amount: another_approve_amount,
             expires_at: None,
             arrived_at: TimeStamp::from_nanos_since_unix_epoch(1),
@@ -760,7 +761,7 @@ mod tests {
             ApprovalKey,
             Account,
             crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::new();
+        > = InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -773,10 +774,10 @@ mod tests {
             owner: PrincipalId::new_user_test_id(966).0,
             subaccount: None,
         };
-        let amount = super::Tokens::from(MINT_AMOUNT);
-        let transfer_amount = super::Tokens::from(TRANSFER_AMOUNT);
-        let approve_amount = super::Tokens::from(APPROVE_AMOUNT);
-        let fee = super::Tokens::from(10_000);
+        let amount = Tokens::from(MINT_AMOUNT);
+        let transfer_amount = Tokens::from(TRANSFER_AMOUNT);
+        let approve_amount = Tokens::from(APPROVE_AMOUNT);
+        let fee = Tokens::from(10_000u64);
         in_memory_ledger.process_mint(&account1, &amount);
         in_memory_ledger.validate_invariants();
         in_memory_ledger.process_approve(
