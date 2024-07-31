@@ -2032,15 +2032,19 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             "CanisterStateBits::log_visibility_v2",
         ) {
             Ok(log_visibility_v2) => LogVisibility::from(log_visibility_v2),
-            Err(_) => pb_canister_state_bits::LogVisibility::try_from(value.log_visibility)
+            Err(_) => {
+                let pb_log_visibility = pb_canister_state_bits::LogVisibility::try_from(
+                    value.log_visibility,
+                )
                 .map_err(|_| ProxyDecodeError::ValueOutOfRange {
                     typ: "LogVisibility",
                     err: format!(
                         "Unexpected value of log visibility: {}",
                         value.log_visibility
                     ),
-                })?
-                .into(),
+                })?;
+                LogVisibility::from(pb_log_visibility)
+            }
         };
 
         Ok(Self {
