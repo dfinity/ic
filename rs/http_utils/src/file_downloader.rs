@@ -11,6 +11,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
+use zstd::stream::read::Decoder as ZstdDecoder;
 
 /// Streams HTTP response bodies to files
 pub struct FileDownloader {
@@ -34,20 +35,20 @@ impl FileDownloader {
         }
     }
 
-    /// Download a .tar.gz file from `url`, verify its hash if given, and
+    /// Download a .tar.gz or .tar.zst file from `url`, verify its hash if given, and
     /// extract the file into `target_dir`
-    pub async fn download_and_extract_tar_gz(
+    pub async fn download_and_extract_tar(
         &self,
         url: &str,
         target_dir: &Path,
         expected_sha256_hex: Option<String>,
     ) -> FileDownloadResult<()> {
-        let tar_gz_path = target_dir.join("tmp.tar.gz");
-        self.download_file(url, &tar_gz_path, expected_sha256_hex)
+        let tar_path = target_dir.join("tmp-tar");
+        self.download_file(url, &tar_path, expected_sha256_hex)
             .await?;
-        extract_tar_gz_into_dir(&tar_gz_path, target_dir)?;
-        fs::remove_file(&tar_gz_path)
-            .map_err(|e| FileDownloadError::file_remove_error(&tar_gz_path, e))?;
+        extract_tar_into_dir(&tar_path, target_dir)?;
+        fs::remove_file(&tar_path)
+            .map_err(|e| FileDownloadError::file_remove_error(&tar_path, e))?;
 
         Ok(())
     }
@@ -182,16 +183,49 @@ pub fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> FileDownloadRe
     }
 }
 
-/// Extract the contents of a given .tar.gz file into `target_dir`
-pub fn extract_tar_gz_into_dir(tar_gz_path: &Path, target_dir: &Path) -> FileDownloadResult<()> {
-    let map_to_untar_error = |e| FileDownloadError::untar_error(tar_gz_path, e);
+/// Check if the file is in Gzip format by verifying the first 2 bytes
+fn is_gz_file<R: Read>(reader: &mut R) -> io::Result<bool> {
+    let mut buffer = [0; 2];
+    reader.read_exact(&mut buffer)?;
+    reader.by_ref().take(2).read_to_end(&mut Vec::new())?;
+    Ok(buffer == [0x1f, 0x8b])
+}
 
-    let tar_gz_file =
-        File::open(tar_gz_path).map_err(|e| FileDownloadError::file_open_error(tar_gz_path, e))?;
+/// Check if the file is in Zstandard format by verifying the first 4 bytes
+fn is_zst_file<R: Read>(reader: &mut R) -> io::Result<bool> {
+    let mut buffer = [0; 4];
+    reader.read_exact(&mut buffer)?;
+    reader.by_ref().take(4).read_to_end(&mut Vec::new())?;
+    Ok(buffer == [0x28, 0xb5, 0x2f, 0xfd])
+}
 
-    let tar = GzDecoder::new(tar_gz_file);
-    let mut archive = Archive::new(tar);
-    archive.unpack(target_dir).map_err(map_to_untar_error)?;
+/// Extract the contents of a given .tar.gz or tar.zst file into `target_dir`
+pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadResult<()> {
+    let map_to_untar_error = |e| FileDownloadError::untar_error(tar_path, e);
+
+    let tar_file =
+        File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
+    let mut buf_reader = io::BufReader::new(tar_file);
+
+    if is_gz_file(&mut buf_reader).unwrap_or(false) {
+        let tar_gz_file =
+            File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
+        let tar = GzDecoder::new(tar_gz_file);
+        let mut archive = Archive::new(tar);
+        archive.unpack(target_dir).map_err(map_to_untar_error)?;
+    } else if is_zst_file(&mut buf_reader).unwrap_or(false) {
+        let tar_zst_file =
+            File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
+        let tar = ZstdDecoder::new(tar_zst_file).map_err(map_to_untar_error)?;
+        let mut archive = Archive::new(tar);
+        archive.unpack(target_dir).map_err(map_to_untar_error)?;
+    } else {
+        return Err(FileDownloadError::untar_error(
+            tar_path,
+            io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
+        ));
+    }
+
     Ok(())
 }
 
