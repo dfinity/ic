@@ -374,7 +374,35 @@ fn test_single_neuron_proposal_new() {
                                 ),
                             ),
                         ),
-
+                        GovernanceCachedMetricsChange::PublicNeuronSubsetMetrics(
+                            comparable::OptionChange::Different(
+                                None,
+                                Some(
+                                    ic_nns_governance::pb::v1::governance::governance_cached_metrics::NeuronSubsetMetricsDesc {
+                                        count: Some(
+                                            0,
+                                        ),
+                                        total_staked_e8s: Some(
+                                            0,
+                                        ),
+                                        total_staked_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_voting_power: Some(
+                                            0,
+                                        ),
+                                        count_buckets: btreemap! {},
+                                        staked_e8s_buckets: btreemap! {},
+                                        staked_maturity_e8s_equivalent_buckets: btreemap! {},
+                                        maturity_e8s_equivalent_buckets: btreemap! {},
+                                        voting_power_buckets: btreemap! {},
+                                    },
+                                ),
+                            ),
+                        ),
                     ]),
                 )),
                 GovernanceChange::CachedDailyMaturityModulationBasisPoints(
@@ -13310,6 +13338,7 @@ async fn test_metrics() {
         total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
+        public_neuron_subset_metrics: None,
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -13328,6 +13357,7 @@ async fn test_metrics() {
             total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
+            public_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -13345,6 +13375,7 @@ async fn test_metrics() {
             total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
+            public_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -13399,6 +13430,7 @@ async fn test_metrics() {
         total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
+        public_neuron_subset_metrics: None,
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(
@@ -13408,6 +13440,7 @@ async fn test_metrics() {
             total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
+            public_neuron_subset_metrics: None,
 
             ..metrics
         },
