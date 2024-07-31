@@ -9,7 +9,7 @@ pub mod v1;
 // These are not exposed outside of the crate, to avoid dependencies from other crates.
 // They should not be exposed in the API.
 #[allow(clippy::all)]
-#[path = "../gen/ic_nns_governance.pb.storage.rs"]
+#[path = "../gen/ic_nns_governance_storage.pb.v1.rs"]
 pub(crate) mod storage;
 
 mod conversions;
