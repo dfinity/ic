@@ -233,7 +233,7 @@ def system_test(
         if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
             deps.append(dep)
 
-    env = {
+    env = env | {
         "COLOCATED_TEST": name,
         "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
         "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
