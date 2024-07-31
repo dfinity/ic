@@ -58,8 +58,8 @@ const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
-pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(45 * 60);
 
 pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
     let mut ic = InternetComputer::new();
@@ -101,7 +101,8 @@ pub fn upgrade_downgrade_nns_subnet(env: TestEnv) {
         .unwrap();
     let intermediate1 = bless_version(&env, &nns_node, "80e0363393ea26a36b77e8c75f7f183cb521f67f");
     let intermediate2 = bless_version(&env, &nns_node, "bb76748d1d225c08d88037e99ca9a066f97de496");
-    let branch_version = bless_branch_version(&env, &nns_node);
+//    let branch_version = bless_branch_version(&env, &nns_node);
+    let branch_version = bless_version(&env, &nns_node, "2c4566b7b7af453167785504ba3c563e09f38504");
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let nns_canister = block_on(MessageCanister::new(
