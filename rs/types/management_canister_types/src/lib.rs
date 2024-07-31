@@ -790,6 +790,9 @@ pub enum LogVisibility {
     Public = 2,
 }
 
+// Ensure forward compatibility with the new `LogVisibilityV2`.
+// First read the old `LogVisibility``, if it fails (eg for `LogVisibilityV2::AllowedViewers`),
+// try to read the new `LogVisibilityV2`.
 impl Payload<'_> for LogVisibility {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
         let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
@@ -855,6 +858,8 @@ pub enum LogVisibilityV2 {
     AllowedViewers(BoundedAllowedViewers),
 }
 
+// Ensure backward compatibility with the old `LogVisibility`.
+// First read the new `LogVisibilityV2`, if it fails, try to read the old `LogVisibility`.
 impl Payload<'_> for LogVisibilityV2 {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
         let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
