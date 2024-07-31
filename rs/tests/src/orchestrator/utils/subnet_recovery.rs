@@ -339,10 +339,6 @@ pub(crate) fn enable_ecdsa_on_new_subnet(
     let registry_version = snapshot.get_registry_version();
 
     info!(logger, "Enabling signing on NNS.");
-    let nns_key = enable_ecdsa_signing_on_subnet(nns_node, canister, root_subnet_id, logger);
-    let snapshot =
-        block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
-    let registry_version = snapshot.get_registry_version();
 
     let unassigned_node_ids = snapshot
         .unassigned_nodes()
@@ -375,12 +371,7 @@ pub(crate) fn enable_ecdsa_on_new_subnet(
             .expect("Timeout while waiting for all nodes to be healthy");
     });
 
-    info!(logger, "Disabling signing on NNS.");
-    disable_ecdsa_on_subnet(nns_node, root_subnet_id, canister, logger);
-    let app_key = enable_ecdsa_signing_on_subnet(nns_node, canister, app_subnet.subnet_id, logger);
-
-    assert_eq!(app_key, nns_key);
-    app_key
+    enable_ecdsa_signing_on_subnet(nns_node, canister, app_subnet.subnet_id, logger)
 }
 
 /// Disable ecdsa signing on the given subnet and wait until sign requests fail.

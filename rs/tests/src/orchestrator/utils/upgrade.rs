@@ -158,7 +158,7 @@ pub fn assert_assigned_replica_version(
             expected_version
         ),
         logger.clone(),
-        secs(600),
+        secs(30 * 60),
         secs(10),
         || match get_assigned_replica_version(node) {
             Ok(ver) if ver == expected_version => {

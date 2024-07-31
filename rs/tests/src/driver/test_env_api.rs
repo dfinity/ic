@@ -1163,7 +1163,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
-fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
+pub fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
     let url = &format!("{base_url}/SHA256SUMS");
     let response = retry_with_msg!(
         format!("GET {url}"),
