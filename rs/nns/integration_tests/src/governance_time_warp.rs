@@ -53,8 +53,7 @@ fn test_time_warp() {
                 kyc_verified: true,
 
                 ..Default::default()
-            }
-            .into(),
+            },
         );
         assert_eq!(
             pre_existing_neuron, None,

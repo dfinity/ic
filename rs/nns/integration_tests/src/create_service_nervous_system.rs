@@ -194,7 +194,9 @@ fn make_proposal(state_machine: &StateMachine, sns_number: u64) -> ManageNeuronR
             summary: "".to_string(),
             url: "".to_string(),
             action: Some(proposal::Action::CreateServiceNervousSystem(
-                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                    .clone()
+                    .into(),
             )),
         },
     )

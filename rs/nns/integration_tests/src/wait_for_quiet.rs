@@ -47,8 +47,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
                 cached_neuron_stake_e8s: 200_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_DAY_SECONDS * 365)),
                 ..Default::default()
-            }
-            .into(),
+            },
         );
 
         let nns_init_payload = nns_init_payload_builder.build();
