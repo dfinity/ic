@@ -1,5 +1,20 @@
-use ic_crypto_ecdsa_secp256k1::{KeyDecodingError, PrivateKey, PublicKey};
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use hex_literal::hex;
+use ic_crypto_ecdsa_secp256k1::{DerivationPath, KeyDecodingError, PrivateKey, PublicKey};
+use rand::Rng;
+use rand_chacha::ChaCha20Rng;
+
+fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
+    use rand::SeedableRng;
+    ChaCha20Rng::from_seed(seed)
+}
+
+fn test_rng() -> ChaCha20Rng {
+    let seed = rand::thread_rng().gen::<[u8; 32]>();
+    // If a test ever fails, reproduce it using
+    // let mut rng = test_rng_with_seed(hex!("SEED"));
+    println!("RNG seed: {}", hex::encode(seed));
+    test_rng_with_seed(seed)
+}
 
 #[test]
 fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), KeyDecodingError> {
@@ -26,7 +41,7 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
 
 #[test]
 fn test_sign_prehash_works_with_any_size_input_gte_16() {
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
@@ -62,7 +77,12 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     assert_eq!(hex::encode(generated_sig), expected_sig);
 
     // Now check the prehash variant:
-    let message_hash = ic_crypto_sha2::Sha256::hash(message);
+    let message_hash: [u8; 32] = {
+        use sha2::Digest;
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(message);
+        sha256.finalize().into()
+    };
     let generated_sig = sk.sign_digest(&message_hash).unwrap();
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }
@@ -87,7 +107,7 @@ fn should_reject_long_x_when_deserializing_private_key() {
 fn should_accept_signatures_that_we_generate() {
     use rand::RngCore;
 
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
@@ -118,7 +138,12 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
     assert!(pk.verify_signature_with_malleability(msg, &sig));
 
     // Test again using the pre-hashed variants:
-    let msg_hash = ic_crypto_sha2::Sha256::hash(msg);
+    let msg_hash: [u8; 32] = {
+        use sha2::Digest;
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(msg);
+        sha256.finalize().into()
+    };
 
     assert!(!pk.verify_signature_prehashed(&msg_hash, &sig));
     assert!(pk.verify_signature_prehashed_with_malleability(&msg_hash, &sig));
@@ -187,7 +212,7 @@ fn should_reject_invalid_public_keys() {
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_private_keys(
 ) -> Result<(), KeyDecodingError> {
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     for _ in 0..200 {
         let key = PrivateKey::generate_using_rng(rng);
@@ -213,7 +238,7 @@ fn should_serialization_and_deserialization_round_trip_for_private_keys(
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_public_keys(
 ) -> Result<(), KeyDecodingError> {
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     for _ in 0..2000 {
         let key = PrivateKey::generate_using_rng(rng).public_key();
@@ -259,15 +284,67 @@ i389XZmdlKFbsLkUI9dDQgMP98YnUA==
     );
 }
 
+#[test]
+fn should_match_slip10_derivation_test_data() {
+    let chain_code = hex!("04466b9cc8e161e966409ca52986c584f07e9dc81f735db683c3ff6ec7b1503f");
+
+    let private_key = PrivateKey::deserialize_sec1(&hex!(
+        "cbce0d719ecf7431d88e6a89fa1483e02e35092af60c042b1df2ff59fa424dca"
+    ))
+    .expect("Test has valid key");
+
+    let public_key = PublicKey::deserialize_sec1(&hex!(
+        "0357bfe1e341d01c69fe5654309956cbea516822fba8a601743a012a7896ee8dc2"
+    ))
+    .expect("Test has valid key");
+
+    assert_eq!(
+        hex::encode(public_key.serialize_sec1(true)),
+        hex::encode(private_key.public_key().serialize_sec1(true))
+    );
+
+    let path = DerivationPath::new_bip32(&[2, 1000000000]);
+
+    let (derived_secret_key, sk_chain_code) =
+        private_key.derive_subkey_with_chain_code(&path, &chain_code);
+
+    let (derived_public_key, pk_chain_code) =
+        public_key.derive_subkey_with_chain_code(&path, &chain_code);
+    assert_eq!(
+        hex::encode(sk_chain_code),
+        "c783e67b921d2beb8f6b389cc646d7263b4145701dadd2161548a8b078e65e9e"
+    );
+    assert_eq!(
+        hex::encode(pk_chain_code),
+        "c783e67b921d2beb8f6b389cc646d7263b4145701dadd2161548a8b078e65e9e"
+    );
+
+    assert_eq!(
+        hex::encode(derived_public_key.serialize_sec1(true)),
+        "022a471424da5e657499d1ff51cb43c47481a03b1e77f951fe64cec9f5a48f7011"
+    );
+
+    assert_eq!(
+        hex::encode(derived_secret_key.serialize_sec1()),
+        "471b76e389e528d6de6d816857e012c5455051cad6660850e58372a6c3e6e7c8"
+    );
+
+    assert_eq!(
+        hex::encode(derived_public_key.serialize_sec1(true)),
+        hex::encode(derived_secret_key.public_key().serialize_sec1(true)),
+        "Derived keys match"
+    );
+}
+
 mod try_recovery_from_digest {
+    use crate::test_rng;
     use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey, RecoveryError};
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use k256::ecdsa::{Signature, VerifyingKey};
     use rand::Rng;
 
     #[test]
     fn should_fail_when_signature_not_parsable() {
-        let rng = &mut reproducible_rng();
+        let rng = &mut test_rng();
         let public_key = PrivateKey::generate_using_rng(rng).public_key();
 
         let recid = public_key.try_recovery_from_digest(&[0], &[0_u8; 64]);
@@ -282,7 +359,7 @@ mod try_recovery_from_digest {
 
     #[test]
     fn should_recover_public_key_from_y_parity() {
-        let rng = &mut reproducible_rng();
+        let rng = &mut test_rng();
         let private_key = PrivateKey::generate_using_rng(rng);
         let public_key = private_key.public_key();
         let digest = rng.gen::<[u8; 32]>();

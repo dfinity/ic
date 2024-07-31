@@ -490,6 +490,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
+            "hmac": crate.spec(
+                version = "^0.12",
+            ),
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
