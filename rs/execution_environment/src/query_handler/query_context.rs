@@ -175,11 +175,11 @@ impl<'a> QueryContext<'a> {
     /// - If it produces a response return the response.
     ///
     /// - If it does not produce a response and does not send further queries,
-    /// then return a response indicating that the canister did not reply.
+    ///   then return a response indicating that the canister did not reply.
     ///
     /// - If it does not produce a response and produces additional
-    /// inter-canister queries, process them till there is a response or the
-    /// call graph finishes with no reply.
+    ///   inter-canister queries, process them till there is a response or the
+    ///   call graph finishes with no reply.
     pub(super) fn run<'b>(
         &mut self,
         query: Query,

@@ -3499,6 +3499,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                         followees: vec![NeuronId::new_test_neuron_id(20)],
                     }
                 ],
+                neuron_recipes: None,
             }
         )]
     )

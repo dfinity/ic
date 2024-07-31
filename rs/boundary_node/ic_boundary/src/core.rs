@@ -724,6 +724,7 @@ impl<T: Run> Run for WithMetrics<T> {
     }
 }
 
+#[allow(dead_code)]
 pub struct WithRetry<T>(
     pub T,
     pub Duration, // attempt_interval

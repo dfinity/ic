@@ -62,9 +62,9 @@ struct DirectParticipantConfig {
 ///
 /// At a high level, the following aspects of an SNS are covered in this function:
 /// 1. Basic properties on an SNS instance:
-/// 1.1. An SNS instance can be deployed successfully by submitting an NNS proposal.
-/// 1.2. A new SNS instance automatically transitions into `Lifecycle::Open`.
-/// 1.3. Direct participation works as expected.
+///     1. An SNS instance can be deployed successfully by submitting an NNS proposal.
+///     2. A new SNS instance automatically transitions into `Lifecycle::Open`.
+///     3. Direct participation works as expected.
 ///
 /// 2. Auto-finalization works as expected.
 ///
@@ -94,39 +94,40 @@ struct DirectParticipantConfig {
 ///    - `CamelCase` is used to refer to operations.
 ///    - `Operation.is_enabled()` refers to the possibility of calling `Operation` in this state.
 ///
-/// 3.1. State machine:
-/// 3.1.1. `{ governance::Mode::PreInitializationSwap } FinalizeUnSuccessfully { governance::Mode::PreInitializationSwap }`
-/// 3.1.2. `{ governance::Mode::PreInitializationSwap } FinalizeSuccessfully   { governance::Mode::Normal }`
+///     1. State machine:
+///         1. `{ governance::Mode::PreInitializationSwap } FinalizeUnSuccessfully { governance::Mode::PreInitializationSwap }`
+///         2. `{ governance::Mode::PreInitializationSwap } FinalizeSuccessfully   { governance::Mode::Normal }`
 ///
-/// 3.2. Availability of SNS operations in different states:
-/// 3.2.1. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeUnSuccessfully { !ManageNervousSystemParameters.is_enabled() }`
-/// 3.2.2. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeSuccessfully   {  ManageNervousSystemParameters.is_enabled() }`
-/// 3.2.3. `{ !DissolveSnsNeuron.is_enabled() } FinalizeUnSuccessfully { !DissolveSnsNeuron.is_enabled() }`
-/// 3.2.4. `{ !DissolveSnsNeuron.is_enabled() } FinalizeSuccessfully   {  DissolveSnsNeuron.is_enabled() }`
-/// 3.2.5. `{ RefreshBuyerTokens.is_enabled() } Finalize { !RefreshBuyerTokens.is_enabled() }`
+///     2. Availability of SNS operations in different states:
+///         1. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeUnSuccessfully { !ManageNervousSystemParameters.is_enabled() }`
+///         2. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeSuccessfully   {  ManageNervousSystemParameters.is_enabled() }`
+///         3. `{ !DissolveSnsNeuron.is_enabled() } FinalizeUnSuccessfully { !DissolveSnsNeuron.is_enabled() }`
+///         4. `{ !DissolveSnsNeuron.is_enabled() } FinalizeSuccessfully   {  DissolveSnsNeuron.is_enabled() }`
+///         5. `{ RefreshBuyerTokens.is_enabled() } Finalize { !RefreshBuyerTokens.is_enabled() }`
 ///
-/// 3.3. ICP refunding mechanism and ICP balances:
-/// 3.3.1. `{ true } FinalizeUnSuccessfully; Swap.error_refund_icp() { All directly participated ICP (minus the fees) are refunded. }`
-/// 3.3.2. `{ true } FinalizeSuccessfully;   Swap.error_refund_icp() { Excess directly participated ICP (minus the fees) are refunded. }`
+///     3. ICP refunding mechanism and ICP balances:
+///         1. `{ true } FinalizeUnSuccessfully; Swap.error_refund_icp() { All directly participated ICP (minus the fees) are refunded. }`
+///         2. `{ true } FinalizeSuccessfully;   Swap.error_refund_icp() { Excess directly participated ICP (minus the fees) are refunded. }`
 ///
 /// 4. The Neurons' Fund works as expected:
-/// 4.1.1. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
-/// 4.1.2. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==150_000 * E8 }`
-/// 4.1.3. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
-/// 4.1.4. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==0 }`
-/// 4.2. Unused portions of Neurons' Fund maturity reserved at SNS creation time are refunded.
+///     1. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
+///     2. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==150_000 * E8 }`
+///     3. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
+///     4. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==0 }`
+///     
+///     Unused portions of Neurons' Fund maturity reserved at SNS creation time are refunded.
 ///
 /// 5. Control over the dapp:
-/// 5.1. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeUnSuccessfully { dapp_canister_status.controllers() == vec![fallback_controllers] }`
-/// 5.2. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeSuccessfully   { dapp_canister_status.controllers() == vec![sns_root] }`
+///     1. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeUnSuccessfully { dapp_canister_status.controllers() == vec![fallback_controllers] }`
+///     2. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeSuccessfully   { dapp_canister_status.controllers() == vec![sns_root] }`
 ///
 /// 6. SNS neuron creation:
-/// 6.1. `{ true } FinalizeUnSuccessfully { No additional SNS neurons are created. }`
-/// 6.2. `{ true } FinalizeSuccessfully   { New SNS neurons are created as expected. }`
+///     1. `{ true } FinalizeUnSuccessfully { No additional SNS neurons are created. }`
+///     2. `{ true } FinalizeSuccessfully   { New SNS neurons are created as expected. }`
 ///
 /// 7. SNS token balances:
-/// 7.1. `{ true } FinalizeUnSuccessfully { sns_token_balances == old(sns_token_balances) }`
-/// 7.2. `{ true } FinalizeSuccessfully   { SNS token balances are as expected. }`
+///     1. `{ true } FinalizeUnSuccessfully { sns_token_balances == old(sns_token_balances) }`
+///     2. `{ true } FinalizeSuccessfully   { SNS token balances are as expected. }`
 fn test_sns_lifecycle(
     ensure_swap_timeout_is_reached: bool,
     create_service_nervous_system: CreateServiceNervousSystem,

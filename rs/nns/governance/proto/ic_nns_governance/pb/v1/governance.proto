@@ -2312,6 +2312,7 @@ message Governance {
     }
 
     NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
+    NeuronSubsetMetrics public_neuron_subset_metrics = 39;
   }
 
   GovernanceCachedMetrics metrics = 15;
