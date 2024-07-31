@@ -806,21 +806,19 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
 
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
     fn from(item: &LogVisibility) -> Self {
-        use pb_canister_state_bits as pb;
         match item {
-            LogVisibility::Controllers => pb::LogVisibility::Controllers,
-            LogVisibility::Public => pb::LogVisibility::Public,
+            LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
+            LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
         }
     }
 }
 
 impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
     fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
-        use pb_canister_state_bits as pb;
         match item {
-            pb::LogVisibility::Unspecified => Self::default(),
-            pb::LogVisibility::Controllers => Self::Controllers,
-            pb::LogVisibility::Public => Self::Public,
+            pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
+            pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
+            pb_canister_state_bits::LogVisibility::Public => Self::Public,
         }
     }
 }
