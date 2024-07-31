@@ -4,7 +4,7 @@ mod parse;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
