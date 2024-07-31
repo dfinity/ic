@@ -169,6 +169,8 @@ pub fn test_sns_deployment(
 fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
     let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions();
 
+    println!("Upgrading SNS canisters: {:#?}", sns_canisters_to_upgrade);
+
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
         .with_one_developer_neuron(
@@ -200,6 +202,8 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         panic!("Cannot find some SNS canister IDs in {:#?}", deployed_sns);
     };
 
+    println!("Deployed SNS canisters");
+
     for canister_type in &sns_canisters_to_upgrade {
         let wasm = match canister_type {
             SnsCanisterType::Root => build_root_sns_wasm(),
@@ -213,6 +217,7 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
             SnsCanisterType::Archive => build_archive_sns_wasm(),
         };
 
+        println!("Publishing new wasm for {:#?}", canister_type);
         let wasm = ensure_sns_wasm_gzipped(wasm);
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
@@ -238,6 +243,7 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
             }
         };
 
+        println!("Publishing second wasm for {:#?}", canister_type);
         let wasm = ensure_sns_wasm_gzipped(wasm);
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
@@ -253,18 +259,33 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         );
     }
 
+    println!("Ledger is available");
+
     sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
     sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap_canister_id, swap_parameters);
 
+    println!("Proceeding with upgrades");
+    let number_upgrades = sns_canisters_to_upgrade.len() * 2;
+    let mut this_upgrade = 0;
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
     for _ in sns_canisters_to_upgrade {
         sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
             &pocket_ic,
             sns_governance_canister_id,
         );
+        this_upgrade += 1;
+        println!(
+            "Done with upgrade {} out of {}",
+            this_upgrade, number_upgrades
+        );
         sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
             &pocket_ic,
             sns_governance_canister_id,
+        );
+        this_upgrade += 1;
+        println!(
+            "Done with upgrade {} out of {}",
+            this_upgrade, number_upgrades
         );
     }
 }
