@@ -362,12 +362,37 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OnLowWasmMemoryHookStatus {
-    #[default]
     ConditionNotSatisfied,
     Ready,
     Executed,
+}
+
+impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
+    fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
+        match *item {
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
+                pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+            }
+            OnLowWasmMemoryHookStatus::Ready => pb::OnLowWasmMemoryHookStatus::Ready,
+            OnLowWasmMemoryHookStatus::Executed => pb::OnLowWasmMemoryHookStatus::Executed,
+        }
+    }
+}
+
+impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::OnLowWasmMemoryHookStatus) -> Result<Self, Self::Error> {
+        match value {
+            pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
+                Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+            }
+            pb::OnLowWasmMemoryHookStatus::Ready => Ok(OnLowWasmMemoryHookStatus::Ready),
+            pb::OnLowWasmMemoryHookStatus::Executed => Ok(OnLowWasmMemoryHookStatus::Executed),
+        }
+    }
 }
 
 impl OnLowWasmMemoryHookStatus {
