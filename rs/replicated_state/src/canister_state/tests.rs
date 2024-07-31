@@ -16,7 +16,7 @@ use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     BoundedAllowedViewers, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
-    CanisterLogRecord, LogVisibility,
+    CanisterLogRecord, LogVisibility, LogVisibilityV2,
 };
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::{
@@ -614,6 +614,7 @@ fn canister_state_callback_round_trip() {
 fn canister_state_log_visibility_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
+    // LogVisibilityV1.
     for initial in LogVisibility::iter() {
         let encoded = pb::LogVisibility::from(&initial);
         let round_trip = LogVisibility::from(encoded);
@@ -621,20 +622,21 @@ fn canister_state_log_visibility_round_trip() {
         assert_eq!(initial, round_trip);
     }
 
-    for initial in LogVisibility::iter() {
+    // LogVisibilityV2.
+    for initial in LogVisibilityV2::iter() {
         let encoded = pb::LogVisibilityV2::from(&initial);
-        let round_trip = LogVisibility::from(encoded);
+        let round_trip = LogVisibilityV2::from(encoded);
 
         assert_eq!(initial, round_trip);
     }
 
-    // Check `allowed_viewers` case with non-empty principals.
-    let initial = LogVisibility::AllowedViewers(BoundedAllowedViewers::new(vec![
+    // LogVisibilityV2: check `allowed_viewers` case with non-empty principals.
+    let initial = LogVisibilityV2::AllowedViewers(BoundedAllowedViewers::new(vec![
         user_test_id(1).get(),
         user_test_id(2).get(),
     ]));
     let encoded = pb::LogVisibilityV2::from(&initial);
-    let round_trip = LogVisibility::from(encoded);
+    let round_trip = LogVisibilityV2::from(encoded);
 
     assert_eq!(initial, round_trip);
 }
@@ -675,7 +677,12 @@ fn long_execution_mode_decoding() {
 fn compatibility_for_log_visibility() {
     // If this fails, you are making a potentially incompatible change to `LogVisibility`.
     // See note [Handling changes to Enums in Replicated State] for how to proceed.
-    assert_eq!(LogVisibility::iter().count(), 3);
+    assert_eq!(
+        LogVisibility::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2]
+    );
 }
 
 #[test]

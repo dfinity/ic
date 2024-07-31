@@ -779,48 +779,21 @@ const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
 pub type BoundedAllowedViewers =
     BoundedVec<MAX_ALLOWED_LOG_VIEWERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 /// Log visibility for a canister.
 /// ```text
 /// variant {
 ///    controllers;
 ///    public;
-///    allowed_viewers: vec principal;
 /// }
 /// ```
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
-    Controllers,
+    Controllers = 1,
     #[serde(rename = "public")]
-    Public,
-    #[serde(rename = "allowed_viewers")]
-    AllowedViewers(BoundedAllowedViewers),
-}
-
-// TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
-impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
-    fn from(item: &LogVisibility) -> Self {
-        use pb_canister_state_bits as pb;
-        match item {
-            LogVisibility::Controllers => pb::LogVisibility::Controllers,
-            LogVisibility::Public => pb::LogVisibility::Public,
-            LogVisibility::AllowedViewers(_) => pb::LogVisibility::EmptyAllowedViewers,
-        }
-    }
-}
-
-// TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
-impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
-    fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
-        use pb_canister_state_bits as pb;
-        match item {
-            pb::LogVisibility::Unspecified => Self::default(),
-            pb::LogVisibility::Controllers => Self::Controllers,
-            pb::LogVisibility::Public => Self::Public,
-            pb::LogVisibility::EmptyAllowedViewers => Self::AllowedViewers(Default::default()),
-        }
-    }
+    Public = 2,
 }
 
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
@@ -833,7 +806,61 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
             LogVisibility::Public => pb::LogVisibilityV2 {
                 log_visibility: Some(pb::log_visibility_v2::LogVisibility::Public(2)),
             },
-            LogVisibility::AllowedViewers(principals) => pb::LogVisibilityV2 {
+        }
+    }
+}
+
+impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
+    fn from(item: &LogVisibility) -> Self {
+        use pb_canister_state_bits as pb;
+        match item {
+            LogVisibility::Controllers => pb::LogVisibility::Controllers,
+            LogVisibility::Public => pb::LogVisibility::Public,
+        }
+    }
+}
+
+impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
+    fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
+        use pb_canister_state_bits as pb;
+        match item {
+            pb::LogVisibility::Unspecified => Self::default(),
+            pb::LogVisibility::Controllers => Self::Controllers,
+            pb::LogVisibility::Public => Self::Public,
+        }
+    }
+}
+
+/// Log visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+///    allowed_viewers: vec principal;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+pub enum LogVisibilityV2 {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
+}
+
+impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
+    fn from(item: &LogVisibilityV2) -> Self {
+        use pb_canister_state_bits as pb;
+        match item {
+            LogVisibilityV2::Controllers => pb::LogVisibilityV2 {
+                log_visibility: Some(pb::log_visibility_v2::LogVisibility::Controllers(1)),
+            },
+            LogVisibilityV2::Public => pb::LogVisibilityV2 {
+                log_visibility: Some(pb::log_visibility_v2::LogVisibility::Public(2)),
+            },
+            LogVisibilityV2::AllowedViewers(principals) => pb::LogVisibilityV2 {
                 log_visibility: Some(pb::log_visibility_v2::LogVisibility::AllowedViewers(
                     pb::LogVisibilityAllowedViewers {
                         principals: principals
@@ -849,7 +876,7 @@ impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
     }
 }
 
-impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibility {
+impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
     fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
         use pb_canister_state_bits as pb;
         match item.log_visibility {
