@@ -15,6 +15,6 @@ ENV PATH=/ic/bin:/home/runner/.cargo/bin:/home/runner/.local/bin:$PATH
 ARG RUST_VERSION=1.79.0
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
-    rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu
+    rustup default stable
 
 CMD ["/bin/bash"]
