@@ -17,7 +17,7 @@ use std::{
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressPayload {
     /// Pairs of MessageId and its serialized byte position in the buffer.
-    pub id_and_pos: Vec<(IngressMessageId, u64)>,
+    id_and_pos: Vec<(IngressMessageId, u64)>,
     /// All messages are serialized in a single byte buffer, so individual
     /// deserialization is delayed. This allows faster deserialization of
     /// IngressPayload when individual message is not needed (e.g. in
