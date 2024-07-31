@@ -9878,7 +9878,7 @@ fn test_neuron_set_visibility() {
                 .with_neuron(&neuron_id, |neuron| neuron.clone())
                 .unwrap();
 
-            assert_eq!(neuron.visibility, expected_visibility, "{:#?}", neuron,);
+            assert_eq!(neuron.visibility(), expected_visibility, "{:#?}", neuron,);
         };
 
     assert_neuron_visibility(typical_neuron.id.unwrap(), Some(Visibility::Public));
@@ -9977,11 +9977,7 @@ fn test_include_public_neurons_in_full_neurons() {
     assert_eq!(
         list_neurons_response.full_neurons,
         vec![
-            Neuron {
-                // Thanks to normalization.
-                visibility: Some(Visibility::Public as i32),
-                ..known_neuron
-            },
+            known_neuron,
             explicitly_public_neuron,
             // In particular, legacy and explicitly_private are NOT in the result.
 
