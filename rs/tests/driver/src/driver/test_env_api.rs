@@ -130,28 +130,33 @@
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
 
-use super::config::NODES_INFO;
-use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use super::farm::{DnsRecord, PlaynetCertificate};
-use super::test_setup::{GroupSetup, InfraProvider};
-use crate::driver::boundary_node::BoundaryNodeVm;
-use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
-use crate::driver::farm::{Farm, GroupSpec};
-use crate::driver::log_events;
-use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
-use crate::k8s::tnet::TNet;
-use crate::k8s::virtualmachine::{destroy_vm, restart_vm, start_vm};
-use crate::retry_with_msg;
-use crate::retry_with_msg_async;
-use crate::util::{block_on, create_agent};
-use anyhow::{anyhow, bail, Result};
+use super::{
+    config::NODES_INFO,
+    driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
+    farm::{DnsRecord, PlaynetCertificate},
+    test_setup::{GroupSetup, InfraProvider},
+};
+use crate::{
+    driver::{
+        boundary_node::BoundaryNodeVm,
+        constants::{self, kibana_link, SSH_USERNAME},
+        farm::{Farm, GroupSpec},
+        log_events,
+        test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
+    },
+    k8s::{
+        tnet::TNet,
+        virtualmachine::{destroy_vm, restart_vm, start_vm},
+    },
+    retry_with_msg, retry_with_msg_async,
+    util::{block_on, create_agent},
+};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
-use ic_agent::export::Principal;
-use ic_agent::{Agent, AgentError};
+use ic_agent::{export::Principal, Agent, AgentError};
 use ic_base_types::PrincipalId;
-use ic_canister_client::Agent as InternalAgent;
-use ic_canister_client::Sender;
+use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
@@ -163,31 +168,38 @@ use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanist
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
 use ic_registry_client_helpers::{
-    node::NodeRegistry, routing_table::RoutingTableRegistry, subnet::SubnetListRegistry,
-    subnet::SubnetRegistry,
+    node::NodeRegistry,
+    routing_table::RoutingTableRegistry,
+    subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{
+    malicious_behaviour::MaliciousBehaviour,
+    messages::{HttpStatusResponse, ReplicaHealthStatus},
+    NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+};
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{debug, error, info, warn, Logger};
 use ssh2::Session;
-use std::cmp::max;
-use std::collections::{HashMap, HashSet};
-use std::ffi::OsStr;
-use std::fs;
-use std::future::Future;
-use std::io::{Read, Write};
-use std::net::{Ipv4Addr, SocketAddr, TcpStream};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
-use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    ffi::OsStr,
+    fs,
+    future::Future,
+    io::{Read, Write},
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
@@ -2069,7 +2081,7 @@ pub async fn install_nns_canisters(
 
         init_payloads
             .with_test_neurons()
-            .with_additional_neurons(neurons)
+            .with_additional_neurons(neurons.into_iter().map(|n| n.into()).collect())
             .with_ledger_init_state(ledger_init_payload);
     }
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
