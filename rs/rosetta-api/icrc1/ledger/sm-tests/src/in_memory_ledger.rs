@@ -336,8 +336,10 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
         blocks: &[ic_icrc1::Block<Tokens>],
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
     ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-        let mut state = InMemoryLedger::default();
-        state.burns_without_spender = burns_without_spender;
+        let mut state = InMemoryLedger {
+            burns_without_spender,
+            ..Default::default()
+        };
         for (index, block) in blocks.iter().enumerate() {
             if let Some(fee_collector) = block.fee_collector {
                 state.fee_collector = Some(fee_collector);
@@ -423,7 +425,7 @@ pub fn verify_ledger_state(
     );
     for (account, balance) in expected_ledger_state.balances.iter() {
         let actual_balance = Decode!(
-            &env.query(ledger_id, "icrc1_balance_of", Encode!(&*account).unwrap())
+            &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
                 .expect("failed to query balance")
                 .bytes(),
             Nat
@@ -502,11 +504,8 @@ mod tests {
     fn should_decrease_balance_with_burn() {
         const MINT_AMOUNT: u64 = 1_000_000;
         const BURN_AMOUNT: u64 = 500_000;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::default();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let to = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -529,11 +528,8 @@ mod tests {
     fn should_remove_balance_with_burn() {
         const MINT_AMOUNT: u64 = 1_000_000;
         const BURN_AMOUNT: u64 = MINT_AMOUNT;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::default();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let to = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -557,11 +553,8 @@ mod tests {
     fn should_increase_and_decrease_balance_with_transfer() {
         const MINT_AMOUNT: u64 = 1_000_000;
         const TRANSFER_AMOUNT: u64 = 200_000;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::default();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -605,11 +598,8 @@ mod tests {
     fn should_remove_balances_with_transfer() {
         const MINT_AMOUNT: u64 = 10_000;
         const TRANSFER_AMOUNT: u64 = 0;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::default();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -640,11 +630,8 @@ mod tests {
     fn should_increase_allowance_with_approve() {
         const MINT_AMOUNT: u64 = 1_000_000;
         const APPROVE_AMOUNT: u64 = 200_000;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::default();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -693,11 +680,8 @@ mod tests {
         const MINT_AMOUNT: u64 = 1_000_000;
         const APPROVE_AMOUNT: u64 = 200_000;
         const ANOTHER_APPROVE_AMOUNT: u64 = 700_000;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::default();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
@@ -757,11 +741,8 @@ mod tests {
         const MINT_AMOUNT: u64 = 1_000_000;
         const APPROVE_AMOUNT: u64 = 300_000;
         const TRANSFER_AMOUNT: u64 = 200_000;
-        let mut in_memory_ledger: InMemoryLedger<
-            ApprovalKey,
-            Account,
-            crate::in_memory_ledger::Tokens,
-        > = InMemoryLedger::default();
+        let mut in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens> =
+            InMemoryLedger::default();
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(134).0,
             subaccount: None,
