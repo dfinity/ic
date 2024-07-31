@@ -78,6 +78,9 @@ pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 pub const CFG_TEMPLATE_BYTES: &[u8] =
     include_bytes!("../../../../ic-os/components/ic/ic.json5.template");
 
+// Requests are multiplexed over H2 requests.
+pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
+
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
         .expect("Invalid secret key.")
@@ -794,6 +797,7 @@ pub async fn agent_with_client_identity(
     let a = Agent::builder()
         .with_transport(transport)
         .with_identity(identity)
+        .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
         // behind, for example when the subnet has many modes and the progress of consensus is
