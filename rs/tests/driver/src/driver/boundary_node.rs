@@ -34,7 +34,7 @@ use crate::{
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use flate2::{write::GzEncoder, Compression};
+use zstd::stream::write::Encoder;
 use ic_agent::{Agent, AgentError};
 use kube::ResourceExt;
 use reqwest::Url;
@@ -58,7 +58,7 @@ const PLAYNET_PATH: &str = "playnet.json";
 const BN_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.gz", CONF_IMG_FNAME)
+    format!("{}.zst", CONF_IMG_FNAME)
 }
 
 #[derive(Clone)]
@@ -675,7 +675,7 @@ fn create_config_disk_image(
     let compressed_img_path = boundary_node_dir.join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
 
-    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;

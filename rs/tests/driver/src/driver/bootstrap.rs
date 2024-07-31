@@ -19,7 +19,7 @@ use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
-use flate2::{write::GzEncoder, Compression};
+use zstd::stream::write::Encoder;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -54,7 +54,7 @@ const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.gz", CONF_IMG_FNAME)
+    format!("{}.zst", CONF_IMG_FNAME)
 }
 
 pub fn init_ic(
@@ -539,7 +539,7 @@ fn create_config_disk_image(
     let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
-    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
@@ -669,7 +669,7 @@ fn configure_setupos_image(
 
     let mut img_file = File::open(&uncompressed_image)?;
     let configured_image_file = File::create(configured_image.clone())?;
-    let mut encoder = GzEncoder::new(configured_image_file, Compression::default());
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
