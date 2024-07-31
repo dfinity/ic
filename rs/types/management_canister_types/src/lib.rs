@@ -807,10 +807,10 @@ impl Payload<'_> for LogVisibility {
 impl From<LogVisibilityV2> for LogVisibility {
     fn from(item: LogVisibilityV2) -> Self {
         match item {
-            LogVisibilityV2::Controllers => LogVisibility::Controllers,
-            LogVisibilityV2::Public => LogVisibility::Public,
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::Public => Self::Public,
             // Fall back to the controllers value.
-            LogVisibilityV2::AllowedViewers(_) => LogVisibility::Controllers,
+            LogVisibilityV2::AllowedViewers(_) => Self::default(),
         }
     }
 }
@@ -865,7 +865,11 @@ impl Payload<'_> for LogVisibilityV2 {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
         let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
         {
-            Ok(record) => record,
+            Ok(record) => match record {
+                // TODO(EXC-1670): ignore receiving `AllowedViewers` variant, fallback to default.
+                Self::AllowedViewers(_) => Self::default(),
+                _ => record,
+            },
             Err(_) => LogVisibility::decode(blob)?.into(),
         };
         Ok(args)
@@ -875,8 +879,8 @@ impl Payload<'_> for LogVisibilityV2 {
 impl From<LogVisibility> for LogVisibilityV2 {
     fn from(item: LogVisibility) -> Self {
         match item {
-            LogVisibility::Controllers => LogVisibilityV2::Controllers,
-            LogVisibility::Public => LogVisibilityV2::Public,
+            LogVisibility::Controllers => Self::Controllers,
+            LogVisibility::Public => Self::Public,
         }
     }
 }
