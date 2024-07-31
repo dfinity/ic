@@ -53,8 +53,8 @@ use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::SshSession;
+use ic_system_test_driver::driver::test_env_api::{HasDependencies, IcNodeSnapshot};
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
@@ -76,7 +76,7 @@ use ic_types::Height;
 
 use anyhow::Result;
 use futures::future::join_all;
-use slog::info;
+use slog::{error, info, Logger};
 use std::time::{Duration, Instant};
 use tokio::runtime::{Builder, Runtime};
 
@@ -283,6 +283,20 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
             RETRY_WAIT,
         ));
     }
+
+    if cfg!(feature = "upload_perf_systest_results") {
+        let branch_version = env
+            .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+            .expect("tip-of-branch IC version");
+
+        rt.block_on(persist_metrics(
+            branch_version,
+            test_metrics,
+            message_size,
+            rps,
+            &log,
+        ));
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -377,6 +391,76 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
     }
 }
 
+async fn persist_metrics(
+    ic_version: String,
+    metrics: TestMetrics,
+    message_size: usize,
+    rps: f64,
+    log: &Logger,
+) {
+    // elastic search url
+    const ES_URL: &str =
+        "https://elasticsearch.testnet.dfinity.network/ci-consensus-performance-test/_doc";
+
+    let timestamp =
+        chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
+
+    let json_report = serde_json::json!(
+        {
+            "benchmark_name": "consensus_performance_test",
+            "timestamp": timestamp,
+            "ic_version": ic_version,
+            "benchmark_settings": {
+                "message_size": message_size,
+                "rps": rps,
+            },
+            "benchmark_results": {
+                "success_rate": metrics.success_rate,
+                "blocks_per_second": metrics.blocks_per_second,
+                "throughput_bytes_per_second": metrics.throughput_bytes_per_second,
+                "throughput_messages_per_second": metrics.throughput_messages_per_second,
+            }
+        }
+    );
+
+    info!(
+        log,
+        "Starting to upload performance test results to {ES_URL}: {}", json_report,
+    );
+
+    let client = reqwest::Client::new();
+    let result = ic_system_test_driver::retry_with_msg_async!(
+        "Uploading performance test results attempt",
+        log,
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(10),
+        || async {
+            client
+                .post(ES_URL)
+                .json(&json_report)
+                .send()
+                .await
+                .map_err(Into::into)
+        }
+    )
+    .await;
+
+    match result {
+        Ok(response) => {
+            info!(
+                log,
+                "Successfully uploaded performance test results: {response:?}"
+            );
+        }
+        Err(err) => {
+            error!(
+                log,
+                "Failed to upload performance test results. Last error: {err}"
+            )
+        }
+    }
+}
+
 fn average(nums: &[u64]) -> u64 {
     assert!(!nums.is_empty());
 
@@ -388,7 +472,7 @@ fn test_small_messages(env: TestEnv) {
 }
 
 fn test_large_messages(env: TestEnv) {
-    test(env, 1_950_000, 2.0)
+    test(env, 950_000, 4.0)
 }
 
 fn main() -> Result<()> {

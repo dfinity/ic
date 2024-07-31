@@ -21,6 +21,8 @@ pub(crate) struct CanisterSettings {
     pub(crate) controllers: Option<Vec<PrincipalId>>,
     pub(crate) compute_allocation: Option<ComputeAllocation>,
     pub(crate) memory_allocation: Option<MemoryAllocation>,
+    /// Threshold used for activation of canister_on_low_wasm_memory hook.
+    pub(crate) wasm_memory_threshold: Option<NumBytes>,
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibility>,
@@ -32,6 +34,7 @@ impl CanisterSettings {
         controllers: Option<Vec<PrincipalId>>,
         compute_allocation: Option<ComputeAllocation>,
         memory_allocation: Option<MemoryAllocation>,
+        wasm_memory_threshold: Option<NumBytes>,
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibility>,
@@ -41,6 +44,7 @@ impl CanisterSettings {
             controllers,
             compute_allocation,
             memory_allocation,
+            wasm_memory_threshold,
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
@@ -58,6 +62,10 @@ impl CanisterSettings {
 
     pub fn memory_allocation(&self) -> Option<MemoryAllocation> {
         self.memory_allocation
+    }
+
+    pub fn wasm_memory_threshold(&self) -> Option<NumBytes> {
+        self.wasm_memory_threshold
     }
 
     pub fn freezing_threshold(&self) -> Option<NumSeconds> {
@@ -127,12 +135,24 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let wasm_memory_threshold = match input.wasm_memory_threshold {
+            Some(wmt) => {
+                let wmt = wmt
+                    .0
+                    .to_u64()
+                    .ok_or(UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided: wmt })?;
+                Some(NumBytes::new(wmt))
+            }
+            None => None,
+        };
+
         Ok(CanisterSettings::new(
             input
                 .controllers
                 .map(|controllers| controllers.get().clone()),
             compute_allocation,
             memory_allocation,
+            wasm_memory_threshold,
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
@@ -156,6 +176,7 @@ pub(crate) struct CanisterSettingsBuilder {
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
+    wasm_memory_threshold: Option<NumBytes>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibility>,
@@ -169,6 +190,7 @@ impl CanisterSettingsBuilder {
             controllers: None,
             compute_allocation: None,
             memory_allocation: None,
+            wasm_memory_threshold: None,
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
@@ -181,6 +203,7 @@ impl CanisterSettingsBuilder {
             controllers: self.controllers,
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
+            wasm_memory_threshold: self.wasm_memory_threshold,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
@@ -205,6 +228,13 @@ impl CanisterSettingsBuilder {
     pub fn with_memory_allocation(self, memory_allocation: MemoryAllocation) -> Self {
         Self {
             memory_allocation: Some(memory_allocation),
+            ..self
+        }
+    }
+
+    pub fn with_wasm_memory_threshold(self, wasm_memory_threshold: NumBytes) -> Self {
+        Self {
+            wasm_memory_threshold: Some(wasm_memory_threshold),
             ..self
         }
     }
@@ -244,6 +274,7 @@ pub enum UpdateSettingsError {
     FreezingThresholdOutOfRange { provided: candid::Nat },
     ReservedCyclesLimitOutOfRange { provided: candid::Nat },
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
+    WasmMemoryThresholdOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -286,6 +317,13 @@ impl From<UpdateSettingsError> for UserError {
                     provided
                 ),
             ),
+            UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {}",
+                    provided
+                ),
+            ),
         }
     }
 }
@@ -306,6 +344,7 @@ pub(crate) struct ValidatedCanisterSettings {
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
+    wasm_memory_threshold: Option<NumBytes>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
@@ -324,6 +363,10 @@ impl ValidatedCanisterSettings {
 
     pub fn memory_allocation(&self) -> Option<MemoryAllocation> {
         self.memory_allocation
+    }
+
+    pub fn wasm_memory_threshold(&self) -> Option<NumBytes> {
+        self.wasm_memory_threshold
     }
 
     pub fn freezing_threshold(&self) -> Option<NumSeconds> {
@@ -358,6 +401,7 @@ impl ValidatedCanisterSettings {
 ///     - there must be enough cycles to avoid freezing the canister.
 /// - controllers:
 ///     - the number of controllers cannot exceed the given maximum.
+///
 /// Keep this function in sync with `do_update_settings()`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_canister_settings(
@@ -438,6 +482,16 @@ pub(crate) fn validate_canister_settings(
             }
         }
         None => {}
+    }
+
+    if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
+        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
+            if wasm_memory_threshold > wasm_memory_limit {
+                return Err(CanisterManagerError::InvalidSettings {
+                    message: format!("Invalid settings: 'wasm_memory_threshold' cannot be larger than 'wasm_memory_limit'. 'wasm_memory_threshold': {}, 'wasm_memory_limit': {}", wasm_memory_threshold, wasm_memory_limit),
+                });
+            }
+        }
     }
 
     let new_memory_allocation = settings
@@ -535,6 +589,7 @@ pub(crate) fn validate_canister_settings(
         controllers: settings.controllers(),
         compute_allocation: settings.compute_allocation(),
         memory_allocation: settings.memory_allocation(),
+        wasm_memory_threshold: settings.wasm_memory_threshold(),
         freezing_threshold: settings.freezing_threshold(),
         reserved_cycles_limit: settings.reserved_cycles_limit(),
         reservation_cycles,

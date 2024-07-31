@@ -435,6 +435,11 @@ impl CanisterState {
         self.system_state.memory_allocation
     }
 
+    /// Returns the current Wasm memory threshold of the canister.
+    pub fn wasm_memory_threshold(&self) -> NumBytes {
+        self.system_state.wasm_memory_threshold
+    }
+
     /// Returns the canister's memory limit: its reservation, if set; else the
     /// provided `default_limit`.
     pub fn memory_limit(&self, default_limit: NumBytes) -> NumBytes {
@@ -583,7 +588,7 @@ impl CanisterState {
 /// - `ContinueLong`: the canister has a long-running execution and will
 ///   continue it.
 /// - `ContinueInstallCode`: the canister has a long-running execution of
-/// `install_code` subnet message and will continue it.
+///   `install_code` subnet message and will continue it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NextExecution {
     None,
