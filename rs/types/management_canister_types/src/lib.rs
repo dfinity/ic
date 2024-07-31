@@ -880,13 +880,13 @@ impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
         use pb_canister_state_bits as pb;
         match item {
             LogVisibilityV2::Controllers => pb::LogVisibilityV2 {
-                log_visibility: Some(pb::log_visibility_v2::LogVisibility::Controllers(1)),
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Controllers(1)),
             },
             LogVisibilityV2::Public => pb::LogVisibilityV2 {
-                log_visibility: Some(pb::log_visibility_v2::LogVisibility::Public(2)),
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Public(2)),
             },
             LogVisibilityV2::AllowedViewers(principals) => pb::LogVisibilityV2 {
-                log_visibility: Some(pb::log_visibility_v2::LogVisibility::AllowedViewers(
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(
                     pb::LogVisibilityAllowedViewers {
                         principals: principals
                             .get()
@@ -904,12 +904,12 @@ impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
 impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
     fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
         use pb_canister_state_bits as pb;
-        match item.log_visibility {
+        match item.log_visibility_v2 {
             None => panic!("Invalid LogVisibility enum variant"),
-            Some(log_visibility) => match log_visibility {
-                pb::log_visibility_v2::LogVisibility::Controllers(_) => Self::Controllers,
-                pb::log_visibility_v2::LogVisibility::Public(_) => Self::Public,
-                pb::log_visibility_v2::LogVisibility::AllowedViewers(data) => {
+            Some(log_visibility_v2) => match log_visibility_v2 {
+                pb::log_visibility_v2::LogVisibilityV2::Controllers(_) => Self::Controllers,
+                pb::log_visibility_v2::LogVisibilityV2::Public(_) => Self::Public,
+                pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
                     Self::AllowedViewers(BoundedAllowedViewers::new(
                         data.principals
                             .iter()

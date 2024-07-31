@@ -327,7 +327,7 @@ message LogVisibilityAllowedViewers {
 }
 
 message LogVisibilityV2 {
-  oneof log_visibility {
+  oneof log_visibility_v2 {
     int32 controllers = 1;
     int32 public = 2;
     LogVisibilityAllowedViewers allowed_viewers = 3;

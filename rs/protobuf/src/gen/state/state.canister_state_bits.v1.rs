@@ -562,14 +562,14 @@ pub struct LogVisibilityAllowedViewers {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogVisibilityV2 {
-    #[prost(oneof = "log_visibility_v2::LogVisibility", tags = "1, 2, 3")]
-    pub log_visibility: ::core::option::Option<log_visibility_v2::LogVisibility>,
+    #[prost(oneof = "log_visibility_v2::LogVisibilityV2", tags = "1, 2, 3")]
+    pub log_visibility_v2: ::core::option::Option<log_visibility_v2::LogVisibilityV2>,
 }
 /// Nested message and enum types in `LogVisibilityV2`.
 pub mod log_visibility_v2 {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum LogVisibility {
+    pub enum LogVisibilityV2 {
         #[prost(int32, tag = "1")]
         Controllers(i32),
         #[prost(int32, tag = "2")]
