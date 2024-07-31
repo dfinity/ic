@@ -18,6 +18,7 @@ impl Default for CreateServiceNervousSystemBuilder {
         let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .swap_parameters
             .clone()
+            .map(|x| x.into())
             .unwrap();
         let swap_parameters = SwapParameters {
             // Ensure just one huge direct participant can finalize the swap.
@@ -35,7 +36,9 @@ impl Default for CreateServiceNervousSystemBuilder {
         CreateServiceNervousSystemBuilder(CreateServiceNervousSystem {
             dapp_canisters: vec![],
             swap_parameters: Some(swap_parameters),
-            ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone()
+            ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .clone()
+                .into()
         })
     }
 }
