@@ -432,7 +432,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                     BlockPayload::Data(DataPayload {
                                         batch: BatchPayload::default(),
                                         dealings: Dealings::new_empty(start_height),
-                                        ecdsa: None,
+                                        idkg: None,
                                     })
                                 }),
                             );

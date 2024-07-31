@@ -15,8 +15,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 slog = { workspace = true }
-hyper = "0.14.18"
-hyper-rustls = { workspace = true }
+reqwest = { workspace = true }
 
 [lib]
 name = "spec_compliance"

@@ -48,6 +48,7 @@ pub struct HttpHandlerMetrics {
     pub request_body_size_bytes: HistogramVec,
     pub response_body_size_bytes: HistogramVec,
     pub connections_total: IntCounter,
+    pub closed_connections_total: IntCounter,
     pub health_status_transitions_total: IntCounterVec,
     pub connection_setup_duration: HistogramVec,
     pub connection_duration: HistogramVec,
@@ -60,6 +61,7 @@ pub struct HttpHandlerMetrics {
     pub ingress_watcher_duplicate_requests_total: IntCounter,
     pub ingress_watcher_subscription_latency_duration_seconds: Histogram,
     pub ingress_watcher_wait_for_certification_duration_seconds: Histogram,
+    pub ingress_watcher_messages_completed_execution_channel_capacity: IntGauge,
 
     // Call v3 handler metrics
     pub call_v3_early_response_trigger_total: IntCounterVec,
@@ -112,6 +114,10 @@ impl HttpHandlerMetrics {
                 "replica_http_tcp_connections_total",
                 "Total number of accepted TCP connections."
             ),
+            closed_connections_total: metrics_registry.int_counter(
+                "replica_http_tcp_closed_connections_total",
+                "Total number closed connections."
+            ),
             health_status_transitions_total: metrics_registry.int_counter_vec(
                 "replica_http_health_status_state_transitions_total",
                 "Number of health status state transitions",
@@ -157,6 +163,10 @@ impl HttpHandlerMetrics {
                 "The duration the call v3 handler waits for subscribing to a message. I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
                 // 0.1ms - 500ms
                 decimal_buckets(-4, -1),
+            ),
+            ingress_watcher_messages_completed_execution_channel_capacity: metrics_registry.int_gauge(
+                "replica_http_ingress_watcher_messages_completed_execution_channel_capacity",
+                "The capacity of the channel that holds messages that have completed execution."
             ),
             ingress_watcher_wait_for_certification_duration_seconds: metrics_registry.histogram(
                 "replica_http_ingress_watcher_wait_for_certification_duration_seconds",

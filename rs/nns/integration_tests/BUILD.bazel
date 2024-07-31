@@ -62,7 +62,6 @@ BASE_DEPENDENCIES = [
         "@crate_index//:ic-xrc-types",
         "@crate_index//:maplit",
         "@crate_index//:rand",
-        # "@crate_index//:randomkit",
         "@crate_index//:rustc-hash",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -76,6 +75,7 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/init",
     "//rs/nns/governance",
+    "//rs/nns/governance/init",
     "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
     "//rs/sns/swap",
@@ -91,6 +91,7 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
     "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
@@ -117,6 +118,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/common/test_utils",
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
 ]

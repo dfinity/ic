@@ -8,7 +8,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -17,7 +17,7 @@ use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{CertificationMessageId, Priority, PriorityFn},
+    artifact::CertificationMessageId,
     consensus::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
@@ -60,7 +60,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationMessage, Pool>
+impl<Pool: CertificationPool> PriorityFnFactory<CertificationMessage, Pool>
     for CertifierGossipImpl
 {
     // The priority function requires just the height of the artifact to decide if
@@ -124,25 +124,25 @@ pub fn setup(
 /// following algorithm:
 ///
 /// 1. Request a set of (height, hash) tuples from its local StateManager, where
-/// `hash` is the hash of the replicated state after processing the batch at the
-/// specified height. The StateManager is responsible for selecting which parts
-/// of the replicated state are included in the computation of the hash.
+///    `hash` is the hash of the replicated state after processing the batch at the
+///    specified height. The StateManager is responsible for selecting which parts
+///    of the replicated state are included in the computation of the hash.
 ///
 /// 2. Sign the hash-height tuple, resulting in a CertificationShare, and place
-/// the CertificationShare in the certification pool, to be gossiped to other
-/// replicas.
+///    the CertificationShare in the certification pool, to be gossiped to other
+///    replicas.
 ///
 /// 3. On every invocation of `on_state_change`, if sufficiently many
-/// CertificationShares for the same (height, hash) pair were received, combine
-/// them into a full Certification and put it into the certification pool. At
-/// that point, the CertificationShares are not required anymore and can be
-/// purged.
+///    CertificationShares for the same (height, hash) pair were received, combine
+///    them into a full Certification and put it into the certification pool. At
+///    that point, the CertificationShares are not required anymore and can be
+///    purged.
 ///
 /// 4. For every (height, hash) pair with a full Certification, submit
-/// the pair (height, Certification) to the StateManager.
+///    the pair (height, Certification) to the StateManager.
 ///
 /// 5. Whenever the catch-up package height increases, remove all certification
-/// artifacts below this height.
+///    artifacts below this height.
 impl<T: CertificationPool> ChangeSetProducer<T> for CertifierImpl {
     type ChangeSet = ChangeSet;
 
@@ -625,7 +625,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        artifact::{CertificationMessageId, Priority},
+        artifact::CertificationMessageId,
         consensus::certification::{
             Certification, CertificationContent, CertificationMessage, CertificationMessageHash,
             CertificationShare,

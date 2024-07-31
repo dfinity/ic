@@ -62,9 +62,9 @@ struct DirectParticipantConfig {
 ///
 /// At a high level, the following aspects of an SNS are covered in this function:
 /// 1. Basic properties on an SNS instance:
-/// 1.1. An SNS instance can be deployed successfully by submitting an NNS proposal.
-/// 1.2. A new SNS instance automatically transitions into `Lifecycle::Open`.
-/// 1.3. Direct participation works as expected.
+///     1. An SNS instance can be deployed successfully by submitting an NNS proposal.
+///     2. A new SNS instance automatically transitions into `Lifecycle::Open`.
+///     3. Direct participation works as expected.
 ///
 /// 2. Auto-finalization works as expected.
 ///
@@ -94,39 +94,40 @@ struct DirectParticipantConfig {
 ///    - `CamelCase` is used to refer to operations.
 ///    - `Operation.is_enabled()` refers to the possibility of calling `Operation` in this state.
 ///
-/// 3.1. State machine:
-/// 3.1.1. `{ governance::Mode::PreInitializationSwap } FinalizeUnSuccessfully { governance::Mode::PreInitializationSwap }`
-/// 3.1.2. `{ governance::Mode::PreInitializationSwap } FinalizeSuccessfully   { governance::Mode::Normal }`
+///     1. State machine:
+///         1. `{ governance::Mode::PreInitializationSwap } FinalizeUnSuccessfully { governance::Mode::PreInitializationSwap }`
+///         2. `{ governance::Mode::PreInitializationSwap } FinalizeSuccessfully   { governance::Mode::Normal }`
 ///
-/// 3.2. Availability of SNS operations in different states:
-/// 3.2.1. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeUnSuccessfully { !ManageNervousSystemParameters.is_enabled() }`
-/// 3.2.2. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeSuccessfully   {  ManageNervousSystemParameters.is_enabled() }`
-/// 3.2.3. `{ !DissolveSnsNeuron.is_enabled() } FinalizeUnSuccessfully { !DissolveSnsNeuron.is_enabled() }`
-/// 3.2.4. `{ !DissolveSnsNeuron.is_enabled() } FinalizeSuccessfully   {  DissolveSnsNeuron.is_enabled() }`
-/// 3.2.5. `{ RefreshBuyerTokens.is_enabled() } Finalize { !RefreshBuyerTokens.is_enabled() }`
+///     2. Availability of SNS operations in different states:
+///         1. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeUnSuccessfully { !ManageNervousSystemParameters.is_enabled() }`
+///         2. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeSuccessfully   {  ManageNervousSystemParameters.is_enabled() }`
+///         3. `{ !DissolveSnsNeuron.is_enabled() } FinalizeUnSuccessfully { !DissolveSnsNeuron.is_enabled() }`
+///         4. `{ !DissolveSnsNeuron.is_enabled() } FinalizeSuccessfully   {  DissolveSnsNeuron.is_enabled() }`
+///         5. `{ RefreshBuyerTokens.is_enabled() } Finalize { !RefreshBuyerTokens.is_enabled() }`
 ///
-/// 3.3. ICP refunding mechanism and ICP balances:
-/// 3.3.1. `{ true } FinalizeUnSuccessfully; Swap.error_refund_icp() { All directly participated ICP (minus the fees) are refunded. }`
-/// 3.3.2. `{ true } FinalizeSuccessfully;   Swap.error_refund_icp() { Excess directly participated ICP (minus the fees) are refunded. }`
+///     3. ICP refunding mechanism and ICP balances:
+///         1. `{ true } FinalizeUnSuccessfully; Swap.error_refund_icp() { All directly participated ICP (minus the fees) are refunded. }`
+///         2. `{ true } FinalizeSuccessfully;   Swap.error_refund_icp() { Excess directly participated ICP (minus the fees) are refunded. }`
 ///
 /// 4. The Neurons' Fund works as expected:
-/// 4.1.1. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
-/// 4.1.2. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==150_000 * E8 }`
-/// 4.1.3. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
-/// 4.1.4. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==0 }`
-/// 4.2. Unused portions of Neurons' Fund maturity reserved at SNS creation time are refunded.
+///     1. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
+///     2. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==150_000 * E8 }`
+///     3. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
+///     4. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==0 }`
+///     
+///     Unused portions of Neurons' Fund maturity reserved at SNS creation time are refunded.
 ///
 /// 5. Control over the dapp:
-/// 5.1. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeUnSuccessfully { dapp_canister_status.controllers() == vec![fallback_controllers] }`
-/// 5.2. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeSuccessfully   { dapp_canister_status.controllers() == vec![sns_root] }`
+///     1. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeUnSuccessfully { dapp_canister_status.controllers() == vec![fallback_controllers] }`
+///     2. `{ dapp_canister_status.controllers() == vec![developer, nns_root] } FinalizeSuccessfully   { dapp_canister_status.controllers() == vec![sns_root] }`
 ///
 /// 6. SNS neuron creation:
-/// 6.1. `{ true } FinalizeUnSuccessfully { No additional SNS neurons are created. }`
-/// 6.2. `{ true } FinalizeSuccessfully   { New SNS neurons are created as expected. }`
+///     1. `{ true } FinalizeUnSuccessfully { No additional SNS neurons are created. }`
+///     2. `{ true } FinalizeSuccessfully   { New SNS neurons are created as expected. }`
 ///
 /// 7. SNS token balances:
-/// 7.1. `{ true } FinalizeUnSuccessfully { sns_token_balances == old(sns_token_balances) }`
-/// 7.2. `{ true } FinalizeSuccessfully   { SNS token balances are as expected. }`
+///     1. `{ true } FinalizeUnSuccessfully { sns_token_balances == old(sns_token_balances) }`
+///     2. `{ true } FinalizeSuccessfully   { SNS token balances are as expected. }`
 fn test_sns_lifecycle(
     ensure_swap_timeout_is_reached: bool,
     create_service_nervous_system: CreateServiceNervousSystem,
@@ -1239,6 +1240,7 @@ fn test_sns_lifecycle(
                 nns_proposal_id
             );
         };
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         neurons_fund_audit_info
             .final_neurons_fund_participation
             .unwrap()
@@ -1248,7 +1250,10 @@ fn test_sns_lifecycle(
             .into_iter()
             .map(|neurons_fund_neuron_portion| {
                 (
-                    neurons_fund_neuron_portion.hotkey_principal.unwrap(),
+                    neurons_fund_neuron_portion
+                        .controller
+                        .or(neurons_fund_neuron_portion.hotkey_principal)
+                        .unwrap(),
                     neurons_fund_neuron_portion,
                 )
             })
@@ -1259,12 +1264,16 @@ fn test_sns_lifecycle(
 
     // Inspect SNS neurons. We perform these checks by comparing neuron controllers.
     {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let expected_neuron_controller_principal_ids = {
             let neurons_fund_neuron_controller_principal_ids: BTreeSet<_> =
                 neurons_fund_neuron_controllers_to_neuron_portions
                     .values()
                     .map(|neurons_fund_neuron_portion| {
-                        neurons_fund_neuron_portion.hotkey_principal.unwrap()
+                        neurons_fund_neuron_portion
+                            .controller
+                            .or(neurons_fund_neuron_portion.hotkey_principal)
+                            .unwrap()
                     })
                     .collect();
 
@@ -1612,9 +1621,9 @@ fn test_sns_lifecycle(
                 .iter()
                 .filter_map(|recipe| {
                     if let Some(Investor::CommunityFund(ref investment)) = recipe.investor {
-                        let hotkey_principal = investment.hotkey_principal.clone();
+                        let controller = investment.try_get_controller().unwrap();
                         let amount_sns_e8s = recipe.sns.clone().unwrap().amount_e8s;
-                        Some((hotkey_principal, amount_sns_e8s))
+                        Some((controller, amount_sns_e8s))
                     } else {
                         None
                     }
@@ -1647,6 +1656,7 @@ fn test_sns_lifecycle(
             );
         };
         // Maps neuron IDs to maturity equivalent ICP e8s.
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let mut final_neurons_fund_participation: BTreeMap<PrincipalId, Vec<u64>> =
             neurons_fund_audit_info
                 .final_neurons_fund_participation
@@ -1658,7 +1668,10 @@ fn test_sns_lifecycle(
                 .fold(
                     BTreeMap::new(),
                     |mut neuron_portions_per_controller, neuron_portion| {
-                        let controller_principal_id = neuron_portion.hotkey_principal.unwrap();
+                        let controller_principal_id = neuron_portion
+                            .controller
+                            .or(neuron_portion.hotkey_principal)
+                            .unwrap();
                         let amount_icp_e8s = neuron_portion.amount_icp_e8s.unwrap();
                         neuron_portions_per_controller
                             .entry(controller_principal_id)

@@ -213,13 +213,6 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
-    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        ic_config.set_whitelisted_prefixes(Some("::/0".to_string()));
-        ic_config.set_whitelisted_ports(Some(
-            "22,2497,4100,7070,8080,9090,9091,9100,19100,19531".to_string(),
-        ));
-    }
-
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
@@ -653,7 +646,7 @@ fn configure_setupos_image(
         .arg("--cpu-mode")
         .arg(cpu_mode)
         .arg("--nns-url")
-        .arg(&nns_url.to_string())
+        .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
         .env(path_key, &new_path);

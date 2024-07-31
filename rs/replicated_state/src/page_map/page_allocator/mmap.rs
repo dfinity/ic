@@ -136,6 +136,7 @@ impl PageInner {
 /// - the physical memory of a dropped page is freed using `madvise` when
 ///   there is sufficient number of dropped pages.
 /// - all virtual memory is freed at once the page allocator itself is dropped.
+///
 /// This approach works well with the checkpoints and allows us to avoid all
 /// the complexity and inefficiency of maintaining a thread-safe free-list.
 ///

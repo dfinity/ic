@@ -1,3 +1,4 @@
+use crate::events::MinterEventAssert;
 use crate::mock::{
     JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
@@ -22,7 +23,7 @@ use ic_cketh_minter::endpoints::{
 };
 use ic_cketh_minter::{
     PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-    SCRAPPING_ETH_LOGS_INTERVAL,
+    SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
 use ic_state_machine_tests::{MessageId, StateMachine};
@@ -158,7 +159,7 @@ impl DepositFlow {
     }
 
     fn handle_deposit_until_block(&mut self, block_number: u64) {
-        self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -167,7 +168,7 @@ impl DepositFlow {
             .build()
             .expect_rpc_calls(&self.setup);
 
-        self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_eth_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .respond_for_all_with(vec![self.params.eth_log()]);
@@ -721,6 +722,22 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
             sent_transaction_hash: tx_hash,
         }
     }
+
+    pub fn expect_transaction_not_created(self) -> T {
+        assert_eq!(
+            self.setup
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
+            RetrieveEthStatus::Pending,
+            "BUG: unexpected status while processing withdrawal"
+        );
+        MinterEventAssert::from_fetching_all_events(self.setup).assert_has_no_event_satisfying(
+            |event| {
+                matches!(event, EventPayload::CreatedTransaction { withdrawal_id, .. }
+                    if withdrawal_id == self.withdrawal_request.withdrawal_id())
+            },
+        )
+    }
 }
 
 pub struct FinalizedTransactionCountProcessWithdrawal<T, Req> {
@@ -880,6 +897,12 @@ pub fn increment_max_priority_fee_per_gas(fee_history: &mut ethers_core::types::
                 .unwrap()
                 .max((1_500_000_000_u64 + 1_u64).into());
         }
+    }
+}
+
+pub fn increment_base_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
+    for base_fee_per_gas in fee_history.base_fee_per_gas.iter_mut() {
+        *base_fee_per_gas = base_fee_per_gas.checked_add(1_u64.into()).unwrap();
     }
 }
 

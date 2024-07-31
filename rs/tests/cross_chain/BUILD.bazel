@@ -1,14 +1,11 @@
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 CANISTER_RUNTIME_DEPS = [
     # Keep sorted.
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
-    "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
-    "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
 ]
 
 system_test(

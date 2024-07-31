@@ -4,7 +4,7 @@ use ic_canister_log::Sink;
 use ic_icrc1::{Operation, Transaction};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
-use ic_ledger_core::approvals::{Allowance, Approvals};
+use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;

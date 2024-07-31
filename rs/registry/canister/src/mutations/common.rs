@@ -115,32 +115,6 @@ pub fn get_unassigned_nodes_record(
         )
 }
 
-// Perform a basic domain validation for a string
-// Note that this is not meant to be an exhaustive check
-pub fn is_valid_domain(domain: &str) -> bool {
-    let parts: Vec<&str> = domain.split('.').collect();
-
-    if parts.len() < 2 {
-        return false; // Domain should have at least one subdomain and a TLD
-    }
-
-    for part in parts {
-        if part.is_empty() || part.len() > 63 {
-            return false; // Each part should not be empty and should not exceed 63 characters
-        }
-
-        if part.starts_with('-') || part.ends_with('-') {
-            return false; // Parts should not start or end with a hyphen
-        }
-
-        if !part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return false; // Parts should consist only of ASCII alphanumeric characters and hyphens
-        }
-    }
-
-    true
-}
-
 // Check that the given string is indeed a valid IPv4 address
 pub fn is_valid_ipv4_address(ipv4_address: &str) -> bool {
     Ipv4Addr::from_str(ipv4_address).is_ok()
@@ -279,8 +253,7 @@ where
 #[cfg(test)]
 pub(crate) mod test {
     use crate::mutations::common::{
-        are_in_the_same_subnet, check_ipv6_format, is_global_ipv4_address, is_valid_domain,
-        is_valid_ipv4_address,
+        are_in_the_same_subnet, check_ipv6_format, is_global_ipv4_address, is_valid_ipv4_address,
     };
 
     pub(crate) const TEST_NODE_ID: &str = "2vxsx-fae";
@@ -298,25 +271,6 @@ pub(crate) mod test {
         // Valid IPv6
         assert!(check_ipv6_format("0:0:0:0:0:0:0:0"));
         assert!(check_ipv6_format("123:221:4567:323:4123:2111:7:7"));
-    }
-
-    #[test]
-    fn test_is_valid_domain() {
-        // Invalid cases
-        for d in ["", "com", ".com", "-a.com", "a-.com"] {
-            assert!(!is_valid_domain(d), "expected {d} to be an invalid domain");
-        }
-
-        // Valid cases
-        for d in [
-            "example.com",
-            "a.example.com",
-            "a.b.example.com",
-            "example--a.com",
-            "example-a.com",
-        ] {
-            assert!(is_valid_domain(d), "expected {d} to be a valid domain");
-        }
     }
 
     #[test]

@@ -8,14 +8,13 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
+    CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
 use crate::state::event::EventType;
 use crate::tx::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate, ResubmissionStrategy,
-    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionPrice,
-    TransactionRequest,
+    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -584,6 +583,7 @@ impl EthTransactions {
     /// with nonces greater than the latest mined transaction nonce:
     /// * the resubmitted transaction will need to be re-signed if its transaction fee was increased
     /// * the resubmitted transaction can be resent as is if its transaction fee was not increased
+    ///
     /// We stop on the first error since if a transaction with nonce n could not be resubmitted
     /// (e.g., the transaction amount does not cover the new fees),
     /// then the next transactions with nonces n+1, n+2, ... are blocked anyway
@@ -998,6 +998,13 @@ impl EthTransactions {
         self.finalized_tx.get_alt(burn_index)
     }
 
+    pub fn get_processed_withdrawal_request(
+        &self,
+        burn_index: &LedgerBurnIndex,
+    ) -> Option<&WithdrawalRequest> {
+        self.processed_withdrawal_requests.get(burn_index)
+    }
+
     pub fn finalized_transactions_iter(
         &self,
     ) -> impl Iterator<
@@ -1092,11 +1099,17 @@ impl EthTransactions {
 pub fn create_transaction(
     withdrawal_request: &WithdrawalRequest,
     nonce: TransactionNonce,
-    transaction_price: TransactionPrice,
+    gas_fee_estimate: GasFeeEstimate,
+    gas_limit: GasAmount,
     ethereum_network: EthereumNetwork,
 ) -> Result<Eip1559TransactionRequest, CreateTransactionError> {
+    assert!(
+        gas_limit > GasAmount::ZERO,
+        "BUG: gas limit should be non-zero"
+    );
     match withdrawal_request {
         WithdrawalRequest::CkEth(request) => {
+            let transaction_price = gas_fee_estimate.to_price(gas_limit);
             let max_transaction_fee = transaction_price.max_transaction_fee();
             let tx_amount = match request.withdrawal_amount.checked_sub(max_transaction_fee) {
                 Some(tx_amount) => tx_amount,
@@ -1121,20 +1134,33 @@ pub fn create_transaction(
             })
         }
         WithdrawalRequest::CkErc20(request) => {
-            let actual_max_transaction_fee = transaction_price.max_transaction_fee();
-            if actual_max_transaction_fee > request.max_transaction_fee {
+            // The transaction fee is already paid and must be at most
+            // the `max_transaction_fee` in the withdrawal request, which, given a gas limit, gives us an upper bound on
+            // the `max_fee_per_gas`. We allocate the maximum from the beginning to minimize
+            // transaction resubmissions: even if the `base_fee_per_gas` increases considerably,
+            // the transaction could still make it as long as `transaction.max_fee_per_gas >=  block.base_fee_per_gas`,
+            // since the `priority_fee_per_gas` received by the miner is capped to (see https://eips.ethereum.org/EIPS/eip-1559)
+            // min(transaction.max_priority_fee_per_gas, transaction.max_fee_per_gas - block.base_fee_per_gas).
+            let request_max_fee_per_gas = request
+                .max_transaction_fee
+                .into_wei_per_gas(gas_limit)
+                .expect("BUG: gas_limit should be non-zero");
+            let actual_min_max_fee_per_gas = gas_fee_estimate.min_max_fee_per_gas();
+            if actual_min_max_fee_per_gas > request_max_fee_per_gas {
                 return Err(CreateTransactionError::InsufficientTransactionFee {
                     cketh_ledger_burn_index: request.cketh_ledger_burn_index,
                     allowed_max_transaction_fee: request.max_transaction_fee,
-                    actual_max_transaction_fee,
+                    actual_max_transaction_fee: actual_min_max_fee_per_gas
+                        .transaction_cost(gas_limit)
+                        .unwrap_or(Wei::MAX),
                 });
             }
             Ok(Eip1559TransactionRequest {
                 chain_id: ethereum_network.chain_id(),
                 nonce,
-                max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-                max_fee_per_gas: transaction_price.max_fee_per_gas,
-                gas_limit: transaction_price.gas_limit,
+                max_priority_fee_per_gas: gas_fee_estimate.max_priority_fee_per_gas,
+                max_fee_per_gas: request_max_fee_per_gas,
+                gas_limit,
                 destination: request.erc20_contract_address,
                 amount: Wei::ZERO,
                 data: TransactionCallData::Erc20Transfer {

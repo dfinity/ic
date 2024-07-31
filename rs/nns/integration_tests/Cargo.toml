@@ -49,6 +49,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
+ic-nns-governance-init = { path = "../governance/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
@@ -56,7 +57,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 lazy_static = { workspace = true }
 lifeline = { path = "../handlers/lifeline/impl" }
-prometheus-parse = "0.2.4"
+prometheus-parse = { workspace = true }
 prost = { workspace = true }
 strum = { workspace = true }
 
@@ -105,4 +106,5 @@ assert_matches = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
 
 [dev-dependencies]
+ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }

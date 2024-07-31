@@ -68,7 +68,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//publish:__subpackages__"],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [":adapter"],
 )
 
@@ -91,34 +91,6 @@ rust_test(
     deps = DEV_DEPENDENCIES,
 )
 
-genrule(
-    name = "decompress_mainnet_headers",
-    srcs = ["@bitcoin_adapter_mainnet_headers//file"],
-    outs = ["mainnet_headers_800k.json"],
-    cmd = "gunzip -c $< > $@",
-)
-
-genrule(
-    name = "decompress_mainnet_blocks",
-    srcs = ["@bitcoin_adapter_mainnet_blocks//file"],
-    outs = ["mainnet_blocks.json"],
-    cmd = "gunzip -c $< > $@",
-)
-
-genrule(
-    name = "decompress_testnet_headers",
-    srcs = ["@bitcoin_adapter_testnet_headers//file"],
-    outs = ["testnet_headers.json"],
-    cmd = "gunzip -c $< > $@",
-)
-
-genrule(
-    name = "decompress_testnet_blocks",
-    srcs = ["@bitcoin_adapter_testnet_blocks//file"],
-    outs = ["testnet_blocks.json"],
-    cmd = "gunzip -c $< > $@",
-)
-
 rust_test_suite(
     name = "adapter_integration",
     timeout = "long",
@@ -126,19 +98,19 @@ rust_test_suite(
     aliases = ALIASES,
     data = [
         # Keep sorted.
-        ":decompress_mainnet_blocks",
-        ":decompress_mainnet_headers",
-        ":decompress_testnet_blocks",
-        ":decompress_testnet_headers",
         "@bitcoin-core//:bitcoin-core",
         "@bitcoin-core//:bitcoind",
+        "@bitcoin_adapter_mainnet_blocks//file",
+        "@bitcoin_adapter_mainnet_headers//file",
+        "@bitcoin_adapter_testnet_blocks//file",
+        "@bitcoin_adapter_testnet_headers//file",
     ],
     env = {
         "BITCOIN_CORE_PATH": "$(rootpath @bitcoin-core//:bitcoind)",
-        "HEADERS_DATA_PATH": "$(rootpath :decompress_mainnet_headers)",
-        "BLOCKS_DATA_PATH": "$(rootpath :decompress_mainnet_blocks)",
-        "TESTNET_HEADERS_DATA_PATH": "$(rootpath :decompress_testnet_headers)",
-        "TESTNET_BLOCKS_DATA_PATH": "$(rootpath :decompress_testnet_blocks)",
+        "HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
+        "BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_blocks//file)",
+        "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
+        "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],

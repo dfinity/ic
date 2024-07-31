@@ -377,7 +377,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"Failed to directly connect".to_string()));
+            .contains(&"deadline has elapsed".to_string()));
     }
 
     #[tokio::test]

@@ -8,8 +8,8 @@ import "state/queues/v1/queues.proto";
 import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
-message EcdsaPayload {
-  reserved 2, 3, 4, 9, 11, 12;
+message IDkgPayload {
+  reserved 2, 3, 4, 9, 11, 12, 16;
   repeated CompletedSignature signature_agreements = 1;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
@@ -19,8 +19,6 @@ message EcdsaPayload {
   repeated MasterKeyTranscript key_transcripts = 13;
   repeated AvailablePreSignature available_pre_signatures = 14;
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
-  // TODO: retire these fields, once we start using `pre_signatures`.
-  bool generalized_pre_signatures = 16;
 }
 
 message ConsensusResponse {

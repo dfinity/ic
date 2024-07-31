@@ -38,10 +38,10 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     dkg::DkgPool,
-    ecdsa::IDkgPool,
+    idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{ChangeSetProducer, PriorityFn, PriorityFnFactory},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -52,7 +52,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{ConsensusMessageId, PriorityFn},
+    artifact::ConsensusMessageId,
     consensus::{ConsensusMessage, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
@@ -374,23 +374,23 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
-    /// non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
-    /// applied to the pool or timer before another subcomponent uses
-    /// them, because each subcomponent expects to see full state in order to
-    /// make correct decisions on what to do next.
+    ///    non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
+    ///    applied to the pool or timer before another subcomponent uses
+    ///    them, because each subcomponent expects to see full state in order to
+    ///    make correct decisions on what to do next.
     ///
     /// 2. The order in which subcomponents are called also matters. At the
-    /// moment it is important to call finalizer first, because otherwise
-    /// we'll just keep producing notarized blocks indefinitely without
-    /// finalizing anything, due to the above decision of having to return
-    /// early.
-    /// Additionally, we call the purger after every function that may increment
-    /// the finalized or CUP height (currently aggregation & validation), as
-    /// these heights determine which artifacts we can purge. This reduces the
-    /// number of excess artifacts, which allows us to maintain a stricter bound
-    /// on the memory consumption of our advertised validated pool.
-    /// The order of the rest subcomponents decides whom is given
-    /// a priority, but it should not affect liveness or correctness.
+    ///    moment it is important to call finalizer first, because otherwise
+    ///    we'll just keep producing notarized blocks indefinitely without
+    ///    finalizing anything, due to the above decision of having to return
+    ///    early.
+    ///    Additionally, we call the purger after every function that may increment
+    ///    the finalized or CUP height (currently aggregation & validation), as
+    ///    these heights determine which artifacts we can purge. This reduces the
+    ///    number of excess artifacts, which allows us to maintain a stricter bound
+    ///    on the memory consumption of our advertised validated pool.
+    ///    The order of the rest subcomponents decides whom is given
+    ///    a priority, but it should not affect liveness or correctness.
     fn on_state_change(&self, pool: &T) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
@@ -588,9 +588,7 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusMessage, Pool>
-    for ConsensusGossipImpl
-{
+impl<Pool: ConsensusPool> PriorityFnFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
     /// Return a priority function that matches the given consensus pool.
     fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
         get_priority_function(pool, self.message_routing.expected_batch_height())

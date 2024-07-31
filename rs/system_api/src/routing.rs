@@ -229,10 +229,6 @@ pub(super) fn resolve_destination(
             let canister_id = args.get_canister_id();
             route_canister_id(canister_id, Ic00Method::StoredChunks, network_topology)
         }
-        Ok(Ic00Method::DeleteChunks) => Err(ResolveDestinationError::UserError(UserError::new(
-            ic_error_types::ErrorCode::CanisterRejectedMessage,
-            "Delete chunks API is not yet implemented",
-        ))),
         Ok(Ic00Method::TakeCanisterSnapshot) => {
             let args = TakeCanisterSnapshotArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
@@ -296,7 +292,7 @@ fn route_idkg_message(
     match requested_subnet {
         Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
             None => Err(ResolveDestinationError::IDkgKeyError(format!(
-                "Requested iDKG key {} from unknown subnet {}",
+                "Requested threshold key {} from unknown subnet {}",
                 key_id, subnet_id
             ))),
             Some(subnet_topology) => {
@@ -310,7 +306,7 @@ fn route_idkg_message(
                                 Ok((*subnet_id).get())
                             } else {
                                 Err(ResolveDestinationError::IDkgKeyError(format!(
-                                    "Subnet {} is not enabled to sign with iDKG key {}",
+                                    "Subnet {} is not enabled to sign with threshold key {}",
                                     subnet_id, key_id,
                                 )))
                             }
@@ -319,7 +315,7 @@ fn route_idkg_message(
                     }
                 } else {
                     Err(ResolveDestinationError::IDkgKeyError(format!(
-                        "Requested unknown iDGK key {} on subnet {}, subnet has keys: {}",
+                        "Requested unknown threshold key {} on subnet {}, subnet has keys: {}",
                         key_id,
                         subnet_id,
                         format_keys(subnet_topology.idkg_keys_held.iter())
@@ -338,7 +334,7 @@ fn route_idkg_message(
                 IDkgSubnetKind::HoldsAndSignWithKey => {
                     let keys = format_keys(network_topology.idkg_signing_subnets.keys());
                     Err(ResolveDestinationError::IDkgKeyError(format!(
-                        "Requested unknown iDKG key: {}, existing keys with signing enabled: {}",
+                        "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}",
                         key_id, keys
                     )))
                 }
@@ -352,7 +348,7 @@ fn route_idkg_message(
                     }
                     let keys = format_keys(keys.iter());
                     Err(ResolveDestinationError::IDkgKeyError(format!(
-                        "Requested unknown iDKG key: {}, existing keys: {}",
+                        "Requested unknown threshold key: {}, existing keys: {}",
                         key_id, keys
                     )))
                 }
@@ -587,7 +583,7 @@ mod tests {
                 ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                     err,
                     format!(
-                        "Requested unknown iDGK key {} on subnet {}, subnet has keys: []",
+                        "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
                         key_id,
                         subnet_test_id(2),
                     )
@@ -613,7 +609,7 @@ mod tests {
                 ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                     err,
                     format!(
-                        "Requested iDKG key {} from unknown subnet {}",
+                        "Requested threshold key {} from unknown subnet {}",
                         key_id,
                         subnet_test_id(3),
                     )
@@ -640,7 +636,7 @@ mod tests {
                     ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                         err,
                         format!(
-                            "Requested unknown iDGK key {} on subnet {}, subnet has keys: []",
+                            "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
                             key_id,
                             subnet_test_id(2),
                     )
@@ -667,7 +663,7 @@ mod tests {
                 ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                     err,
                     format!(
-                        "Requested iDKG key {} from unknown subnet {}",
+                        "Requested threshold key {} from unknown subnet {}",
                         key_id,
                         subnet_test_id(3),
                     )
@@ -727,7 +723,7 @@ mod tests {
             ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                     err,
                     format!(
-                        "Requested unknown iDKG key: {}, existing keys with signing enabled: []",
+                        "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: []",
                         idkg_key_id,
                     )
                 )
@@ -818,7 +814,7 @@ mod tests {
                 Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
-                        "Subnet {} is not enabled to sign with iDKG key {}",
+                        "Subnet {} is not enabled to sign with threshold key {}",
                         subnet_id, key_id,
                     )
                 ),
@@ -842,7 +838,9 @@ mod tests {
             ) {
                 Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
                     msg,
-                    format!("Requested iDKG key {key_id} from unknown subnet {unknown_subnet_id}",)
+                    format!(
+                        "Requested threshold key {key_id} from unknown subnet {unknown_subnet_id}",
+                    )
                 ),
                 _ => panic!("Unexpected result."),
             };
@@ -864,7 +862,7 @@ mod tests {
             ) {
                 Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
                     msg,
-                    format!("Requested unknown iDGK key {key_id} on subnet {subnet_id}, subnet has keys: []",)
+                    format!("Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",)
                 ),
                 _ => panic!("Unexpected result."),
             };
@@ -894,7 +892,7 @@ mod tests {
                 Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
-                        "Requested unknown iDKG key: {unknown_key_id}, existing keys with signing enabled: [{known_key_id}]",
+                        "Requested unknown or signing disabled threshold key: {unknown_key_id}, existing keys with signing enabled: [{known_key_id}]",
                     )
                 ),
                 _ => panic!("Unexpected result."),
@@ -927,7 +925,7 @@ mod tests {
                 Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
-                        "Requested unknown iDKG key: {unknown_key_id}, existing keys: [{key_id1}, {key_id2}]",
+                        "Requested unknown threshold key: {unknown_key_id}, existing keys: [{key_id1}, {key_id2}]",
                     )
                 ),
                 _ => panic!("Unexpected result."),
