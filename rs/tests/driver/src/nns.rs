@@ -288,7 +288,7 @@ pub async fn add_nodes_to_subnet(
         &governance_canister,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::AddNodeToSubnet.into(),
+        NnsFunction::AddNodeToSubnet,
         proposal_payload,
         String::from("Add nodes for testing"),
         "".to_string(),
@@ -310,7 +310,7 @@ pub async fn remove_nodes_via_endpoint(url: Url, node_ids: &[NodeId]) -> Result<
         &governance_canister,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::RemoveNodesFromSubnet.into(),
+        NnsFunction::RemoveNodesFromSubnet,
         proposal_payload,
         String::from("Remove node for testing"),
         "".to_string(),
@@ -339,7 +339,7 @@ pub async fn change_subnet_membership(
         &governance_canister,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::ChangeSubnetMembership.into(),
+        NnsFunction::ChangeSubnetMembership,
         proposal_payload,
         String::from("Change subnet membership for testing"),
         "Motivation: testing".to_string(),
@@ -423,9 +423,7 @@ pub async fn vote_and_execute_proposal(
         )
         .await
         .expect("Vote failed");
-    wait_for_final_state(governance_canister, proposal_id)
-        .await
-        .into()
+    wait_for_final_state(governance_canister, proposal_id).await
 }
 
 pub fn get_governance_canister(nns_api: &'_ Runtime) -> Canister<'_> {
@@ -447,7 +445,7 @@ pub async fn submit_external_proposal_with_test_id<T: CandidType>(
         governance_canister,
         sender,
         neuron_id,
-        nns_function.into(),
+        nns_function,
         payload,
         "<proposal created by submit_external_proposal_with_test_id>".to_string(),
         "".to_string(),
@@ -490,7 +488,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::ReviseElectedGuestosVersions.into(),
+        NnsFunction::ReviseElectedGuestosVersions,
         ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: Some(String::from(version.clone())),
             release_package_sha256_hex: Some(sha256.clone()),
@@ -536,7 +534,7 @@ pub async fn submit_deploy_guestos_to_all_subnet_nodes_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::DeployGuestosToAllSubnetNodes.into(),
+        NnsFunction::DeployGuestosToAllSubnetNodes,
         DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
             replica_version_id: String::from(version.clone()),
@@ -646,7 +644,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::DeployGuestosToAllUnassignedNodes.into(),
+        NnsFunction::DeployGuestosToAllUnassignedNodes,
         DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: version.clone(),
         },
@@ -684,7 +682,7 @@ pub async fn submit_update_elected_hostos_versions_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::ReviseElectedHostosVersions.into(),
+        NnsFunction::ReviseElectedHostosVersions,
         // TODO[NNS1-3000]: Rename Registry APIs for consistency with NNS Governance.
         UpdateElectedHostosVersionsPayload {
             hostos_version_to_elect: Some(String::from(version)),
@@ -726,7 +724,7 @@ pub async fn submit_update_nodes_hostos_version_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::DeployHostosToSomeNodes.into(),
+        NnsFunction::DeployHostosToSomeNodes,
         // TODO[NNS1-3000]: Rename Registry APIs according to NNS1-3000
         UpdateNodesHostosVersionPayload {
             node_ids: node_ids.clone(),

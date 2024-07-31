@@ -2081,7 +2081,7 @@ pub async fn install_nns_canisters(
 
         init_payloads
             .with_test_neurons()
-            .with_additional_neurons(neurons.into_iter().map(|n| n.into()).collect())
+            .with_additional_neurons(neurons)
             .with_ledger_init_state(ledger_init_payload);
     }
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();

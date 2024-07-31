@@ -425,11 +425,6 @@ async fn deploy_new_sns_via_proposal(
     let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let nns_agent = nns_node.build_canister_agent().await;
 
-    // Sanity check that params is valid
-    SnsInitPayload::try_from(create_service_nervous_system_proposal.clone()).expect(
-        "create_service_nervous_system_proposal could not be converted to an SnsInitPayload - is probably invalid",
-    );
-
     // Check that there are no SNSes
     let sns_wasm_canister_id = SNS_WASM_CANISTER_ID.get();
     let list_deployed_snses_request = {

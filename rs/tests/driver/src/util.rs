@@ -34,7 +34,11 @@ use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
-    create_service_nervous_system::SwapParameters, CreateServiceNervousSystem,
+    create_service_nervous_system::{
+        swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
+        SwapParameters,
+    },
+    CreateServiceNervousSystem,
 };
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
@@ -1777,8 +1781,22 @@ pub fn create_service_nervous_system_into_params(
 
     let neuron_basket_construction_parameters: NeuronBasketConstructionParameters =
         neuron_basket_construction_parameters
-            .ok_or("`neuron_basket_construction_parameters` should not be None")?
-            .try_into()?;
+            .map(|neuron_basket_construction_params| {
+                let GovApiNeuronBasketConstructionParameters {
+                    count,
+                    dissolve_delay_interval,
+                } = neuron_basket_construction_params;
+                Ok::<NeuronBasketConstructionParameters, String>(
+                    NeuronBasketConstructionParameters {
+                        count: count.ok_or("`count` should not be None".to_string())?,
+                        dissolve_delay_interval_seconds: dissolve_delay_interval
+                            .ok_or("`dissolve_delay_interval` should not be None".to_string())?
+                            .seconds
+                            .ok_or("`seconds` should not be None".to_string())?,
+                    },
+                )
+            })
+            .expect("`neuron_basket_construction_parameters` should not be None")?;
 
     let start_time = start_time.unwrap_or_else(|| GlobalTimeOfDay::from_hh_mm(12, 0).unwrap()); // Just use a random start time if it's not
     let duration = duration.ok_or("`duration` should not be None")?;

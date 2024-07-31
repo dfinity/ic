@@ -93,7 +93,7 @@ pub fn test(env: TestEnv) {
         );
         let proposal_info =
             ProposalInfoResponse::try_from(Some(proposal_info_response.result)).unwrap();
-        assert_eq!(proposal_info.0.proposal.unwrap(), proposal);
+        assert_eq!(proposal_info.0.proposal.unwrap(), proposal.clone().into());
         info!(_logger, "Test Register Vote with Vote: Yes");
         test_register_proposal(&client, &neuron2, &first_proposal, &1).await;
         info!(_logger, "Test Register Vote with Vote: No");
