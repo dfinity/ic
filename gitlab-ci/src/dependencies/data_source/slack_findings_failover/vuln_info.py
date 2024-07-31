@@ -2,9 +2,21 @@ import json
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-from data_source.slack_findings_failover.data import SlackFinding, SlackProjectInfo, SlackVulnerabilityEvent, VULNERABILITY_HEADER
-from data_source.slack_findings_failover.parse_format import project_to_list_item, get_current_iso_timestamp
-from integration.slack.slack_block_kit_utils import block_kit_header, block_kit_section_with_two_cols, block_kit_bullet_list_with_headline, block_kit_section_with_single_col, block_kit_divider, BlockKitListHeadline
+from data_source.slack_findings_failover.data import (
+    VULNERABILITY_HEADER,
+    SlackFinding,
+    SlackProjectInfo,
+    SlackVulnerabilityEvent,
+)
+from data_source.slack_findings_failover.parse_format import get_current_iso_timestamp, project_to_list_item
+from integration.slack.slack_block_kit_utils import (
+    BlockKitListHeadline,
+    block_kit_bullet_list_with_headline,
+    block_kit_divider,
+    block_kit_header,
+    block_kit_section_with_single_col,
+    block_kit_section_with_two_cols,
+)
 from model.finding import Finding
 from model.vulnerability import Vulnerability
 

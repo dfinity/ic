@@ -3,7 +3,6 @@ import typing
 from unittest.mock import Mock, patch
 
 import pytest
-
 from model.dependency import Dependency
 from model.finding import Finding
 from model.project import Project

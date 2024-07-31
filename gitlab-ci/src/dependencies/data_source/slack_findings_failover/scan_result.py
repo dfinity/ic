@@ -1,9 +1,16 @@
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, Set
+from typing import Dict, Set, Tuple
 
-from data_source.slack_findings_failover.parse_format import project_to_list_item, get_current_iso_timestamp
-from integration.slack.slack_block_kit_utils import block_kit_header, block_kit_section_with_two_cols, BlockKitListItem, BlockKitRichText, block_kit_bullet_list_with_headline, BlockKitListHeadline
+from data_source.slack_findings_failover.parse_format import get_current_iso_timestamp, project_to_list_item
+from integration.slack.slack_block_kit_utils import (
+    BlockKitListHeadline,
+    BlockKitListItem,
+    BlockKitRichText,
+    block_kit_bullet_list_with_headline,
+    block_kit_header,
+    block_kit_section_with_two_cols,
+)
 
 
 @dataclass

@@ -1,11 +1,17 @@
-from typing import List, Dict
+from typing import Dict, List
 from unittest.mock import Mock
 
-from data_source.slack_findings_failover.data import SlackFinding, VULNERABILITY_THRESHOLD_SCORE, SlackVulnerabilityEvent, SlackProjectInfo, SlackVulnerabilityEventType
+from data_source.slack_findings_failover.data import (
+    VULNERABILITY_THRESHOLD_SCORE,
+    SlackFinding,
+    SlackProjectInfo,
+    SlackVulnerabilityEvent,
+    SlackVulnerabilityEventType,
+)
 from data_source.slack_findings_failover.scan_result import SlackScanResult
 from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo
 from data_source.slack_findings_failover.vuln_store import SlackVulnerabilityStore
-from data_source.slack_findings_failover_data_store import SlackFindingsFailoverDataStore, SLACK_CHANNEL_CONFIG_BY_TEAM
+from data_source.slack_findings_failover_data_store import SLACK_CHANNEL_CONFIG_BY_TEAM, SlackFindingsFailoverDataStore
 from model.dependency import Dependency
 from model.finding import Finding
 from model.project import Project

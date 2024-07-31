@@ -2,12 +2,21 @@ import json
 from dataclasses import dataclass
 from typing import Dict, List, Set, Tuple
 
-from data_source.slack_findings_failover.data import SlackVulnerabilityEvent, SlackVulnerabilityEventType, VULNERABILITY_MSG_FIXED_REACTION, SlackProjectInfo
+from data_source.slack_findings_failover.data import (
+    VULNERABILITY_MSG_FIXED_REACTION,
+    SlackProjectInfo,
+    SlackVulnerabilityEvent,
+    SlackVulnerabilityEventType,
+)
 from data_source.slack_findings_failover.scan_result import SlackScanResult
 from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo
 from integration.slack.slack_api import SlackApi
-from integration.slack.slack_block_kit_utils import BlockKitListItem, block_kit_bullet_list_with_headline, BlockKitListHeadline, \
-    BlockKitRichText
+from integration.slack.slack_block_kit_utils import (
+    BlockKitListHeadline,
+    BlockKitListItem,
+    BlockKitRichText,
+    block_kit_bullet_list_with_headline,
+)
 
 
 @dataclass

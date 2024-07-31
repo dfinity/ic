@@ -5,9 +5,9 @@ from copy import deepcopy
 from typing import Dict, List, Set
 
 from data_source.findings_failover_data_store import FindingsFailoverDataStore
-from data_source.slack_findings_failover.data import SlackProjectInfo, VULNERABILITY_THRESHOLD_SCORE
+from data_source.slack_findings_failover.data import VULNERABILITY_THRESHOLD_SCORE, SlackProjectInfo
 from data_source.slack_findings_failover.scan_result import SlackScanResult
-from data_source.slack_findings_failover.vuln_info import VulnerabilityInfo, SlackVulnerabilityInfo
+from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo, VulnerabilityInfo
 from data_source.slack_findings_failover.vuln_load import SlackVulnerabilityLoader
 from data_source.slack_findings_failover.vuln_store import SlackVulnerabilityStore
 from integration.slack.slack_api import SlackApi

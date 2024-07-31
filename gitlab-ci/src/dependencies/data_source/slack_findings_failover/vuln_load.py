@@ -1,8 +1,13 @@
 from dataclasses import dataclass
 from html import unescape
-from typing import Dict, Tuple, List
+from typing import Dict, List, Tuple
 
-from data_source.slack_findings_failover.data import VULNERABILITY_HEADER, SlackFinding, VULNERABILITY_MSG_FIXED_REACTION, VULNERABILITY_MSG_AUTHOR
+from data_source.slack_findings_failover.data import (
+    VULNERABILITY_HEADER,
+    VULNERABILITY_MSG_AUTHOR,
+    VULNERABILITY_MSG_FIXED_REACTION,
+    SlackFinding,
+)
 from data_source.slack_findings_failover.parse_format import parse_slack_field, parse_slack_optional_hyperlink
 from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo
 from integration.slack.slack_api import SlackApi

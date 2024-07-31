@@ -1,5 +1,10 @@
-from data_source.slack_findings_failover.data import SlackFinding, SlackProjectInfo, SlackVulnerabilityEventType, SlackVulnerabilityEvent
-from data_source.slack_findings_failover.vuln_info import VulnerabilityInfo, SlackVulnerabilityInfo
+from data_source.slack_findings_failover.data import (
+    SlackFinding,
+    SlackProjectInfo,
+    SlackVulnerabilityEvent,
+    SlackVulnerabilityEventType,
+)
+from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo, VulnerabilityInfo
 from model.dependency import Dependency
 from model.finding import Finding
 from model.vulnerability import Vulnerability

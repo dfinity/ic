@@ -1,8 +1,7 @@
 from unittest.mock import Mock, call
 
 import pytest
-
-from data_source.slack_findings_failover.data import SlackVulnerabilityEvent, VULNERABILITY_MSG_FIXED_REACTION
+from data_source.slack_findings_failover.data import VULNERABILITY_MSG_FIXED_REACTION, SlackVulnerabilityEvent
 from data_source.slack_findings_failover.scan_result import SlackScanResult
 from data_source.slack_findings_failover.vuln_store import SlackVulnerabilityStore
 

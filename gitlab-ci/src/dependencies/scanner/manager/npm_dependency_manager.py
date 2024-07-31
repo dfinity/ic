@@ -4,13 +4,12 @@ import os
 import pathlib
 import typing
 
-from nested_lookup import nested_lookup
-from nodesemver import satisfies
-
 from model.dependency import Dependency
 from model.finding import Finding
 from model.project import Project
 from model.vulnerability import Vulnerability
+from nested_lookup import nested_lookup
+from nodesemver import satisfies
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 

@@ -4,7 +4,6 @@ import pathlib
 import typing
 
 import pytest
-
 from model.dependency import Dependency
 from model.project import Project
 from model.vulnerability import Vulnerability
