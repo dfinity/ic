@@ -1,13 +1,10 @@
-use crate::error::LayoutError;
-use crate::utils::do_copy;
-
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger, warn};
 use ic_management_canister_types::LogVisibility;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::{
         canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
         canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
@@ -15,32 +12,35 @@ use ic_protobuf::{
     },
 };
 use ic_replicated_state::{
+    CallContextManager,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
+        system_state::{CanisterHistory, CyclesUseCase, wasm_chunk_store::WasmChunkStoreMetadata},
     },
-    page_map::{Shard, StorageLayout},
-    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
+    CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages, page_map::{Shard, StorageLayout},
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    AccumulatedPriority, batch::TotalQueryStats, CanisterId, CanisterLog,
+    ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode, MemoryAllocation,
+    nominal_cycles::NominalCycles, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::{identity, From, TryFrom, TryInto};
+use std::convert::{From, identity, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::{Error, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
+
+use crate::error::LayoutError;
+use crate::utils::do_copy;
 
 #[cfg(test)]
 mod tests;
@@ -172,6 +172,7 @@ pub struct CanisterStateBits {
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1946,6 +1947,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
+            on_low_wasm_memory_hook_status: Some(item.on_low_wasm_memory_hook_status),
         }
     }
 }
@@ -2103,6 +2105,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
+            on_low_wasm_memory_hook_status: value.unrwap_or_default(),
         })
     }
 }

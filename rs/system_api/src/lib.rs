@@ -13,16 +13,16 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, Memory, memory_required_to_push_request, NumWasmPages,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
     PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_types::{
-    CanisterId,
-    CanisterLog,
-    CanisterTimer,
-    ComputeAllocation, Cycles, ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MemoryAllocation, messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request}, methods::{SystemMethod, WasmClosure},
-    NumBytes, NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
+    ingress::WasmResult,
+    messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    methods::{SystemMethod, WasmClosure},
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -590,9 +590,9 @@ impl ApiType {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                NonReplicatedQueryKind::Stateful {
-                    call_context_id, ..
-                },
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id, ..
+                    },
                 ..
             }
             | ApiType::ReplyCallback {
@@ -750,7 +750,9 @@ impl MemoryUsage {
                 limit
             );
         }
-        let (wasm_memory_usage, overflow) = current_usage.get().overflowing_sub(stable_memory_usage.get());
+        let (wasm_memory_usage, overflow) = current_usage
+            .get()
+            .overflowing_sub(stable_memory_usage.get());
 
         debug_assert!(!overflow);
 
@@ -873,7 +875,11 @@ impl MemoryUsage {
 
                         self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
-                        sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(None, self.stable_memory_usage, self.wasm_memory_usage);
+                        sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(
+                            None,
+                            self.stable_memory_usage,
+                            self.wasm_memory_usage,
+                        );
 
                         Ok(())
                     }
@@ -895,13 +901,24 @@ impl MemoryUsage {
                 self.current_usage = NumBytes::from(new_usage);
                 self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
-                sandbox_safe_system_state.system_state_changes.on_low_wasm_memory_hook_status.update(Some(reserved_bytes), self.stable_memory_usage, self.wasm_memory_usage);
+                sandbox_safe_system_state
+                    .system_state_changes
+                    .on_low_wasm_memory_hook_status
+                    .update(
+                        Some(reserved_bytes),
+                        self.stable_memory_usage,
+                        self.wasm_memory_usage,
+                    );
                 Ok(())
             }
         }
     }
 
-    fn add_execution_memory(&mut self, execution_bytes: NumBytes, execution_memory_type: ExecutionMemoryType) {
+    fn add_execution_memory(
+        &mut self,
+        execution_bytes: NumBytes,
+        execution_memory_type: ExecutionMemoryType,
+    ) {
         match execution_memory_type {
             ExecutionMemoryType::WasmMemory => {
                 let (new_usage, overflow) = self
@@ -925,7 +942,10 @@ impl MemoryUsage {
             }
         }
 
-        debug_assert_eq!(self.current_usage.get(), self.stable_memory_usage.get() + self.wasm_memory_usage.get());
+        debug_assert_eq!(
+            self.current_usage.get(),
+            self.stable_memory_usage.get() + self.wasm_memory_usage.get()
+        );
     }
 
     /// Tries to allocate the requested amount of message memory.
@@ -1062,7 +1082,9 @@ impl SystemApiImpl {
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
-        let stable_memory_usage = stable_memory.size.checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+        let stable_memory_usage = stable_memory
+            .size
+            .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
             .map(NumBytes::new)
             .ok_or(HypervisorError::OutOfMemory)?;
 
@@ -2141,9 +2163,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                NonReplicatedQueryKind::Stateful {
-                    outgoing_request, ..
-                },
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
                 ..
             }
             | ApiType::SystemTask {
@@ -2216,9 +2238,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                NonReplicatedQueryKind::Stateful {
-                    outgoing_request, ..
-                },
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
                 ..
             }
             | ApiType::SystemTask {
@@ -2258,9 +2280,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                NonReplicatedQueryKind::Stateful {
-                    outgoing_request, ..
-                },
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
                 ..
             }
             | ApiType::SystemTask {
@@ -2343,10 +2365,10 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery {
                 time,
                 query_kind:
-                NonReplicatedQueryKind::Stateful {
-                    call_context_id,
-                    outgoing_request,
-                },
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id,
+                        outgoing_request,
+                    },
                 ..
             } => {
                 let req_in_prep =

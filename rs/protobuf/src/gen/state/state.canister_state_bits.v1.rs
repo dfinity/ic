@@ -670,6 +670,8 @@ pub struct CanisterStateBits {
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
+    #[prost(enumeration = "OnLowWasmMemoryHookStatus", optional, tag = "51")]
+    pub on_low_wasm_memory_hook_status: ::core::option::Option<i32>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -867,6 +869,35 @@ impl LongExecutionMode {
             "LONG_EXECUTION_MODE_UNSPECIFIED" => Some(Self::Unspecified),
             "LONG_EXECUTION_MODE_OPPORTUNISTIC" => Some(Self::Opportunistic),
             "LONG_EXECUTION_MODE_PRIORITIZED" => Some(Self::Prioritized),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum OnLowWasmMemoryHookStatus {
+    ConditionNotSatisfied = 0,
+    Ready = 1,
+    Executed = 2,
+}
+impl OnLowWasmMemoryHookStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => "CONDITION_NOT_SATISFIED",
+            OnLowWasmMemoryHookStatus::Ready => "READY",
+            OnLowWasmMemoryHookStatus::Executed => "EXECUTED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CONDITION_NOT_SATISFIED" => Some(Self::ConditionNotSatisfied),
+            "READY" => Some(Self::Ready),
+            "EXECUTED" => Some(Self::Executed),
             _ => None,
         }
     }

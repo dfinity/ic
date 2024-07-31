@@ -362,8 +362,9 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub enum OnLowWasmMemoryHookStatus {
+    #[default]
     ConditionNotSatisfied,
     Ready,
     Executed,
@@ -804,6 +805,7 @@ impl SystemState {
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         Self {
             controllers,
@@ -831,6 +833,7 @@ impl SystemState {
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
+            on_low_wasm_memory_hook_status,
         }
     }
 
