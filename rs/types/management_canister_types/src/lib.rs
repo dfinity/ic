@@ -790,16 +790,23 @@ pub enum LogVisibility {
     Public = 2,
 }
 
-impl From<&LogVisibility> for pb_canister_state_bits::LogVisibilityV2 {
-    fn from(item: &LogVisibility) -> Self {
-        use pb_canister_state_bits as pb;
+impl Payload<'_> for LogVisibility {
+    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
+        let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
+        {
+            Ok(record) => record,
+            Err(_) => LogVisibilityV2::decode(blob)?.into(),
+        };
+        Ok(args)
+    }
+}
+
+impl From<LogVisibilityV2> for LogVisibility {
+    fn from(item: LogVisibilityV2) -> Self {
         match item {
-            LogVisibility::Controllers => pb::LogVisibilityV2 {
-                log_visibility: Some(pb::log_visibility_v2::LogVisibility::Controllers(1)),
-            },
-            LogVisibility::Public => pb::LogVisibilityV2 {
-                log_visibility: Some(pb::log_visibility_v2::LogVisibility::Public(2)),
-            },
+            LogVisibilityV2::Controllers => LogVisibility::Controllers,
+            LogVisibilityV2::Public => LogVisibility::Public,
+            LogVisibilityV2::AllowedViewers(_) => LogVisibility::Controllers,
         }
     }
 }
@@ -846,6 +853,26 @@ pub enum LogVisibilityV2 {
     Public,
     #[serde(rename = "allowed_viewers")]
     AllowedViewers(BoundedAllowedViewers),
+}
+
+impl Payload<'_> for LogVisibilityV2 {
+    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
+        let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
+        {
+            Ok(record) => record,
+            Err(_) => LogVisibility::decode(blob)?.into(),
+        };
+        Ok(args)
+    }
+}
+
+impl From<LogVisibility> for LogVisibilityV2 {
+    fn from(item: LogVisibility) -> Self {
+        match item {
+            LogVisibility::Controllers => LogVisibilityV2::Controllers,
+            LogVisibility::Public => LogVisibilityV2::Public,
+        }
+    }
 }
 
 impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
