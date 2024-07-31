@@ -2,7 +2,6 @@ use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
 use anyhow::{self, bail};
-use zstd::stream::write::Encoder;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
@@ -13,6 +12,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use url::Url;
+use zstd::stream::write::Encoder;
 
 use crate::driver::farm::FarmResult;
 use crate::driver::farm::FileId;

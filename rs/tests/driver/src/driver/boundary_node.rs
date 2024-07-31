@@ -34,13 +34,13 @@ use crate::{
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use zstd::stream::write::Encoder;
 use ic_agent::{Agent, AgentError};
 use kube::ResourceExt;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
+use zstd::stream::write::Encoder;
 
 use crate::driver::{farm::PlaynetCertificate, test_env_api::HasIcDependencies};
 

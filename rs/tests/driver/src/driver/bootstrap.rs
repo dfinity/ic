@@ -19,7 +19,6 @@ use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
-use zstd::stream::write::Encoder;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -44,6 +43,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 use url::Url;
+use zstd::stream::write::Encoder;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
