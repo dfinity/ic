@@ -43,6 +43,8 @@ use std::{
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
+const LOG_EVERY_N_SECONDS: i32 = 10;
+
 enum CallV3Response {
     Certificate(Certificate),
     UserError(UserError),
@@ -210,6 +212,7 @@ async fn call_sync_v3(
             // TODO: Send a warning or notification.
             // This probably means that the ingress watcher panicked.
             error!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
                 "Error while waiting for subscriber of ingress message: {}", error_message
             );
@@ -220,6 +223,7 @@ async fn call_sync_v3(
         }
         Err(_) => {
             warn!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
                 "Timed out while submitting a certification subscription.";
             );
