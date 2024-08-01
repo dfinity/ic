@@ -5833,16 +5833,6 @@ impl Governance {
             )
         })?;
 
-        #[cfg(not(feature = "test"))]
-        if topic == Topic::ProtocolCanisterManagement
-            || topic == Topic::ServiceNervousSystemManagement
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!("Cannot follow the {:?} topic yet", topic),
-            ));
-        }
-
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {
                 neuron.followees.remove(&(topic as i32))
