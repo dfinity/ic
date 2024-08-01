@@ -454,6 +454,12 @@ impl PrivateKey {
     /// This is the same derivation system used by the Internet Computer when
     /// deriving subkeys for threshold ECDSA with secp256k1 and BIP340 Schnorr
     ///
+    /// As long as each index of the derivation path is a 4-byte input with the highest
+    /// bit cleared, this derivation scheme matches BIP32 and SLIP-10
+    ///
+    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-ecdsa_public_key>
+    /// for details on the derivation scheme.
+    ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
         let chain_code = [0u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
@@ -465,7 +471,12 @@ impl PrivateKey {
     /// This is the same derivation system used by the Internet Computer when
     /// deriving subkeys for threshold ECDSA with secp256k1 and BIP340 Schnorr
     ///
-    /// This derivation matches BIP340 and SLIP-10
+    /// As long as each index of the derivation path is a 4-byte input with the highest
+    /// bit cleared, this derivation scheme matches BIP32 and SLIP-10
+    ///
+    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-ecdsa_public_key>
+    /// for details on the derivation scheme.
+    ///
     pub fn derive_subkey_with_chain_code(
         &self,
         derivation_path: &DerivationPath,
@@ -474,7 +485,7 @@ impl PrivateKey {
         use k256::NonZeroScalar;
 
         let public_key: AffinePoint = *self.key.verifying_key().as_affine();
-        let (_pt, offset, chain_code) = derivation_path.derive_offset(public_key, chain_code);
+        let (_pt, offset, derived_chain_code) = derivation_path.derive_offset(public_key, chain_code);
 
         let derived_scalar = self.key.as_nonzero_scalar().as_ref().add(&offset);
 
@@ -485,7 +496,7 @@ impl PrivateKey {
             key: k256::ecdsa::SigningKey::from(nz_ds),
         };
 
-        (derived_key, chain_code)
+        (derived_key, derived_chain_code)
     }
 }
 
