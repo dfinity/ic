@@ -11406,7 +11406,6 @@ lazy_static! {
                             1_200_000 * E8,
                         ),
                         controller: Some(principal(1)),
-                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11427,7 +11426,6 @@ lazy_static! {
                             600_000 * E8,
                         ),
                         controller: Some(principal(2)),
-                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11542,7 +11540,6 @@ lazy_static! {
                             120000000000000,
                         ),
                         controller: Some(principal(1)),
-                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11564,7 +11561,6 @@ lazy_static! {
                             60000000000000,
                         ),
                         controller: Some(principal(2)),
-                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11626,7 +11622,6 @@ lazy_static! {
                     120000000000000,
                 ),
                 controller: Some(principal(1)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
@@ -11649,7 +11644,6 @@ lazy_static! {
                     60000000000000,
                 ),
                 controller: Some(principal(2)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
@@ -11675,7 +11669,6 @@ lazy_static! {
                     15666666667,
                 ),
                 controller: Some(principal(1)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     120000000000000,
@@ -11697,7 +11690,6 @@ lazy_static! {
                     7833333333,
                 ),
                 controller: Some(principal(2)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,
