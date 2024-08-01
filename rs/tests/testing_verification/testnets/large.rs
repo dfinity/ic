@@ -85,9 +85,9 @@ pub fn setup(env: TestEnv) {
 
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(32)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(64 * 1024 * 1024)), // <- 128 GB
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
+        vcpus: Some(NrOfVCPUs::new(64)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), // <- 512 GB
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
     };
 
     InternetComputer::new()
