@@ -10,13 +10,12 @@ documentation.workspace = true
 bit-vec = "0.6.3"
 cvt = "0.1.1"
 ic-btc-interface = { workspace = true }
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-error-types = { path = "../types/error_types" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
@@ -31,8 +30,8 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
-lazy_static = "1.4.0"
-libc = "0.2.91"
+lazy_static = { workspace = true }
+libc = { workspace = true }
 maplit = "1.0.2"
 nix = { workspace = true }
 rand = { workspace = true }
@@ -44,7 +43,14 @@ slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
-uuid = { version = "1.2.1", features = ["v4", "serde"] }
+uuid = { workspace = true }
+
+# Optional dependencies needed for fuzzing
+arbitrary = { workspace = true, optional = true }
+assert_matches = { workspace = true, optional = true }
+ic-test-utilities-io = { path = "../test_utilities/io", optional = true }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics", optional = true }
+proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -52,6 +58,7 @@ criterion = { workspace = true }
 criterion-time = { path = "../criterion_time" }
 ic-btc-test-utils = { workspace = true }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
+ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-test-utilities-io = { path = "../test_utilities/io" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
@@ -66,3 +73,12 @@ scoped_threadpool = "0.1.*"
 [[bench]]
 name = "bench_allocator"
 harness = false
+
+[features]
+fuzzing_code = [
+    "dep:arbitrary",
+    "dep:assert_matches",
+    "dep:ic-test-utilities-io",
+    "dep:ic-test-utilities-metrics",
+    "dep:proptest",
+]

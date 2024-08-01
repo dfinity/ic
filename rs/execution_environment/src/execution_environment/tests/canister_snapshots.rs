@@ -280,7 +280,7 @@ fn take_canister_snapshot_fails_invalid_replace_snapshot_id() {
             Payload::Reject(RejectContext::new(
                 RejectCode::DestinationInvalid,
                 format!(
-                    "Could not find the snapshot ID {} for canister {}",
+                    "Could not find the snapshot ID {} for canister {}.",
                     snapshot_id, canister_id
                 ),
             ))
@@ -380,7 +380,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
     assert_eq!(
-        *snapshot.canister_module().unwrap(),
+        *snapshot.canister_module(),
         test.canister_state(canister_id)
             .execution_state
             .as_ref()
@@ -918,7 +918,10 @@ fn list_canister_snapshot_succeeds() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.
@@ -1224,7 +1227,11 @@ fn load_canister_snapshot_succeeds() {
     let last_canister_change: &CanisterChange = history_after.last().unwrap();
     assert_eq!(
         *last_canister_change.details(),
-        CanisterChangeDetails::load_snapshot(canister_version_after, snapshot_taken_at_timestamp)
+        CanisterChangeDetails::load_snapshot(
+            canister_version_after,
+            snapshot_id.to_vec(),
+            snapshot_taken_at_timestamp
+        )
     );
     let unflushed_changes = test.state_mut().canister_snapshots.take_unflushed_changes();
     assert_eq!(unflushed_changes.len(), 2);
@@ -1247,7 +1254,10 @@ fn snapshot_is_deleted_with_canister_delete() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.

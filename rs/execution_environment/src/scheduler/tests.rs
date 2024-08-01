@@ -18,8 +18,8 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method, Payload as _,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
+    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -195,6 +195,282 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
         3
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn smooth_heap_delta_rate_limiting() {
+    let page_size = 4_096;
+    // Create scheduler test allowing one dirty page per round.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(10 * page_size + 1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            heap_delta_initial_reserve: NumBytes::from(page_size),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 10.into(),
+            current_interval_length: 9.into(),
+        })
+        .build();
+
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Both messages should be executed.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The execution should be rate limited in this round.
+    assert_eq!(test.ingress_queue_size(canister_id), 2);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The previous messages should be executed in this round.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        4
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn smooth_heap_delta_rate_limiting_with_initial_burst() {
+    let page_size = 4_096;
+    // Create scheduler test allowing one dirty page per round with 2 pages burst.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(12 * page_size),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            heap_delta_initial_reserve: NumBytes::from(page_size),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 10.into(),
+            current_interval_length: 9.into(),
+        })
+        .build();
+
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Both messages should be executed.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Thanks to the burst, the execution should be successful again.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        0
+    );
+
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Now it should be rate limited
+    assert_eq!(test.ingress_queue_size(canister_id), 2);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The previous messages should be executed in this round.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        6
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn smooth_heap_delta_rate_limiting_reaches_the_limit() {
+    let page_size = 4_096;
+    let rounds = 10;
+    // Create scheduler test allowing two dirty page per round.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(rounds * page_size * 2 + 1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            max_heap_delta_per_iteration: NumBytes::from(page_size),
+            heap_delta_initial_reserve: NumBytes::from(page_size * 2),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: rounds.into(),
+            current_interval_length: (rounds - 1).into(),
+        })
+        .build();
+    let canister_id = test.create_canister();
+
+    // Each message dirties 4 pages, so only half of them should be executed
+    for i in 0..rounds {
+        test.send_ingress(canister_id, ingress(10).dirty_pages(4));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+        // The messages should be executed every second round.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_metrics
+                .update_transactions_total,
+            i / 2 + 1
+        );
+    }
+    // Only half of the messages should be executed.
+    assert_eq!(test.ingress_queue_size(canister_id), rounds as usize / 2);
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn smooth_heap_delta_rate_limiting_for_two_canisters() {
+    let page_size = 4_096;
+    // Create scheduler test allowing one dirty page per round.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(10 * page_size + 1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            heap_delta_initial_reserve: NumBytes::from(page_size),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 10.into(),
+            current_interval_length: 9.into(),
+        })
+        .build();
+
+    let a_id = test.create_canister();
+    let b_id = test.create_canister();
+    test.send_ingress(a_id, ingress(10).dirty_pages(1));
+    test.send_ingress(b_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Both messages should be executed.
+    assert_eq!(test.ingress_queue_size(a_id), 0);
+    assert_eq!(test.ingress_queue_size(b_id), 0);
+
+    test.send_ingress(a_id, ingress(10).dirty_pages(1));
+    test.send_ingress(b_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The execution should be rate limited in this round for both canisters.
+    assert_eq!(test.ingress_queue_size(a_id), 1);
+    assert_eq!(test.ingress_queue_size(b_id), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The previous messages should be executed in this round.
+    assert_eq!(test.ingress_queue_size(a_id), 0);
+    assert_eq!(test.ingress_queue_size(b_id), 0);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        4
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn no_heap_delta_rate_limiting_for_system_subnet() {
+    const GIB: usize = 1024 * 1024 * 1024;
+    const PAGE_SIZE: usize = 4_096;
+    const SUBNET_HEAP_DELTA_CAPACITY: usize = 140 * GIB;
+    const DIRTY_2G_CHUNK: usize = 2 * GIB;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 200.into(),
+            current_interval_length: 199.into(),
+        })
+        .build();
+
+    let a_id = test.create_canister();
+    // For 140GiB subnet heap delta capacity we should be able to iterate
+    // `140 / 2 = 70` times.
+    for _ in 0..SUBNET_HEAP_DELTA_CAPACITY / DIRTY_2G_CHUNK {
+        test.send_ingress(a_id, ingress(10).dirty_pages(DIRTY_2G_CHUNK / PAGE_SIZE));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+        // Assert the message is executed
+        assert_eq!(test.ingress_queue_size(a_id), 0);
+        // Assert there is no rate limiting.
+        assert_eq!(
+            test.scheduler()
+                .metrics
+                .round_skipped_due_to_current_heap_delta_above_limit
+                .get(),
+            0
+        );
+    }
+    // Once the subnet capacity is reached, there should be no further executions.
+    test.send_ingress(a_id, ingress(10).dirty_pages(DIRTY_2G_CHUNK / PAGE_SIZE));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(a_id), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
+    assert!(
+        test.scheduler().metrics.current_heap_delta.get() as usize >= SUBNET_HEAP_DELTA_CAPACITY
+    );
+
+    // After a checkpoint round, the message should be executed.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(a_id), 0);
 }
 
 #[test]
@@ -2309,6 +2585,7 @@ fn can_record_metrics_for_a_round() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn heap_delta_rate_limiting_metrics_recorded() {
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 2,
@@ -3202,50 +3479,80 @@ fn scheduler_maintains_canister_order() {
 }
 
 #[test]
-fn ecdsa_signature_agreements_metric_is_updated() {
-    let ecdsa_key = EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: String::from("secp256k1"),
-    };
+fn threshold_signature_agreements_metric_is_updated() {
+    let ecdsa_key_id = make_ecdsa_key_id(0);
+    let master_ecdsa_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    let schnorr_key_id = make_schnorr_key_id(0);
+    let master_schnorr_key_id = MasterPublicKeyId::Schnorr(schnorr_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(ecdsa_key.clone())
+        .with_idkg_keys(vec![
+            master_ecdsa_key_id.clone(),
+            master_schnorr_key_id.clone(),
+        ])
         .build();
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        1.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
 
     let canister_id = test.create_canister();
 
-    let payload = Encode!(&SignWithECDSAArgs {
-        message_hash: [0; 32],
+    let ecdsa_payload = Encode!(&SignWithECDSAArgs {
+        message_hash: [1; 32],
         derivation_path: DerivationPath::new(Vec::new()),
-        key_id: ecdsa_key
+        key_id: ecdsa_key_id,
+    })
+    .unwrap();
+    let schnorr_payload = Encode!(&SignWithSchnorrArgs {
+        message: vec![1; 128],
+        derivation_path: DerivationPath::new(Vec::new()),
+        key_id: schnorr_key_id,
     })
     .unwrap();
 
-    // inject two signing request
+    // inject three signing request
     test.inject_call_to_ic00(
         Method::SignWithECDSA,
-        payload.clone(),
+        ecdsa_payload.clone(),
         test.ecdsa_signature_fee(),
         canister_id,
         InputQueueType::RemoteSubnet,
     );
     test.inject_call_to_ic00(
         Method::SignWithECDSA,
-        payload,
+        ecdsa_payload,
         test.ecdsa_signature_fee(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.inject_call_to_ic00(
+        Method::SignWithSchnorr,
+        schnorr_payload,
+        test.schnorr_signature_fee(),
         canister_id,
         InputQueueType::RemoteSubnet,
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Check that the SubnetCallContextManager contains both requests.
+    // Check that the SubnetCallContextManager contains all requests.
     let sign_with_ecdsa_contexts = &test
         .state()
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
+        .sign_with_ecdsa_contexts();
     assert_eq!(sign_with_ecdsa_contexts.len(), 2);
+    let sign_with_schnorr_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_schnorr_contexts();
+    assert_eq!(sign_with_schnorr_contexts.len(), 1);
 
-    // reject the first one
+    // reject the first ecdsa context
     let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
     let response = ConsensusResponse::new(
         *callback_id,
@@ -3263,29 +3570,28 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         &no_op_logger(),
     );
 
-    let ecdsa_signature_agreements_before = test
+    let threshold_signature_agreements_before = &test
         .state()
         .metadata
         .subnet_metrics
-        .ecdsa_signature_agreements;
-    let metric_before = fetch_int_gauge(
+        .threshold_signature_agreements;
+    let metric_before = fetch_int_gauge_vec(
         test.metrics_registry(),
-        "replicated_state_ecdsa_signature_agreements_total",
-    )
-    .unwrap();
+        "replicated_state_threshold_signature_agreements_total",
+    );
 
     // metric and state variable should not have been updated
-    assert_eq!(ecdsa_signature_agreements_before, metric_before);
-    assert_eq!(0, metric_before);
+    assert!(threshold_signature_agreements_before.is_empty());
+    assert!(metric_before.is_empty());
 
     let sign_with_ecdsa_contexts = &test
         .state()
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
+        .sign_with_ecdsa_contexts();
     assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
-    // send a reply to the second request
+    // send a reply to the remaining requests
     let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
     let response = ConsensusResponse::new(
         *callback_id,
@@ -3296,8 +3602,19 @@ fn ecdsa_signature_agreements_metric_is_updated() {
             .encode(),
         ),
     );
-
     test.state_mut().consensus_queue.push(response);
+    let (callback_id, _) = sign_with_schnorr_contexts.iter().next().unwrap();
+    let response = ConsensusResponse::new(
+        *callback_id,
+        Payload::Data(
+            ic00::SignWithSchnorrReply {
+                signature: vec![1, 2, 3],
+            }
+            .encode(),
+        ),
+    );
+    test.state_mut().consensus_queue.push(response);
+
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     observe_replicated_state_metrics(
@@ -3308,41 +3625,47 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         &no_op_logger(),
     );
 
-    let ecdsa_signature_agreements_after = test
+    let threshold_signature_agreements_after = &test
         .state()
         .metadata
         .subnet_metrics
-        .ecdsa_signature_agreements;
-    let metric_after = fetch_int_gauge(
+        .threshold_signature_agreements;
+    assert_eq!(threshold_signature_agreements_after.len(), 2);
+
+    // Value of the new ecdsa metric should be set to 1
+    let ecdsa_count = threshold_signature_agreements_after
+        .get(&master_ecdsa_key_id)
+        .unwrap();
+    assert_eq!(1, *ecdsa_count);
+
+    // Value of the new schnorr metric should be set to 1
+    let schnorr_count = threshold_signature_agreements_after
+        .get(&master_schnorr_key_id)
+        .unwrap();
+    assert_eq!(1, *schnorr_count);
+
+    let metrics_after = fetch_int_gauge_vec(
         test.metrics_registry(),
-        "replicated_state_ecdsa_signature_agreements_total",
-    )
-    .unwrap();
-
-    assert_eq!(
-        ecdsa_signature_agreements_before + 1,
-        ecdsa_signature_agreements_after
+        "replicated_state_threshold_signature_agreements_total",
     );
-    assert_eq!(ecdsa_signature_agreements_after, metric_after);
+    assert_eq!(
+        metrics_after,
+        metric_vec(&[
+            (&[("key_id", &master_ecdsa_key_id.to_string())], 1),
+            (&[("key_id", &master_schnorr_key_id.to_string())], 1),
+        ]),
+    );
 
-    // Check that the request was removed.
-    let sign_with_ecdsa_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
-    assert!(sign_with_ecdsa_contexts.is_empty());
+    // Check that the requests were removed.
+    let sign_with_threshold_contexts = &test.state().signature_request_contexts();
+    assert!(sign_with_threshold_contexts.is_empty());
 }
 
 #[test]
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
-    let ecdsa_key = EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: String::from("secp256k1"),
-    };
-
+    let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(ecdsa_key.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
     let fee = test.ecdsa_signature_fee();
@@ -3371,7 +3694,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         Encode!(&SignWithECDSAArgs {
             message_hash: [0; 32],
             derivation_path: DerivationPath::new(Vec::new()),
-            key_id: ecdsa_key
+            key_id,
         })
         .unwrap(),
         payment,
@@ -3385,7 +3708,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         .state()
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
+        .sign_with_ecdsa_contexts();
     assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
     observe_replicated_state_metrics(
@@ -4146,6 +4469,46 @@ fn dts_long_execution_completes() {
             .get_sample_sum(),
         9.0
     );
+}
+
+fn can_execute_multiple_messages_per_round_with_dts(mut test: SchedulerTest) {
+    let canister = test.create_canister();
+    let num_messages = 1000;
+    for _ in 0..num_messages {
+        test.send_ingress(canister, ingress(1000));
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        num_messages
+    );
+}
+
+// The following two tests check that we can execute multiple messages per round
+// with DTS enabled on both app and system subnets. The tests are explicitly
+// checking with production configurations to ensure that we don't accidentally
+// set incompatible limits and end up reducing throughput a lot (e.g. execute
+// only one message per round).
+#[test]
+fn can_execute_multiple_messages_per_round_on_app_subnets_with_dts() {
+    let test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    can_execute_multiple_messages_per_round_with_dts(test);
+}
+
+#[test]
+fn can_execute_multiple_messages_per_round_on_system_subnets_with_dts() {
+    let test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    can_execute_multiple_messages_per_round_with_dts(test);
 }
 
 #[test]
@@ -5056,8 +5419,12 @@ fn test_is_next_method_added_to_task_queue() {
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
 }
 
-pub(crate) fn make_key_id(id: u64) -> EcdsaKeyId {
+pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
     EcdsaKeyId::from_str(&format!("Secp256k1:key_{:?}", id)).unwrap()
+}
+
+pub(crate) fn make_schnorr_key_id(id: u64) -> SchnorrKeyId {
+    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{:?}", id)).unwrap()
 }
 
 fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
@@ -5081,9 +5448,9 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 
 #[test]
 fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
-    let key_id = make_key_id(0);
+    let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
     inject_ecdsa_signing_request(&mut test, &key_id);
@@ -5092,24 +5459,24 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let sign_with_ecdsa_context = &test
+        let contexts = test
             .state()
-            .sign_with_ecdsa_contexts()
-            .values()
-            .next()
-            .expect("Context should exist");
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts();
+        let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
         // Check that quadruple and nonce are none
         assert!(sign_with_ecdsa_context.nonce.is_none());
-        assert!(sign_with_ecdsa_context.matched_quadruple.is_none());
+        assert!(sign_with_ecdsa_context.matched_pre_signature.is_none());
     }
 }
 
 #[test]
 fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
-    let key_id = make_key_id(0);
+    let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
     let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
@@ -5121,34 +5488,34 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let sign_with_ecdsa_context = &test
+    let contexts = test
         .state()
-        .sign_with_ecdsa_contexts()
-        .values()
-        .next()
-        .expect("Context should exist");
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     let expected_height = Height::from(test.last_round().get());
 
     // Check that quadruple was matched
     assert_eq!(
-        sign_with_ecdsa_context.matched_quadruple,
+        sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
     );
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let sign_with_ecdsa_context = &test
+    let contexts = test
         .state()
-        .sign_with_ecdsa_contexts()
-        .values()
-        .next()
-        .expect("Context should exist");
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that quadruple is still matched
     assert_eq!(
-        sign_with_ecdsa_context.matched_quadruple,
+        sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
     );
     // Check that nonce is set
@@ -5156,12 +5523,12 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert!(nonce.is_some());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let sign_with_ecdsa_context = &test
+    let contexts = test
         .state()
-        .sign_with_ecdsa_contexts()
-        .values()
-        .next()
-        .expect("Context should exist");
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that nonce wasn't changed
     let nonce = sign_with_ecdsa_context.nonce;
@@ -5170,9 +5537,15 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
 
 #[test]
 fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
-    let key_ids: Vec<_> = (0..3).map(make_key_id).collect();
+    let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_keys(key_ids.clone())
+        .with_idkg_keys(
+            key_ids
+                .iter()
+                .cloned()
+                .map(MasterPublicKeyId::Ecdsa)
+                .collect(),
+        )
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
@@ -5200,26 +5573,30 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
 
-    let sign_with_ecdsa_contexts = &test.state().sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts();
 
     // First context (requesting key 3) should be unmatched
     let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();
     assert!(context0.nonce.is_none());
-    assert!(context0.matched_quadruple.is_none());
+    assert!(context0.matched_pre_signature.is_none());
 
     // Remaining contexts should have been matched
     let expected_height = Height::from(test.last_round().get() - 1);
     let context1 = sign_with_ecdsa_contexts.get(&CallbackId::from(1)).unwrap();
     assert!(context1.nonce.is_some());
     assert_eq!(
-        context1.matched_quadruple,
+        context1.matched_pre_signature,
         Some((*pre_sig_ids1.first().unwrap(), expected_height))
     );
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
     assert_eq!(
-        context2.matched_quadruple,
+        context2.matched_pre_signature,
         Some((*pre_sig_ids0.first().unwrap(), expected_height))
     );
 }
@@ -5307,4 +5684,123 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
         0
     );
     assert!(test.state().subnet_queues().has_output());
+}
+
+fn scheduled_heap_delta_limit_corner_values() -> BoxedStrategy<u64> {
+    prop_oneof!(Just(0), Just(5), Just(10), Just(100), Just(u64::MAX)).boxed()
+}
+
+fn scheduled_heap_delta_limit_option_values() -> BoxedStrategy<Option<u64>> {
+    prop_oneof!(
+        Just(None),
+        Just(Some(0)),
+        Just(Some(5)),
+        Just(Some(10)),
+        Just(Some(100)),
+        Just(Some(u64::MAX))
+    )
+    .boxed()
+}
+
+#[test_strategy::proptest]
+fn scheduled_heap_delta_limit_corner_cases(
+    #[strategy(scheduled_heap_delta_limit_corner_values())] current_round: u64,
+    #[strategy(scheduled_heap_delta_limit_option_values())] next_checkpoint_round: Option<u64>,
+    #[strategy(scheduled_heap_delta_limit_option_values())] current_interval_length: Option<u64>,
+    #[strategy(scheduled_heap_delta_limit_corner_values())] subnet_heap_delta_capacity: u64,
+    #[strategy(scheduled_heap_delta_limit_corner_values())] heap_delta_initial_reserve: u64,
+) {
+    let round_summary = if next_checkpoint_round.is_none() || current_interval_length.is_none() {
+        None
+    } else {
+        Some(ExecutionRoundSummary {
+            next_checkpoint_round: next_checkpoint_round.unwrap().into(),
+            current_interval_length: current_interval_length.unwrap().into(),
+        })
+    };
+
+    let res = scheduled_heap_delta_limit(
+        current_round.into(),
+        round_summary.clone(),
+        subnet_heap_delta_capacity.into(),
+        heap_delta_initial_reserve.into(),
+    )
+    .get();
+
+    // The result should never exceed the heap delta capacity.
+    prop_assert!(res <= subnet_heap_delta_capacity);
+    // The result should be at least the initial reserve, provided the reserve is below
+    // the heap delta capacity.
+    if heap_delta_initial_reserve <= subnet_heap_delta_capacity {
+        prop_assert!(res >= heap_delta_initial_reserve);
+    }
+
+    // The result should be just the capacity if the round summary is not defined.
+    if round_summary.is_none() {
+        prop_assert!(res == subnet_heap_delta_capacity);
+    }
+
+    // Otherwise, the result should be scaled proportionally to the current round
+    // (see the test below).
+}
+
+#[test]
+fn scheduled_heap_delta_limit_scaling() {
+    fn scheduled_limit(
+        current_round: u64,
+        next_checkpoint_round: u64,
+        current_interval_length: u64,
+        subnet_heap_delta_capacity: u64,
+        heap_delta_initial_reserve: u64,
+    ) -> u64 {
+        let round_summary = ExecutionRoundSummary {
+            next_checkpoint_round: next_checkpoint_round.into(),
+            current_interval_length: current_interval_length.into(),
+        };
+
+        scheduled_heap_delta_limit(
+            current_round.into(),
+            Some(round_summary.clone()),
+            subnet_heap_delta_capacity.into(),
+            heap_delta_initial_reserve.into(),
+        )
+        .get()
+    }
+
+    // Scaling with no initial reserve.
+    assert_eq!(0, scheduled_limit(0, 10, 9, 10, 0));
+    assert_eq!(5, scheduled_limit(5, 10, 9, 10, 0));
+    assert_eq!(10, scheduled_limit(10, 10, 9, 10, 0));
+    assert_eq!(10, scheduled_limit(15, 10, 9, 10, 0));
+
+    // Scaling with 50% initial reserve.
+    assert_eq!(5, scheduled_limit(0, 10, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(5, 10, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(10, 10, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(15, 10, 9, 10, 5));
+
+    // Scaling across checkpoints.
+    assert_eq!(5, scheduled_limit(0, 10, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(5, 10, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(9, 10, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(10, 20, 9, 10, 5));
+    assert_eq!(6, scheduled_limit(11, 20, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(15, 20, 9, 10, 5));
+
+    // Scaling with invalid round summary (`next_checkpoint_round` is 5).
+    assert_eq!(8, scheduled_limit(0, 5, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(5, 5, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(10, 5, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(15, 5, 9, 10, 5));
+
+    // Scaling with invalid round summary (`next_checkpoint_round` is 50).
+    assert_eq!(5, scheduled_limit(0, 50, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(5, 50, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(10, 50, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(15, 50, 9, 10, 5));
+    // No scaling up until the `next_checkpoint_round` - `current_interval_length`.
+    assert_eq!(5, scheduled_limit(40, 50, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(45, 50, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(50, 50, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(55, 50, 9, 10, 5));
 }

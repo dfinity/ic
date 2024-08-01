@@ -49,6 +49,10 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub upgrade_version: Option<ReplicaVersion>,
 
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
+
     /// URL of the upgrade image
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub upgrade_image_url: Option<Url>,
@@ -146,6 +150,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
+                };
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
                 }
             }
 
@@ -206,12 +214,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         upgrade_version,
                         url,
                         hash,
+                        self.params.replay_until_height,
                     )?))
                 } else {
                     Ok(Box::new(self.recovery.get_replay_step(
                         self.params.subnet_id,
                         None,
                         None,
+                        self.params.replay_until_height,
                     )))
                 }
             }

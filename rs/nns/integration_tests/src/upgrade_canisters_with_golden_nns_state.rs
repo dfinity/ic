@@ -16,7 +16,6 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use std::str::FromStr;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -240,6 +239,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     *canister_id,
                     wasm_content.clone(),
                     module_arg.clone(),
+                    false,
                 );
 
                 // Step 3: Verify result(s): In a short while, the canister should

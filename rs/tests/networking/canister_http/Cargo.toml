@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-tests = { path = "../../" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }

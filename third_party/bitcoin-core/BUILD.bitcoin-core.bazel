@@ -14,7 +14,10 @@ configure_make(
     autogen = True,
     configure_in_place = True,
     configure_options = ["--disable-tests"],
-    copts = ["-UNDEBUG"],
+    copts = [
+        "-UNDEBUG",
+        "-std=c++17",
+    ],
     lib_source = ":all_srcs",
     out_binaries = ["bitcoind"],
     out_headers_only = True,

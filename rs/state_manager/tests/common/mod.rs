@@ -137,7 +137,7 @@ pub fn encode_decode_stream_test<
             streams.insert(destination_subnet, stream.clone());
         });
 
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
 
         certify_height(&state_manager, Height::new(1));
 
@@ -169,9 +169,9 @@ pub fn encode_decode_stream_test<
 /// `CertifiedStreamSlice`, and checks that:
 ///
 ///  1. the payload is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `msg_begin` and the same limits; and
+///     witness and payload beginning at `msg_begin` and the same limits; and
 ///  2. the witness is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `witness_begin` and matching message limit.
+///     witness and payload beginning at `witness_begin` and matching message limit.
 ///
 /// # Panics
 /// Whenever encoding and/or decoding would under normal circumstances return an
@@ -192,7 +192,7 @@ pub fn encode_partial_slice_test(
             streams.insert(destination_subnet, stream.clone());
         });
 
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
 
         certify_height(&state_manager, Height::new(1));
 
@@ -283,7 +283,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
         streams.insert(subnet_test_id(42), modified_stream);
     });
 
-    state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
 
     certify_height(&state_manager, Height::new(2));
 

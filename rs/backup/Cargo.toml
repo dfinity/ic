@@ -23,10 +23,10 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-term = "2.6.0"
+slog-async = { workspace = true }
+slog-term = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }

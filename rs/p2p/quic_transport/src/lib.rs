@@ -32,8 +32,11 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
     future::Future,
+    io::IoSliceMut,
     net::SocketAddr,
+    pin::Pin,
     sync::{Arc, RwLock},
+    task::{Context, Poll},
 };
 
 use anyhow::anyhow;
@@ -50,7 +53,8 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::AsyncUdpSocket;
+use quinn::{AsyncUdpSocket, UdpPoller};
+use quinn_udp::{RecvMeta, Transmit};
 use tokio::sync::watch;
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 use tracing::instrument;
@@ -210,6 +214,10 @@ impl Transport for QuicTransport {
     }
 }
 
+/// Low-level transport interface for exchanging messages between nodes.
+///
+/// It intentionally uses http::Request and http::Response types.
+/// By using them, HTTP servers build on top of Axum + TCP can be an easily transitioned to the quic transport.
 #[async_trait]
 pub trait Transport: Send + Sync {
     async fn rpc(
@@ -251,26 +259,23 @@ impl From<MessagePriority> for i32 {
 pub struct DummyUdpSocket;
 
 impl AsyncUdpSocket for DummyUdpSocket {
-    fn poll_send(
-        &self,
-        _state: &quinn::udp::UdpState,
-        _cx: &mut std::task::Context,
-        _transmits: &[quinn::udp::Transmit],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
         todo!()
     }
+
+    fn try_send(&self, _transmit: &Transmit<'_>) -> std::io::Result<()> {
+        todo!()
+    }
+
     fn poll_recv(
         &self,
-        _cx: &mut std::task::Context,
-        _bufs: &mut [std::io::IoSliceMut<'_>],
-        _meta: &mut [quinn::udp::RecvMeta],
-    ) -> std::task::Poll<std::io::Result<usize>> {
+        _cx: &mut Context<'_>,
+        _bufs: &mut [IoSliceMut<'_>],
+        _meta: &mut [RecvMeta],
+    ) -> Poll<std::io::Result<usize>> {
         todo!()
     }
     fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        todo!()
-    }
-    fn may_fragment(&self) -> bool {
         todo!()
     }
 }

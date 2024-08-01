@@ -34,7 +34,15 @@ def _run_system_test(ctx):
         ),
     )
 
-    env = dict(ctx.attr.env.items() + [
+    env = dict(ctx.attr.env.items())
+
+    # Expand Make variables in env vars, with runtime_deps as targets
+    for key, value in env.items():
+        # If this looks like a Make variable, try to expand it
+        if value.startswith("$"):
+            env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
+
+    env = dict(env.items() + [
         ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
     ])
     if ctx.executable.colocated_test_bin != None:
@@ -110,7 +118,9 @@ def system_test(
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
         uses_hostos_dev_test = False,
+        env = {},
         env_inherit = [],
+        additional_colocate_tags = [],
         **kwargs):
     """Declares a system-test.
 
@@ -138,8 +148,10 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
+      env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
+      additional_colocate_tags: additional tags to pass to the colocated test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 
@@ -204,9 +216,11 @@ def system_test(
         src = bin_name,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
+        env = env,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
     )
@@ -240,7 +254,8 @@ def system_test(
         env_inherit = env_inherit,
         env = env,
         tags = tags + ["requires-network", "system_test"] +
-               ([] if "experimental_system_test_colocation" in tags else ["manual"]),
+               ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
     )
@@ -262,6 +277,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         outs = [name + "_size.txt"],
         cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -275,6 +291,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         /usr/sbin/mkfs.vfat -i "0" -n CONFIG $@
         """,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -284,6 +301,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         fs = ":" + name + "_vfat",
         remap_paths = remap_paths,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -299,5 +317,6 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         name = name,
         actual = name + ".zst",
         tags = tags,
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
     )

@@ -97,13 +97,6 @@ pub enum EventType {
     /// or the transaction fee associated with a ckERC20 withdrawal.
     #[n(12)]
     ReimbursedEthWithdrawal(#[n(0)] Reimbursed),
-    /// The minter could not scrap the logs for that block (for ETH contract).
-    #[n(13)]
-    SkippedBlock(
-        #[n(0)]
-        #[deprecated(note = "Use SkippedBlockForContract instead")]
-        BlockNumber,
-    ),
     /// Add a new ckERC20 token.
     #[n(14)]
     AddedCkErc20Token(#[n(0)] CkErc20Token),

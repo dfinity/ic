@@ -19,9 +19,9 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
 };
 use serde::{Deserialize, Serialize};
-use std::cmp::PartialOrd;
 use std::convert::TryInto;
 use std::hash::Hash;
+use std::{cmp::PartialOrd, convert::Infallible};
 
 pub mod block_maker;
 pub mod catchup;
@@ -35,6 +35,8 @@ pub mod thunk;
 pub use catchup::*;
 use hashed::Hashed;
 pub use payload::{BlockPayload, DataPayload, Payload, PayloadType, SummaryPayload};
+
+use self::artifact::{IdentifiableArtifact, PbArtifact};
 
 /// Abstract messages with height attribute
 pub trait HasHeight {
@@ -897,6 +899,25 @@ pub enum ConsensusMessage {
     EquivocationProof(EquivocationProof),
 }
 
+impl IdentifiableArtifact for ConsensusMessage {
+    const NAME: &'static str = "consensus";
+    type Id = ConsensusMessageId;
+    type Attribute = ();
+    fn id(&self) -> Self::Id {
+        self.get_id()
+    }
+    fn attribute(&self) -> Self::Attribute {}
+}
+
+impl PbArtifact for ConsensusMessage {
+    type PbId = ic_protobuf::types::v1::ConsensusMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
+}
+
 impl From<ConsensusMessage> for pb::ConsensusMessage {
     fn from(value: ConsensusMessage) -> Self {
         Self {
@@ -1261,7 +1282,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
-            ecdsa_payload,
+            idkg_payload,
         ) = if payload.is_summary() {
             (
                 pb::DkgPayload::from(&payload.as_summary().dkg),
@@ -1270,11 +1291,7 @@ impl From<&Block> for pb::Block {
                 None,
                 vec![],
                 vec![],
-                payload
-                    .as_summary()
-                    .ecdsa
-                    .as_ref()
-                    .map(|ecdsa| ecdsa.into()),
+                payload.as_summary().idkg.as_ref().map(|idkg| idkg.into()),
             )
         } else {
             let batch = &payload.as_data().batch;
@@ -1285,7 +1302,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
-                payload.as_data().ecdsa.as_ref().map(|ecdsa| ecdsa.into()),
+                payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
         Self {
@@ -1302,7 +1319,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
-            ecdsa_payload,
+            idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
     }
@@ -1341,38 +1358,35 @@ impl TryFrom<pb::Block> for Block {
                     batch.is_empty(),
                     "Error: Summary block has non-empty batch payload."
                 );
-                // Convert the ECDSA summary. Note that the summary may contain
+                // Convert the idkg summary. Note that the summary may contain
                 // transcript references, and here we are NOT checking if these
                 // references are valid. Such checks, if required, should be done
                 // after converting from protobuf to rust internal type.
                 //
                 // If after conversion, the summary block is intend to get a different
                 // height value (e.g. when a new CUP is created), then a call to
-                // ecdsa.update_refs(height) should be manually called.
-                let ecdsa = block
-                    .ecdsa_payload
+                // idkg.update_refs(height) should be manually called.
+                let idkg = block
+                    .idkg_payload
                     .as_ref()
-                    .map(|ecdsa| ecdsa.try_into())
+                    .map(|idkg| idkg.try_into())
                     .transpose()
                     .map_err(|e: ProxyDecodeError| e.to_string())?;
 
-                BlockPayload::Summary(SummaryPayload {
-                    dkg: summary,
-                    ecdsa,
-                })
+                BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
             dkg::Payload::Dealings(dealings) => {
-                let ecdsa = block
-                    .ecdsa_payload
+                let idkg = block
+                    .idkg_payload
                     .as_ref()
-                    .map(|ecdsa| ecdsa.try_into())
+                    .map(|idkg| idkg.try_into())
                     .transpose()
                     .map_err(|e: ProxyDecodeError| e.to_string())?;
 
                 BlockPayload::Data(DataPayload {
                     batch,
                     dealings,
-                    ecdsa,
+                    idkg,
                 })
             }
         };

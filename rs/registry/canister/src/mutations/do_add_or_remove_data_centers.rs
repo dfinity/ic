@@ -1,10 +1,11 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use prost::Message;
 
 impl Registry {
     /// Add or remove data center records to the Registry
@@ -47,7 +48,7 @@ impl Registry {
                 Ok(_) => mutations.push(RegistryMutation {
                     mutation_type: registry_mutation::Type::Upsert as i32,
                     key: key.into(),
-                    value: encode_or_panic(&dc),
+                    value: dc.encode_to_vec(),
                 }),
                 Err(msg) => {
                     println!(
@@ -65,11 +66,11 @@ impl Registry {
 
 #[cfg(test)]
 mod test {
-    use crate::mutations::common::decode_registry_value;
     use crate::registry::Registry;
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
     use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
     use ic_registry_keys::make_data_center_record_key;
+    use prost::Message;
 
     #[test]
     #[should_panic(
@@ -248,7 +249,7 @@ mod test {
                 latest_version,
             )
             .unwrap();
-        decode_registry_value::<DataCenterRecord>(record.value.clone())
+        DataCenterRecord::decode(record.value.as_slice()).unwrap()
     }
 
     fn assert_no_dc_record(registry: &Registry, id_string: &str) {

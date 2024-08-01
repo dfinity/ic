@@ -1,7 +1,7 @@
 load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
     "secret_key.pem",
@@ -29,7 +29,8 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS,
     deps = [
-        "//rs/tests",
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/ic_mainnet_nns_recovery",
         "@crate_index//:anyhow",
     ],

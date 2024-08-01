@@ -86,8 +86,6 @@ Adding a new ERC-20 token involves an NNS upgrade proposal for the ledger suite 
 
 * Identifier for the new ERC-20 token: this is the pair Ethereum chain ID (`1` for Ethereum mainnet or `11155111` for Ethereum Testnet Sepolia) and the ERC-20 smart contract Ethereum address.
 * Initialization args for the ICRC ledger
-* Wasm hash of the ledger
-* Wasm hash of the index
 
 See the <<ckusdc-example>> example for a detailed explanation of the arguments used.
 
@@ -95,27 +93,20 @@ See the <<ckusdc-example>> example for a detailed explanation of the arguments u
 [EXAMPLE]
 .ckUSDC
 ====
-As an example, we detail the arguments used in proposal https://dashboard.internetcomputer.org/proposal/129750[129750] that added the ckUSDC token.
+As an example, we detail the arguments that would be needed to add the ckUSDC token with the latest version of the ledger suite orchestrator.
+Note that the original proposal https://dashboard.internetcomputer.org/proposal/129750[129750] to add ckUSDC used a different version for the ledger suite orchestrator (`4472b0064d347a88649beb526214fde204f906fb`), which explains why some arguments that appear in the proposal are no longer required or use a slightly different syntax. Always refer to the Candid interface (`ledger_suite_orchestrator.did`) for the most up-to-date information.
 
 . `contract`: Uniquely identifies the ERC-20 smart contract.
 .. `chain_id = 1`: designates Ethereum mainnet. This value MUST be `1`.
 .. `address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"`: address of the ERC-20 smart contract on Ethereum mainnet. The address MUST be a valid Ethereum address corresponding to an ERC-20 smart contract as specified in https://eips.ethereum.org/EIPS/eip-20[EIP-20].
 . `ledger_init_arg`: Initialization arguments for the ledger that will be spawned off by the orchestrator.
-.. `minting_account = record { owner = principal "sv3dd-oaaaa-aaaar-qacoa-cai" }`: Principal that is allowed to mint new tokens. This MUST be the ckETH minter principal.
-.. `fee_collector_account = opt record { owner = principal "sv3dd-oaaaa-aaaar-qacoa-cai"; subaccount = opt blob "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\0f\ee"; }`: Accounts that collects transaction fees. This SHOULD be the `0000000000000000000000000000000000000000000000000000000000000fee` subaccount of the ckETH minter canister, so that in the future such fees can be used to self-sustain the cycle consumption of the involved canisters.
-.. `feature_flags  = opt record { icrc2 = true };`: Use https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md[ICRC-2] approve and transfer from. This MUST be set to `true`, otherwise withdrawals will not be possible.
-.. `decimals = opt 6`: number of decimals to used by the ledger. This SHOULD be the same number as the one returned by `decimals()` on the ERC-20 smart contract.
-.. `max_memo_length = opt 80`: maximum number of bytes for the memo. Since the memo is encoded by the ckETH minter, this MUST be set to `80`.
-.. `transfer_fee = 10_000`: cost of a user transaction on the ledger (e.g., `icrc1_transfer`, `icrc2_approve`, etc.). The goal of this fee is that it should be high enough to prevent spam (and in the future to pay for the cycles consumption), but low enough to encourage users from using the ckERC20 token. This number SHOULD be between the equivalent of 0.005 USD to 0.01 USD.
+.. `decimals = 6`: number of decimals to used by the ledger. This SHOULD be the same number as the one returned by `decimals()` on the ERC-20 smart contract.
+.. `transfer_fee = 10_000`: cost of a user transaction on the ledger (e.g., `icrc1_transfer`, `icrc2_approve`, etc.). The goal of this fee is that it should be high enough to prevent spam (and in the future to pay for the cycles consumption), but low enough to encourage users from using the ckERC20 token.
+... This number SHOULD be a power of 10 (e.g., 1, 10, 100, 1_000, 10_000, etc.) to ease any user's mental arithmetic.
+... This number SHOULD be between the equivalent of 0.001 USD to 0.01 USD.
 .. `token_symbol = "ckUSDC"`: symbol of the twin ERC-20 token on the IC. This MUST be an ASCII string of at most 20 characters starting with the `ck` prefix. The symbol MUST be unique among all ckERC20 tokens. This SHOULD correspond to the `symbol()` of the ERC-20 smart contract prefixed with `ck`.
 .. `token_name = "ckUSDC"`: name of the twin ERC-20 token on the IC. This MAY be the same as `token_symbol`.
 .. `token_logo = "data:image/svg+xml;base64PHN2ZyB3...+Cg==`: logo of the twin ERC-20 token on the IC. This MUST be a https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URLs[data URL].
-.. `initial_balances = vec {}`: initial balances of the ledger. This SHOULD be an empty vector.
-.. `maximum_number_of_accounts = null`: maximum number of accounts on the ledger. This SHOULD be `null`.
-.. `accounts_overflow_trim_quantity = null`: number of accounts to trim when there are too many accounts on the ledger. This SHOULD be `null`.
-. `git_commit_hash = "4472b0064d347a88649beb526214fde204f906fb"`: This MUST be a 20-byte hexadecimal string that is the git revision in the https://github.com/dfinity/ic[IC repository] used for the spawned off ledger and index canisters for the new ckERC20 token. This MUST match the value given in `ledger_compressed_wasm_hash` and in `index_compressed_wasm_hash`. Consult the ledger suite orchestrator https://vxkom-oyaaa-aaaar-qafda-cai.raw.icp0.io/dashboard[dashboard] to see which versions are available. The latest version SHOULD be used.
-. `ledger_compressed_wasm_hash = "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"`: This MUST be a 32-byte hexadecimal string corresponding to the SHA2-256 ledger compressed wasm hash built from the git revision specified in `git_commit_hash`.
-. `index_compressed_wasm_hash = "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"`: This MUST be a 32-byte hexadecimal string corresponding to the SHA2-256 index compressed wasm hash built from the git revision specified in `git_commit_hash.
 ====
 
 [TIP]

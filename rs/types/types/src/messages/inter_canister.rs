@@ -5,8 +5,9 @@ use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
     UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
@@ -162,7 +163,6 @@ impl Request {
                     Err(_) => None,
                 }
             }
-            Ok(Method::FetchCanisterLogs) => None, // TODO(IC-272).
             Ok(Method::UploadChunk) => match UploadChunkArgs::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
@@ -177,18 +177,36 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::DeleteChunks)
-            | Ok(Method::TakeCanisterSnapshot)
-            | Ok(Method::LoadCanisterSnapshot)
-            | Ok(Method::ListCanisterSnapshots)
-            | Ok(Method::DeleteCanisterSnapshot) => None,
+            Ok(Method::TakeCanisterSnapshot) => {
+                match TakeCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::LoadCanisterSnapshot) => {
+                match LoadCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ListCanisterSnapshots) => {
+                match ListCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::DeleteCanisterSnapshot) => {
+                match DeleteCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
             | Ok(Method::RawRand)
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
-            | Ok(Method::ComputeInitialEcdsaDealings)
             | Ok(Method::ComputeInitialIDkgDealings)
             | Ok(Method::SchnorrPublicKey)
             | Ok(Method::SignWithSchnorr)
@@ -203,6 +221,10 @@ impl Request {
                 // No effective canister id.
                 None
             }
+            // `FetchCanisterLogs` method is only allowed for messages sent by
+            // end users in non-replicated mode, so we should never reach this point.
+            // If we do, we return `None` (which should be no-op) to avoid panicking.
+            Ok(Method::FetchCanisterLogs) => None,
             Err(_) => None,
         }
     }

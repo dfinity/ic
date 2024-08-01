@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
@@ -9,17 +10,20 @@ package(default_visibility = ["//visibility:public"])
         name = "ledger" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
         compile_data = [
-            "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix,
+            "//rs/rosetta-api/icrc1/archive:archive_canister" + archive_name_suffix,
         ],
+        crate_features = features,
         crate_name = "ic_icrc1_ledger",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:async-trait",
         ],
         rustc_env = {
-            "IC_ICRC1_ARCHIVE_WASM_PATH": "$(execpath //rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ")",
+            "IC_ICRC1_ARCHIVE_WASM_PATH": "$(execpath //rs/rosetta-api/icrc1/archive:archive_canister" + archive_name_suffix + ")",
         },
         version = "0.9.0",
         deps = [
+            # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/tree_hash",
@@ -35,26 +39,47 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
-        ],
+        ] + extra_deps,
     )
-    for name_suffix in [
-        "",
-        "_u256",
+    for (name_suffix, archive_name_suffix, features, extra_deps) in [
+        ("", "", [], []),
+        ("_u256", "_u256", [], []),
+        (
+            "_canbench",
+            "",
+            ["canbench-rs"],
+            [
+                "@crate_index//:canbench-rs",
+            ],
+        ),
+        (
+            "_canbench_u256",
+            "_u256",
+            [
+                "canbench-rs",
+                "u256-tokens",
+            ],
+            [
+                "@crate_index//:canbench-rs",
+            ],
+        ),
     ]
 ]
 
 [
     rust_canister(
         name = "ledger_canister" + name_suffix,
-        srcs = ["src/main.rs"],
+        srcs = ["src/main.rs"] + glob(["src/benches/**/*.rs"]),
         crate_features = features,
         crate_name = "ic_icrc1_ledger_canister" + name_suffix,
         opt = "z",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:ic-cdk-macros",
         ],
         service_file = ":ledger.did",
         deps = [
+            # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/ledger_canister_core",
@@ -80,11 +105,34 @@ package(default_visibility = ["//visibility:public"])
             ],
         ),
         (
+            "_canbench",
+            ["canbench-rs"],
+            [
+                ":ledger",
+                "//rs/rosetta-api/icrc1/tokens_u64",
+                "@crate_index//:assert_matches",
+                "@crate_index//:canbench-rs",
+            ],
+        ),
+        (
             "_u256",
             ["u256-tokens"],
             [
                 ":ledger_u256",
                 "//rs/rosetta-api/icrc1/tokens_u256",
+            ],
+        ),
+        (
+            "_u256_canbench",
+            [
+                "u256-tokens",
+                "canbench-rs",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/rosetta-api/icrc1/tokens_u256",
+                "@crate_index//:assert_matches",
+                "@crate_index//:canbench-rs",
             ],
         ),
         (
@@ -131,16 +179,21 @@ rust_test(
             ":ledger_canister" + name_suffix + ".wasm",
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
+            "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
         },
         deps = [
+            # Keep sorted.
             ":ledger",
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -152,11 +205,13 @@ rust_test(
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
+            "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:cddl",
             "@crate_index//:hex",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
+            "@crate_index//:num-bigint",
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:serde_bytes",
@@ -183,6 +238,7 @@ rust_test(
     ],
     crate = "ledger",
     deps = [
+        # Keep sorted.
         ":ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
@@ -192,3 +248,67 @@ rust_test(
         "//rs/types/base_types",
     ],
 )
+
+# Usage:
+# Benchmarking:
+# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u64 for legder using u64 tokens.
+# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u256 for legder using u256 tokens.
+# Updating the results file:
+# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u64_update for updating the results file.
+# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u256_update for updating the results file.
+# Currently, updating the results file is not automated, and there are no tests to avoid
+# regression. For now, we can use it as an example for benchmarking as part of an
+# investigation of potential performance issues, or when we make a change that can affect
+# the performance measured in this benchmark.
+[
+    rust_canbench(
+        name = "canbench" + name_suffix,
+        srcs = glob(["src/**/*.rs"]),
+        crate_features = features,
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:ic-cdk-macros",
+        ],
+        results_file = "canbench_results/canbench" + name_suffix + ".yml",
+        deps = [
+            # Keep sorted.
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/ledger_canister_core",
+            "//rs/rosetta-api/ledger_core",
+            "//rs/rust_canisters/canister_log",
+            "//rs/rust_canisters/http_types",
+            "//rs/types/base_types",
+            "@crate_index//:assert_matches",
+            "@crate_index//:candid",
+            "@crate_index//:ciborium",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:num-traits",
+            "@crate_index//:serde_bytes",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "_u64",
+            ["canbench-rs"],
+            [
+                ":ledger_canbench",
+                "//rs/rosetta-api/icrc1/tokens_u64",
+                "@crate_index//:canbench-rs",
+            ],
+        ),
+        (
+            "_u256",
+            [
+                "canbench-rs",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_canbench_u256",
+                "//rs/rosetta-api/icrc1/tokens_u256",
+                "@crate_index//:canbench-rs",
+            ],
+        ),
+    ]
+]

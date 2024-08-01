@@ -105,8 +105,17 @@ type UpgradeArg = record {
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
 
+// Argument to Eip1559TransactionPrice.
+// When specified, it is to lookup transaction price for a ckERC20 token withdrawal.
+// When not specified (null), it is for ETH withdrawal.
+type Eip1559TransactionPriceArg = record {
+    // The ledger ID for that ckERC20 token.
+    ckerc20_ledger_id : principal;
+};
+
 // Estimate price of an EIP-1559 transaction
-// when converting ckETH to ETH, see https://eips.ethereum.org/EIPS/eip-1559
+// when converting ckETH to ETH or ckERC20 to ERC20, see
+// https://eips.ethereum.org/EIPS/eip-1559
 type Eip1559TransactionPrice = record {
     // Maximum amount of gas transaction is authorized to consume.
     gas_limit : nat;
@@ -547,7 +556,7 @@ service : (MinterArg) -> {
     smart_contract_address : () -> (text) query;
 
     // Estimate the price of a transaction issued by the minter when converting ckETH to ETH.
-    eip_1559_transaction_price : () -> (Eip1559TransactionPrice) query;
+    eip_1559_transaction_price : (opt Eip1559TransactionPriceArg) -> (Eip1559TransactionPrice) query;
 
     // Returns internal minter parameters
     get_minter_info : () -> (MinterInfo) query;

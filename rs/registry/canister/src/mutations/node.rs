@@ -1,8 +1,9 @@
-use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 use ic_base_types::NodeId;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::pb::v1::RegistryValue;
+use prost::Message;
 
 impl Registry {
     /// Get the Node record or panic on error with a message.
@@ -23,6 +24,6 @@ impl Registry {
                 )
             });
 
-        decode_registry_value::<NodeRecord>(node_record_vec.clone())
+        NodeRecord::decode(node_record_vec.as_slice()).unwrap()
     }
 }

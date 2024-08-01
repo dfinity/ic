@@ -23,13 +23,12 @@ ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }
-idna = "0.3.0"
+idna = { workspace = true }
 instant-acme = "0.3.2"
 leb128 = "0.2.5"
 mockall = { workspace = true }
-opentelemetry = { workspace = true}
-opentelemetry-prometheus = { workspace = true }
-opentelemetry_sdk = { workspace = true}
+opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
+opentelemetry-prometheus = { version = "0.13" }
 pem = "1.1.0"
 prometheus = { workspace = true }
 rcgen = { workspace = true }
@@ -44,7 +43,7 @@ reqwest = { workspace = true, default-features = false, features = [
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10.6"
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

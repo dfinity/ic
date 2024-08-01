@@ -28,16 +28,15 @@ Coverage::
 
 end::catalog[] */
 
-use crate::consensus::catch_up_test::await_node_certified_height;
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry, GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-    SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-};
-use crate::retry_with_msg;
 use anyhow::bail;
+use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
 use ic_types::Height;
 use slog::{info, Logger};
 
@@ -161,7 +160,7 @@ fn await_updated_secret_key_store_metadata(
     current_sks_metadata: &SecretKeyStoreMetadata,
     logger: Logger,
 ) -> SecretKeyStoreMetadata {
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "check if secret key store metadata has been updated",
         logger.clone(),
         READY_WAIT_TIMEOUT,

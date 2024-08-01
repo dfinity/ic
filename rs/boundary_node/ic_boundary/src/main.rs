@@ -1,9 +1,10 @@
 use anyhow::Error;
 use clap::Parser;
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 
 use crate::cli::Cli;
 
+#[cfg(feature = "tls")]
 mod acme;
 mod bouncer;
 mod cache;
@@ -15,7 +16,6 @@ mod firewall;
 mod geoip;
 mod http;
 mod log;
-mod management;
 mod metrics;
 mod persist;
 mod rate_limiting;

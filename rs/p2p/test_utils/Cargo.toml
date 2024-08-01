@@ -10,7 +10,8 @@ axum = { workspace = true }
 bytes = { workspace = true }
 either = "1.6.0"
 futures = { workspace = true }
-ic-artifact-manager = { path = "../../artifact_manager" }
+ic-artifact-manager = { path = "../../p2p/artifact_manager" }
+ic-artifact-downloader = { path = "../../p2p/artifact_downloader" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-consensus-manager = { path = "../consensus_manager" }
@@ -35,7 +36,9 @@ ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 mockall = { workspace = true }
+pin-project-lite = "0.2"
 quinn = { workspace = true }
+quinn-udp = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }

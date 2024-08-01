@@ -70,8 +70,9 @@ pub struct SocketTcp {
 impl SocketTcp {
     pub fn bind(addr: SocketAddr, backlog: u32) -> Result<Self, std::io::Error> {
         let socket = TcpSocket::new_v6()?;
-        socket.bind(addr)?;
         socket.set_keepalive(true)?;
+        socket.set_reuseaddr(true)?;
+        socket.bind(addr)?;
         let listener = socket.listen(backlog)?;
         Ok(Self { listener })
     }

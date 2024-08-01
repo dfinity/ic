@@ -110,10 +110,6 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 *reimbursed_in_block,
             );
         }
-        #[allow(deprecated)]
-        EventType::SkippedBlock(block_number) => {
-            state.record_skipped_block(*block_number);
-        }
         EventType::SkippedBlockForContract {
             contract_address,
             block_number,

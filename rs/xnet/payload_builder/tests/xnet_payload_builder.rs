@@ -475,7 +475,7 @@ proptest! {
 
             // Bump `stream.signals_end` and pool an empty slice again.
             let mut updated_stream = stream.clone();
-            updated_stream.increment_signals_end();
+            updated_stream.push_accept_signal();
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &updated_stream, from, 0, &log);
 
             // Build a payload again.

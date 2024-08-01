@@ -102,6 +102,41 @@ pub(crate) async fn get_wasm(
     Ok(wasm)
 }
 
+pub(crate) async fn get_proposal_id_that_added_wasm(
+    env: &dyn Environment,
+    wasm_hash: Vec<u8>,
+) -> Result<Option<u64>, String> {
+    let response = env
+        .call_canister(
+            SNS_WASM_CANISTER_ID,
+            "get_proposal_id_that_added_wasm",
+            Encode!(&GetProposalIdThatAddedWasmRequest { hash: wasm_hash }).map_err(|e| {
+                format!(
+                    "Could not encode GetProposalIdThatAddedWasmRequest: {:?}",
+                    e
+                )
+            })?,
+        )
+        .await
+        .map_err(|(code, message)| {
+            format!(
+                "Call to get_proposal_id_that_added_wasm failed: {} {}",
+                code.unwrap_or_default(),
+                message
+            )
+        })?;
+
+    let response = Decode!(&response, GetProposalIdThatAddedWasmResponse).map_err(|e| {
+        format!(
+            "Decoding GetProposalIdThatAddedWasmResponse failed: {:?}",
+            e
+        )
+    })?;
+    let proposal_id = response.proposal_id;
+
+    Ok(proposal_id)
+}
+
 async fn get_canisters_to_upgrade(
     env: &dyn Environment,
     root_canister_id: CanisterId,
@@ -548,4 +583,22 @@ pub(crate) enum SnsCanisterType {
     Archive = 5,
     /// The type for the ledger index canister
     Index = 6,
+}
+/// Copied from ic-sns-wasm
+/// Similar to GetWasmRequest, but only returns the NNS proposal ID that blessed the wasm.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+/// Copied from ic-sns-wasm
+/// The NNS proposal ID that blessed the wasm, if it was recorded.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub proposal_id: ::core::option::Option<u64>,
 }

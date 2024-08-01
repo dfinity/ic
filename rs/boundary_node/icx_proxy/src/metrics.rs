@@ -23,11 +23,12 @@ use hyper::{self, StatusCode};
 use ic_agent::Agent;
 use ic_response_verification::types::VerificationInfo;
 use opentelemetry::{
-    metrics::{Counter, Histogram, Meter, MeterProvider},
+    metrics::{Counter, Histogram, Meter, MeterProvider as _},
+    sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream},
     KeyValue,
 };
+
 use opentelemetry_prometheus::exporter;
-use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, MeterProviderBuilder, Stream};
 
 use prometheus::{Encoder as PrometheusEncoder, Registry, TextEncoder};
 
@@ -78,14 +79,23 @@ impl<T: Validate> Validate for WithMetrics<T> {
         request: &HttpRequest,
         response: &HttpResponse,
     ) -> Result<Option<VerificationInfo>, Cow<'static, str>> {
-        let out = self.0.validate(agent, canister_id, request, response);
+        let out: Result<Option<VerificationInfo>, Cow<'_, str>> =
+            self.0.validate(agent, canister_id, request, response);
 
         let mut status = if out.is_ok() { "ok" } else { "fail" };
         if cfg!(feature = "skip_body_verification") {
             status = "skip";
         }
 
-        let labels = &[KeyValue::new("status", status)];
+        let verification_version = match out {
+            Ok(Some(ref verification_info)) => verification_info.verification_version.to_string(),
+            _ => "none".to_string(),
+        };
+
+        let labels = &[
+            KeyValue::new("status", status),
+            KeyValue::new("response_verification_version", verification_version),
+        ];
 
         let MetricParams { counter } = &self.1;
         counter.add(1, labels);
@@ -162,7 +172,7 @@ pub fn setup(opts: MetricsOpts) -> (Meter, Runner) {
     .unwrap();
 
     let exporter = exporter().with_registry(registry.clone()).build().unwrap();
-    let provider = MeterProviderBuilder::default()
+    let provider = MeterProvider::builder()
         .with_reader(exporter)
         .with_view(view_req_size)
         .with_view(view_resp_size)

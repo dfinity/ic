@@ -3,6 +3,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, Signer},
+    utils::http_endpoint_to_url,
 };
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
@@ -21,16 +22,16 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
-    node_operator::ConnectionEndpoint,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
+use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::{
-    common::{check_ipv4_config, is_valid_domain},
+    common::check_ipv4_config,
     do_update_node_directly::UpdateNodeDirectlyPayload,
     node_management::{
         do_add_node::AddNodePayload, do_update_node_ipv4_config_directly::IPv4Config,
@@ -38,7 +39,6 @@ use registry_canister::mutations::{
 };
 use std::{
     net::IpAddr,
-    str::FromStr,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -217,9 +217,7 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            p2p_flow_endpoints: vec![],
             chip_id: None,
-            prometheus_metrics_endpoint: "".to_string(),
             public_ipv4_config: process_ipv4_config(
                 &self.log,
                 &self.node_config.initial_ipv4_config,
@@ -227,6 +225,9 @@ impl NodeRegistration {
             .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
+            // Unused section follows
+            p2p_flow_endpoints: Default::default(),
+            prometheus_metrics_endpoint: Default::default(),
         }
     }
 
@@ -500,38 +501,13 @@ impl NodeRegistration {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| self.http_endpoint_to_url(h))
+                    .and_then(|h| http_endpoint_to_url(h, &self.log))
             })
             .collect();
 
         let mut rng = thread_rng();
         urls.shuffle(&mut rng);
         urls.pop()
-    }
-
-    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
-        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) => {
-                if v.is_ipv6() {
-                    format!("[{}]", v)
-                } else {
-                    v.to_string()
-                }
-            }
-            Err(_) => {
-                // assume hostname
-                http.ip_addr.clone()
-            }
-        };
-
-        let url = format!("http://{}:{}/", host_str, http.port);
-        match Url::parse(&url) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                warn!(self.log, "Invalid url: {}: {:?}", url, e);
-                None
-            }
-        }
     }
 
     async fn is_node_registered(&self) -> bool {
@@ -689,14 +665,17 @@ fn process_ipv4_config(
 
 fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<Option<String>> {
     info!(log, "Reading domain name for registration");
-    match domain {
-        "" => Ok(None),
-        domain if is_valid_domain(domain) => Ok(Some(domain.into())),
-        _ => Err(OrchestratorError::invalid_configuration_error(format!(
-            "Provided domain name {} is invalid",
-            domain
-        ))),
+    if domain.is_empty() {
+        return Ok(None);
     }
+
+    if !domain_to_ascii_strict(domain).is_ok_and(|s| s == domain) {
+        return Err(OrchestratorError::invalid_configuration_error(format!(
+            "Provided domain name {domain} is invalid",
+        )));
+    }
+
+    Ok(Some(domain.to_string()))
 }
 
 /// Create a nonce to be included with the ingress message sent to the node

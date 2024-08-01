@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
@@ -6,12 +7,13 @@ use ic_config::{
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload, SignWithECDSAArgs,
-    UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    ErrorCode, IngressStatus, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
+    ErrorCode, IngressState, IngressStatus, MessageId, StateMachine, StateMachineBuilder,
+    StateMachineConfig, UserError,
 };
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::fetch_int_counter;
@@ -740,6 +742,17 @@ fn assert_replied_with(result: Result<WasmResult, UserError>, expected: i64) {
     }
 }
 
+// Returns true iff the canister replied with the expected number.
+fn replied_with(result: &Result<WasmResult, UserError>, expected: i64) -> bool {
+    match result {
+        Ok(wasm_result) => match wasm_result {
+            WasmResult::Reply(res) => i64::from_le_bytes(res[0..8].try_into().unwrap()) == expected,
+            WasmResult::Reject(_reject_message) => false,
+        },
+        Err(_) => false,
+    }
+}
+
 fn assert_rejected(result: Result<WasmResult, UserError>) {
     match result {
         Ok(wasm_result) => match wasm_result {
@@ -776,12 +789,13 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
     // 4 running which means that the available subnet capacity would be split
     // across these many threads. If the canister is trying to allocate
     // 1MiB of memory, it'll keep succeeding until we reach 16MiB total allocated
-    // capacity and then should fail after that point because the capacity split
-    // over 4 threads will be less than 1MiB (keep in mind the wasm module of the
-    // canister also takes some space).
+    // capacity in the best case scenario and then should fail after that point because
+    // the capacity split over 4 threads will be less than 1MiB (keep in mind the wasm
+    // module of the canister also takes some space).
     let memory_to_allocate = 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES; // 1MiB in Wasm pages.
     let mut expected_result = 0;
-    for _ in 0..15 {
+    let mut iterations = 0;
+    loop {
         let res = env.execute_ingress(
             canister_id,
             "update",
@@ -790,21 +804,15 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
                 .reply_int64()
                 .build(),
         );
-        assert_replied_with(res, expected_result);
-        expected_result += memory_to_allocate as i64;
+        iterations += 1;
+        if replied_with(&res, -1) {
+            break;
+        } else {
+            assert_replied_with(res, expected_result);
+            expected_result += memory_to_allocate as i64;
+        }
     }
-
-    // Canister tries to grow by another `memory_to_allocate` pages, should fail and
-    // the return value will be -1.
-    let res = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm()
-            .stable64_grow(memory_to_allocate)
-            .reply_int64()
-            .build(),
-    );
-    assert_replied_with(res, -1);
+    assert_lt!(iterations, 16);
 }
 
 #[test]
@@ -958,14 +966,13 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
         .build();
 
     let err = env.execute_ingress(a_id, "update", a).unwrap_err();
-    assert_eq!(
-        err.description(),
-        format!(
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
             "Error from Canister {}: Canister trapped: stable memory out of bounds",
             a_id
-        )
+        ),
     );
-    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
 }
 
 #[test]
@@ -1130,7 +1137,7 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
             (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32)))
+                (func $msg_reply_data_append (param i64 i64)))
             (func $update
                 (if (i64.ne (memory.grow (i64.const 400)) (i64.const 1))
                   (then (unreachable))
@@ -1518,85 +1525,360 @@ fn execution_observes_oversize_messages() {
 
 #[test]
 fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
-    // Test consensus queue invariant for the case of exceeding heap delta limit.
+    // Tests consensus queue invariant for the case of exceeding heap delta limit.
+    // The test creates a universal canister that's used to both send an ECDSA
+    // signing request but also to increase the stable memory to exceed the heap
+    // delta limit.
 
-    fn setup_test(heap_delta_limit: Option<u64>) -> StateMachine {
-        // This setup creates an environment with the canister that sends a `SignWithECDSA` message.
+    let heap_delta_limit = 100 * 1024 * 1024; // 100 MiB
+
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
+    subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
+    let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
+    let env = StateMachineBuilder::new()
+        .with_checkpoints_enabled(false)
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .build();
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(1_000_000_000_000),
+        )
+        .unwrap();
+
+    // Send SignWithECDSA message to trigger non-empty consensus queue.
+    let _msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::SignWithECDSA,
+                call_args().other_side(
+                    Encode!(&SignWithECDSAArgs {
+                        message_hash: [0; 32],
+                        derivation_path: DerivationPath::new(Vec::new()),
+                        key_id
+                    })
+                    .unwrap(),
+                ),
+                Cycles::new(2_000_000_000),
+            )
+            .build(),
+    );
+
+    // Tick #1: heap delta is below the limit, process sign_with_ecdsa message (no response yet)...
+    assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
+
+    // and grow and fill stable memory with a bit more than `heap_delta_limit` data.
+    let _msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm()
+            .stable64_grow((heap_delta_limit / WASM_PAGE_SIZE_IN_BYTES) + 1)
+            .stable64_fill(0, 42, heap_delta_limit + 1)
+            .build(),
+    );
+    env.tick();
+
+    // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
+    assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
+    env.tick();
+
+    // Tick #3: round is executed normally.
+    env.tick();
+}
+
+#[test]
+fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
+    fn setup(subnet_heap_delta_capacity: u64, heap_delta_initial_reserve: u64) -> StateMachine {
         let mut subnet_config = SubnetConfig::new(SubnetType::Application);
-        if let Some(heap_delta_limit) = heap_delta_limit {
-            subnet_config.scheduler_config.subnet_heap_delta_capacity =
-                NumBytes::new(heap_delta_limit);
-        }
-        let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
-        let env = StateMachineBuilder::new()
-            .with_checkpoints_enabled(false)
+        subnet_config.scheduler_config.subnet_heap_delta_capacity =
+            subnet_heap_delta_capacity.into();
+        subnet_config.scheduler_config.heap_delta_initial_reserve =
+            heap_delta_initial_reserve.into();
+
+        StateMachineBuilder::new()
+            .with_checkpoint_interval_length(9)
             .with_config(Some(StateMachineConfig::new(
                 subnet_config,
                 HypervisorConfig::default(),
             )))
-            .with_ecdsa_key(key_id.clone())
-            .build();
-        let canister_id = env
-            .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
-                vec![],
-                None,
-                Cycles::new(100_000_000_000),
-            )
-            .unwrap();
+            .build()
+    }
 
-        // Send SignWithECDSA message to trigger non-empty consensus queue.
-        let _msg_id = env.send_ingress(
+    fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
+        let wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
+        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
+    }
+
+    fn send_ingress(env: &StateMachine, canister_id: &CanisterId) -> MessageId {
+        env.send_ingress(PrincipalId::new_anonymous(), *canister_id, "inc", vec![])
+    }
+
+    ////////////////////////////////////////////////////////////////////
+    // First test case. Making sure that the execution is happening
+    // even with minimal heap delta capacity.
+
+    // Set the heap delta capacity to minimum (2), with minimal initial reserve (1).
+    let env = setup(1, 1);
+
+    // With minimal subnet heap delta capacity we should start
+    // the round execution anyway, so the canister installation should succeed.
+    // Round 1 and 2.
+    let canister_id = install_canister(&env).unwrap();
+    // Assert the canister install does not touch the heap.
+    assert_eq!(env.heap_delta_estimate_bytes(), 0);
+
+    // The heap delta estimate is still zero, so the ingress execution should succeed.
+    // Round 3.
+    let msg_id = send_ingress(&env, &canister_id);
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        }
+    );
+
+    // Remember the heap delta estimate for the second test case.
+    let ingress_heap_delta_estimate = env.heap_delta_estimate_bytes();
+
+    // As the subnet capacity is at minimum, any other message execution
+    // should be postponed after the next checkpoint.
+    // Round 4.
+    let msg_id = send_ingress(&env, &canister_id);
+    // Round 5.
+    env.tick();
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            // Received, but not completed.
+            state: IngressState::Received,
+            ..
+        }
+    );
+
+    // The ingress should be executed after the checkpoint.
+    // Round 6-10.
+    for _ in 6..=10 {
+        env.tick();
+    }
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            // Received, but not completed.
+            state: IngressState::Received,
+            ..
+        }
+    );
+    // The `heap_delta_estimate` is reset after the checkpoint round, so the message
+    // will be executed in round 11.
+    // Round 11.
+    env.tick();
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            // Now completed.
+            state: IngressState::Completed(_),
+            ..
+        }
+    );
+
+    ////////////////////////////////////////////////////////////////////
+    // Second test case. Making sure that the heap delta is scaled.
+
+    // Using previous estimates, set the heap delta capacity enough
+    // to execute three ingress messages.
+    // The initial reserve is just enough to execute one message.
+    // The checkpoint interval length is 10 rounds.
+    let env = setup(ingress_heap_delta_estimate * 3, ingress_heap_delta_estimate);
+
+    // Install canister.
+    // Round 1 and 2.
+    let canister_id = install_canister(&env).unwrap();
+    // Assert the canister install does not touch the heap.
+    assert_eq!(env.heap_delta_estimate_bytes(), 0);
+
+    // First ingress message should take `ingress_heap_delta_estimate`.
+    // Round 3.
+    let msg_id = send_ingress(&env, &canister_id);
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        }
+    );
+
+    // As there are a few rounds has passed, the second ingress message
+    // execution should also succeed now.
+    // Round 4.
+    let msg_id = send_ingress(&env, &canister_id);
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        }
+    );
+
+    // The third message execution should be postponed to the last third
+    // of the checkpoint interval (10 * 2 / 3 = 6).
+    // Round 5.
+    let msg_id = send_ingress(&env, &canister_id);
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            state: IngressState::Received,
+            ..
+        }
+    );
+
+    // Skip a round.
+    // Round 6.
+    env.tick();
+
+    // The third message must be executed now.
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        }
+    );
+}
+
+const DIRTY_PAGE_CANISTER: &str = r#"
+    (module
+        (func $dirty (i32.store (i32.const 1) (i32.const 2)))
+        (start $dirty)
+        (memory $memory 1)
+    )"#;
+
+#[test]
+fn current_interval_length_works_on_app_subnets() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
+    let _canister_id = env
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
+        .unwrap();
+
+    // Canister install takes 2 rounds.
+    for _ in 2..500 {
+        // Assert there is a dirty page.
+        assert!(env.heap_delta_estimate_bytes() > 0);
+        env.tick();
+    }
+    // Assert there are no dirty pages after the checkpoint.
+    assert_eq!(env.heap_delta_estimate_bytes(), 0);
+}
+
+#[test]
+fn current_interval_length_works_on_system_subnets() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
+    let _canister_id = env
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
+        .unwrap();
+
+    // Canister install takes 2 rounds.
+    for _ in 2..200 {
+        // Assert there is a dirty page.
+        assert!(env.heap_delta_estimate_bytes() > 0);
+        env.tick();
+    }
+    // Assert there are no dirty pages after the checkpoint.
+    assert_eq!(env.heap_delta_estimate_bytes(), 0);
+}
+
+// To run the test:
+//     bazel test //rs/execution_environment:execution_environment_misc_integration_tests/execution_test --test_arg=system_subnets_are_not_rate_limited --test_arg=--include-ignored
+#[test]
+#[ignore]
+fn system_subnets_are_not_rate_limited() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    const WASM_PAGE_SIZE: u64 = 65_536;
+    const SUBNET_HEAP_DELTA_CAPACITY: u64 = 140 * GIB;
+    // It's a bit less than 2GiB, otherwise the vector allocation in canister traps.
+    const DIRTY_2G_CHUNK: u64 = 2 * GIB - WASM_PAGE_SIZE;
+
+    fn send_2g_ingress(i: u64, env: &StateMachine, canister_id: &CanisterId) -> MessageId {
+        env.send_ingress(
             PrincipalId::new_anonymous(),
-            canister_id,
+            *canister_id,
             "update",
             wasm()
-                .call_with_cycles(
-                    IC_00,
-                    Method::SignWithECDSA,
-                    call_args().other_side(
-                        Encode!(&SignWithECDSAArgs {
-                            message_hash: [0; 32],
-                            derivation_path: DerivationPath::new(Vec::new()),
-                            key_id
-                        })
-                        .unwrap(),
-                    ),
-                    Cycles::new(2_000_000_000),
-                )
+                .stable64_grow(DIRTY_2G_CHUNK / WASM_PAGE_SIZE)
+                // Stable fill allocates a vector first, so there will be ~4GiB
+                // of dirty pages in the first round.
+                .stable64_fill(i * DIRTY_2G_CHUNK, 1, DIRTY_2G_CHUNK)
+                .reply_data(&[42])
                 .build(),
+        )
+    }
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            None,
+            Cycles::new(100_000_000_000),
+        )
+        .unwrap();
+
+    // For 140GiB subnet heap delta capacity we should be able to iterate
+    // `140 / 2 = 70` times (taking into account 2GiB of dirty Wasm heap).
+    for i in 0..SUBNET_HEAP_DELTA_CAPACITY / DIRTY_2G_CHUNK {
+        let msg_id = send_2g_ingress(i, &env, &canister_id);
+        let status = env.ingress_status(&msg_id);
+        assert_matches!(
+            status,
+            IngressStatus::Known {
+                state: IngressState::Completed(_),
+                ..
+            }
         );
-        // Expected behavior after the setup:
-        //  - Tick #1: process sign_with_ecdsa message, no response yet in that round
-        //  - Tick #2: the response is added to consensus queue and processed then the round is executed normally
-        //  - Tick #3: consensus queue invariant is checked before executing a regular round
-
-        env
     }
+    // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
+    assert!(env.heap_delta_estimate_bytes() >= SUBNET_HEAP_DELTA_CAPACITY);
 
-    // Preparation: find out the heap delta limit.
-    let heap_delta_limit = {
-        let env = setup_test(None);
-        // Tick #1.
-        env.tick();
-        // To trigger the condition heap delta limit must be less than the actual heap delta on tick #2.
-        env.heap_delta_estimate_bytes() - 1
-    };
-
-    // Run the actual test with specific heap delta limit.
-    {
-        let env = setup_test(Some(heap_delta_limit));
-        // Tick #1: heap delta is below the limit, process sign_with_ecdsa message, no response in this round.
-        assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
-        env.tick();
-
-        // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
-        assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
-        env.tick();
-
-        // Tick #3: round is executed normally.
-        env.tick();
-    }
+    // Once the subnet capacity is reached, there should be no further executions.
+    let msg_id = send_2g_ingress(70, &env, &canister_id);
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            state: IngressState::Received,
+            ..
+        }
+    );
 }
 
 #[test]
@@ -1736,5 +2018,273 @@ fn best_effort_responses_valid_timeout() {
         start_time_seconds,
         Some(timeout_seconds),
         expected_deadline_seconds,
+    );
+}
+
+#[test]
+fn test_malicious_input() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(
+            r#"(module
+                  (import "ic0" "msg_reply" (func $msg_reply))
+                  (import "ic0" "msg_reply_data_append"
+                    (func $msg_reply_data_append (param i32) (param i32)))
+                  (import "ic0" "msg_arg_data_size"
+                    (func $msg_arg_data_size (result i32)))
+                  (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32) (param i32) (param i32)))
+                  (import "ic0" "msg_caller_size"
+                    (func $msg_caller_size (result i32)))
+                  (import "ic0" "msg_caller_copy"
+                    (func $msg_caller_copy (param i32) (param i32) (param i32)))
+                  (import "ic0" "data_certificate_copy"
+                    (func $data_certificate_copy (param i32) (param i32) (param i32)))
+                  (import "ic0" "data_certificate_size"
+                    (func $data_certificate_size (result i32)))
+                  (import "ic0" "data_certificate_present"
+                    (func $data_certificate_present (result i32)))
+                  (import "ic0" "certified_data_set"
+                    (func $certified_data_set (param i32) (param i32)))
+                  (import "ic0" "call_new"
+                    (func $ic0_call_new
+                    (param i32 i32)
+                    (param $method_name_src i32)    (param $method_name_len i32)
+                    (param $reply_fun i32)          (param $reply_env i32)
+                    (param $reject_fun i32)         (param $reject_env i32)
+                  ))
+                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+    
+                  (func $proxy_msg_reply_data_append
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
+                    (call $msg_reply_data_append (i32.load (i32.const 0)) (i32.load (i32.const 4)))
+                    (call $msg_reply))
+    
+                  (func $proxy_msg_arg_data_copy_from_buffer_without_input
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
+    
+                  (func $proxy_msg_arg_data_copy_to_oob_buffer
+                    (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
+                    (call $msg_reply))
+    
+                  (func $proxy_msg_arg_data_copy_return_last_4_bytes
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 65536))
+                    (call $msg_reply_data_append (i32.const 65532) (i32.const 4))
+                    (call $msg_reply))
+    
+                  ;; All the function below are not used
+                  (func $proxy_data_certificate_present
+                    (i32.const 0)
+                    (call $data_certificate_present)
+                    (i32.store)
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                    (call $msg_reply))
+    
+                  (func $proxy_certified_data_set
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
+                    (call $certified_data_set (i32.const 0) (call $msg_arg_data_size))
+                    (call $msg_reply_data_append (i32.const 0) (call $msg_arg_data_size))
+                    (call $msg_reply))
+    
+                  (func $proxy_data_certificate_copy
+                    (call $data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 32))
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 32))
+                    (call $msg_reply))
+    
+                  (func $f_100 (result i32)
+                    i32.const 100)
+                  (func $f_200 (result i32)
+                    i32.const 200)
+    
+                  (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
+                  (func $callByIndex
+                    (i32.const 0)
+                    (call_indirect (type $return_i32) (i32.const 0))
+                    (i32.store)
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                    (call $msg_reply))
+    
+                  (table funcref (elem $f_100 $f_200))
+                  (memory $memory 1)
+                  (export "memory" (memory $memory))
+                  (export "canister_query callByIndex" (func $callByIndex))
+                  (export "canister_query proxy_msg_reply_data_append" (func $proxy_msg_reply_data_append))
+                  (export "canister_query proxy_msg_arg_data_copy_from_buffer_without_input" (func $proxy_msg_arg_data_copy_from_buffer_without_input))
+                  (export "canister_query proxy_msg_arg_data_copy_to_oob_buffer" (func $proxy_msg_arg_data_copy_to_oob_buffer))
+                  (export "canister_query proxy_data_certificate_present" (func $proxy_data_certificate_present))
+                  (export "canister_update proxy_certified_data_set" (func $proxy_certified_data_set))
+                  (export "canister_query proxy_data_certificate_copy" (func $proxy_data_certificate_copy))
+                  )"#,
+        ).unwrap();
+
+    let canister_id = create_canister_with_cycles(&env, wasm.clone(), None, INITIAL_CYCLES_BALANCE);
+
+    helper_tests_for_illegal_wasm_memory_access(&env, &canister_id);
+
+    helper_tests_for_stale_data_in_buffer_between_calls(&env, &canister_id);
+
+    helper_tests_for_illegal_data_buffer_access(&env, &canister_id);
+}
+
+fn helper_tests_for_illegal_wasm_memory_access(env: &StateMachine, canister_id: &CanisterId) {
+    // msg_reply_data_append(0, 65536) => expect no error
+    let ret_val = env.query(
+        *canister_id,
+        "proxy_msg_reply_data_append",
+        vec![0, 0, 0, 0, 0, 0, 1, 0],
+    );
+
+    assert!(
+        ret_val.is_ok(),
+        "msg_reply_data_append(0, 65536) failed. Error: {}",
+        ret_val.unwrap_err()
+    );
+
+    // msg_reply_data_append(0, 65537) => expect no error
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_reply_data_append",
+            vec![0, 0, 0, 0, 1, 0, 1, 0],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str =
+        "violated contract: msg.reply: src=0 + length=65537 exceeds the slice size=65536";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "expected msg_reply_data_append(0, 65537) to fail"
+    );
+
+    // msg_reply_data_append(65536, 10) => expect error
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_reply_data_append",
+            vec![0, 0, 1, 0, 10, 0, 0, 0],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str =
+        "violated contract: msg.reply: src=65536 + length=10 exceeds the slice size=65536";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "expected msg_reply_data_append(65536, 10) to fail"
+    );
+}
+
+fn helper_tests_for_stale_data_in_buffer_between_calls(
+    env: &StateMachine,
+    canister_id: &CanisterId,
+) {
+    // Between every query the input data buffer is expected to be reset
+    // and no stale data from previous query can be found. The following
+    // test check this case
+    let mut input = vec![10; (32 * 1024) + 8];
+    for i in input.iter_mut().take(8) {
+        *i = 0;
+    }
+    input[0] = 8; //bytes 0x00 0x00 0x00 0x08 start index = 8 - Little Endian
+    input[5] = 128; //bytes 0x00 0x00 0x80 0x00 size = 32768 - Little Endian
+    let ret_val = env.query(*canister_id, "proxy_msg_reply_data_append", input);
+
+    assert!(
+        ret_val.is_ok(),
+        "Check for stale data step 1 failed. Error: {}",
+        ret_val.unwrap_err()
+    );
+
+    let data = match ret_val.unwrap() {
+        WasmResult::Reply(data) => data,
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+    };
+
+    assert_eq!(
+        [10, 10, 10, 10],
+        &data[0..4],
+        "first read - expected [10, 10, 10, 10] at data index 0 to 4 {:?}",
+        &data[0..4]
+    );
+    assert_eq!(
+        [10, 10, 10, 10],
+        &data[32764..32768],
+        "first read - expected [10, 10, 10, 10] at data index 32765 to 32768 {:?}",
+        &data[32764..32768]
+    );
+
+    let ret_val = env.query(
+        *canister_id,
+        "proxy_msg_reply_data_append",
+        vec![8, 0, 0, 0, 0, 128, 0, 0],
+    );
+
+    assert!(
+        ret_val.is_ok(),
+        "Check for stale data step 2 failed. Error: {}",
+        ret_val.unwrap_err()
+    );
+
+    let data = match ret_val.unwrap() {
+        WasmResult::Reply(data) => data,
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+    };
+
+    assert_eq!(
+        [0, 0, 0, 0],
+        &data[0..4],
+        "second read - stale data present, expected [0, 0, 0, 0] at data index 0 to 4 {:?}",
+        &data[0..4]
+    );
+    assert_eq!(
+        [0, 0, 0, 0],
+        &data[32764..32768],
+        "second read - stale data present, expected [0, 0, 0, 0] at data index 32765 to 32768 {:?}",
+        &data[32764..32768]
+    );
+}
+
+fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: &CanisterId) {
+    // No input given but still read the input buffer
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_arg_data_copy_from_buffer_without_input",
+            vec![],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str = "violated contract: ic0.msg_arg_data_copy payload: src=0 + length=10 exceeds the slice size=0";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "Should return error if try to read input buffer on no input"
+    );
+
+    // copy data from argument buffer to out of bound internal buffer
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_arg_data_copy_to_oob_buffer",
+            vec![1; 10],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str = "violated contract: ic0.msg_arg_data_copy heap: src=65536 + length=10 exceeds the slice size=65536";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
     );
 }

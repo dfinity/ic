@@ -1,6 +1,9 @@
 use ic_base_types::NumSeconds;
-use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
-use ic_management_canister_types::{CanisterStatusType, LogVisibility};
+use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
+use ic_management_canister_types::{
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibility, MasterPublicKeyId, SchnorrAlgorithm,
+    SchnorrKeyId,
+};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -33,7 +36,9 @@ use ic_types::{
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
     nominal_cycles::NominalCycles,
-    xnet::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue},
+    xnet::{
+        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+    },
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NodeId, NumBytes,
     PrincipalId, SubnetId, Time,
 };
@@ -44,6 +49,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Arc,
 };
+use strum::IntoEnumIterator;
 
 mod history;
 pub use history::MockIngressHistory;
@@ -196,6 +202,7 @@ pub struct CanisterStateBuilder {
     stable_memory: Option<Vec<u8>>,
     wasm: Option<Vec<u8>>,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     ingress_queue: Vec<Ingress>,
     status: CanisterStatusType,
@@ -240,6 +247,11 @@ impl CanisterStateBuilder {
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
         self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self
+    }
+
+    pub fn with_wasm_memory_threshold<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
+        self.wasm_memory_threshold = num_bytes.into();
         self
     }
 
@@ -396,6 +408,7 @@ impl Default for CanisterStateBuilder {
             stable_memory: None,
             wasm: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),
             status: CanisterStatusType::Running,
@@ -451,6 +464,11 @@ impl SystemStateBuilder {
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
         self.system_state.memory_allocation =
             MemoryAllocation::try_from(memory_allocation).unwrap();
+        self
+    }
+
+    pub fn wasm_memory_threshold(mut self, wasm_memory_threshold: NumBytes) -> Self {
+        self.system_state.wasm_memory_threshold = wasm_memory_threshold;
         self
     }
 
@@ -761,15 +779,14 @@ pub fn register_callback(
     canister_state: &mut CanisterState,
     originator: CanisterId,
     respondent: CanisterId,
-    callback_id: CallbackId,
     deadline: CoarseTime,
-) {
+) -> CallbackId {
     let call_context_manager = canister_state
         .system_state
         .call_context_manager_mut()
         .unwrap();
     let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(originator, callback_id, deadline),
+        CallOrigin::SystemTask,
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         RequestMetadata::new(0, UNIX_EPOCH),
@@ -786,7 +803,7 @@ pub fn register_callback(
         WasmClosure::new(0, 2),
         None,
         deadline,
-    ));
+    ))
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
@@ -810,33 +827,51 @@ pub fn insert_dummy_canister(
 
 prop_compose! {
     /// Produces a strategy that generates an arbitrary `signals_end` and between
-    /// `[min_signal_count, max_signal_count]` reject signals .
-    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize)(
-        sig_start in 0..10000u64,
-        sigs in prop::collection::btree_set(arbitrary::stream_index(100 + max_signal_count as u64), min_signal_count..=max_signal_count),
-        sig_end_delta in 0..10u64,
-    ) -> (StreamIndex, VecDeque<StreamIndex>) {
-        let mut reject_signals = VecDeque::with_capacity(sigs.len());
-        let sig_start = sig_start.into();
-        for s in sigs {
-            reject_signals.push_back(s + sig_start);
-        }
-        let sig_end = sig_start + reject_signals.back().unwrap_or(&0.into()).increment() + sig_end_delta.into();
-        (sig_end, reject_signals)
+    /// `[min_signal_count, max_signal_count]` reject signals.
+    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize, reject_reasons: Vec<RejectReason>)(
+        sig_start in 0..10000_u64,
+        reject_signals_map in prop::collection::btree_map(
+            0..(100 + max_signal_count),
+            proptest::sample::select(reject_reasons),
+            min_signal_count..=max_signal_count,
+        ),
+        signals_end_delta in 0..10u64,
+    ) -> (StreamIndex, VecDeque<RejectSignal>) {
+        let reject_signals = reject_signals_map
+            .iter()
+            .map(|(index, reason)| RejectSignal::new(*reason, (*index as u64 + sig_start).into()))
+            .collect::<VecDeque<RejectSignal>>();
+        let signals_end = reject_signals
+            .back()
+            .map(|signal| signal.index)
+            .unwrap_or(0.into())
+            .increment() + signals_end_delta.into();
+        (signals_end, reject_signals)
     }
 }
 
 prop_compose! {
     /// Produces a strategy that generates a stream with between
     /// `[min_size, max_size]` messages; and between
-    /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_stream_with_config(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
+    /// `[min_signal_count, max_signal_count]` reject signals using `with_reject_reasons` to
+    /// determine the type of reject signal.
+    pub fn arb_stream_with_config(
+        min_size: usize,
+        max_size: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
+    )(
         msg_start in 0..10000u64,
         msgs in prop::collection::vec(
             arbitrary::request_or_response_with_config(true, true),
             min_size..=max_size
         ),
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
+        (signals_end, reject_signals) in arb_reject_signals(
+            min_signal_count,
+            max_signal_count,
+            with_reject_reasons,
+        ),
         responses_only_flag in any::<bool>(),
     ) -> Stream {
         let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(msg_start));
@@ -857,7 +892,15 @@ prop_compose! {
     /// `[min_size, max_size]` messages and between
     /// `[min_signal_count, max_signal_count]` reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count)
+        stream in arb_stream_with_config(
+            min_size,
+            max_size,
+            min_signal_count,
+            max_signal_count,
+            // TODO: MR-590 Include all `RejectReason` variants once
+            // the canonical representation supports them.
+            vec![RejectReason::CanisterMigrating],
+        )
     ) -> Stream {
         stream
     }
@@ -883,10 +926,15 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn arb_stream_header(min_signal_count: usize, max_signal_count: usize, with_responses_only_flag: Vec<bool>)(
+    pub fn arb_stream_header(
+        min_signal_count: usize,
+        max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
+        with_responses_only_flag: Vec<bool>,
+    )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
+        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
         responses_only in proptest::sample::select(with_responses_only_flag),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);
@@ -948,8 +996,36 @@ pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`SubnetMetrics`] (with only the fields relevant to
-    /// its canonical representation filled).
+    fn arb_ecdsa_key_id()(
+        curve in prop::sample::select(EcdsaCurve::iter().collect::<Vec<_>>())
+    ) -> EcdsaKeyId {
+        EcdsaKeyId {
+            curve,
+            name: String::from("ecdsa_key_id"),
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_schnorr_key_id()(
+        algorithm in prop::sample::select(SchnorrAlgorithm::iter().collect::<Vec<_>>())
+    ) -> SchnorrKeyId {
+        SchnorrKeyId {
+            algorithm,
+            name: String::from("schnorr_key_id"),
+        }
+    }
+}
+
+fn arb_master_public_key_id() -> impl Strategy<Value = MasterPublicKeyId> {
+    prop_oneof![
+        arb_ecdsa_key_id().prop_map(MasterPublicKeyId::Ecdsa),
+        arb_schnorr_key_id().prop_map(MasterPublicKeyId::Schnorr),
+    ]
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`SubnetMetrics`].
     pub fn arb_subnet_metrics()(
         consumed_cycles_by_deleted_canisters in arb_nominal_cycles(),
         consumed_cycles_http_outcalls in arb_nominal_cycles(),
@@ -958,6 +1034,7 @@ prop_compose! {
         canister_state_bytes in arb_num_bytes(),
         update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
+        threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
@@ -967,6 +1044,7 @@ prop_compose! {
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
+        metrics.threshold_signature_agreements = threshold_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(

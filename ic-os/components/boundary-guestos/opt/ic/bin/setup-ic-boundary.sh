@@ -6,6 +6,7 @@ source '/opt/ic/bin/helpers.shlib'
 readonly SERVICE_NAME='ic-boundary'
 
 readonly IC_BOUNDARY_CONFIG="${BOOT_DIR}/ic_boundary.conf"
+readonly IC_BOUNDARY_RATELIMITS="${BOOT_DIR}/canister-ratelimit.yml"
 
 readonly NNS_CONFIG="${BOOT_DIR}/nns.conf"
 readonly NNS_PEM="${BOOT_DIR}/nns_public_key.pem"
@@ -83,10 +84,18 @@ function setup_geolite2_dbs() {
     cp "${DBS_SRC}/GeoLite2-Country.mmdb" "${CFG_DIR}"
 }
 
+function setup_ratelimits() {
+    if [ -f "${IC_BOUNDARY_RATELIMITS}" ]; then
+        mkdir -p "${CFG_DIR}"
+        cp "${IC_BOUNDARY_RATELIMITS}" "${CFG_DIR}"
+    fi
+}
+
 function main() {
     read_variables
     generate_config
     setup_geolite2_dbs
+    setup_ratelimits
     mkdir -p /var/opt/registry/store
 }
 

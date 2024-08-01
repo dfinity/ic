@@ -18,10 +18,11 @@ const MAX_WASM_MEMORY_LIMIT: u64 = 1 << 48;
 /// Struct used for decoding CanisterSettingsArgs
 #[derive(Default)]
 pub(crate) struct CanisterSettings {
-    pub(crate) controller: Option<PrincipalId>,
     pub(crate) controllers: Option<Vec<PrincipalId>>,
     pub(crate) compute_allocation: Option<ComputeAllocation>,
     pub(crate) memory_allocation: Option<MemoryAllocation>,
+    /// Threshold used for activation of canister_on_low_wasm_memory hook.
+    pub(crate) wasm_memory_threshold: Option<NumBytes>,
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibility>,
@@ -30,29 +31,25 @@ pub(crate) struct CanisterSettings {
 
 impl CanisterSettings {
     pub fn new(
-        controller: Option<PrincipalId>,
         controllers: Option<Vec<PrincipalId>>,
         compute_allocation: Option<ComputeAllocation>,
         memory_allocation: Option<MemoryAllocation>,
+        wasm_memory_threshold: Option<NumBytes>,
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibility>,
         wasm_memory_limit: Option<NumBytes>,
     ) -> Self {
         Self {
-            controller,
             controllers,
             compute_allocation,
             memory_allocation,
+            wasm_memory_threshold,
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
         }
-    }
-
-    pub fn controller(&self) -> Option<PrincipalId> {
-        self.controller
     }
 
     pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
@@ -65,6 +62,10 @@ impl CanisterSettings {
 
     pub fn memory_allocation(&self) -> Option<MemoryAllocation> {
         self.memory_allocation
+    }
+
+    pub fn wasm_memory_threshold(&self) -> Option<NumBytes> {
+        self.wasm_memory_threshold
     }
 
     pub fn freezing_threshold(&self) -> Option<NumSeconds> {
@@ -88,7 +89,6 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
     type Error = UpdateSettingsError;
 
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
-        let controller = input.get_controller();
         let compute_allocation = match input.compute_allocation {
             Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
                 || UpdateSettingsError::ComputeAllocation(InvalidComputeAllocationError::new(ca)),
@@ -135,13 +135,24 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let wasm_memory_threshold = match input.wasm_memory_threshold {
+            Some(wmt) => {
+                let wmt = wmt
+                    .0
+                    .to_u64()
+                    .ok_or(UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided: wmt })?;
+                Some(NumBytes::new(wmt))
+            }
+            None => None,
+        };
+
         Ok(CanisterSettings::new(
-            controller,
             input
                 .controllers
                 .map(|controllers| controllers.get().clone()),
             compute_allocation,
             memory_allocation,
+            wasm_memory_threshold,
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
@@ -162,10 +173,10 @@ impl TryFrom<Option<CanisterSettingsArgs>> for CanisterSettings {
 }
 
 pub(crate) struct CanisterSettingsBuilder {
-    controller: Option<PrincipalId>,
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
+    wasm_memory_threshold: Option<NumBytes>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibility>,
@@ -176,10 +187,10 @@ pub(crate) struct CanisterSettingsBuilder {
 impl CanisterSettingsBuilder {
     pub fn new() -> Self {
         Self {
-            controller: None,
             controllers: None,
             compute_allocation: None,
             memory_allocation: None,
+            wasm_memory_threshold: None,
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
@@ -189,21 +200,14 @@ impl CanisterSettingsBuilder {
 
     pub fn build(self) -> CanisterSettings {
         CanisterSettings {
-            controller: self.controller,
             controllers: self.controllers,
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
+            wasm_memory_threshold: self.wasm_memory_threshold,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
-        }
-    }
-
-    pub fn with_controller(self, controller: PrincipalId) -> Self {
-        Self {
-            controller: Some(controller),
-            ..self
         }
     }
 
@@ -224,6 +228,13 @@ impl CanisterSettingsBuilder {
     pub fn with_memory_allocation(self, memory_allocation: MemoryAllocation) -> Self {
         Self {
             memory_allocation: Some(memory_allocation),
+            ..self
+        }
+    }
+
+    pub fn with_wasm_memory_threshold(self, wasm_memory_threshold: NumBytes) -> Self {
+        Self {
+            wasm_memory_threshold: Some(wasm_memory_threshold),
             ..self
         }
     }
@@ -263,6 +274,7 @@ pub enum UpdateSettingsError {
     FreezingThresholdOutOfRange { provided: candid::Nat },
     ReservedCyclesLimitOutOfRange { provided: candid::Nat },
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
+    WasmMemoryThresholdOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -305,6 +317,13 @@ impl From<UpdateSettingsError> for UserError {
                     provided
                 ),
             ),
+            UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {}",
+                    provided
+                ),
+            ),
         }
     }
 }
@@ -322,10 +341,10 @@ impl From<InvalidMemoryAllocationError> for UpdateSettingsError {
 }
 
 pub(crate) struct ValidatedCanisterSettings {
-    controller: Option<PrincipalId>,
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
+    wasm_memory_threshold: Option<NumBytes>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
@@ -334,10 +353,6 @@ pub(crate) struct ValidatedCanisterSettings {
 }
 
 impl ValidatedCanisterSettings {
-    pub fn controller(&self) -> Option<PrincipalId> {
-        self.controller
-    }
-
     pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
         self.controllers.clone()
     }
@@ -348,6 +363,10 @@ impl ValidatedCanisterSettings {
 
     pub fn memory_allocation(&self) -> Option<MemoryAllocation> {
         self.memory_allocation
+    }
+
+    pub fn wasm_memory_threshold(&self) -> Option<NumBytes> {
+        self.wasm_memory_threshold
     }
 
     pub fn freezing_threshold(&self) -> Option<NumSeconds> {
@@ -382,6 +401,7 @@ impl ValidatedCanisterSettings {
 ///     - there must be enough cycles to avoid freezing the canister.
 /// - controllers:
 ///     - the number of controllers cannot exceed the given maximum.
+///
 /// Keep this function in sync with `do_update_settings()`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_canister_settings(
@@ -452,25 +472,26 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    // Field `controller` is kept for backward compatibility. However, specifying
-    // both `controller` and `controllers` fields in the same request results in an
-    // error.
     let controllers = settings.controllers();
-    if let (Some(_), Some(_)) = (settings.controller(), &controllers) {
-        return Err(CanisterManagerError::InvalidSettings {
-                message: "Invalid settings: 'controller' and 'controllers' fields cannot be set simultaneously".to_string(),
-            });
-    }
     match &controllers {
         Some(controllers) => {
             if controllers.len() > max_controllers {
                 return Err(CanisterManagerError::InvalidSettings {
-                    message: "Invalid settings: 'controllers' length exceeds maximum size allowed"
-                        .to_string(),
+                    message: format!("Invalid settings: 'controllers' length exceeds maximum size allowed of {}.", max_controllers),
                 });
             }
         }
         None => {}
+    }
+
+    if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
+        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
+            if wasm_memory_threshold > wasm_memory_limit {
+                return Err(CanisterManagerError::InvalidSettings {
+                    message: format!("Invalid settings: 'wasm_memory_threshold' cannot be larger than 'wasm_memory_limit'. 'wasm_memory_threshold': {}, 'wasm_memory_limit': {}", wasm_memory_threshold, wasm_memory_limit),
+                });
+            }
+        }
     }
 
     let new_memory_allocation = settings
@@ -520,48 +541,55 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    let reservation_cycles = if new_memory_bytes <= old_memory_bytes {
-        Cycles::zero()
+    let allocated_bytes = if new_memory_bytes > old_memory_bytes {
+        new_memory_bytes - old_memory_bytes
     } else {
-        let allocated_bytes = new_memory_bytes - old_memory_bytes;
-        let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
-            allocated_bytes,
-            subnet_memory_saturation,
-            subnet_size,
-        );
-        let reserved_balance_limit = settings
-            .reserved_cycles_limit()
-            .or(canister_reserved_balance_limit);
-        if let Some(limit) = reserved_balance_limit {
-            if canister_reserved_balance + reservation_cycles > limit {
-                return Err(
-                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
-                        memory_allocation: new_memory_allocation,
-                        requested: canister_reserved_balance + reservation_cycles,
-                        limit,
-                    },
-                );
-            }
-        }
-        // Note that this check does not include the freezing threshold to be
-        // consistent with the `reserve_cycles()` function, which moves
-        // cycles between the main and reserved balances without checking
-        // the freezing threshold.
-        if canister_cycles_balance < reservation_cycles {
-            return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                memory_allocation: new_memory_allocation,
-                available: canister_cycles_balance,
-                threshold: reservation_cycles,
-            });
-        }
-        reservation_cycles
+        NumBytes::new(0)
     };
 
+    let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
+        allocated_bytes,
+        subnet_memory_saturation,
+        subnet_size,
+    );
+    let reserved_balance_limit = settings
+        .reserved_cycles_limit()
+        .or(canister_reserved_balance_limit);
+
+    if let Some(limit) = reserved_balance_limit {
+        if canister_reserved_balance > limit {
+            return Err(CanisterManagerError::ReservedCyclesLimitIsTooLow {
+                cycles: canister_reserved_balance,
+                limit,
+            });
+        } else if canister_reserved_balance + reservation_cycles > limit {
+            return Err(
+                CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
+                    memory_allocation: new_memory_allocation,
+                    requested: canister_reserved_balance + reservation_cycles,
+                    limit,
+                },
+            );
+        }
+    }
+
+    // Note that this check does not include the freezing threshold to be
+    // consistent with the `reserve_cycles()` function, which moves
+    // cycles between the main and reserved balances without checking
+    // the freezing threshold.
+    if canister_cycles_balance < reservation_cycles {
+        return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+            memory_allocation: new_memory_allocation,
+            available: canister_cycles_balance,
+            threshold: reservation_cycles,
+        });
+    }
+
     Ok(ValidatedCanisterSettings {
-        controller: settings.controller(),
         controllers: settings.controllers(),
         compute_allocation: settings.compute_allocation(),
         memory_allocation: settings.memory_allocation(),
+        wasm_memory_threshold: settings.wasm_memory_threshold(),
         freezing_threshold: settings.freezing_threshold(),
         reserved_cycles_limit: settings.reserved_cycles_limit(),
         reservation_cycles,

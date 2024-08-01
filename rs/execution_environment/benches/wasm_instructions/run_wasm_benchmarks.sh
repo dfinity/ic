@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Runs the Wasm instructions benchmarks, confirms the results are not optimized
 # by the `wasmtime` compiler, and produces a Wasm instructions costs report
 # in Markdown format (see `WASM_BENCHMARKS.md`).
@@ -6,6 +6,11 @@
 # Usage: run_wasm_benchmarks.sh [-f]
 # Where:
 #     -f force run benchmarks (do not use cache)
+
+if ! which bazel pee rg >/dev/null; then
+    echo "Error checking dependencies: please ensure 'bazel', 'pee' and 'rg' are installed"
+    exit 1
+fi
 
 # The command-line arguments to pass to the benchmark.
 # See: https://bheisler.github.io/criterion.rs/book/user_guide/command_line_options.html
@@ -30,10 +35,12 @@ RES_FILE="${0##*/}.res.tmp"
 CONFIRMATION_RES_FILE="${0##*/}.confirmation.res.tmp"
 
 # Re-run all the benchmarks (or use the cached results).
+set -eo pipefail
 [ -s "${CACHE_FILE}" -a "${1}" != "-f" ] \
     || bazel run //rs/execution_environment:wasm_instructions_bench \
         -- ${BENCHMARK_ARGS} --output-format bencher \
-    | pee "cat" "rg '^test wasm_' > '${CACHE_FILE}'"
+    | pee "cat" "rg '^test wasm_' > '${CACHE_FILE}' || true"
+set +eo pipefail
 
 # Split the cache into the results and confirmations.
 cat "${CACHE_FILE}" | rg -v '/confirmation' >"${RES_FILE}"

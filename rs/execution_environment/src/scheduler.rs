@@ -815,12 +815,14 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
-            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
+            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
-                    ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
+                    ExecutionTask::Heartbeat
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => false,
                     ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
@@ -1254,9 +1256,9 @@ impl SchedulerImpl {
             .inc_by(inducted_messages_to_others as u64);
     }
 
-    // Iterates through the provided canisters and checks if the invariants are still valid.
-    //
-    // Returns `true` if all canisters are valid, `false` otherwise.
+    /// Iterates through the provided canisters and checks if the invariants are still valid.
+    ///
+    /// Returns `true` if all canisters are valid, `false` otherwise.
     fn check_canister_invariants(
         &self,
         round_log: &ReplicaLogger,
@@ -1267,25 +1269,20 @@ impl SchedulerImpl {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
             if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
+                let msg = format!(
+                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
+                    CANISTER_INVARIANT_BROKEN,
+                    current_round,
+                    state.time(),
+                    canister_id,
+                    err
+                );
+
                 // Crash in debug mode if any invariant fails.
-                debug_assert!(false,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                debug_assert!(false, "{}", msg);
+
                 self.metrics.canister_invariants.inc();
-                warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
-                    CANISTER_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    canister_id,
-                    err
-                );
+                warn!(round_log, "{}", msg);
                 return false;
             }
         }
@@ -1322,7 +1319,7 @@ impl SchedulerImpl {
             });
     }
 
-    // Code that must be executed unconditionally after each round.
+    /// Code that must be executed unconditionally after each round.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1357,7 +1354,7 @@ impl SchedulerImpl {
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
-        // 1. Heartbeat and GlobalTimer tasks exist only during the round
+        // 1. Heartbeat, GlobalTimer, and OnLowWasmMemory tasks exist only during the round
         //    and must not exist after the round.
         // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
         // 3. If deterministic time slicing is disabled, then there are no paused tasks.
@@ -1376,6 +1373,16 @@ impl SchedulerImpl {
                     ExecutionTask::GlobalTimer => {
                         panic!(
                             "Unexpected global timer task after a round in canister {:?}",
+                            id
+                        );
+                    }
+                    // TODO [EXC-1666]
+                    // For now, since OnLowWasmMemory is not used we will copy behaviour similar
+                    // to Heartbeat and GlobalTimer, but when the feature is implemented we will
+                    // come back to it, to revisit if we should keep it after the round ends.
+                    ExecutionTask::OnLowWasmMemory => {
+                        panic!(
+                            "Unexpected on low wasm memory task after a round in canister {:?}",
                             id
                         );
                     }
@@ -1418,7 +1425,7 @@ impl Scheduler for SchedulerImpl {
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
-        _round_summary: Option<ExecutionRoundSummary>,
+        round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
@@ -1584,15 +1591,22 @@ impl Scheduler for SchedulerImpl {
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
 
-            // See documentation around definition of `heap_delta_estimate` for an explanation.
-            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
+            let scheduled_heap_delta_limit = scheduled_heap_delta_limit(
+                current_round,
+                round_summary,
+                self.config.subnet_heap_delta_capacity,
+                self.config.heap_delta_initial_reserve,
+            );
+            if state.metadata.heap_delta_estimate >= scheduled_heap_delta_limit {
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so finish round early possibly not executing some of the messages.",
+                    "At Round {} @ time {}, current heap delta estimate {} \
+                        exceeds scheduled limit {} out of {}, so not executing any messages.",
                     current_round,
                     state.time(),
                     state.metadata.heap_delta_estimate,
-                    self.config.subnet_heap_delta_capacity
+                    scheduled_heap_delta_limit,
+                    self.config.subnet_heap_delta_capacity,
                 );
                 self.finish_round(&mut state, current_round_type);
                 self.metrics
@@ -1691,22 +1705,13 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
             let contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_ecdsa_contexts
+                .sign_with_threshold_contexts
                 .values_mut()
-                .map(SignatureRequestContext::Ecdsa)
-                .chain(
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .sign_with_threshold_contexts
-                        .values_mut()
-                        .map(SignatureRequestContext::Generic),
-                )
                 .collect();
 
             update_signature_request_contexts(
@@ -1801,14 +1806,14 @@ impl Scheduler for SchedulerImpl {
                 {
                     self.metrics.subnet_memory_usage_invariant.inc();
                     warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
-                    SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    total_canister_memory_usage,
-                    self.exec_env.subnet_memory_capacity()
-                );
+                        round_log,
+                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                        SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
+                        current_round,
+                        state.time(),
+                        total_canister_memory_usage,
+                        self.exec_env.subnet_memory_capacity()
+                    );
                 }
 
                 // Check if the invariants are still valid after the execution for active canisters.
@@ -1923,6 +1928,7 @@ struct ExecutionThreadResult {
 /// Executes the given canisters one by one. For each canister it
 /// - runs the heartbeat or timer handlers of the canister if needed,
 /// - executes all messages of the canister.
+///
 /// The execution stops if `total_instruction_limit` is reached
 /// or all canisters are processed.
 #[allow(clippy::too_many_arguments)]
@@ -2138,7 +2144,10 @@ fn observe_replicated_state_metrics(
             Some(&ExecutionTask::AbortedInstallCode { .. }) => {
                 num_aborted_install += 1;
             }
-            Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
+            Some(&ExecutionTask::Heartbeat)
+            | Some(&ExecutionTask::GlobalTimer)
+            | Some(&ExecutionTask::OnLowWasmMemory)
+            | None => {}
         }
         consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
         join_consumed_cycles_by_use_case(
@@ -2223,9 +2232,12 @@ fn observe_replicated_state_metrics(
 
     metrics.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
 
-    metrics
-        .ecdsa_signature_agreements
-        .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
+    for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
+        metrics
+            .threshold_signature_agreements
+            .with_label_values(&[&key_id.to_string()])
+            .set(*count as i64);
+    }
 
     let observe_reading = |status: CanisterStatusType, num: i64| {
         metrics
@@ -2358,7 +2370,6 @@ fn get_instructions_limits_for_subnet_message(
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
-            | ComputeInitialEcdsaDealings
             | ComputeInitialIDkgDealings
             | SchnorrPublicKey
             | SignWithSchnorr
@@ -2379,7 +2390,6 @@ fn get_instructions_limits_for_subnet_message(
             | ProvisionalTopUpCanister
             | UploadChunk
             | StoredChunks
-            | DeleteChunks
             | ClearChunkStore
             | TakeCanisterSnapshot
             | LoadCanisterSnapshot
@@ -2454,4 +2464,52 @@ fn enqueue_tasks(
     }
 
     canister.system_state.task_queue.push_front(task);
+}
+
+/// Estimates the heap delta limit for the given round based on the maximum
+/// heap delta limit and the number of rounds between checkpoints.
+///
+/// The scheduler decides whether to execute the current round or not based on
+/// the result of this function. The purpose of this function is to distribute
+/// the heap delta budget equally over all rounds in order to make execution of
+/// rounds more smooth.
+///
+/// Note that this function computes a heuristic, so any positive number
+/// not exceeding the maximum heap delta limit would be a valid result.
+/// The result should be reasonably large to ensure faster progress.
+fn scheduled_heap_delta_limit(
+    current_round: ExecutionRound,
+    round_summary: Option<ExecutionRoundSummary>,
+    subnet_heap_delta_capacity: NumBytes,
+    heap_delta_initial_reserve: NumBytes,
+) -> NumBytes {
+    let Some(round_summary) = round_summary else {
+        // This should happen only in tests.
+        return subnet_heap_delta_capacity;
+    };
+    let next_checkpoint_round = round_summary.next_checkpoint_round;
+    // Plus one is because the interval length is normally 499, not 500.
+    let current_interval_length = round_summary
+        .current_interval_length
+        .get()
+        .saturating_add(1);
+    let remaining_rounds = next_checkpoint_round
+        .get()
+        .saturating_sub(current_round.get());
+
+    // The initial reserve is always available, so it should not be scaled.
+    let heap_delta_capacity_minus_initial_reserve = subnet_heap_delta_capacity
+        .get()
+        .saturating_sub(heap_delta_initial_reserve.get());
+    // The rest of the heap delta capacity is distributed across remaining rounds.
+    let remaining_rounds = remaining_rounds.min(current_interval_length);
+    let remaining_heap_delta_reserve = heap_delta_capacity_minus_initial_reserve
+        .saturating_mul(remaining_rounds)
+        .saturating_div(current_interval_length);
+
+    // The scheduled limit is the capacity minus reserve for the remaining rounds.
+    subnet_heap_delta_capacity
+        .get()
+        .saturating_sub(remaining_heap_delta_reserve)
+        .into()
 }

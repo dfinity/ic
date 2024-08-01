@@ -31,9 +31,12 @@ use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
 use std::cell::RefCell;
 
+type CanisterRuntime = CdkRuntime;
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
-type CanisterRuntime = CdkRuntime;
+thread_local! {
+    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
+}
 
 struct CanisterEnvironment {}
 
@@ -83,10 +86,6 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
         .expect("Expected the ledger_canister_id to be convertible to a CanisterId");
 
     RealLedgerCanisterClient::new(ledger_canister_id)
-}
-
-thread_local! {
-    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
 #[candid_method(init)]
@@ -192,6 +191,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
     })
 }
 
+/// This function will return immediately, and the actual upgrade will be performed in the background.
 #[candid_method(update)]
 #[update]
 fn change_canister(request: ChangeCanisterRequest) {
@@ -212,9 +212,24 @@ fn change_canister(request: ChangeCanisterRequest) {
     //
     // To implement "acknowledge without actually completing the work", we use
     // spawn to do the real work in the background.
-    CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
-        CanisterRuntime,
-    >(request));
+    CanisterRuntime::spawn_future(async move {
+        let change_canister_result =
+            ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(request)
+                .await;
+        // We don't want to panic in here, or the log messages will be lost when
+        // the state rolls back.
+        match change_canister_result {
+            Ok(()) => {
+                log!(
+                    INFO,
+                    "change_canister: Canister change completed successfully."
+                );
+            }
+            Err(err) => {
+                log!(ERROR, "change_canister: Canister change failed: {err}");
+            }
+        };
+    });
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used

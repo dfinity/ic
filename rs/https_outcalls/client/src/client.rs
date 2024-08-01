@@ -32,6 +32,7 @@ use tokio::{
 };
 use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
+use tracing::instrument;
 
 /// This client is returned if we fail to make connection to canister http adapter.
 pub struct BrokenCanisterHttpClient {}
@@ -89,6 +90,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
     /// Enqueues a request that will be send to the canister http adapter iff we don't have
     /// more than 'inflight_requests' requests waiting to be consumed by the
     /// client.
+    #[instrument(skip_all)]
     fn send(
         &self,
         canister_http_request: CanisterHttpRequest,
@@ -254,6 +256,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
     }
 
     /// Returns an available canister http response.
+    #[instrument(skip_all)]
     fn try_receive(&mut self) -> Result<Self::Response, TryReceiveError> {
         self.rx.try_recv().map_err(|e| match e {
             TryRecvError::Empty => TryReceiveError::Empty,
@@ -320,7 +323,7 @@ async fn transform_adapter_response(
     }
 }
 
-fn grpc_status_code_to_reject(code: Code) -> RejectCode {
+pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
     match code {
         // TODO: Is unavailable really transient
         Code::Unavailable => RejectCode::SysTransient,

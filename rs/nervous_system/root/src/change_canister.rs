@@ -15,18 +15,16 @@ use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(CandidType, Serialize, Deserialize, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ChangeCanisterRequest {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
     ///
     /// The value depend on the canister. For instance:
     /// * Canisters that don't emit any inter-canister call, such as the
-    ///   registry canister,
-    /// have no reason to be stopped before being upgraded.
+    ///   registry canister, have no reason to be stopped before being upgraded.
     /// * Canisters that emit inter-canister call are at risk of undefined
-    ///   behavior if
-    /// a callback is delivered to them after the upgrade.
+    ///   behavior if a callback is delivered to them after the upgrade.
     pub stop_before_installing: bool,
 
     // -------------------------------------------------------------------- //
@@ -188,13 +186,13 @@ pub enum CanisterAction {
 }
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug)]
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StopOrStartCanisterRequest {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
 }
 
-pub async fn change_canister<Rt>(request: ChangeCanisterRequest)
+pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
 {
@@ -208,13 +206,15 @@ where
                 "{}change_canister: Failed to stop canister, trying to restart...",
                 LOG_PREFIX
             );
-            match start_canister::<Rt>(canister_id).await {
-                Ok(_) => {}
+            return match start_canister::<Rt>(canister_id).await {
+                Ok(_) => {
+                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."))
+                }
                 Err(_) => {
                     println!("{}change_canister: Failed to restart canister.", LOG_PREFIX);
+                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."))
                 }
             };
-            return;
         }
     }
 
@@ -225,7 +225,7 @@ where
     // because there could be a concurrent request to restart it. This could be
     // guaranteed with a "stopped precondition" in the management canister, or
     // with some locking here.
-    let res = install_code(request).await;
+    let res = install_code(request.clone()).await;
     // For once, we don't want to unwrap the result here. The reason is that, if the
     // installation failed (e.g., the wasm was rejected because it's invalid),
     // then we want to restart the canister. So we just keep the res to be
@@ -237,7 +237,7 @@ where
     }
 
     // Check the result of the install_code
-    res.unwrap();
+    res.map_err(|(rejection_code, message)| format!("Attempt to call install_code with request {request:?} failed with code {rejection_code:?}: {message}"))
 }
 
 /// Calls the "install_code" method of the management canister.

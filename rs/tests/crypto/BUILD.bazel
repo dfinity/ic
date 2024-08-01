@@ -1,14 +1,18 @@
 load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 II_DEV_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "@ii_dev_canister//file",
 ]
 
 system_test(
     name = "canister_sig_verification_cache_test",
+    env = {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

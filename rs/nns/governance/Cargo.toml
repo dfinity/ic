@@ -41,6 +41,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -53,6 +54,8 @@ ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
+ic-nns-governance-api = { path = "./api" }
+ic-nns-governance-init = { path = "./init" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
@@ -60,14 +63,16 @@ ic-sns-swap = { path = "../../sns/swap" }                                       
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 itertools = { workspace = true }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
+prometheus-parse = { workspace = true }
 prost = { workspace = true }
 rust_decimal = { version = "1.25" }
 rust_decimal_macros = "1.25"
@@ -80,7 +85,7 @@ registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
-canbench-rs = { version = "0.1.1", optional = true }
+canbench-rs = { version = "0.1.4", optional = true }
 ic-cdk = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

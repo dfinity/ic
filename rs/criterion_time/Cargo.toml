@@ -8,4 +8,4 @@ documentation.workspace = true
 
 [dependencies]
 criterion = { workspace = true }
-libc = "0.2.91"
+libc = { workspace = true }

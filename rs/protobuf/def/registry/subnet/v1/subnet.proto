@@ -1,7 +1,6 @@
 syntax = "proto3";
 package registry.subnet.v1;
 
-import "bitcoin/v1/bitcoin.proto";
 import "registry/crypto/v1/crypto.proto";
 import "types/v1/types.proto";
 
@@ -59,17 +58,14 @@ message SubnetRecord {
   // The maximum combined size of the ingress and xnet messages that fit into a block.
   uint64 max_block_payload_size = 19;
 
-  // The maximum number of instructions a message can execute.
-  // See the comments in `subnet_config.rs` for more details.
-  uint64 max_instructions_per_message = 20;
+  reserved 20;
+  reserved "max_instructions_per_message";
 
-  // The maximum number of instructions a round can execute.
-  // See the comments in `subnet_config.rs` for more details.
-  uint64 max_instructions_per_round = 21;
+  reserved 21;
+  reserved "max_instructions_per_round";
 
-  // The maximum number of instructions an `install_code` message can execute.
-  // See the comments in `subnet_config.rs` for more details.
-  uint64 max_instructions_per_install_code = 22;
+  reserved 22;
+  reserved "max_instructions_per_install_code";
 
   // Information on whether a feature is supported by this subnet.
   SubnetFeatures features = 23;

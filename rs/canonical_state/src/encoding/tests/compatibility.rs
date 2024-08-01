@@ -11,6 +11,9 @@
 use crate::{all_supported_versions, encoding::*, CertificationVersion};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::CyclesUseCase,
@@ -25,7 +28,7 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::CoarseTime,
-    xnet::StreamFlags,
+    xnet::{RejectReason, RejectSignal, StreamFlags},
     CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
 };
 use serde_cbor::value::Value;
@@ -77,14 +80,18 @@ fn canonical_encoding_stream_header() {
     }
 }
 
-/// Canonical CBOR encoding (with certification versions 8 and up) of:
+/// Canonical CBOR encoding (with certification version 8 to version 18) of:
 ///
 /// ```no_run
 /// StreamHeader {
 ///     begin: 23.into(),
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
-///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+///     ].into(),
 ///     flags: StreamFlags::default(),
 /// }
 /// ```
@@ -99,7 +106,7 @@ fn canonical_encoding_stream_header() {
 ///    18 19   # unsigned(25)
 ///    02      # field_index(StreamHeader::signals_end)
 ///    19 0100 # unsigned(256)
-///    03      # field_index(StreamHeader::reject_signals)
+///    03      # field_index(StreamHeader::deprecated_reject_signals)
 ///    83      # array(3)
 ///       01   # unsigned(1)
 ///       02   # unsigned(2)
@@ -107,14 +114,20 @@ fn canonical_encoding_stream_header() {
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
-fn canonical_encoding_stream_header_v8_plus() {
-    for certification_version in all_supported_versions().filter(|v| v >= &CertificationVersion::V8)
+fn canonical_encoding_stream_header_v8_to_v18() {
+    for certification_version in all_supported_versions()
+        .filter(|v| v >= &CertificationVersion::V8 && v <= &CertificationVersion::V18)
     {
         let header = StreamHeader::new(
             23.into(),
             25.into(),
             256.into(),
-            vec![249.into(), 250.into(), 252.into()].into(),
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+            ]
+            .into(),
             StreamFlags::default(),
         );
 
@@ -125,14 +138,18 @@ fn canonical_encoding_stream_header_v8_plus() {
     }
 }
 
-/// Canonical CBOR encoding (with certification versions 17 and up) of:
+/// Canonical CBOR encoding (with certification versions 17 and 18) of:
 ///
 /// ```no_run
 /// StreamHeader {
 ///     begin: 23.into(),
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
-///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+///     ].into(),
 ///     flags: StreamFlags {
 ///        deprecated_responses_only: true,
 ///     },
@@ -149,7 +166,7 @@ fn canonical_encoding_stream_header_v8_plus() {
 ///    18 19   # unsigned(25)
 ///    02      # field_index(StreamHeader::signals_end)
 ///    19 0100 # unsigned(256)
-///    03      # field_index(StreamHeader::reject_signals)
+///    03      # field_index(StreamHeader::deprecated_reject_signals)
 ///    83      # array(3)
 ///       01   # unsigned(1)
 ///       02   # unsigned(2)
@@ -159,15 +176,20 @@ fn canonical_encoding_stream_header_v8_plus() {
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
-fn canonical_encoding_stream_header_v17_plus() {
-    for certification_version in
-        all_supported_versions().filter(|v| v >= &CertificationVersion::V17)
+fn canonical_encoding_stream_header_v17_and_v18() {
+    for certification_version in all_supported_versions()
+        .filter(|v| v == &CertificationVersion::V17 || v == &CertificationVersion::V18)
     {
         let header = StreamHeader::new(
             23.into(),
             25.into(),
             256.into(),
-            vec![249.into(), 250.into(), 252.into()].into(),
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+            ]
+            .into(),
             StreamFlags {
                 deprecated_responses_only: true,
             },
@@ -175,6 +197,97 @@ fn canonical_encoding_stream_header_v17_plus() {
 
         assert_eq!(
             "A5 00 17 01 18 19 02 19 01 00 03 83 01 02 04 04 01",
+            as_hex(&encode_stream_header(&header, certification_version))
+        );
+    }
+}
+
+/// Canonical CBOR encoding (with certification versions 19 and up) of:
+///
+/// ```no_run
+/// StreamHeader {
+///     begin: 23.into(),
+///     end: 25.into(),
+///     signals_end: 256.into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+///         RejectSignal::new(RejectReason::QueueFull, 251.into()),
+///         RejectSignal::new(RejectReason::OutOfMemory, 252.into()),
+///         RejectSignal::new(RejectReason::CanisterStopping, 253.into()),
+///         RejectSignal::new(RejectReason::CanisterStopped, 254.into()),
+///         RejectSignal::new(RejectReason::Unknown, 255.into()),
+///     ]
+///     .into(),
+///     flags: StreamFlags {
+///        deprecated_responses_only: true,
+///     },
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A5          # map(5)
+///    00       # field_index(StreamHeader::begin)
+///    17       # unsigned(23)
+///    01       # field_index(StreamHeader::end)
+///    18 19    # unsigned(25)
+///    02       # field_index(StreamHeader::signals_end)
+///    19 0100  # unsigned(256)
+///    04       # field_index(StreamHeader::flags)
+///    01       # unsigned(1)
+///    05       # field_index(StreamHeader::reject_signals)
+///    A7       # map(7)
+///       00    # field_index(RejectSignals::canister_migrating_deltas)
+///       81    # array(1)
+///          07 # unsigned(7)
+///       01    # field_index(RejectSignals::canister_not_found_deltas)
+///       81    # array(1)
+///          06 # unsigned(6)
+///       02    # field_index(RejectSignals::canister_stopped_deltas)
+///       81    # array(1)
+///          02 # unsigned(2)
+///       03    # field_index(RejectSignals::canister_stopping_deltas)
+///       81    # array(1)
+///          03 # unsigned(3)
+///       04    # field_index(RejectSignals::queue_full_deltas)
+///       81    # array(1)
+///          05 # unsigned(5)
+///       05    # field_index(RejectSignals::out_of_memory_deltas)
+///       81    # array(1)
+///          04 # unsigned(4)
+///       06    # field_index(RejectSignals::unknown_deltas)
+///       81    # array(1)
+///          01 # unsigned(1)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_stream_header_v19_plus() {
+    for certification_version in
+        all_supported_versions().filter(|v| v >= &CertificationVersion::V19)
+    {
+        let header = StreamHeader::new(
+            23.into(),
+            25.into(),
+            256.into(),
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+                RejectSignal::new(RejectReason::QueueFull, 251.into()),
+                RejectSignal::new(RejectReason::OutOfMemory, 252.into()),
+                RejectSignal::new(RejectReason::CanisterStopping, 253.into()),
+                RejectSignal::new(RejectReason::CanisterStopped, 254.into()),
+                RejectSignal::new(RejectReason::Unknown, 255.into()),
+            ]
+            .into(),
+            StreamFlags {
+                deprecated_responses_only: true,
+            },
+        );
+
+        assert_eq!(
+            "A5 00 17 01 18 19 02 19 01 00 04 01 05 A7 00 81 07 01 81 06 02 81 02 03 81 03 04 81 05 05 81 04 06 81 01",
             as_hex(&encode_stream_header(&header, certification_version))
         );
     }
@@ -191,10 +304,13 @@ fn canonical_encoding_stream_header_v17_plus() {
 ///         CyclesUseCase::Instructions => 80_000_000_000.into(),
 ///         CyclesUseCase::RequestAndResponseTransmission => 20_000_000_000.into(),
 ///     },
-///     ecdsa_signature_agreements: 2,
 ///     num_canisters: 5,
 ///     canister_state_bytes: (5 * 1024 * 1024).into(),
 ///     update_transactions_total: 4200,
+///     threshold_signature_agreements: btreemap!{
+///         schnorr_key_id => 15,
+///         ecdsa_key_id => 16,
+///     }
 /// }
 /// ```
 ///
@@ -229,7 +345,6 @@ fn canonical_encoding_subnet_metrics_v15_plus() {
         metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
         metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
         metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
-        metrics.ecdsa_signature_agreements = 2;
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;
@@ -241,6 +356,16 @@ fn canonical_encoding_subnet_metrics_v15_plus() {
             CyclesUseCase::RequestAndResponseTransmission,
             NominalCycles::from(20_000_000_000),
         );
+        let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "schnorr_key_id".into(),
+        });
+        let ecdsa_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "ecdsa_key_id".into(),
+        });
+        metrics.threshold_signature_agreements =
+            BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
         assert_eq!(
             "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68",
@@ -870,7 +995,7 @@ fn valid_stream_header() {
 }
 
 #[test]
-#[should_panic(expected = "expected field index 0 <= i < 5")]
+#[should_panic(expected = "expected field index 0 <= i < 6")]
 fn invalid_stream_header_extra_field() {
     for certification_version in all_supported_versions() {
         let bytes = types::StreamHeader::encode_with_extra_field((
@@ -1407,7 +1532,12 @@ fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
         25.into(),
         256.into(),
         if certification_version >= CertificationVersion::V8 {
-            vec![249.into(), 250.into(), 252.into()].into()
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+            ]
+            .into()
         } else {
             VecDeque::default()
         },

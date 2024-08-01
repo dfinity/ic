@@ -1,16 +1,13 @@
 name: Container IC Build Image
 
 on:
-  # TODO: add to Dockerfile before ENTRYPOINT before migration
-  # 'RUN date +"%D %T.%6N" > /build-date.txt'
-  # TODO: switch to pull_request_target before migration
-  #pull_request_target:
   pull_request:
     paths:
-      - '.github/workflows/container-autobuild.yml' # TODO: remove me before migration
+      - '.github/workflows/container-autobuild.yml'
       - '.bazelversion'
       - 'rust-toolchain.toml'
       - 'gitlab-ci/container/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -95,14 +92,11 @@ jobs:
 
           IMG_NAME=${{ github.repository_owner }}/ic-build
           IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ env.IMAGE_SHA }}"
-          # TODO: remove after to migration
-          IMG_NAME="(dfinity\|dfinity-sandbox)/ic-build"
 
           echo "$IMAGE_TAG" > gitlab-ci/container/TAG_GH
-          # TODO: uncomment prior to migration
-          #pushd .devcontainer
-          #sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
-          #popd
+          pushd .devcontainer
+          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
+          popd
           pushd .github
           sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- workflow*/*
           popd

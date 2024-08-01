@@ -13,7 +13,6 @@ use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
@@ -43,19 +42,18 @@ use ic_nns_governance::pb::v1::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, JoinCommunityFund,
-        LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
+        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     proposal::{self, Action},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, ListNeurons, ListNeuronsResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
-    RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCode, ListNeurons,
+    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal,
+    ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_registry_subnet_type::SubnetType;
 use ic_sns_governance::pb::v1::{
     self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
@@ -64,11 +62,11 @@ use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
+use ic_types::{ingress::WasmResult, Cycles};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -86,28 +84,12 @@ use std::{convert::TryInto, env, time::Duration};
 /// is omitted so that the canister range of the II subnet is not used
 /// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
-    // TODO, remove when this is the value set in the normal IC build
-    // This is to uncover issues in testing that might affect performance in production
-    const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
-    const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions =
-        NumInstructions::new(2_000_000_000);
-
-    let mut subnet_config = SubnetConfig::new(SubnetType::System);
-    subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
-    subnet_config
-        .scheduler_config
-        .max_instructions_per_install_code_slice = MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE;
-
     StateMachineBuilder::new()
         .with_current_time()
         .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
         ))
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            Config::default(),
-        )))
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -272,6 +254,8 @@ pub fn query_with_sender(
     query_impl(machine, canister, method_name, payload, Some(sender))
 }
 
+/// Once you have a Scrape, pass it to a function like get_gauge, get_counter,
+/// et. al., which are provided by nervous_system/common/test_utils.
 pub fn scrape_metrics(
     state_machine: &StateMachine,
     canister_id: CanisterId,
@@ -297,29 +281,6 @@ pub fn scrape_metrics(
         .into_iter();
 
     prometheus_parse::Scrape::parse(body).unwrap()
-}
-
-pub fn get_counter(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Counter(value) => value,
-        value => panic!("Metric found, but not a counter: {:?}", value),
-    }
-}
-
-pub fn get_gauge(scrape: &prometheus_parse::Scrape, name: &str) -> f64 {
-    match get_sample(scrape, name).value {
-        prometheus_parse::Value::Gauge(value) => value,
-        value => panic!("Metric found, but not a gauge: {:?}", value),
-    }
-}
-
-pub fn get_sample(scrape: &prometheus_parse::Scrape, name: &str) -> prometheus_parse::Sample {
-    for sample in &scrape.samples {
-        if sample.metric == name {
-            return sample.clone();
-        }
-    }
-    panic!("Metric not found: {}", name);
 }
 
 pub fn make_http_request(
@@ -1003,6 +964,24 @@ pub fn nns_claim_or_refresh_neuron(
     *neuron_id
 }
 
+pub fn nns_disburse_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    amount_e8s: u64,
+    to_account: Option<AccountIdentifier>,
+) -> ManageNeuronResponse {
+    manage_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        manage_neuron::Command::Disburse(Disburse {
+            amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
+            to_account: to_account.map(|account| account.into()),
+        }),
+    )
+}
+
 pub fn nns_increase_dissolve_delay(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1034,8 +1013,17 @@ pub fn nns_propose_upgrade_nns_canister(
     target_canister_id: CanisterId,
     wasm_module: Vec<u8>,
     module_arg: Vec<u8>,
+    use_proposal_action: bool,
 ) -> ProposalId {
-    let action = if target_canister_id != ROOT_CANISTER_ID {
+    let action = if use_proposal_action {
+        Some(proposal::Action::InstallCode(InstallCode {
+            canister_id: Some(target_canister_id.get()),
+            install_mode: Some(3),
+            wasm_module: Some(wasm_module),
+            arg: Some(module_arg),
+            skip_stopping_before_installing: None,
+        }))
+    } else if target_canister_id != ROOT_CANISTER_ID {
         let payload = ChangeCanisterRequest::new(
             true, // stop_before_installing,
             CanisterInstallMode::Upgrade,
@@ -1115,7 +1103,7 @@ pub fn wait_for_canister_upgrade_to_succeed(
     for i in 0..25 {
         state_machine.tick();
 
-        // Fetch status of governance.
+        // Fetch status of the canister being upgraded.
         let status_result = get_canister_status(
             state_machine,
             controller_principal_id,
@@ -1378,7 +1366,7 @@ pub fn nns_get_monthly_node_provider_rewards(
 /// Return the most recent monthly Node Provider rewards
 pub fn nns_get_most_recent_monthly_node_provider_rewards(
     state_machine: &StateMachine,
-) -> Option<MostRecentMonthlyNodeProviderRewards> {
+) -> Option<MonthlyNodeProviderRewards> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
@@ -1397,7 +1385,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
         }
     };
 
-    Decode!(&result, Option<MostRecentMonthlyNodeProviderRewards>).unwrap()
+    Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap()
 }
 
 pub fn nns_get_network_economics_parameters(state_machine: &StateMachine) -> NetworkEconomics {
@@ -1436,17 +1424,17 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
 }
 
-pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNeuronsResponse {
+pub fn list_neurons(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: ListNeurons,
+) -> ListNeuronsResponse {
     let result = state_machine
         .execute_ingress_as(
             sender,
             GOVERNANCE_CANISTER_ID,
             "list_neurons",
-            Encode!(&ListNeurons {
-                neuron_ids: vec![],
-                include_neurons_readable_by_caller: true,
-            })
-            .unwrap(),
+            Encode!(&request).unwrap(),
         )
         .unwrap();
 
@@ -1456,6 +1444,22 @@ pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNe
     };
 
     Decode!(&result, ListNeuronsResponse).unwrap()
+}
+
+pub fn list_neurons_by_principal(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+) -> ListNeuronsResponse {
+    list_neurons(
+        state_machine,
+        sender,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: None,
+            include_public_neurons_in_full_neurons: None,
+        },
+    )
 }
 
 /// Returns when the proposal has been executed. A proposal is considered to be

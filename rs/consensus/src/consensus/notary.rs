@@ -18,15 +18,15 @@
 //! * A node must only issue notarization shares for rounds for which this node
 //!   is selected as a notary.
 //! * A node must only issue notarization shares for blocks that have a lower
-//!   (or equal) rank than what it has previously issued shares for in the same
-//!   round.
+//!   (or equal) rank than every non-disqualified block for which the node
+//!   has previously issued shares for in the same round.
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
 use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, get_adjusted_notary_delay,
+    find_lowest_ranked_non_disqualified_proposals, get_adjusted_notary_delay,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
 };
@@ -88,7 +88,7 @@ impl Notary {
                 return notarization_shares;
             }
             let height = notarized_height.increment();
-            for proposal in find_lowest_ranked_proposals(pool, height) {
+            for proposal in find_lowest_ranked_non_disqualified_proposals(pool, height) {
                 if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank()) {
                     if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
                         let block = proposal.as_ref();
@@ -202,15 +202,13 @@ mod tests {
     //! Notary unit tests
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-    use ic_interfaces::consensus_pool::ConsensusPool;
-    use ic_interfaces::time_source::TimeSource;
+    use ic_interfaces::{consensus_pool::ConsensusPool, time_source::TimeSource};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use std::sync::Arc;
-    use std::time::Duration;
+    use std::{sync::Arc, time::Duration};
 
     /// Do basic notary validations
     #[test]

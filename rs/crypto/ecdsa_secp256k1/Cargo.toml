@@ -10,8 +10,8 @@ documentation.workspace = true
 
 [dependencies]
 k256 = { workspace = true }
-lazy_static = "1.4"
-num-bigint = "0.4"
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
 pem = "1.1.0"
 rand = { workspace = true }
 simple_asn1 = { workspace = true }

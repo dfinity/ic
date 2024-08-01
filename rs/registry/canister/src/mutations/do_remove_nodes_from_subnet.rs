@@ -3,12 +3,12 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_base_types::NodeId;
-use ic_nns_common::registry::{encode_or_panic, get_subnet_ids_from_subnet_list};
+use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::update;
+use prost::Message;
+use serde::Serialize;
 
 impl Registry {
     /// Remove nodes from their subnets
@@ -34,7 +34,7 @@ impl Registry {
                 if initial_len != subnet.membership.len() {
                     Some(update(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&subnet),
+                        subnet.encode_to_vec(),
                     ))
                 } else {
                     None

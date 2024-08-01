@@ -12,19 +12,17 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
 };
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::{
-    init::{GovernanceCanisterInitPayloadBuilder, TEST_NEURON_1_ID},
-    pb::v1::{
-        manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
-        ManageNeuron, ManageNeuronResponse,
-    },
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
+    ManageNeuron, ManageNeuronResponse,
 };
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{install_governance_canister, state_machine_test_on_nns_subnet},
@@ -58,7 +56,7 @@ fn test_upgrade_after_state_shrink() {
             .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
             .await
             .unwrap();
-        install_governance_canister(&mut canister, governance_proto).await;
+        install_governance_canister(&mut canister, governance_proto.into()).await;
 
         // First let's do a self-upgrade
         canister.stop().await.unwrap();

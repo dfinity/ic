@@ -505,10 +505,10 @@ impl InstallCodeHelper {
 
         validate_canister_settings(
             CanisterSettings {
-                controller: None,
                 controllers: None,
                 compute_allocation: original.requested_compute_allocation,
                 memory_allocation: original.requested_memory_allocation,
+                wasm_memory_threshold: None,
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
                 log_visibility: None,

@@ -112,12 +112,12 @@ artifacts
 # Boundary node prober binary
 boundary-node-prober
 
-# Scalability test results
-scalability/results/
+# Python pip file
 *Pipfile*
 
 # Bazel outdir dirs
 /bazel-*
+bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
 bazel-timestamp.txt

@@ -3,6 +3,7 @@ load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
     "@crate_index//:arbitrary",
     "@crate_index//:hex",

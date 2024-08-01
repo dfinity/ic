@@ -50,6 +50,7 @@ component_files = {
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
+    Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/guestos/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("misc/guestos/sudoers"): "/etc/sudoers",
@@ -81,6 +82,8 @@ component_files = {
     Label("monitoring/metrics-proxy/guestos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
+    Label("monitoring/nft-exporter/nft-exporter.service"): "/etc/systemd/system/nft-exporter.service",
+    Label("monitoring/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
 
     # networking
     Label("networking/generate-network-config/guestos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",

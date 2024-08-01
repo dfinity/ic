@@ -274,6 +274,8 @@ pub struct SystemState {
     queues: CanisterQueues,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
+    /// Threshold used for activation of canister_on_low_wasm_memory hook.
+    pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: Running, Stopping, or Stopped.
     /// Different statuses allow for different behaviors on the SystemState.
@@ -453,6 +455,10 @@ pub enum ExecutionTask {
     /// The task exists only within an execution round, it never gets serialized.
     GlobalTimer,
 
+    /// On low Wasm memory hook.
+    /// The task exists only within an execution round, it never gets serialized.
+    OnLowWasmMemory,
+
     /// A paused execution task exists only within an epoch (between
     /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
     /// before the checkpoint or when there are too many long-running executions.
@@ -498,6 +504,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
@@ -705,6 +712,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
             certified_data: Default::default(),
@@ -727,6 +735,7 @@ impl SystemState {
         canister_id: CanisterId,
         queues: CanisterQueues,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         certified_data: Vec<u8>,
@@ -751,6 +760,7 @@ impl SystemState {
             canister_id,
             queues,
             memory_allocation,
+            wasm_memory_threshold,
             freeze_threshold,
             status,
             certified_data,
@@ -1066,16 +1076,15 @@ impl SystemState {
     ///
     /// On failure, returns the provided message along with a `StateError`:
     ///  * `QueueFull` if either the input queue or the matching output queue is
-    ///    full when pushing a `Request`; or when pushing a `Response` when none
-    ///    is expected.
+    ///    full when pushing a `Request`;
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
     ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
     ///    is larger than `subnet_available_memory`.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
-    ///  * `NonMatchingResponse` if the callback is not found or the respondent
-    ///    does not match.
+    ///  * `NonMatchingResponse` if no response is expected, the callback is not
+    ///    found or the respondent does not match.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -1449,7 +1458,7 @@ impl SystemState {
     }
 
     /// Checks the invariants that should hold at the end of each consensus round.
-    pub fn check_invariants(&self) -> Result<(), StateError> {
+    pub fn check_invariants(&self) -> Result<(), String> {
         // Callbacks still awaiting a (potentially already enqueued) response.
         let pending_callbacks = self
             .call_context_manager()
@@ -1460,12 +1469,12 @@ impl SystemState {
         let input_queue_reserved_slots = self.queues.input_queues_reserved_slots();
 
         if pending_callbacks != input_queue_reserved_slots + input_queue_responses {
-            return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of callbacks ({}) is different from the cumulative number of reservations and responses ({})",
+            return Err(format!(
+                "Invariant broken: Canister {}: Number of callbacks ({}) is different from the cumulative number of reservations and responses ({})",
                 self.canister_id(),
                 pending_callbacks,
                 input_queue_reserved_slots + input_queue_responses
-            )));
+            ));
         }
 
         let unresponded_call_contexts = self
@@ -1479,12 +1488,12 @@ impl SystemState {
         let output_queue_reserved_slots = self.queues.output_queues_reserved_slots();
 
         if input_queue_requests + unresponded_call_contexts != output_queue_reserved_slots {
-            return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of output queue reserved slots ({}) is different from the cumulative number of input requests and unresponded call contexts ({})",
+            return Err(format!(
+                "Invariant broken: Canister {}: Number of output queue reserved slots ({}) is different from the cumulative number of input requests and unresponded call contexts ({})",
                 self.canister_id(),
                 output_queue_reserved_slots,
                 input_queue_requests + unresponded_call_contexts
-            )));
+            ));
         }
 
         Ok(())

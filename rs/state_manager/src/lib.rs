@@ -52,6 +52,7 @@ use ic_state_layout::{
     error::LayoutError, AccessPolicy, CheckpointLayout, PageMapLayout, ReadOnly, StateLayout,
 };
 use ic_types::{
+    batch::BatchSummary,
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
@@ -105,7 +106,7 @@ pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Write an overlay file this many rounds before each checkpoint.
-const NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY: u64 = 50;
+pub const NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY: u64 = 50;
 
 /// Labels for manifest metrics
 const LABEL_TYPE: &str = "type";
@@ -1411,6 +1412,27 @@ impl StateManagerImpl {
         info!(log, "Loading metadata took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
+        let checkpoint_heights = state_layout
+            .checkpoint_heights()
+            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
+
+        for h in checkpoint_heights {
+            let cp_layout = state_layout.checkpoint_untracked(h).unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create untracked checkpoint layout @{}: {}",
+                    h,
+                    err
+                )
+            });
+            if cp_layout.unverified_checkpoint_marker().exists() {
+                info!(log, "Archiving unverified checkpoint {} ", h);
+                state_layout
+                    .archive_checkpoint(h)
+                    .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+            }
+        }
+
         let mut checkpoint_heights = state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
@@ -2426,12 +2448,15 @@ impl StateManagerImpl {
                 .start_timer();
             switch_to_checkpoint(state, &checkpointed_state);
             #[cfg(debug_assertions)]
-            self.tip_channel
-                .send(TipRequest::ValidateReplicatedState {
-                    checkpointed_state: Box::new(checkpointed_state.clone()),
-                    execution_state: Box::new(state.clone()),
-                })
-                .expect("Failed to send Validate request");
+            {
+                self.tip_channel
+                    .send(TipRequest::ValidateReplicatedState {
+                        checkpointed_state: Box::new(checkpointed_state.clone()),
+                        execution_state: Box::new(state.clone()),
+                    })
+                    .expect("Failed to send Validate request");
+                self.flush_tip_channel();
+            }
         }
 
         // On the NNS subnet we never allow incremental manifest computation
@@ -3050,6 +3075,7 @@ impl StateManager for StateManagerImpl {
         mut state: Self::State,
         height: Height,
         scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
     ) {
         let _timer = self
             .metrics
@@ -3085,26 +3111,19 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => {
                 match self.lsmt_status {
                     FlagStatus::Enabled => {
-                        let is_nns =
-                            self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
                         // We want to balance writing too many overlay files with having too many unflushed pages at
                         // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
                         // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
                         // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                        //
-                        // For the NNS we simply fall back to only writing overlay files during checkpointing.
-                        //
-                        // TODO (MR-527): Use information about the actual next checkpoint, instead of hardcoding possibly
-                        // inaccurate information.
-                        //
-                        // Note that for correctness we only require that we write overlays at deterministic heights, which
-                        // is also satisfied if the subnet configuration changes and the checkpoints are no longer produced
-                        // every 500 heights.
-                        if !is_nns
-                            && height.get() % 500
-                                == 500 - NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                        {
-                            self.flush_page_maps(&mut state, height);
+                        if let Some(batch_summary) = batch_summary {
+                            if batch_summary
+                                .next_checkpoint_height
+                                .get()
+                                .saturating_sub(height.get())
+                                == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+                            {
+                                self.flush_page_maps(&mut state, height);
+                            }
                         }
                     }
                     FlagStatus::Disabled => {

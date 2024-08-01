@@ -21,7 +21,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_crypto_tecdsa::derive_threshold_public_key;
+use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
     ResourceSaturation,
@@ -33,12 +33,11 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialEcdsaDealingsArgs,
-    ComputeInitialIDkgDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
+    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
     SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
     UpdateSettingsArgs, UploadChunkArgs, IC_00,
@@ -50,9 +49,9 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaDealingsContext, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId,
-        SchnorrArguments, SetupInitialDkgContext, SignWithEcdsaContext, SignWithThresholdContext,
-        StopCanisterCall, SubnetCallContext, ThresholdArguments,
+        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
+        SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
+        ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -390,7 +389,6 @@ impl ExecutionEnvironment {
             config.max_canister_memory_size,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
-            config.wasm_chunk_store,
             config.rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
@@ -492,11 +490,17 @@ impl ExecutionEnvironment {
                             },
                         );
 
-                        if matches!(
-                            (&context, &response.response_payload),
-                            (&SubnetCallContext::SignWithEcdsa(_), &Payload::Data(_))
-                        ) {
-                            state.metadata.subnet_metrics.ecdsa_signature_agreements += 1;
+                        if let (
+                            SubnetCallContext::SignWithThreshold(threshold_context),
+                            Payload::Data(_),
+                        ) = (&context, &response.response_payload)
+                        {
+                            *state
+                                .metadata
+                                .subnet_metrics
+                                .threshold_signature_agreements
+                                .entry(threshold_context.key_id())
+                                .or_default() += 1;
                         }
 
                         state.push_subnet_output_response(
@@ -556,9 +560,7 @@ impl ExecutionEnvironment {
                 );
             }
 
-            Ok(Ic00Method::InstallChunkedCode)
-                if self.config.wasm_chunk_store == FlagStatus::Enabled =>
-            {
+            Ok(Ic00Method::InstallChunkedCode) => {
                 // Tail call is needed for deterministic time slicing here to
                 // properly handle the case of a paused execution.
                 return self.execute_install_code(
@@ -612,11 +614,13 @@ impl ExecutionEnvironment {
                                     response: Err(err),
                                     refund: msg.take_cycles(),
                                 },
-                                Ok(_) => match self.sign_with_ecdsa(
+                                Ok(_) => match self.sign_with_threshold(
                                     (**request).clone(),
-                                    args.message_hash,
+                                    ThresholdArguments::Ecdsa(EcdsaArguments {
+                                        key_id: args.key_id,
+                                        message_hash: args.message_hash,
+                                    }),
                                     args.derivation_path.into_inner(),
-                                    args.key_id,
                                     registry_settings
                                         .chain_key_settings
                                         .get(&key_id)
@@ -723,11 +727,6 @@ impl ExecutionEnvironment {
 
                         let canister_id = args.get_canister_id();
                         let sender_canister_version = args.get_sender_canister_version();
-
-                        // Track whether the deprecated `controller` field was used.
-                        if args.settings.get_controller().is_some() {
-                            self.metrics.controller_in_update_settings_total.inc();
-                        }
 
                         let result = match CanisterSettings::try_from(args.settings) {
                             Err(err) => Err(err.into()),
@@ -1036,42 +1035,6 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
-                let cycles = msg.take_cycles();
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_public_key(
-                                idkg_subnet_public_keys,
-                                self.own_subnet_id,
-                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
-                            ) {
-                                Ok(_) => self
-                                    .compute_initial_ecdsa_dealings(&mut state, args, request)
-                                    .map_or_else(
-                                        |err| ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
-                                            refund: cycles,
-                                        },
-                                        |()| ExecuteSubnetMessageResult::Processing,
-                                    ),
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: cycles,
-                                },
-                            },
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: cycles,
-                            },
-                        }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialEcdsaDealings)
-                    }
-                }
-            }
-
             Ok(Ic00Method::ComputeInitialIDkgDealings) => {
                 match self.config.ic00_compute_initial_i_dkg_dealings {
                     FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
@@ -1203,11 +1166,13 @@ impl ExecutionEnvironment {
                                         response: Err(err),
                                         refund: msg.take_cycles(),
                                     },
-                                    Ok(_) => match self.sign_with_schnorr(
+                                    Ok(_) => match self.sign_with_threshold(
                                         (**request).clone(),
-                                        args.message,
+                                        ThresholdArguments::Schnorr(SchnorrArguments {
+                                            key_id: args.key_id,
+                                            message: Arc::new(args.message),
+                                        }),
                                         args.derivation_path.into_inner(),
-                                        args.key_id,
                                         registry_settings
                                             .chain_key_settings
                                             .get(&key_id)
@@ -1384,10 +1349,6 @@ impl ExecutionEnvironment {
                     response: res,
                     refund: msg.take_cycles(),
                 }
-            }
-
-            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => {
-                Self::reject_due_to_api_not_implemented(&mut msg)
             }
 
             Ok(Ic00Method::NodeMetricsHistory) => {
@@ -1736,7 +1697,7 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a canister task of a given canister.
-    pub fn execute_canister_task(
+    fn execute_canister_task(
         &self,
         canister: CanisterState,
         task: CanisterTask,
@@ -2623,112 +2584,20 @@ impl ExecutionEnvironment {
         .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn sign_with_ecdsa(
-        &self,
-        mut request: Request,
-        message_hash: [u8; 32],
-        derivation_path: Vec<Vec<u8>>,
-        key_id: EcdsaKeyId,
-        max_queue_size: u32,
-        state: &mut ReplicatedState,
-        rng: &mut dyn RngCore,
-        subnet_size: usize,
-    ) -> Result<(), UserError> {
-        // We already ensured message_hash is 32 byte statically, so there is
-        // no need to check length here.
-
-        let topology = &state.metadata.network_topology;
-        // If the request isn't from the NNS, then we need to charge for it.
-        let source_subnet = topology.routing_table.route(request.sender.get());
-        if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
-            if request.payment < signature_fee {
-                return Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} request sent with {} cycles, but {} cycles are required.",
-                        request.method_name, request.payment, signature_fee
-                    ),
-                ));
-            } else {
-                request.payment -= signature_fee;
-                let nominal_fee = NominalCycles::from(signature_fee);
-                state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
-                state
-                    .metadata
-                    .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(
-                        CyclesUseCase::ECDSAOutcalls,
-                        nominal_fee,
-                    );
-            }
+    fn calculate_signature_fee(&self, args: &ThresholdArguments, subnet_size: usize) -> Cycles {
+        let cam = &self.cycles_account_manager;
+        match args {
+            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
+            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
         }
-
-        let key = MasterPublicKeyId::Ecdsa(key_id.clone());
-        if !topology
-            .idkg_signing_subnets(&key)
-            .contains(&state.metadata.own_subnet_id)
-        {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} request failed: invalid or disabled key {}.",
-                    request.method_name, key
-                ),
-            ));
-        }
-
-        // TODO(EXC-1645): migrate to using `.sign_with_threshold_contexts`.
-        if state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .len()
-            >= max_queue_size as usize
-        {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} request failed: the ECDSA signature queue is full.",
-                    request.method_name
-                ),
-            ));
-        }
-
-        let mut pseudo_random_id = [0u8; 32];
-        rng.fill_bytes(&mut pseudo_random_id);
-
-        info!(
-            self.log,
-            "Assigned the pseudo_random_id {:?} to the new sign_with_ECDSA request from {:?}",
-            pseudo_random_id,
-            request.sender()
-        );
-
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::SignWithEcdsa(SignWithEcdsaContext {
-                request,
-                key_id,
-                message_hash,
-                derivation_path,
-                pseudo_random_id,
-                batch_time: state.metadata.batch_time,
-                matched_quadruple: None,
-                nonce: None,
-            }));
-        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn sign_with_schnorr(
+    fn sign_with_threshold(
         &self,
         mut request: Request,
-        message: Vec<u8>,
+        args: ThresholdArguments,
         derivation_path: Vec<Vec<u8>>,
-        key_id: SchnorrKeyId,
         max_queue_size: u32,
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
@@ -2738,9 +2607,7 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self
-                .cycles_account_manager
-                .schnorr_signature_fee(subnet_size);
+            let signature_fee = self.calculate_signature_fee(&args, subnet_size);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2750,18 +2617,26 @@ impl ExecutionEnvironment {
                     ),
                 ));
             } else {
+                // Charge for signing request.
                 request.payment -= signature_fee;
+                let nominal_fee = NominalCycles::from(signature_fee);
+                let use_case = match args {
+                    ThresholdArguments::Ecdsa(_) => {
+                        state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
+                        CyclesUseCase::ECDSAOutcalls
+                    }
+                    ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
+                };
                 state
                     .metadata
                     .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(
-                        CyclesUseCase::SchnorrOutcalls,
-                        NominalCycles::from(signature_fee),
-                    );
+                    .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
             }
         }
 
-        let threshold_key = MasterPublicKeyId::Schnorr(key_id.clone());
+        let threshold_key = args.key_id();
+
+        // Check if signing is enabled.
         if !topology
             .idkg_signing_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
@@ -2769,12 +2644,13 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: invalid or disabled key {}.",
+                    "{} request failed: unknown or signing disabled threshold key {}.",
                     request.method_name, threshold_key
                 ),
             ));
         }
 
+        // Check if the queue is full.
         if state
             .metadata
             .subnet_call_context_manager
@@ -2804,7 +2680,7 @@ impl ExecutionEnvironment {
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
-                args: ThresholdArguments::Schnorr(SchnorrArguments { key_id, message }),
+                args,
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
@@ -2812,27 +2688,6 @@ impl ExecutionEnvironment {
                 nonce: None,
             }),
         );
-        Ok(())
-    }
-
-    fn compute_initial_ecdsa_dealings(
-        &self,
-        state: &mut ReplicatedState,
-        args: ComputeInitialEcdsaDealingsArgs,
-        request: &Request,
-    ) -> Result<(), UserError> {
-        let nodes = args.get_set_of_nodes()?;
-        let registry_version = args.get_registry_version();
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::EcdsaDealings(EcdsaDealingsContext {
-                request: request.clone(),
-                key_id: args.key_id,
-                nodes,
-                registry_version,
-                time: state.time(),
-            }));
         Ok(())
     }
 
@@ -3066,6 +2921,7 @@ impl ExecutionEnvironment {
     /// - If the execution is finished, then it outputs the subnet response.
     /// - If the execution is paused, then it enqueues it to the task queue of
     ///   the canister.
+    ///
     /// In both cases, the functions gets the canister from the result and adds
     /// it to the replicated state.
     fn process_install_code_result(
@@ -3101,7 +2957,7 @@ impl ExecutionEnvironment {
                             execution_duration,
                             result.old_wasm_hash,
                             result.new_wasm_hash,
-                            instructions_used);
+                            instructions_used.display());
 
                         Ok(EmptyBlob.encode())
                     }
@@ -3112,7 +2968,7 @@ impl ExecutionEnvironment {
                             canister_id,
                             execution_duration,
                             err,
-                            instructions_used);
+                            instructions_used.display());
                         Err(err.into())
                     }
                 };
@@ -3200,6 +3056,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
@@ -3296,7 +3153,8 @@ impl ExecutionEnvironment {
                     ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. }
                     | ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer => task,
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => task,
                     ExecutionTask::PausedExecution { id, .. } => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (input, prepaid_execution_cycles) = paused.abort(log);
@@ -3852,6 +3710,10 @@ pub fn execute_canister(
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
                 (task, None)
             }
+            ExecutionTask::OnLowWasmMemory => {
+                let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
+                (task, None)
+            }
             ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
@@ -3892,7 +3754,10 @@ fn get_master_public_key<'a>(
     match idkg_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!("Subnet {} does not hold iDKG key {}.", subnet_id, key_id),
+            format!(
+                "Subnet {} does not hold threshold key {}.",
+                subnet_id, key_id
+            ),
         )),
         Some(master_key) => Ok(master_key),
     }

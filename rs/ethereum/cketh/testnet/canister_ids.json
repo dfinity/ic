@@ -14,6 +14,12 @@
   "cklink_ledger": {
     "ic": "r52mc-qaaaa-aaaar-qafzq-cai"
   },
+  "ckpepe_index": {
+    "ic": "g3sv2-4iaaa-aaaar-qagea-cai"
+  },
+  "ckpepe_ledger": {
+    "ic": "hw4ru-taaaa-aaaar-qagdq-cai"
+  },
   "index": {
     "ic": "sh5u2-cqaaa-aaaar-qacna-cai"
   },

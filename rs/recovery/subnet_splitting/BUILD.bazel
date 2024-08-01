@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/utils/threshold_sig",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/monitoring/metrics",
@@ -13,9 +14,9 @@ DEPENDENCIES = [
     "//rs/state_tool:state_tool_lib",
     "//rs/types/base_types",
     "//rs/types/types",
-    "@crate_index//:ic-agent",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:hex",
+    "@crate_index//:ic-agent",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
@@ -24,10 +25,12 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/test_utilities/tmpdir",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
@@ -44,7 +47,7 @@ rust_library(
     crate_name = "ic_subnet_splitting",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    visibility = ["//rs/tests:__subpackages__"],
+    visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
 
@@ -54,7 +57,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [
         ":subnet_splitting",
         "//rs/canister_sandbox:backend_lib",

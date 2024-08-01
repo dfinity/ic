@@ -423,6 +423,8 @@ fn handle_list_neurons(
     let args = ic_nns_governance::pb::v1::ListNeurons {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
+        include_empty_neurons_readable_by_caller: None,
+        include_public_neurons_in_full_neurons: None,
     };
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),

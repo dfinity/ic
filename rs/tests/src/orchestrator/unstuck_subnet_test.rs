@@ -13,26 +13,25 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use super::utils::ssh_access::execute_bash_command;
-use super::utils::upgrade::{bless_replica_version, deploy_guestos_to_all_subnet_nodes};
-use crate::orchestrator::utils::rw_message::{
-    can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
-    store_message_with_retries,
-};
-use crate::orchestrator::utils::upgrade::UpdateImageType;
-use crate::util::block_on;
-use crate::{
-    driver::{
-        ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
-        test_env_api::*,
-    },
-    orchestrator::utils::upgrade::get_assigned_replica_version,
-    retry_with_msg,
-};
 use anyhow::bail;
+use ic_consensus_system_test_utils::upgrade::{
+    bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
+    UpdateImageType,
+};
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
+        install_nns_and_check_progress, store_message_with_retries,
+    },
+    ssh_access::execute_bash_command,
+};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+    test_env_api::*,
+};
+use ic_system_test_driver::util::block_on;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use ssh2::Session;
@@ -95,7 +94,7 @@ pub fn test(test_env: TestEnv) {
         let session = nns_node
             .block_on_ssh_session()
             .expect("Failed to establish SSH session");
-        retry_with_msg!(
+        ic_system_test_driver::retry_with_msg!(
             "check for 'hash mismatch' in the replica's log",
             test_env.logger(),
             secs(600),
@@ -159,7 +158,7 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Waiting for update to finish on all 3 nodes...");
     let updated_version = format!("{}-test", target_version);
     for n in &nodes {
-        retry_with_msg!(
+        ic_system_test_driver::retry_with_msg!(
             format!("check if all 3 nodes have version {}", updated_version),
             test_env.logger(),
             secs(1800),

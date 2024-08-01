@@ -2,12 +2,12 @@ use ic00::BitcoinGetBlockHeadersArgs;
 use ic_async_utils::incoming_from_path;
 use ic_base_types::CanisterId;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
+use ic_btc_replica_types::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
-use ic_btc_types_internal::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_config::{
     execution_environment::{BitcoinConfig, Config as HypervisorConfig},

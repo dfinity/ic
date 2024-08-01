@@ -9,6 +9,7 @@ use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
+use crate::ledger::{LedgerAccess, LedgerData};
 use ic_ledger_core::block::EncodedBlock;
 
 fn default_cycles_for_archive_creation() -> u64 {
@@ -39,9 +40,25 @@ pub struct ArchiveOptions {
 /// A scope guard for block archiving.
 /// It sets archiving flag to true on the archive when constructed and disables the flag
 /// when dropped.
-pub struct ArchivingGuard<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+struct ArchivingGuard<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
 );
+
+/// Wraps around `ArchivingGuard` to abstract away the two generic parameters with the single
+/// `LedgerAccess` trait.
+pub struct LedgerArchivingGuard<LA: LedgerAccess> {
+    _guard: ArchivingGuard<
+        <LA::Ledger as LedgerData>::Runtime,
+        <LA::Ledger as LedgerData>::ArchiveWasm,
+    >,
+}
+
+impl<LA: LedgerAccess> LedgerArchivingGuard<LA> {
+    pub fn new() -> Result<Self, ArchivingGuardError> {
+        let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
+        ArchivingGuard::new(Arc::clone(&archive_arc)).map(|guard| Self { _guard: guard })
+    }
+}
 
 pub enum ArchivingGuardError {
     /// There is no archive to lock, the archiving is disabled.
@@ -51,9 +68,7 @@ pub enum ArchivingGuardError {
 }
 
 impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> ArchivingGuard<Rt, Wasm> {
-    pub fn new(
-        archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
-    ) -> Result<Self, ArchivingGuardError> {
+    fn new(archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>) -> Result<Self, ArchivingGuardError> {
         let mut archive_guard = archive.write().expect("failed to obtain archive lock");
         match archive_guard.as_mut() {
             Some(archive) => {

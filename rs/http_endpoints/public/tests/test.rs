@@ -61,8 +61,9 @@ use prost::Message;
 use reqwest::header::CONTENT_TYPE;
 use rstest::rstest;
 use rustls::{
-    client::{ServerCertVerified, ServerCertVerifier},
-    ClientConfig,
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    ClientConfig, DigitallySignedStruct, SignatureScheme,
 };
 use serde_bytes::ByteBuf;
 use serde_cbor::value::Value as CBOR;
@@ -975,23 +976,42 @@ fn test_http_alpn_header_is_set(
 
     let socket = TcpSocket::new_v4().unwrap();
 
+    #[derive(Debug)]
     struct NoVerify;
     impl ServerCertVerifier for NoVerify {
         fn verify_server_cert(
             &self,
-            _end_entity: &rustls::Certificate,
-            _intermediates: &[rustls::Certificate],
-            _server_name: &rustls::ServerName,
-            _scts: &mut dyn Iterator<Item = &[u8]>,
+            _end_entity: &CertificateDer,
+            _intermediates: &[CertificateDer],
+            _server_name: &ServerName,
             _ocsp_response: &[u8],
-            _now: std::time::SystemTime,
-        ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
             Ok(ServerCertVerified::assertion())
+        }
+        fn verify_tls12_signature(
+            &self,
+            _: &[u8],
+            _: &CertificateDer<'_>,
+            _: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+        fn verify_tls13_signature(
+            &self,
+            _: &[u8],
+            _: &CertificateDer<'_>,
+            _: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            vec![SignatureScheme::ED25519]
         }
     }
 
     let mut accept_any_config = ClientConfig::builder()
-        .with_safe_defaults()
+        .dangerous()
         .with_custom_certificate_verifier(Arc::new(NoVerify))
         .with_no_client_auth();
 
@@ -1089,7 +1109,7 @@ fn test_duplicate_requests_are_handled() {
             first_request_submitted_to_ingress_clone.notify_one();
             handlers
                 .terminal_state_ingress_messages
-                .send((message_id, Height::from(0)))
+                .try_send((message_id, Height::from(1)))
                 .unwrap();
         }
     });
@@ -1140,11 +1160,10 @@ fn test_duplicate_requests_are_handled() {
 /// to the synchronous call.
 #[rstest]
 /// The message is certified after certified state transition.
-#[case(Height::from(0), Some(Height::from(2)), Height::from(1))]
-#[case(Height::from(0), Some(Height::from(1)), Height::from(0))]
+#[case(Height::from(0), Some(Height::from(1)), Height::from(1))]
 /// The message is already certified.
-#[case(Height::from(1), None, Height::from(0))]
-#[case(Height::from(1), Some(Height::from(0)), Height::from(0))]
+#[case(Height::from(1), None, Height::from(1))]
+#[case(Height::from(1), Some(Height::from(0)), Height::from(1))]
 fn test_sync_call_endpoint_responds_with_certificate(
     #[case] initial_certified_height: Height,
     #[case] transitioned_certified_height: Option<Height>,
@@ -1180,7 +1199,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
         let message_id = message.id();
         handlers
             .terminal_state_ingress_messages
-            .send((message_id, message_finalization_height))
+            .try_send((message_id, message_finalization_height))
             .unwrap();
 
         if let Some(transitioned_certified_height) = transitioned_certified_height {
@@ -1231,15 +1250,10 @@ fn test_sync_call_endpoint_responds_with_certificate(
 }
 
 /// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
-/// ingress messages that complete execution, but their height never
+/// ingress messages that complete execution, but its height never
 /// gets certified.
-#[rstest]
-#[case::certification_timeout(Height::from(0), Height::from(1))]
-#[case::certification_timeout(Height::from(0), Height::from(0))]
-fn test_synchronous_call_endpoint_no_certification(
-    #[case] initial_certified_height: Height,
-    #[case] message_finalization_height: Height,
-) {
+#[test]
+fn test_synchronous_call_endpoint_no_certification() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1249,7 +1263,7 @@ fn test_synchronous_call_endpoint_no_certification(
     };
 
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
-        .with_certified_height(initial_certified_height)
+        .with_certified_height(Height::from(0))
         .run();
 
     let message = IngressMessage::default();
@@ -1271,7 +1285,7 @@ fn test_synchronous_call_endpoint_no_certification(
 
         handlers
             .terminal_state_ingress_messages
-            .send((message_id, message_finalization_height))
+            .try_send((message_id, Height::from(1)))
             .unwrap();
     });
 
@@ -1310,8 +1324,8 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
 }
 
 /// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
-/// ingress messages that complete execution, but the state reader fails to
-/// read the certified state.
+/// ingress messages that complete execution and certification
+/// but the state reader fails to read the certified state.
 #[rstest]
 #[case::certified_state_snapshot_unavailable(None)]
 #[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot) as _))]
@@ -1370,7 +1384,7 @@ fn test_call_v3_response_when_state_reader_fails(
         // Execute the ingress and certify it.
         handlers
             .terminal_state_ingress_messages
-            .send((message_id, Height::from(0)))
+            .try_send((message_id, Height::from(1)))
             .unwrap();
         handlers
             .certified_height_watcher

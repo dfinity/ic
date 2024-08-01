@@ -23,6 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
@@ -278,9 +279,17 @@ where
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     ));
-    let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> = Arc::new(
-        IngressHistoryWriterImpl::new(config.clone(), log.clone(), &metrics_registry),
-    );
+
+    let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+    let state_reader = Arc::new(FakeStateManager::new());
+    let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
+        Arc::new(IngressHistoryWriterImpl::new(
+            config.clone(),
+            log.clone(),
+            &metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        ));
     let exec_env = ExecutionEnvironment::new(
         log,
         hypervisor,

@@ -49,14 +49,19 @@ pub async fn wait_for_rosetta_block(
     network_identifier: NetworkIdentifier,
     block_index: u64,
 ) -> Option<u64> {
-    const MAX_ATTEMPTS: u8 = 10;
+    const MAX_ATTEMPTS: u8 = 20;
     let mut last_block = None;
     for _ in 0..MAX_ATTEMPTS {
-        let response = rosetta_client
-            .network_status(network_identifier.clone())
-            .await;
-        if let Ok(response) = response {
-            last_block = Some(response.current_block_identifier.index);
+        let response = rosetta_client.ready().await;
+        if response.is_success() {
+            last_block = Some(
+                rosetta_client
+                    .network_status(network_identifier.clone())
+                    .await
+                    .unwrap()
+                    .current_block_identifier
+                    .index,
+            );
             if last_block >= Some(block_index) {
                 return last_block;
             }

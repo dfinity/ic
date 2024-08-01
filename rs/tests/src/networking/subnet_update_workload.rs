@@ -21,7 +21,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{
+use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
@@ -29,12 +29,11 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
+            HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
             NnsInstallationBuilder, RetrieveIpv4Addr, SubnetSnapshot, READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
     },
-    retry_with_msg_async,
     util::{
         agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
         spawn_round_robin_workload_engine,
@@ -133,7 +132,7 @@ pub fn config(
     if let Some(bn) = bn {
         info!(&logger, "Polling registry");
         let registry = RegistryCanister::new(bn.nns_node_urls);
-        let (latest, routes) = rt.block_on(retry_with_msg_async!(
+        let (latest, routes) = rt.block_on(ic_system_test_driver::retry_with_msg_async!(
             "checking registry",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -231,7 +230,7 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!("observing NNS canister module {}", nns_canister.to_string()),
                 &log,
                 READY_WAIT_TIMEOUT,
@@ -247,7 +246,7 @@ pub fn test(
             .unwrap();
         }
         for agent in app_agents.iter() {
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!("observing app canister module {}", app_canister.to_string()),
                 &log,
                 READY_WAIT_TIMEOUT,
