@@ -47,8 +47,9 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
+    app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
     NodeMetrics, Recovery, RecoveryArgs,
 };
@@ -62,11 +63,13 @@ use ic_system_test_driver::driver::driver_setup::{
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{Height, ReplicaVersion, SubnetId};
+use ic_types::{consensus::CatchUpPackage, Height, ReplicaVersion, SubnetId};
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
-use std::time::Duration;
 use std::{collections::BTreeMap, convert::TryFrom};
+use std::{io::Read, time::Duration};
+use std::{io::Write, path::Path};
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
@@ -154,26 +157,34 @@ pub fn setup_failover_nodes(env: TestEnv) {
 }
 
 pub fn test_with_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES, true, true);
+    app_subnet_recovery_test(env, APP_NODES, true, true, false);
 }
 
 pub fn test_without_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES, true, false);
+    app_subnet_recovery_test(env, APP_NODES, true, false, false);
 }
 
 pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES, false, true);
+    // Test the corrupt CUP case only when recovering an app subnet with tECDSA without upgrade
+    let corrupt_cup = env.topology_snapshot().unassigned_nodes().count() > 0;
+    app_subnet_recovery_test(env, APP_NODES, false, true, corrupt_cup);
 }
 
 pub fn test_large_with_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES_LARGE, false, true);
+    app_subnet_recovery_test(env, APP_NODES_LARGE, false, true, false);
 }
 
 pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES, false, false);
+    app_subnet_recovery_test(env, APP_NODES, false, false, false);
 }
 
-pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool, chain_key: bool) {
+pub fn app_subnet_recovery_test(
+    env: TestEnv,
+    subnet_size: usize,
+    upgrade: bool,
+    chain_key: bool,
+    corrupt_cup: bool,
+) {
     let logger = env.logger();
 
     let master_version = env.get_initial_replica_version().unwrap();
@@ -319,7 +330,8 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None,
-        pub_key: Some(pub_key),
+        // If the latest CUP is corrupted we can't deploy read-only access
+        pub_key: (!corrupt_cup).then_some(pub_key),
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: chain_key.then_some(root_subnet_id),
@@ -354,20 +366,26 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
             &logger,
         )
     }
-    assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, &logger);
+    assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
-    let download_node = select_download_node(
-        env.topology_snapshot()
-            .subnets()
-            .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-            .expect("there is no application subnet"),
-        &logger,
-    );
+    let download_node = select_download_node(&app_subnet, &logger);
+
+    if corrupt_cup {
+        info!(logger, "Corrupting the latest CUP on all nodes");
+        corrupt_latest_cup(&app_subnet, subnet_recovery.get_recovery_api(), &logger);
+        assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
+    }
 
     subnet_recovery.params.download_node = Some(download_node.0.get_ip_addr());
 
     for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);
+
+        if corrupt_cup && step_type == StepType::ValidateReplayOutput {
+            // Skip validating the output if the CUP is corrupt, as in this case
+            // no replica will be running to compare the heights to.
+            continue;
+        }
 
         info!(logger, "{}", step.descr());
         step.exec()
@@ -473,6 +491,12 @@ fn break_subnet(
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct Cursor {
+    #[serde(alias = "__CURSOR")]
+    cursor: String,
+}
+
 /// Halt the subnet and wait until the given app node reports consensus 'is halted'
 fn halt_subnet(
     app_node: &IcNodeSnapshot,
@@ -480,13 +504,7 @@ fn halt_subnet(
     recovery: &Recovery,
     logger: &Logger,
 ) {
-    #[derive(Debug, Deserialize, Serialize)]
-    struct Cursor {
-        #[serde(alias = "__CURSOR")]
-        cursor: String,
-    }
-
-    info!(logger, "Breaking the app subnet by halting it",);
+    info!(logger, "Breaking the app subnet by halting it");
     let s = app_node.block_on_ssh_session().unwrap();
     let message_str = execute_bash_command(
         &s,
@@ -521,15 +539,114 @@ fn halt_subnet(
     .expect("Failed to detect broken subnet.");
 }
 
+fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Logger) {
+    const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
+    const NEW_CUP_PATH: &str = "/var/lib/ic/data/cups/new_cup.pb";
+
+    let app_node = subnet.nodes().next().unwrap();
+    let session = app_node.block_on_ssh_session().unwrap();
+
+    info!(
+        logger,
+        "Setting journal cursor on node {:?}",
+        app_node.get_ip_addr()
+    );
+    let message_str = execute_bash_command(
+        &session,
+        "journalctl -n1 -o json --output-fields='__CURSOR'".to_string(),
+    )
+    .expect("journal message");
+    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+
+    info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
+    let (mut channel, _) = session.scp_recv(Path::new(CUP_PATH)).unwrap();
+    let mut bytes = Vec::new();
+    channel.read_to_end(&mut bytes).unwrap();
+
+    info!(logger, "Modifying CUP replica version");
+    let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
+    let mut cup = CatchUpPackage::try_from(&proto_cup).unwrap();
+    cup.content.block.as_mut().version = ReplicaVersion::try_from("invalid_version").unwrap();
+    let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+
+    for node in subnet.nodes() {
+        info!(
+            logger,
+            "Uploading corrupted CUP of length {} to node {:?}",
+            bytes.len(),
+            node.get_ip_addr()
+        );
+        let session = node.block_on_ssh_session().unwrap();
+        execute_bash_command(
+            &session,
+            format!(
+                "sudo touch {}; sudo chmod a+rw {}",
+                NEW_CUP_PATH, NEW_CUP_PATH
+            ),
+        )
+        .expect("touch");
+        let mut channel = session
+            .scp_send(Path::new(NEW_CUP_PATH), 0o666, bytes.len() as u64, None)
+            .unwrap();
+        channel.write_all(&bytes).unwrap();
+
+        info!(logger, "Restarting node {:?}", node.get_ip_addr());
+        execute_bash_command(
+            &session,
+            format!(
+                "sudo mv {} {}; sudo systemctl restart ic-replica",
+                NEW_CUP_PATH, CUP_PATH
+            ),
+        )
+        .expect("restart");
+    }
+
+    ic_system_test_driver::retry_with_msg!(
+        "check if cup is corrupted",
+        logger.clone(),
+        secs(120),
+        secs(10),
+        || {
+            let res = execute_bash_command(
+                &session,
+                format!(
+                    "journalctl --after-cursor='{}' | grep -c 'Failed to deserialize CatchUpPackage'",
+                    message.cursor
+                ),
+            );
+            if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0) {
+                Ok(())
+            } else {
+                bail!("Did not find log entry that cup is corrupted.")
+            }
+        }
+    )
+    .expect("Failed to detect broken subnet.");
+
+    info!(logger, "Unhalting subnet");
+    recovery
+        .halt_subnet(subnet.subnet_id, false, &[])
+        .exec()
+        .expect("Failed to unhalt subnet.");
+}
+
 /// A subnet is considered to be broken if it still works in read mode,
 /// but doesn't in write mode
-fn assert_subnet_is_broken(node_url: &Url, can_id: Principal, msg: &str, logger: &Logger) {
-    info!(logger, "Ensure the subnet works in read mode");
-    assert!(
-        can_read_msg(logger, node_url, can_id, msg),
-        "Failed to read message on node: {}",
-        node_url
-    );
+fn assert_subnet_is_broken(
+    node_url: &Url,
+    can_id: Principal,
+    msg: &str,
+    can_read: bool,
+    logger: &Logger,
+) {
+    if can_read {
+        info!(logger, "Ensure the subnet works in read mode");
+        assert!(
+            can_read_msg(logger, node_url, can_id, msg),
+            "Failed to read message on node: {}",
+            node_url
+        );
+    }
     info!(
         logger,
         "Ensure the subnet doesn't work in write mode anymore"
@@ -573,7 +690,7 @@ fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
 }
 
 /// Select a node with highest finalization height in the given subnet snapshot
-fn select_download_node(subnet: SubnetSnapshot, logger: &Logger) -> (IcNodeSnapshot, NodeMetrics) {
+fn select_download_node(subnet: &SubnetSnapshot, logger: &Logger) -> (IcNodeSnapshot, NodeMetrics) {
     let node = subnet
         .nodes()
         .filter_map(|n| block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| (n, m)))
