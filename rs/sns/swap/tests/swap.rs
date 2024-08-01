@@ -39,9 +39,10 @@ use ic_neurons_fund::{
     PolynomialMatchingFunction, SerializableFunction,
 };
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::NeuronParameters,
-    claim_swap_neurons_response::ClaimSwapNeuronsResult, governance, ClaimSwapNeuronsRequest,
-    ClaimSwapNeuronsResponse, NeuronId, SetMode, SetModeResponse,
+    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
+    claim_swap_neurons_response::ClaimSwapNeuronsResult,
+    governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, NeuronId, NeuronIds, SetMode,
+    SetModeResponse,
 };
 use ic_sns_swap::{
     environment::CanisterClients,
@@ -1345,6 +1346,7 @@ async fn test_finalize_swap_ok_matched_funding() {
         "{:#?}",
         clients.sns_governance.calls
     );
+
     let neuron_controllers = clients
         .sns_governance
         .calls
@@ -1359,7 +1361,7 @@ async fn test_finalize_swap_ok_matched_funding() {
                 }
             }
         })
-        .flat_map(|b| &b.neuron_parameters)
+        .flat_map(|b| b.neuron_recipes.clone().unwrap().neuron_recipes)
         .map(|neuron_distribution| neuron_distribution.controller.as_ref().unwrap().to_string())
         .collect::<HashSet<_>>();
     assert_eq!(
@@ -3401,7 +3403,7 @@ async fn test_claim_swap_neuron_skips_correct_claim_statuses() {
 /// of claim_swap_neurons, this is more of a regression test. If something unexpected changes
 /// in the NeuronParameter creation, this will fail loudly.
 #[tokio::test]
-async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
+async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
     // Step 1: Prepare the world
 
     // Create some valid and invalid NeuronRecipes in the state
@@ -3435,7 +3437,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                 }),
                 investor: Some(Investor::CommunityFund(CfInvestment {
                     controller: Some(*TEST_USER2_PRINCIPAL),
-                    hotkeys: Some(Principals::from(Vec::new())),
+                    hotkeys: Some(Principals::from(vec![*TEST_USER3_PRINCIPAL])),
                     hotkey_principal: (*TEST_USER2_PRINCIPAL).to_string(),
                     nns_neuron_id: 100,
                 })),
@@ -3468,40 +3470,47 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
         }
     );
 
-    assert_eq!(
-        sns_governance_client.get_calls_snapshot(),
-        vec![SnsGovernanceClientCall::ClaimSwapNeurons(
-            ClaimSwapNeuronsRequest {
-                neuron_parameters: vec![
-                    NeuronParameters {
-                        controller: Some(*TEST_USER1_PRINCIPAL),
-                        hotkey: None,
-                        stake_e8s: Some((10 * E8) - init().transaction_fee_e8s()),
-                        dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
-                        source_nns_neuron_id: None,
-                        neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
-                            *TEST_USER1_PRINCIPAL,
-                            10
-                        ))),
-                        followees: vec![NeuronId::new_test_neuron_id(10)],
-                    },
-                    NeuronParameters {
-                        controller: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
-                        hotkey: Some(*TEST_USER2_PRINCIPAL),
-                        stake_e8s: Some((20 * E8) - init().transaction_fee_e8s()),
-                        dissolve_delay_seconds: Some(0),
-                        source_nns_neuron_id: Some(100),
-                        neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
-                            NNS_GOVERNANCE_CANISTER_ID.get(),
-                            0
-                        ))),
-                        followees: vec![NeuronId::new_test_neuron_id(20)],
-                    }
-                ],
-                neuron_recipes: None,
-            }
-        )]
-    )
+    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once neuron_parameters is removed
+    let expected = SnsGovernanceClientCall::ClaimSwapNeurons(ClaimSwapNeuronsRequest {
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes {
+            neuron_recipes: vec![
+                NeuronRecipe {
+                    controller: Some(*TEST_USER1_PRINCIPAL),
+                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
+                        *TEST_USER1_PRINCIPAL,
+                        10,
+                    ))),
+                    stake_e8s: Some((10 * E8) - init().transaction_fee_e8s()),
+                    dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
+                    followees: Some(NeuronIds {
+                        neuron_ids: vec![NeuronId::new_test_neuron_id(10)],
+                    }),
+                    participant: Some(neuron_recipe::Participant::Direct(neuron_recipe::Direct {})),
+                },
+                NeuronRecipe {
+                    controller: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
+                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
+                        NNS_GOVERNANCE_CANISTER_ID.get(),
+                        0,
+                    ))),
+                    stake_e8s: Some((20 * E8) - init().transaction_fee_e8s()),
+                    dissolve_delay_seconds: Some(0),
+                    followees: Some(NeuronIds {
+                        neuron_ids: vec![NeuronId::new_test_neuron_id(20)],
+                    }),
+                    participant: Some(neuron_recipe::Participant::NeuronsFund(
+                        neuron_recipe::NeuronsFund {
+                            nns_neuron_id: Some(100),
+                            nns_neuron_controller: Some(*TEST_USER2_PRINCIPAL),
+                            nns_neuron_hotkeys: Some(Principals::from(vec![*TEST_USER3_PRINCIPAL])),
+                        },
+                    )),
+                },
+            ],
+        }),
+    });
+    assert_eq!(sns_governance_client.get_calls_snapshot(), vec![expected])
 }
 
 /// Test the batching mechanism for claim_swap_neurons, mostly that given a number of
