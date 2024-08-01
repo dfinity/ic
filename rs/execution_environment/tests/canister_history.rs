@@ -647,7 +647,7 @@ fn canister_history_tracks_changes_from_canister() {
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the canister is created in the next round after the ingress message is received
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the same round as the ingress message is received
         0,
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
@@ -677,7 +677,7 @@ fn canister_history_tracks_changes_from_canister() {
     env.execute_ingress(ucan, "update", ucan_payload).unwrap();
     // check canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the canister is installed in the next round after the ingress message is received
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is installed in the same round as the ingress message is received
         1,
         CanisterChangeOrigin::from_canister(ucan.into(), None),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -980,7 +980,7 @@ fn canister_info_retrieval() {
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
-        19,
+        15,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::CanisterCodeUninstall,
     ));
@@ -1054,7 +1054,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     };
 
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the canister is created in the next round after the ingress message is received
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the same round as the ingress message is received
         0,
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
