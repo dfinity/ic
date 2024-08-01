@@ -2,7 +2,7 @@ use crate::{
     canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
-        ExecutionEnvironment, RoundInstructions, RoundLimits,
+        ExecutionEnvironment, RawRandAction, RoundInstructions, RoundLimits,
     },
     metrics::MeasurementScope,
     util::process_responses,
@@ -480,6 +480,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         ongoing_long_install_code: bool,
         long_running_canister_ids: BTreeSet<CanisterId>,
+        raw_rand_action: &RawRandAction,
         registry_settings: &RegistryExecutionSettings,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
@@ -506,6 +507,7 @@ impl SchedulerImpl {
                     state,
                     csprng,
                     round_limits,
+                    raw_rand_action,
                     registry_settings,
                     measurement_scope,
                     idkg_subnet_public_keys,
@@ -538,6 +540,7 @@ impl SchedulerImpl {
         state: ReplicatedState,
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
+        raw_rand_action: &RawRandAction,
         registry_settings: &RegistryExecutionSettings,
         measurement_scope: &MeasurementScope,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
@@ -557,6 +560,7 @@ impl SchedulerImpl {
             idkg_subnet_public_keys,
             registry_settings,
             round_limits,
+            raw_rand_action,
         );
         let round_instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
@@ -659,6 +663,7 @@ impl SchedulerImpl {
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
         let mut non_zero_priority_credit_canister_ids = BTreeSet::new();
+        let mut raw_rand_action = RawRandAction::Execute;
 
         // Start iteration loop:
         //      - Execute subnet messages.
@@ -699,6 +704,7 @@ impl SchedulerImpl {
                         &subnet_measurement_scope,
                         ongoing_long_install_code,
                         long_running_canister_ids,
+                        &raw_rand_action,
                         registry_settings,
                         idkg_subnet_public_keys,
                     );
@@ -807,6 +813,7 @@ impl SchedulerImpl {
             }
 
             is_first_iteration = false;
+            raw_rand_action = RawRandAction::Postpone(current_round);
             drop(finalization_timer);
         }; // end iteration loop.
 
@@ -1168,9 +1175,9 @@ impl SchedulerImpl {
     /// moving them from the source to the destination canister if the
     /// destination canister has room for them.
     ///
-    /// This method only handles messages sent to self and to other canisters.
-    /// Messages sent to the subnet are not handled i.e. they take the slow path
-    /// through message routing.
+    /// This method also handles messages sent to the same subnet, moving
+    /// a canister management request to the subnet input queue, and a response
+    /// from the subnet to a local canister.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
         let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
@@ -1235,8 +1242,24 @@ impl SchedulerImpl {
                                 "Inducting {:?} on same subnet failed with error '{}'.", &msg, &err
                             );
                         }),
-                    None => Err(()),
+                    None => {
+                        if msg.is_addressed_to_subnet(state.metadata.own_subnet_id) {
+                            state
+                                .push_input((*msg).clone(), &mut subnet_available_memory)
+                                .map_err(|(err, msg)| {
+                                    error!(
+                                        self.log,
+                                        "Inducting {:?} on same subnet failed with error '{}'.",
+                                        &msg,
+                                        &err
+                                    );
+                                })
+                        } else {
+                            Err(())
+                        }
+                    }
                 });
+
             let messages_after_induction = source_canister
                 .system_state
                 .queues()
@@ -1246,6 +1269,14 @@ impl SchedulerImpl {
             canisters.insert(source_canister_id, source_canister);
         }
         state.put_canister_states(canisters);
+
+        // Redirect subnet output messages to input queues of the local canisters.
+        let messages_before_induction = state.subnet_queues().output_queues_message_count();
+        state.induct_subnet_messages_to_local(&mut subnet_available_memory, &self.log);
+        let messages_after_induction = state.subnet_queues().output_queues_message_count();
+        inducted_messages_to_others +=
+            messages_before_induction.saturating_sub(messages_after_induction);
+
         self.metrics
             .inducted_messages
             .with_label_values(&["self"])
@@ -1580,6 +1611,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     &mut csprng,
                     &mut subnet_round_limits,
+                    &RawRandAction::Execute,
                     registry_settings,
                     &measurement_scope,
                     &idkg_subnet_public_keys,
@@ -1641,6 +1673,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     &mut csprng,
                     &mut subnet_round_limits,
+                    &RawRandAction::Execute,
                     registry_settings,
                     &measurement_scope,
                     &idkg_subnet_public_keys,

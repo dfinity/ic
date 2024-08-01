@@ -2581,6 +2581,18 @@ impl StateMachine {
             .contains_key(&canister)
     }
 
+    /// Returns the canister version.
+    pub fn canister_version(&self, canister_id: CanisterId) -> u64 {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .canister_version
+    }
+
     /// Queries the canister with the specified ID using the anonymous principal.
     pub fn query(
         &self,
