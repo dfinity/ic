@@ -2166,7 +2166,7 @@ impl Governance {
                         // neuron is public, and the caller requested that
                         // public neurons be included (in full_neurons).
                         || (include_public_neurons_in_full_neurons
-                            && neuron.visibility == Some(Visibility::Public)
+                            && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
                     full_neurons.push(NeuronProto::from(neuron.clone()));
