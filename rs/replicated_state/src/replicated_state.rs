@@ -21,6 +21,7 @@ use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
+use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
@@ -851,6 +852,35 @@ impl ReplicatedState {
     /// to push the `Response` into.
     pub fn push_subnet_output_response(&mut self, msg: Arc<Response>) {
         self.subnet_queues.push_output_response(msg)
+    }
+
+    /// Induct messages from the subnet output queues into the input queues
+    /// of the respective canisters while respecting the capacity and
+    /// subnet available memory.
+    pub fn induct_subnet_messages_to_local(
+        &mut self,
+        subnet_available_memory: &mut i64,
+        log: &ReplicaLogger,
+    ) {
+        self.subnet_queues
+            .output_queues_for_each(|canister_id, msg| {
+                match self.canister_states.get_mut(canister_id) {
+                    Some(dest_canister) => dest_canister
+                        .push_input(
+                            (*msg).clone(),
+                            subnet_available_memory,
+                            self.metadata.own_subnet_type,
+                            InputQueueType::LocalSubnet,
+                        )
+                        .map_err(|(err, msg)| {
+                            error!(
+                                log,
+                                "Inducting {:?} on same subnet failed with error '{}'.", &msg, &err
+                            );
+                        }),
+                    None => Err(()),
+                }
+            });
     }
 
     /// Returns a circular iterator that consumes messages from all canisters'

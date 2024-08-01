@@ -76,7 +76,8 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, NumBytes, NumInstructions, ReplicaVersion, SubnetId, Time,
+    CanisterId, Cycles, ExecutionRound, LongExecutionMode, NumBytes, NumInstructions,
+    ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -367,6 +368,13 @@ impl fmt::Display for DtsInstallCodeStatus {
     }
 }
 
+/// Used during execution of a `RawRand` request to determine
+/// whether it is processed immediately or postponed.
+pub enum RawRandAction {
+    Execute,
+    Postpone(ExecutionRound),
+}
+
 impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -496,6 +504,7 @@ impl ExecutionEnvironment {
         replica_version: &ReplicaVersion,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
+        raw_rand_action: &RawRandAction,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let since = Instant::now(); // Start logging execution time.
 
@@ -899,20 +908,33 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::RawRand) => match &msg {
                 CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::RawRand),
-                CanisterCall::Request(_) => {
-                    let res = match EmptyBlob::decode(payload) {
-                        Err(err) => Err(err),
-                        Ok(EmptyBlob) => {
+                CanisterCall::Request(request) => match EmptyBlob::decode(payload) {
+                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(err),
+                        refund: msg.take_cycles(),
+                    },
+                    Ok(_) => match raw_rand_action {
+                        RawRandAction::Execute => {
                             let mut buffer = vec![0u8; 32];
                             rng.fill_bytes(&mut buffer);
-                            Ok(Encode!(&buffer).unwrap())
+                            ExecuteSubnetMessageResult::Finished {
+                                response: Ok(Encode!(&buffer).unwrap()),
+                                refund: msg.take_cycles(),
+                            }
                         }
-                    };
-                    ExecuteSubnetMessageResult::Finished {
-                        response: res,
-                        refund: msg.take_cycles(),
-                    }
-                }
+                        RawRandAction::Postpone(execution_round_id) => {
+                            state
+                                .metadata
+                                .subnet_call_context_manager
+                                .push_raw_rand_request(
+                                    request.as_ref().clone(),
+                                    *execution_round_id,
+                                    state.time(),
+                                );
+                            ExecuteSubnetMessageResult::Processing
+                        }
+                    },
+                },
             },
 
             Ok(Ic00Method::DepositCycles) => match CanisterIdRecord::decode(payload) {

@@ -880,6 +880,7 @@ fn canister_info_retrieval() {
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
+    assert_eq!(env.canister_version(canister_id), 3);
 
     // create and install universal_canister
     let ucan = env
@@ -894,6 +895,7 @@ fn canister_info_retrieval() {
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
+    assert_eq!(env.canister_version(canister_id), 5);
 
     // users cannot retrieve canister information directly via ingress messages
     let res = env.execute_ingress(
@@ -908,6 +910,7 @@ fn canister_info_retrieval() {
             "Only canisters can call ic00 method canister_info"
         ))
     );
+    assert_eq!(env.canister_version(canister_id), 6);
 
     // do not specify the number of requested changes
     let canister_info = get_canister_info(&env, ucan, canister_id, None).unwrap();
@@ -934,6 +937,7 @@ fn canister_info_retrieval() {
         Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
     );
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+    assert_eq!(env.canister_version(canister_id), 10);
 
     // retrieve a proper suffix of canister history
     let canister_info = get_canister_info(&env, ucan, canister_id, Some(2)).unwrap();

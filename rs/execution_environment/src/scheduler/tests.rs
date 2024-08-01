@@ -19,8 +19,9 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
-    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    CanisterInstallModeV2, CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob,
+    InstallCodeArgsV2, Method, Payload as _, SchnorrKeyId, SignWithSchnorrArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -6318,4 +6319,308 @@ fn charge_idle_canisters_for_full_execution_round() {
         // The accumulated priority invariant should be respected.
         assert_eq!(total_accumulated_priority - total_priority_credit, 0);
     }
+
+fn test_induct_same_subnet_management_messages() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let subnet_id = test.own_subnet_id();
+
+    let sender_id = test.create_canister_with(
+        Cycles::new(10_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        None,
+    );
+    let canister_id = test.create_canister_with(
+        Cycles::new(10_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        None,
+    );
+    test.expect_heartbeat(sender_id, instructions(100));
+    test.expect_heartbeat(canister_id, instructions(101));
+    test.state_mut()
+        .canister_state_mut(&canister_id)
+        .unwrap()
+        .system_state
+        .controllers
+        .insert(sender_id.get());
+
+    // Push request into the output queue of canister identified by `sender_id`.
+    let arg1 = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+    test.push_output_request(
+        &sender_id,
+        RequestBuilder::new()
+            .sender(sender_id)
+            .receiver(CanisterId::from(subnet_id))
+            .method_name(Method::StopCanister)
+            .method_payload(arg1.clone())
+            .payment(Cycles::zero())
+            .build(),
+    );
+
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        0
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    // After executing a round, the stop request is processed.
+    // Response is added in the subnet queues at the end of execution round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    // Check `induct_subnet_messages_to_local` routes messages from subnet
+    // output to the right input canister queue.
+    let mut subnet_available_memory = test.subnet_available_message_memory();
+    test.state_mut()
+        .induct_subnet_messages_to_local(&mut subnet_available_memory, &no_op_logger());
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        0
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+}
+
+#[test]
+fn test_postponing_raw_rand_management_message() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let subnet_id = test.own_subnet_id();
+
+    let sender_id = test.create_canister_with(
+        Cycles::new(10_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        None,
+    );
+    test.expect_heartbeat(sender_id, instructions(100));
+
+    // Push request into the output queue of canister identified by `sender_id`.
+    test.push_output_request(
+        &sender_id,
+        RequestBuilder::new()
+            .sender(sender_id)
+            .receiver(CanisterId::from(subnet_id))
+            .method_name(Method::RawRand)
+            .method_payload(EmptyBlob.encode())
+            .payment(Cycles::zero())
+            .build(),
+    );
+
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        0
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+
+    // After executing a round, the raw request is postponed.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        0
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn test_execute_raw_rand_routed_by_message_routing() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    let sender_id = test.create_canister_with(
+        Cycles::new(10_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        None,
+    );
+    test.expect_heartbeat(sender_id, instructions(100));
+
+    // Added directly in the subnet queues.
+    // Will be executed immediately.
+    test.inject_call_to_ic00(
+        Method::RawRand,
+        EmptyBlob.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        0
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+
+    // After executing a round, the raw request is executed.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "execution_round_subnet_queue_messages",
+        ),
+        Some(HistogramStats { sum: 1.0, count: 3 })
+    );
+}
+
+#[test]
+fn test_inner_round_loop_with_multiple_same_subnet_install_code() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(300),
+            max_instructions_per_message: NumInstructions::from(20),
+            max_instructions_per_message_without_dts: NumInstructions::from(10),
+            max_instructions_per_slice: NumInstructions::from(10),
+            max_instructions_per_install_code: NumInstructions::new(40),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    let subnet_id = test.own_subnet_id();
+    let canister_1 = test.create_canister();
+    test.inject_call_to_ic00(
+        Method::RawRand,
+        EmptyBlob.encode(),
+        Cycles::zero(),
+        canister_1,
+        InputQueueType::LocalSubnet,
+    );
+
+    let canister_2 = test.create_canister();
+    let install_code = TestInstallCode::Upgrade {
+        post_upgrade: instructions(23),
+    };
+    test.inject_install_code_call_to_ic00(canister_2, install_code);
+
+    let sender_id = test.create_canister_with(
+        Cycles::new(10_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        None,
+    );
+    test.expect_heartbeat(sender_id, instructions(10));
+    test.state_mut()
+        .canister_state_mut(&canister_1)
+        .unwrap()
+        .system_state
+        .controllers
+        .insert(sender_id.get());
+    let args = InstallCodeArgsV2 {
+        mode: CanisterInstallModeV2::Install,
+        canister_id: canister_1.get(),
+        wasm_module: vec![],
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        sender_canister_version: None,
+    };
+    // Push request into the output queue of canister identified by `sender_id`.
+    test.push_output_request(
+        &sender_id,
+        RequestBuilder::new()
+            .sender(sender_id)
+            .receiver(CanisterId::from(subnet_id))
+            .method_name(Method::InstallCode)
+            .method_payload(args.encode())
+            .payment(Cycles::zero())
+            .build(),
+    );
+
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 2);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Subnet input queues contain the second install code message,
+    // The message was routed during a `inner_round` iteration.
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+    // Subnet output queue contain the response for the`RawRand` message.
+    // Message was not routed because it was added to the subnet queues
+    // without registering any callback id.
+    assert_eq!(
+        test.state().subnet_queues().output_queues_message_count(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_2)
+            .unwrap()
+            .next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "execution_round_subnet_queue_messages",
+        ),
+        Some(HistogramStats { sum: 1.0, count: 3 })
+    );
 }

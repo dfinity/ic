@@ -7,6 +7,7 @@ use std::{
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
+    execution_environment::Config as ExecConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
@@ -36,7 +37,8 @@ use ic_replicated_state::{
     canister_state::execution_state::{self, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
+    CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory,
+    ReplicatedState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
@@ -54,7 +56,8 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
-        CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response, NO_DEADLINE,
+        CallContextId, CallbackId, Ingress, MessageId, Request, RequestMetadata, RequestOrResponse,
+        Response, NO_DEADLINE,
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
@@ -65,7 +68,8 @@ use maplit::btreemap;
 use std::time::Duration;
 
 use crate::{
-    as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
+    as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
+    RawRandAction, RoundLimits,
 };
 
 use super::{RoundSchedule, SchedulerImpl};
@@ -107,6 +111,8 @@ pub(crate) struct SchedulerTest {
     xnet_canister_id: CanisterId,
     // The actual scheduler.
     scheduler: SchedulerImpl,
+    // The execution config.
+    config: ExecConfig,
     // The fake Wasm executor.
     wasm_executor: Arc<TestWasmExecutor>,
     // Registry Execution Settings.
@@ -140,6 +146,10 @@ impl SchedulerTest {
         self.state().canister_state(&canister_id).unwrap()
     }
 
+    pub fn own_subnet_id(&self) -> SubnetId {
+        self.state().metadata.own_subnet_id
+    }
+
     pub fn metrics_registry(&self) -> &MetricsRegistry {
         &self.metrics_registry
     }
@@ -157,6 +167,12 @@ impl SchedulerTest {
 
     pub fn subnet_ingress_queue_size(&self) -> usize {
         self.state().subnet_queues().ingress_queue_size()
+    }
+
+    pub fn subnet_available_message_memory(&self) -> i64 {
+        let memory_taken = self.state.as_ref().unwrap().memory_taken();
+        self.config.subnet_message_memory_capacity.get() as i64
+            - memory_taken.guaranteed_response_messages().get() as i64
     }
 
     pub fn last_round(&self) -> ExecutionRound {
@@ -569,10 +585,53 @@ impl SchedulerTest {
             &mut csprng,
             &mut round_limits,
             &measurements,
+            false,
+            long_running_canister_ids,
+            &RawRandAction::Execute,
             self.registry_settings(),
             &self.replica_version,
             &BTreeMap::new(),
         )
+    }
+
+    pub fn push_output_request(&mut self, canister_id: &CanisterId, mut request: Request) {
+        let time = self.state.as_ref().unwrap().metadata.batch_time;
+        let canister = self
+            .state
+            .as_mut()
+            .unwrap()
+            .canister_states
+            .get_mut(canister_id)
+            .unwrap();
+
+        assert_eq!(canister.status(), CanisterStatusType::Running);
+        let call_context_manager = canister.system_state.call_context_manager_mut().unwrap();
+
+        let callback_id = call_context_manager.next_callback_id() + 1;
+        request.sender_reply_callback = CallbackId::new(callback_id);
+
+        let call_context_id = call_context_manager.new_call_context(
+            CallOrigin::CanisterUpdate(request.sender, request.sender_reply_callback, NO_DEADLINE),
+            request.payment,
+            Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, UNIX_EPOCH),
+        );
+        let _ = call_context_manager.register_callback(Callback::new(
+            call_context_id,
+            request.sender,
+            request.receiver,
+            Cycles::zero(),
+            Cycles::new(42),
+            Cycles::new(84),
+            WasmClosure::new(0, 1),
+            WasmClosure::new(2, 3),
+            None,
+            NO_DEADLINE,
+        ));
+
+        let _ = canister
+            .system_state
+            .push_output_request(request.into(), time);
     }
 
     pub fn charge_for_resource_allocations(&mut self) {
@@ -595,7 +654,7 @@ impl SchedulerTest {
         wasm_executor.round = self.round;
     }
 
-    fn next_canister_id(&mut self) -> CanisterId {
+    pub(crate) fn next_canister_id(&mut self) -> CanisterId {
         let canister_id = canister_test_id(self.next_canister_id);
         self.next_canister_id += 1;
         canister_id
@@ -925,7 +984,7 @@ impl SchedulerTestBuilder {
             self.own_subnet_id,
             self.subnet_type,
             RoundSchedule::compute_capacity_percent(self.scheduler_config.scheduler_cores),
-            config,
+            config.clone(),
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -956,6 +1015,7 @@ impl SchedulerTestBuilder {
             user_id: user_test_id(1),
             xnet_canister_id: canister_test_id(first_xnet_canister),
             scheduler,
+            config,
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,

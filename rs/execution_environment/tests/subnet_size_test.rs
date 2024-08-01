@@ -478,15 +478,13 @@ fn simulate_sign_with_ecdsa_cost(
         )
         .build();
     // Ignore ingress message response, since SignWithECDSA requires a response
-    // from consensus, which is not simulated in staet_machine_tests.
+    // from consensus, which is not simulated in state_machine_tests.
     let _msg_id = env.send_ingress(
         PrincipalId::new_anonymous(),
         canister_id,
         "update",
         sign_with_ecdsa,
     );
-    // Run `execute_subnet_message`.
-    env.tick();
 
     // Expect `SignWithEcdsa` request to be added into subnet call context manager.
     // Signature fee is deduced from `request.payment`, the excess amount
@@ -495,6 +493,11 @@ fn simulate_sign_with_ecdsa_cost(
     assert_eq!(sign_with_ecdsa_contexts.len(), 1);
     let (_, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
     let payment_after = context.request.payment;
+
+    // Run new execution round.
+    env.tick();
+    let sign_with_ecdsa_contexts = env.sign_with_ecdsa_contexts();
+    assert_eq!(sign_with_ecdsa_contexts.len(), 0);
 
     payment_before - payment_after
 }
