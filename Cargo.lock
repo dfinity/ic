@@ -6599,6 +6599,7 @@ dependencies = [
 name = "ic-crypto-ecdsa-secp256k1"
 version = "0.9.0"
 dependencies = [
+ "bip32",
  "hex",
  "hex-literal",
  "hmac",

@@ -19,6 +19,7 @@ simple_asn1 = { workspace = true }
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 
 [dev-dependencies]
+bip32 = "0.5"
 hex = { workspace = true }
 hex-literal = "0.4"
 rand_chacha = { workspace = true }

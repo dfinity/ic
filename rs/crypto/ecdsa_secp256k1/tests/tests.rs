@@ -336,6 +336,52 @@ fn should_match_slip10_derivation_test_data() {
     );
 }
 
+#[test]
+fn key_derivation_matches_bip32() {
+    // SLIP10 differs from BIP32 only in the case that a 256-bit HMAC
+    // output is greater than the group order. For secp256k1 this occurs
+    // with the cryptographically negligible case of 1/2**127.
+
+    let rng = &mut test_rng();
+
+    // zeros the high bit to avoid requesting hardened derivation, which we do not support
+    let path = (0..255)
+        .map(|_| rng.gen::<u32>() & 0x7FFFFFFF)
+        .collect::<Vec<u32>>();
+
+    let master_key = PrivateKey::generate_using_rng(rng).public_key();
+    let root_chain_code = [0u8; 32];
+
+    let mut derived_keys = Vec::with_capacity(path.len());
+    for i in 1..=path.len() {
+        derived_keys.push(master_key.derive_subkey(&DerivationPath::new_bip32(&path[..i])).0);
+    }
+
+    let attrs = bip32::ExtendedKeyAttrs {
+        depth: 0,
+        parent_fingerprint: [0u8; 4],
+        child_number: bip32::ChildNumber(0),
+        chain_code: root_chain_code,
+    };
+
+    let ext = bip32::ExtendedKey {
+        prefix: bip32::Prefix::XPUB,
+        attrs,
+        key_bytes: master_key.serialize_sec1(true).try_into().expect("Unexpected size"),
+    };
+
+    let bip32_mk = bip32::XPub::try_from(ext).expect("Failed to accept BIP32");
+
+    let mut bip32_state = bip32_mk.clone();
+    for (i, p) in path.iter().enumerate() {
+        let derived = bip32_state
+            .derive_child(bip32::ChildNumber(*p))
+            .expect("Failed to derive child");
+        assert_eq!(derived.to_bytes().to_vec(), derived_keys[i].serialize_sec1(true));
+        bip32_state = derived;
+    }
+}
+
 mod try_recovery_from_digest {
     use crate::test_rng;
     use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey, RecoveryError};
