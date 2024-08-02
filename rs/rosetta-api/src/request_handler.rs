@@ -601,7 +601,7 @@ impl RosettaRequestHandler {
             } => {
                 // If rosetta blocks mode is enabled we have to check whether the rosetta blocks table has been populated
                 match blocks.get_highest_rosetta_block_index()? {
-                    // If it has been populated we ca return the highest rosetta block
+                    // If it has been populated we can return the highest rosetta block
                     Some(highest_rosetta_block_index) => {
                         let highest_rosetta_block = self
                             .get_rosetta_block_by_index(highest_rosetta_block_index)

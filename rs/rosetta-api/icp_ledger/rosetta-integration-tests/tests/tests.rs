@@ -932,7 +932,7 @@ async fn test_block_transaction() {
         .message
         .contains("Block not found"));
 
-    // We are creating a second rosetta block that contains 4 transactions with each having an unique tx hash
+    // We are creating a second rosetta block that contains 4 transactions with each having a unique tx hash
     env.icrc1_transfers(vec![
         TransferArg {
             from_subaccount: None,
@@ -969,7 +969,7 @@ async fn test_block_transaction() {
     ])
     .await;
     env.pocket_ic.auto_progress().await;
-    // ALl the previous transactions are stored in a single rosetta block so we wait until rosetta block 1 is finished
+    // All the previous transactions are stored in a single rosetta block so we wait until rosetta block 1 is finished
     env.rosetta.wait_until_synced_up_to(1).await.unwrap();
 
     // We try to fetch the RosettaBlock we just created earlier
@@ -1027,7 +1027,7 @@ async fn test_block_transaction() {
 
 #[tokio::test]
 async fn test_network_status_multiple_genesis_transactions() {
-    // We start of by testing the case with no rosetta blocks enabled
+    // We start off by testing the case with no rosetta blocks enabled
     let mut env = TestEnv::setup(false, true).await.unwrap();
     let network_status = env.rosetta.network_status().await.unwrap();
     let genesis_block = env
