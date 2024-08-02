@@ -5,14 +5,14 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
 use ic_management_canister_types::{
-    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs,
-    ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload,
-    ProvisionalTopUpCanisterArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadChunkArgs,
+    BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
+    BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
+    ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload, ProvisionalTopUpCanisterArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
+    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -134,6 +134,14 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::BitcoinGetUtxos) => {
             let args = BitcoinGetUtxosArgs::decode(payload)?;
+            Ok(route_bitcoin_message(
+                args.network,
+                network_topology,
+                own_subnet,
+            ))
+        }
+        Ok(Ic00Method::BitcoinGetBlockHeaders) => {
+            let args = BitcoinGetBlockHeadersArgs::decode(payload)?;
             Ok(route_bitcoin_message(
                 args.network,
                 network_topology,
