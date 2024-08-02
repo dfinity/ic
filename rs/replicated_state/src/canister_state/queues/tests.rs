@@ -2371,7 +2371,7 @@ mod mainnet_compatibility_tests {
             queues
                 .push_input_request(LOCAL_CANISTER_ID, InputQueueType::LocalSubnet)
                 .unwrap();
-            // Make an outgoing request just to create a reservation for a response (even if they don't match)
+            // Make an outgoing request just to create a reservation for a response
             queues.push_output_request(LOCAL_CANISTER_ID).unwrap();
             queues
                 .push_input_response(LOCAL_CANISTER_ID, InputQueueType::LocalSubnet)
@@ -2381,7 +2381,7 @@ mod mainnet_compatibility_tests {
             queues
                 .push_input_request(REMOTE_CANISTER_ID, InputQueueType::RemoteSubnet)
                 .unwrap();
-            // Make an outgoing request just to create a reservation for a response (even if they don't match)
+            // Make an outgoing request just to create a reservation for a response
             queues.push_output_request(REMOTE_CANISTER_ID).unwrap();
             queues
                 .push_input_response(REMOTE_CANISTER_ID, InputQueueType::RemoteSubnet)
@@ -2433,7 +2433,7 @@ mod mainnet_compatibility_tests {
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(ref req) if req.respondent == REMOTE_CANISTER_ID);
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(ref req) if req.respondent == LOCAL_CANISTER_ID);
 
-            assert!(!queues.queues.has_input());
+            assert!(!queues.has_input());
         }
     }
 }
