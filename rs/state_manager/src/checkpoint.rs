@@ -1,3 +1,4 @@
+use crate::tip::CheckpointForResettingTip;
 use crate::{
     pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
@@ -14,7 +15,9 @@ use ic_replicated_state::{
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
-use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly};
+use ic_state_layout::{
+    CanisterLayout, CanisterStateBits, CheckpointLayout, LoadingPolicy, ReadOnly,
+};
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::parallel_map;
@@ -96,7 +99,7 @@ pub(crate) fn make_checkpoint(
         if lsmt_storage == FlagStatus::Disabled {
             tip_channel
                 .send(TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: cp.clone(),
+                    checkpoint_layout: CheckpointForResettingTip::Verifying(cp.clone()),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
                     is_initializing_tip: false,
                 })
@@ -131,13 +134,15 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
-    Ok((cp, state, has_downgrade))
+    let cp_verified = cp.remove_unverified_checkpoint_marker()?;
+
+    Ok((cp_verified, state, has_downgrade))
 }
 
 /// Calls [load_checkpoint] with a newly created thread pool.
 /// See [load_checkpoint] for further details.
-pub fn load_checkpoint_parallel(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+pub fn load_checkpoint_parallel<T: LoadingPolicy + Sync>(
+    checkpoint_layout: &CheckpointLayout<T>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -155,8 +160,8 @@ pub fn load_checkpoint_parallel(
 
 /// Loads the node state heighted with `height` using the specified
 /// directory layout.
-pub fn load_checkpoint(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+pub fn load_checkpoint<T: LoadingPolicy + Sync>(
+    checkpoint_layout: &CheckpointLayout<T>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
@@ -294,8 +299,8 @@ impl LoadCanisterMetrics {
     }
 }
 
-pub fn load_canister_state(
-    canister_layout: &CanisterLayout<ReadOnly>,
+pub fn load_canister_state<T: LoadingPolicy>(
+    canister_layout: &CanisterLayout<T>,
     canister_id: &CanisterId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -445,8 +450,8 @@ pub fn load_canister_state(
     Ok((canister_state, metrics))
 }
 
-fn load_canister_state_from_checkpoint(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+fn load_canister_state_from_checkpoint<T: LoadingPolicy>(
+    checkpoint_layout: &CheckpointLayout<T>,
     canister_id: &CanisterId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &CheckpointMetrics,

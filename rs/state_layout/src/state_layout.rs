@@ -71,6 +71,8 @@ pub struct RwPolicy<'a, Owner> {
     lifetime_tag: PhantomData<&'a Owner>,
 }
 
+pub enum InVerification {}
+
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
     /// directory while reading/writing a checkpoint.
@@ -87,10 +89,14 @@ pub trait ReadPolicy: AccessPolicy {}
 pub trait WritePolicy: AccessPolicy {}
 pub trait ReadWritePolicy: ReadPolicy + WritePolicy {}
 
+pub trait LoadingPolicy: ReadPolicy {}
+
 impl<T> ReadWritePolicy for T where T: ReadPolicy + WritePolicy {}
 
 impl AccessPolicy for ReadOnly {}
 impl ReadPolicy for ReadOnly {}
+
+impl LoadingPolicy for ReadOnly {}
 
 impl AccessPolicy for WriteOnly {
     /// For `WriteOnly` mode we want to ensure the directory exists
@@ -115,6 +121,10 @@ impl<'a, T> AccessPolicy for RwPolicy<'a, T> {
 
 impl<'a, T> ReadPolicy for RwPolicy<'a, T> {}
 impl<'a, T> WritePolicy for RwPolicy<'a, T> {}
+
+impl AccessPolicy for InVerification {}
+impl ReadPolicy for InVerification {}
+impl LoadingPolicy for InVerification {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
@@ -350,10 +360,10 @@ impl TipHandler {
     }
 
     /// Resets "tip" to a checkpoint identified by height.
-    pub fn reset_tip_to(
+    pub fn reset_tip_to<T: LoadingPolicy>(
         &mut self,
         state_layout: &StateLayout,
-        cp: &CheckpointLayout<ReadOnly>,
+        cp: &CheckpointLayout<T>,
         lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
@@ -371,6 +381,14 @@ impl TipHandler {
         let file_copy_instruction = |path: &Path| {
             if path.extension() == Some(OsStr::new("pbuf")) {
                 // Do not copy protobufs.
+                CopyInstruction::Skip
+            } else if path == cp.unverified_checkpoint_marker() {
+                // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
+                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
+                // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
+
+                // With LSMT enabled, the unverified checkpoint marker should already be removed at this point.
+                debug_assert_eq!(lsmt_storage, FlagStatus::Disabled);
                 CopyInstruction::Skip
             } else if path.extension() == Some(OsStr::new("bin"))
                 && lsmt_storage == FlagStatus::Disabled
@@ -496,7 +514,7 @@ impl StateLayout {
         thread_pool: &mut Option<scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
-            let path = self.checkpoint(height)?.raw_path().to_path_buf();
+            let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
             sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
                 .map_err(|err| LayoutError::IoError {
                     path,
@@ -617,7 +635,7 @@ impl StateLayout {
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<InVerification>, LayoutError> {
         debug_assert_eq!(height, layout.height);
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
@@ -648,7 +666,7 @@ impl StateLayout {
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        self.checkpoint(height)
+        self.checkpoint_in_verification(height)
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
@@ -669,9 +687,13 @@ impl StateLayout {
         Ok(())
     }
 
+    // TODO: make this method private.
     /// Returns the layout of the checkpoint with the given height (if
     /// there is one).
-    pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    pub fn checkpoint<P>(&self, height: Height) -> Result<CheckpointLayout<P>, LayoutError>
+    where
+        P: LoadingPolicy,
+    {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -700,20 +722,36 @@ impl StateLayout {
                 }
             }
         }
-        CheckpointLayout::new(path, height, self.clone())
+        CheckpointLayout::<P>::new(path, height, self.clone())
     }
 
-    /// Returns the untracked `CheckpointLayout` for the given height (if there is one).
-    pub fn checkpoint_untracked(
+    pub fn checkpoint_verified(
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let cp = self.checkpoint::<ReadOnly>(height)?;
+        // TODO: move this check to the checkpoint layout constructor.
+        if !cp.is_checkpoint_verified() {
+            return Err(LayoutError::CheckpointUnverified(height));
+        };
+        Ok(cp)
+    }
+
+    pub fn checkpoint_in_verification(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<InVerification>, LayoutError> {
+        self.checkpoint::<InVerification>(height)
+    }
+
+    pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
-        CheckpointLayout::new_untracked(path, height)
+        let cp = CheckpointLayout::<ReadOnly>::new_untracked(path, height)?;
+        Ok(cp.is_checkpoint_verified())
     }
 
     fn increment_checkpoint_ref_counter(&self, height: Height) {
@@ -761,8 +799,19 @@ impl StateLayout {
         }
     }
 
-    /// Returns a sorted list of `Height`s for which a checkpoint is available.
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
     pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let checkpoint_heights = self
+            .unfiltered_checkpoint_heights()?
+            .into_iter()
+            .filter(|h| self.checkpoint_verification_status(*h).unwrap_or(false))
+            .collect();
+
+        Ok(checkpoint_heights)
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available, regardless of verification status.
+    pub fn unfiltered_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
             path: self.checkpoints(),
             message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
@@ -884,7 +933,7 @@ impl StateLayout {
                 if heights.is_empty() {
                     error!(
                         self.log,
-                        "Trying to remove non-existing checkpoint {}. The CheckpoinLayout was invalid",
+                        "Trying to remove non-existing checkpoint {}. The CheckpointLayout was invalid",
                         height,
                     );
                     self.metrics
@@ -1316,7 +1365,7 @@ impl<Permissions: AccessPolicy> Drop for CheckpointLayout<Permissions> {
     }
 }
 
-impl Clone for CheckpointLayout<ReadOnly> {
+impl<P: LoadingPolicy> Clone for CheckpointLayout<P> {
     fn clone(&self) -> Self {
         let result = Self {
             root: self.root.clone(),
@@ -1416,6 +1465,78 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn raw_path(&self) -> &Path {
         &self.root
+    }
+
+    /// Returns if the checkpoint is marked as unverified or not.
+    pub fn is_checkpoint_verified(&self) -> bool {
+        !self.unverified_checkpoint_marker().exists()
+    }
+}
+
+impl<P> CheckpointLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Creates the unverified checkpoint marker.
+    /// If the marker already exists, this function does nothing and returns `Ok(())`.
+    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if marker.exists() {
+            return Ok(());
+        }
+        open_for_write(&marker)?;
+        sync_path(&self.root).map_err(|err| LayoutError::IoError {
+            path: self.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+}
+
+impl CheckpointLayout<InVerification> {
+    fn transit_to_verified(self) -> CheckpointLayout<ReadOnly> {
+        let verified_checkpoint = CheckpointLayout::<ReadOnly> {
+            root: self.root.clone(),
+            height: self.height,
+            state_layout: self.state_layout.clone(),
+            permissions_tag: PhantomData,
+        };
+        // Increment after result is constructed in case one of the field clone()'s
+        // panics
+        if let Some(ref state_layout) = self.state_layout {
+            state_layout.increment_checkpoint_ref_counter(self.height);
+        }
+        verified_checkpoint
+    }
+    /// Removes the unverified checkpoint marker.
+    /// If the marker does not exist, this function does nothing and returns `Ok(())`.
+    pub fn remove_unverified_checkpoint_marker(
+        self,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if !marker.exists() {
+            return Ok(self.transit_to_verified());
+        }
+        match std::fs::remove_file(&marker) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                return Err(LayoutError::IoError {
+                    path: marker.to_path_buf(),
+                    message: "failed to remove file from disk".to_string(),
+                    io_err: err,
+                });
+            }
+            _ => {}
+        }
+
+        // Sync the directory to make sure the marker is removed from disk.
+        // This is strict prerequisite for the manifest computation.
+        sync_path(&self.root).map_err(|err| LayoutError::IoError {
+            path: self.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })?;
+
+        Ok(self.transit_to_verified())
     }
 }
 
