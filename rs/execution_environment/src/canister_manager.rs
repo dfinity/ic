@@ -2081,7 +2081,7 @@ impl CanisterManager {
             .add_restore_operation(canister_id, snapshot_id);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            new_canister.scheduler_state.heap_delta_debit += NumBytes::from(new_memory_usage);
+            new_canister.scheduler_state.heap_delta_debit += new_canister.heap_delta();
         }
 
         (instructions_used, Ok(new_canister))
