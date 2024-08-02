@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -25,6 +25,7 @@ rust_binary(
 
 system_test(
     name = "spec_compliance_application_subnet_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
@@ -40,6 +41,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_system_subnet_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
@@ -55,6 +57,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_group_01_application_subnet_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
@@ -70,6 +73,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_group_01_system_subnet_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
@@ -85,6 +89,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_group_02_system_subnet_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
