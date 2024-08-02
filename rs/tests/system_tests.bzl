@@ -5,7 +5,7 @@ Rules for system-tests.
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -108,6 +108,7 @@ default_vm_resources = {
 
 def system_test(
         name,
+        variant = "",
         runtime_deps = [],
         tags = [],
         test_timeout = "long",
@@ -129,6 +130,7 @@ def system_test(
 
     Args:
       name: base name to use for the binary and test rules.
+      variant: string to identify the variant of this test.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
@@ -159,17 +161,18 @@ def system_test(
     """
 
     # Names are used as part of domain names; thus, limit their length
-    if len(name) > 50:
+    if len(name) > 50 or len(variant) > 25:
         fail("Name of system test group too long (max 50): " + name)
 
     bin_name = name + "_bin"
 
-    rust_binary(
-        name = bin_name,
-        testonly = True,
-        srcs = [name + ".rs"],
-        **kwargs
-    )
+    if variant == "":
+        rust_binary(
+            name = bin_name,
+            testonly = True,
+            srcs = [name + ".rs"],
+            **kwargs
+        )
 
     # Automatically detect system tests that use guestos dev for back compatibility.
     for _d in runtime_deps:
@@ -214,8 +217,10 @@ def system_test(
         _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos_malicous + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256"
 
+    variant_suffix = "" if variant == "" else "_" + variant
+
     run_system_test(
-        name = name,
+        name = name + variant_suffix,
         src = bin_name,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
@@ -246,7 +251,7 @@ def system_test(
         env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
 
     run_system_test(
-        name = name + "_colocate",
+        name = name + "_colocate" + variant_suffix,
         src = "//rs/tests/testing_verification:colocate_test_bin",
         colocated_test_bin = bin_name,
         runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
@@ -261,6 +266,50 @@ def system_test(
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
+    )
+
+def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwargs):
+    """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
+
+    Declares two system-tests:
+
+    * One with the given name which uses the NNS from mainnet as specified by testnet/mainnet_revisions.json
+    * One with the given name suffixed with "_head_nns" which uses the NNS from the HEAD of the repo.
+
+    The latter one is additionally tagged with "system_test_nightly" such that it only runs daily and not on PRs.
+    You can override the latter behaviour by specifying different `extra_head_nns_tags`.
+    If you set `extra_head_nns_tags` to `None` the head_nns variant will have the same tags as the default variant.
+
+    The idea being that for most system-tests which test the replica it's more realistic to test against the
+    mainnet NNS since that version would be active when the replica would be released.
+
+    However it's still useful to see if the HEAD replica works against the HEAD NNS which is why this macro
+    introduces the <name>_head_nns variant which only runs daily if not overriden.
+
+    Args:
+        name: the name of the system-tests.
+        extra_head_nns_tags: extra tags assigned to the head_nns variant or None to use the original tags.
+        **kwargs: the arguments of the system-tests.
+    """
+    runtime_deps = kwargs.pop("runtime_deps", [])
+    env = kwargs.pop("env", {})
+
+    system_test(
+        name,
+        env = env | MAINNET_NNS_CANISTER_ENV,
+        runtime_deps = runtime_deps + MAINNET_NNS_CANISTER_RUNTIME_DEPS,
+        **kwargs
+    )
+
+    original_tags = kwargs.pop("tags", [])
+    system_test(
+        name,
+        variant = "head_nns",
+        env = env | NNS_CANISTER_ENV,
+        runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
+        tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] +
+               extra_head_nns_tags if extra_head_nns_tags != None else original_tags,
+        **kwargs
     )
 
 def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
