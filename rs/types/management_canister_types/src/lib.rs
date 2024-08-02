@@ -910,25 +910,34 @@ impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
     }
 }
 
-impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
-    fn from(item: pb_canister_state_bits::LogVisibilityV2) -> Self {
+impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_canister_state_bits::LogVisibilityV2) -> Result<Self, Self::Error> {
         use pb_canister_state_bits as pb;
-        match item.log_visibility_v2 {
-            None => panic!("Invalid LogVisibility enum variant"),
-            Some(log_visibility_v2) => match log_visibility_v2 {
-                pb::log_visibility_v2::LogVisibilityV2::Controllers(_) => Self::Controllers,
-                pb::log_visibility_v2::LogVisibilityV2::Public(_) => Self::Public,
-                pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
-                    Self::AllowedViewers(BoundedAllowedViewers::new(
-                        data.principals
-                            .iter()
-                            .map(|p| {
-                                PrincipalId::try_from(p.raw.clone()).expect("Invalid PrincipalId")
-                            })
-                            .collect(),
-                    ))
-                }
-            },
+        let Some(log_visibility_v2) = item.log_visibility_v2 else {
+            return Err(ProxyDecodeError::MissingField(
+                "LogVisibilityV2::log_visibility_v2",
+            ));
+        };
+        match log_visibility_v2 {
+            pb::log_visibility_v2::LogVisibilityV2::Controllers(_) => Ok(Self::Controllers),
+            pb::log_visibility_v2::LogVisibilityV2::Public(_) => Ok(Self::Public),
+            pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
+                let data = data
+                    .principals
+                    .iter()
+                    .map(|p| {
+                        PrincipalId::try_from(p.raw.clone()).map_err(|e| {
+                            ProxyDecodeError::ValueOutOfRange {
+                                typ: "PrincipalId",
+                                err: e.to_string(),
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<PrincipalId>, _>>()?;
+                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(data)))
+            }
         }
     }
 }
