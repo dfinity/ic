@@ -210,7 +210,11 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                         .map_err(|_| Aborted {})?;
                 }
 
-                timer.stop_and_record();
+                if missing_stripped_ingress_messages > 0 {
+                    timer.stop_and_record();
+                } else {
+                    timer.stop_and_discard();
+                }
             }
 
             // FIXME(kpop): remove the `unwrap()`.
