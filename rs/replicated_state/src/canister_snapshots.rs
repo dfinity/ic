@@ -241,6 +241,8 @@ pub struct CanisterSnapshot {
     /// Snapshot of chunked store.
     chunk_store: WasmChunkStore,
     execution_snapshot: ExecutionStateSnapshot,
+    /// Amount of heap delta produced by this snapshot.
+    heap_delta: NumBytes,
 }
 
 impl CanisterSnapshot {
@@ -252,6 +254,7 @@ impl CanisterSnapshot {
         chunk_store: WasmChunkStore,
         execution_snapshot: ExecutionStateSnapshot,
         size: NumBytes,
+        heap_delta: NumBytes,
     ) -> CanisterSnapshot {
         Self {
             canister_id,
@@ -261,6 +264,7 @@ impl CanisterSnapshot {
             chunk_store,
             execution_snapshot,
             size,
+            heap_delta,
         }
     }
 
@@ -288,6 +292,7 @@ impl CanisterSnapshot {
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
             size: canister.snapshot_memory_usage(),
+            heap_delta: canister.heap_delta(),
         })
     }
 
@@ -329,6 +334,10 @@ impl CanisterSnapshot {
 
     pub fn certified_data(&self) -> &Vec<u8> {
         &self.certified_data
+    }
+
+    pub fn heap_delta(&self) -> NumBytes {
+        self.heap_delta
     }
 }
 
@@ -378,6 +387,7 @@ mod tests {
             vec![],
             WasmChunkStore::new_for_testing(),
             execution_snapshot,
+            NumBytes::from(0),
             NumBytes::from(0),
         );
 

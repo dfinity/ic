@@ -659,11 +659,13 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_snapshots(FlagStatus::Enabled)
-        .with_heap_delta_rate_limit(NumBytes::new(1_000_000))
+        .with_heap_delta_rate_limit(NumBytes::new(80_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
+
+    let initial_heap_delta_estimate = test.state().metadata.heap_delta_estimate;
 
     // Create canister.
     let canister_id = test
@@ -681,6 +683,12 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
+    let heap_delta_estimate_after_taking_snapshot = test.state().metadata.heap_delta_estimate;
+    assert_gt!(
+        heap_delta_estimate_after_taking_snapshot,
+        initial_heap_delta_estimate,
+        "Expected the heap delta estimate to increase after taking a snapshot"
+    );
     let initial_subnet_available_memory = test.subnet_available_memory();
 
     // Taking another snapshot.
@@ -696,6 +704,12 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     assert_eq!(
         test.subnet_available_memory(),
         initial_subnet_available_memory
+    );
+
+    let heap_delta_estimate_after_taking_snapshot_again = test.state().metadata.heap_delta_estimate;
+    assert_eq!(
+        heap_delta_estimate_after_taking_snapshot_again, heap_delta_estimate_after_taking_snapshot,
+        "Expected the heap delta estimate to remain the same after failing to take snapshot"
     );
 }
 
@@ -1200,7 +1214,7 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_snapshots(FlagStatus::Enabled)
-        .with_heap_delta_rate_limit(NumBytes::new(160_800_000))
+        .with_heap_delta_rate_limit(NumBytes::new(150_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
