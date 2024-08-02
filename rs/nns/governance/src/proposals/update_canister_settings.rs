@@ -36,6 +36,11 @@ impl UpdateCanisterSettings {
             .ok_or(invalid_proposal_error("Canister ID is required"))?;
         let canister_id = CanisterId::try_from(canister_principal_id)
             .map_err(|_| invalid_proposal_error("Invalid canister ID"))?;
+        if canister_id == ROOT_CANISTER_ID {
+            return Err(invalid_proposal_error(
+                "Updating root canister settings is not supported yet.",
+            ));
+        }
         Ok(canister_id)
     }
 
@@ -220,6 +225,14 @@ mod tests {
                 ..valid_update_canister_settings.clone()
             },
             vec!["invalid log visibility", "0"],
+        );
+
+        is_invalid_proposal_with_keywords(
+            UpdateCanisterSettings {
+                canister_id: Some(ROOT_CANISTER_ID.get()),
+                ..valid_update_canister_settings.clone()
+            },
+            vec!["root canister", "not supported"],
         );
     }
 
