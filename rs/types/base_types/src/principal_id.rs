@@ -208,7 +208,7 @@ impl PrincipalId {
         }
 
         // Append the internal marker
-        bytes[8] = 0xfe;
+        bytes[n_bytes.len()] = 0xfe;
 
         Self::new_opaque_from_array(bytes, 9)
     }
