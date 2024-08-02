@@ -216,7 +216,7 @@ impl CustomClient {
 /// * the `end_entity` exactly matches a given reference
 ///   certificate, and
 /// * the `intermediates` certs are empty.
-/// All other parameters (server name, time, etc.) are ignored.
+///   All other parameters (server name, time, etc.) are ignored.
 #[derive(Debug)]
 struct MatchingEndEntityCertVerifier {
     end_entity: TlsPublicKeyCert,

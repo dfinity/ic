@@ -678,6 +678,7 @@ pub fn sigsegv_fault_handler_new(
 /// Preconditions:
 ///    * The pages in `max_prefetch_range` have not been dirtied before.
 ///    * `min_prefetch_range` ⊆ `max_prefetch_range`
+///
 /// Guarantees:
 ///    * `min_prefetch_range` ⊆ result ⊆ `max_prefetch_range`
 ///    * Any data read from the tracker's memory within the result range will be equal

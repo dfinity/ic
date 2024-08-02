@@ -90,6 +90,7 @@ pub enum Method {
     // Bitcoin Interface.
     BitcoinGetBalance,
     BitcoinGetUtxos,
+    BitcoinGetBlockHeaders,
     BitcoinSendTransaction,
     BitcoinGetCurrentFeePercentiles,
     // Private APIs used exclusively by the bitcoin canisters.
@@ -108,7 +109,6 @@ pub enum Method {
     // Support for chunked uploading of Wasm modules.
     UploadChunk,
     StoredChunks,
-    DeleteChunks,
     ClearChunkStore,
 
     // Support for canister snapshots.
@@ -1658,6 +1658,7 @@ impl DataSize for PrincipalId {
 ///     reserved_cycles_limit: opt nat;
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
+///     wasm_memory_threshold: opt nat;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSettingsArgs {
@@ -1668,6 +1669,7 @@ pub struct CanisterSettingsArgs {
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -1684,6 +1686,7 @@ impl CanisterSettingsArgs {
             reserved_cycles_limit: None,
             log_visibility: None,
             wasm_memory_limit: None,
+            wasm_memory_threshold: None,
         }
     }
 }
@@ -1697,6 +1700,7 @@ pub struct CanisterSettingsArgsBuilder {
     reserved_cycles_limit: Option<candid::Nat>,
     log_visibility: Option<LogVisibility>,
     wasm_memory_limit: Option<candid::Nat>,
+    wasm_memory_threshold: Option<candid::Nat>,
 }
 
 #[allow(dead_code)]
@@ -1714,6 +1718,7 @@ impl CanisterSettingsArgsBuilder {
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
+            wasm_memory_threshold: self.wasm_memory_threshold,
         }
     }
 
@@ -1787,6 +1792,14 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_wasm_memory_limit(self, wasm_memory_limit: u64) -> Self {
         Self {
             wasm_memory_limit: Some(candid::Nat::from(wasm_memory_limit)),
+            ..self
+        }
+    }
+
+    /// Sets the Wasm memory threshold in bytes.
+    pub fn with_wasm_memory_threshold(self, wasm_memory_threshold: u64) -> Self {
+        Self {
+            wasm_memory_threshold: Some(candid::Nat::from(wasm_memory_threshold)),
             ..self
         }
     }
@@ -2490,6 +2503,7 @@ impl ComputeInitialIDkgDealingsResponse {
 // Export the bitcoin types.
 pub use ic_btc_interface::{
     GetBalanceRequest as BitcoinGetBalanceArgs,
+    GetBlockHeadersRequest as BitcoinGetBlockHeadersArgs,
     GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
     GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionArgs,
@@ -2504,6 +2518,7 @@ pub use ic_btc_replica_types::{
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
 impl Payload<'_> for BitcoinGetUtxosArgs {}
+impl Payload<'_> for BitcoinGetBlockHeadersArgs {}
 impl Payload<'_> for BitcoinSendTransactionArgs {}
 impl Payload<'_> for BitcoinGetCurrentFeePercentilesArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsArgs {}

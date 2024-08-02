@@ -10,10 +10,7 @@ concurrency:
 
 jobs:
   test-namespace:
-    strategy:
-      matrix:
-        os: [ namespace-profile-darwin-small ] # profile created in namespace console
-    runs-on: ${{ matrix.os }}
+    runs-on: namespace-profile-darwin-small # profile created in namespace console
     steps:
 
       - name: Install nsc

@@ -380,7 +380,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
     assert_eq!(
-        *snapshot.canister_module().unwrap(),
+        *snapshot.canister_module(),
         test.canister_state(canister_id)
             .execution_state
             .as_ref()
@@ -408,6 +408,79 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
     assert_ne!(new_snapshot_id, snapshot_id);
     assert!(!test.state().canister_snapshots.contains(&snapshot_id));
     assert!(test.state().canister_snapshots.contains(&new_snapshot_id));
+}
+
+#[test]
+fn take_canister_snapshot_fails_when_limit_is_reached() {
+    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister and update controllers.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    // Upload chunk.
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+
+    // Take a snapshot for the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+
+    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+
+    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+
+    let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
+    assert_eq!(
+        *snapshot.canister_module(),
+        test.canister_state(canister_id)
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary
+    );
+    assert_eq!(
+        *snapshot.chunk_store(),
+        test.canister_state(canister_id)
+            .system_state
+            .wasm_chunk_store
+    );
+
+    // Take a new snapshot for the canister without providing a replacement ID.
+    // Should fail as only 1 snapshot per canister is allowed.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let error = test
+        .subnet_message("take_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(
+        error.description(),
+        format!(
+            "Canister {} has reached the maximum number of snapshots allowed: 1.",
+            canister_id,
+        )
+    );
 }
 
 fn grow_stable_memory(
@@ -918,7 +991,10 @@ fn list_canister_snapshot_succeeds() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.
@@ -1251,7 +1327,10 @@ fn snapshot_is_deleted_with_canister_delete() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.

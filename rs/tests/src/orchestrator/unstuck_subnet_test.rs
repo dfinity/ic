@@ -13,10 +13,11 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use super::utils::upgrade::{bless_replica_version, deploy_guestos_to_all_subnet_nodes};
-use crate::orchestrator::utils::upgrade::get_assigned_replica_version;
-use crate::orchestrator::utils::upgrade::UpdateImageType;
 use anyhow::bail;
+use ic_consensus_system_test_utils::upgrade::{
+    bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
+    UpdateImageType,
+};
 use ic_consensus_system_test_utils::{
     rw_message::{
         can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,

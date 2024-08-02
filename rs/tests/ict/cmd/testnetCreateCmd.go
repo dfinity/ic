@@ -32,7 +32,7 @@ var MAX_TESTNET_LIFETIME_MINS = 1440 * 7
 var DEFAULT_RESULTS_DIR = "ict_testnets"
 
 // Logs are streamed into this file during testnet deployment.
-var SUFFIX_LOG_FILE = "log.txt"
+var SUFFIX_LOG_FILE = ".log"
 
 // Filenames are prefixed with this datetime format up to milliseconds.
 var DATE_TIME_FORMAT = "2006-01-02_15-04-05.000"
@@ -69,7 +69,7 @@ type OutputFilepath struct {
 
 func NewOutputFilepath(outputDir string, time time.Time) *OutputFilepath {
 	return &OutputFilepath{
-		logPath: filepath.Join(outputDir, fmt.Sprintf("%s_%s", time.Format(DATE_TIME_FORMAT), SUFFIX_LOG_FILE)),
+		logPath: filepath.Join(outputDir, fmt.Sprintf("%s%s", time.Format(DATE_TIME_FORMAT), SUFFIX_LOG_FILE)),
 	}
 }
 

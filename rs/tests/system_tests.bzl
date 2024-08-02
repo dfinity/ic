@@ -18,7 +18,10 @@ def _run_system_test(ctx):
         is_executable = True,
         content = """#!/bin/bash
             set -eEuo pipefail
-            RUNFILES="$PWD"
+            # We export RUNFILES such that the from_location_specified_by_env_var() function in
+            # rs/rust_canisters/canister_test/src/canister.rs can find canisters
+            # relative to the $RUNFILES directory.
+            export RUNFILES="$PWD"
             KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
             VERSION_FILE="$(cat $VERSION_FILE_PATH)"
             cd "$TEST_TMPDIR"
@@ -220,6 +223,7 @@ def system_test(
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
     )
@@ -229,7 +233,7 @@ def system_test(
         if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
             deps.append(dep)
 
-    env = {
+    env = env | {
         "COLOCATED_TEST": name,
         "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
         "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
@@ -254,6 +258,7 @@ def system_test(
         env = env,
         tags = tags + ["requires-network", "system_test"] +
                ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
     )
@@ -275,6 +280,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         outs = [name + "_size.txt"],
         cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -288,6 +294,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         /usr/sbin/mkfs.vfat -i "0" -n CONFIG $@
         """,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -297,6 +304,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         fs = ":" + name + "_vfat",
         remap_paths = remap_paths,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -312,5 +320,6 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         name = name,
         actual = name + ".zst",
         tags = tags,
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
     )

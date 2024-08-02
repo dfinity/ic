@@ -14,7 +14,7 @@ fn test_get_network_economics() {
         };
 
         let mut nns_builder = NnsInitPayloadsBuilder::new();
-        nns_builder.governance.proto.economics = Some(network_economics.clone());
+        nns_builder.governance.proto.economics = Some(network_economics.clone().into());
 
         let nns_init_payload = nns_builder.build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;

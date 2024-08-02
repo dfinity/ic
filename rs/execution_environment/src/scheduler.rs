@@ -1705,7 +1705,7 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignWithThresholdContext`]s by assigning randomness and matching quadruples.
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
             let contexts = state
                 .metadata
@@ -1928,6 +1928,7 @@ struct ExecutionThreadResult {
 /// Executes the given canisters one by one. For each canister it
 /// - runs the heartbeat or timer handlers of the canister if needed,
 /// - executes all messages of the canister.
+///
 /// The execution stops if `total_instruction_limit` is reached
 /// or all canisters are processed.
 #[allow(clippy::too_many_arguments)]
@@ -2231,10 +2232,6 @@ fn observe_replicated_state_metrics(
 
     metrics.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
 
-    metrics
-        .ecdsa_signature_agreements
-        .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
-
     for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
         metrics
             .threshold_signature_agreements
@@ -2382,6 +2379,7 @@ fn get_instructions_limits_for_subnet_message(
             | UpdateSettings
             | BitcoinGetBalance
             | BitcoinGetUtxos
+            | BitcoinGetBlockHeaders
             | BitcoinSendTransaction
             | BitcoinSendTransactionInternal
             | BitcoinGetCurrentFeePercentiles
@@ -2392,7 +2390,6 @@ fn get_instructions_limits_for_subnet_message(
             | ProvisionalTopUpCanister
             | UploadChunk
             | StoredChunks
-            | DeleteChunks
             | ClearChunkStore
             | TakeCanisterSnapshot
             | LoadCanisterSnapshot

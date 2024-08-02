@@ -189,6 +189,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::UpdateSettings
                     | ic00::Method::BitcoinGetBalance
                     | ic00::Method::BitcoinGetUtxos
+                    | ic00::Method::BitcoinGetBlockHeaders
                     | ic00::Method::BitcoinSendTransaction
                     | ic00::Method::BitcoinGetCurrentFeePercentiles
                     | ic00::Method::NodeMetricsHistory
@@ -197,7 +198,6 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::ProvisionalTopUpCanister
                     | ic00::Method::UploadChunk
                     | ic00::Method::StoredChunks
-                    | ic00::Method::DeleteChunks
                     | ic00::Method::ClearChunkStore
                     | ic00::Method::TakeCanisterSnapshot
                     | ic00::Method::LoadCanisterSnapshot

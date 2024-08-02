@@ -114,27 +114,25 @@ pub fn setup_logging(cli: &Cli) -> Result<(), Error> {
 
     let subscriber = tracing_subscriber::registry::Registry::default()
         // Journald
-        .with(
-            cli.monitoring
-                .log_journald
-                .then_some(JournaldLayer::new()?.with_filter(level_filter)),
-        )
+        .with(cli.monitoring.log_journald.then(|| {
+            JournaldLayer::new()
+                .expect("failed to setup logging to journald")
+                .with_filter(level_filter)
+        }))
         // Stdout
         .with(
             cli.monitoring
                 .log_stdout
-                .then_some(layer().json().flatten_event(true).with_filter(level_filter)),
+                .then(|| layer().json().flatten_event(true).with_filter(level_filter)),
         )
         // Null
-        .with(
-            cli.monitoring.log_null.then_some(
-                layer()
-                    .with_writer(std::io::sink)
-                    .json()
-                    .flatten_event(true)
-                    .with_filter(level_filter),
-            ),
-        );
+        .with(cli.monitoring.log_null.then(|| {
+            layer()
+                .with_writer(std::io::sink)
+                .json()
+                .flatten_event(true)
+                .with_filter(level_filter)
+        }));
 
     Ok(tracing::subscriber::set_global_default(subscriber)?)
 }
