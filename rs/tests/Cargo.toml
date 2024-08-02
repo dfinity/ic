@@ -181,6 +181,7 @@ wat = "1.0.52"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
 ic-agent = { workspace = true }
+ic-agent-route = { package = "ic-agent", git = "https://github.com/dfinity/agent-rs", rev = "30107322c97e842cb1a51b05e9162f9ef8118f96"  }
 ic-utils = { workspace = true }
 
 [lib]
