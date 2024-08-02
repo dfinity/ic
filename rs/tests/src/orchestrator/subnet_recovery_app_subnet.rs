@@ -156,35 +156,76 @@ pub fn setup_failover_nodes(env: TestEnv) {
     setup(None, APP_NODES, UNASSIGNED_NODES, DKG_INTERVAL, env);
 }
 
+struct Config {
+    subnet_size: usize,
+    upgrade: bool,
+    chain_key: bool,
+    corrupt_cup: bool,
+}
+
 pub fn test_with_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES, true, true, false);
+    app_subnet_recovery_test(
+        env,
+        Config {
+            subnet_size: APP_NODES,
+            upgrade: true,
+            chain_key: true,
+            corrupt_cup: false,
+        },
+    );
 }
 
 pub fn test_without_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES, true, false, false);
+    app_subnet_recovery_test(
+        env,
+        Config {
+            subnet_size: APP_NODES,
+            upgrade: true,
+            chain_key: false,
+            corrupt_cup: false,
+        },
+    );
 }
 
 pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
     // Test the corrupt CUP case only when recovering an app subnet with tECDSA without upgrade
     let corrupt_cup = env.topology_snapshot().unassigned_nodes().count() > 0;
-    app_subnet_recovery_test(env, APP_NODES, false, true, corrupt_cup);
+    app_subnet_recovery_test(
+        env,
+        Config {
+            subnet_size: APP_NODES,
+            upgrade: false,
+            chain_key: true,
+            corrupt_cup,
+        },
+    );
 }
 
 pub fn test_large_with_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES_LARGE, false, true, false);
+    app_subnet_recovery_test(
+        env,
+        Config {
+            subnet_size: APP_NODES_LARGE,
+            upgrade: false,
+            chain_key: true,
+            corrupt_cup: false,
+        },
+    );
 }
 
 pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, APP_NODES, false, false, false);
+    app_subnet_recovery_test(
+        env,
+        Config {
+            subnet_size: APP_NODES,
+            upgrade: false,
+            chain_key: false,
+            corrupt_cup: false,
+        },
+    );
 }
 
-pub fn app_subnet_recovery_test(
-    env: TestEnv,
-    subnet_size: usize,
-    upgrade: bool,
-    chain_key: bool,
-    corrupt_cup: bool,
-) {
+fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
     let logger = env.logger();
 
     let master_version = env.get_initial_replica_version().unwrap();
@@ -211,10 +252,10 @@ pub fn app_subnet_recovery_test(
     let create_new_subnet = !topology_snapshot
         .subnets()
         .any(|s| s.subnet_type() == SubnetType::Application);
-    assert!(chain_key >= create_new_subnet);
+    assert!(cfg.chain_key >= create_new_subnet);
 
     let key_ids = make_key_ids_for_all_schemes();
-    let chain_key_pub_keys = chain_key.then(|| {
+    let chain_key_pub_keys = cfg.chain_key.then(|| {
         info!(logger, "Chain key flag set, creating key on NNS.");
         if create_new_subnet {
             info!(
@@ -225,7 +266,7 @@ pub fn app_subnet_recovery_test(
                 &env,
                 &nns_node,
                 &nns_canister,
-                subnet_size,
+                cfg.subnet_size,
                 master_version.clone(),
                 key_ids.clone(),
                 &logger,
@@ -314,7 +355,7 @@ pub fn app_subnet_recovery_test(
         .map(|n| n.node_id)
         .collect::<Vec<NodeId>>();
 
-    let version_is_broken = upgrade && unassigned_nodes_ids.is_empty();
+    let version_is_broken = cfg.upgrade && unassigned_nodes_ids.is_empty();
     let working_version = if version_is_broken {
         format!("{}-test", master_version)
     } else {
@@ -322,7 +363,7 @@ pub fn app_subnet_recovery_test(
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
-        keep_downloaded_state: Some(chain_key),
+        keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
@@ -331,10 +372,10 @@ pub fn app_subnet_recovery_test(
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None,
         // If the latest CUP is corrupted we can't deploy read-only access
-        pub_key: (!corrupt_cup).then_some(pub_key),
+        pub_key: (!cfg.corrupt_cup).then_some(pub_key),
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),
-        chain_key_subnet_id: chain_key.then_some(root_subnet_id),
+        chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
     };
 
@@ -351,10 +392,10 @@ pub fn app_subnet_recovery_test(
         /*neuron_args=*/ None,
         subnet_args,
     );
-    if upgrade {
+    if cfg.upgrade {
         break_subnet(
             app_nodes,
-            subnet_size,
+            cfg.subnet_size,
             subnet_recovery.get_recovery_api(),
             &logger,
         );
@@ -370,7 +411,7 @@ pub fn app_subnet_recovery_test(
 
     let download_node = select_download_node(&app_subnet, &logger);
 
-    if corrupt_cup {
+    if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
         corrupt_latest_cup(&app_subnet, subnet_recovery.get_recovery_api(), &logger);
         assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
@@ -381,7 +422,7 @@ pub fn app_subnet_recovery_test(
     for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);
 
-        if corrupt_cup && step_type == StepType::ValidateReplayOutput {
+        if cfg.corrupt_cup && step_type == StepType::ValidateReplayOutput {
             // Skip validating the output if the CUP is corrupt, as in this case
             // no replica will be running to compare the heights to.
             continue;
@@ -429,7 +470,7 @@ pub fn app_subnet_recovery_test(
         assert!(height > Height::from(1000));
     }
 
-    if chain_key {
+    if cfg.chain_key {
         if !create_new_subnet {
             disable_chain_key_on_subnet(
                 &nns_node,
