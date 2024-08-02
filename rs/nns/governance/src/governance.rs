@@ -2166,7 +2166,7 @@ impl Governance {
                         // neuron is public, and the caller requested that
                         // public neurons be included (in full_neurons).
                         || (include_public_neurons_in_full_neurons
-                            && neuron.visibility == Some(Visibility::Public)
+                            && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
                     full_neurons.push(NeuronProto::from(neuron.clone()));
@@ -5832,16 +5832,6 @@ impl Governance {
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
             )
         })?;
-
-        #[cfg(not(feature = "test"))]
-        if topic == Topic::ProtocolCanisterManagement
-            || topic == Topic::ServiceNervousSystemManagement
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!("Cannot follow the {:?} topic yet", topic),
-            ));
-        }
 
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {

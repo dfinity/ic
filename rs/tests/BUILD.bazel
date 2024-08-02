@@ -11,7 +11,7 @@ load(":system_tests.bzl", "uvm_config_image")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
-    "src/cow_safety.wasm",
+    "src/memory_safety.wasm",
     "src/message.wasm",
 ])
 
@@ -31,7 +31,7 @@ rust_library(
     aliases = ALIASES,
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
-        "src/consensus/cow_safety.wasm",
+        "src/memory_safety.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
