@@ -930,7 +930,7 @@ async fn test_block_transaction() {
         .message
         .contains("Block not found"));
 
-    // We are creating a second rosetta block that contains 4 transactions with each having an unique tx hash
+    // We are creating a second rosetta block that contains 4 transactions with each having a unique tx hash
     env.icrc1_transfers(vec![
         TransferArg {
             from_subaccount: None,
