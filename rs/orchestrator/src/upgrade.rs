@@ -162,13 +162,14 @@ impl Upgrade {
                     (subnet_id, maybe_proto, maybe_cup)
                 }
                 (None, Some(proto)) => {
-                    // We found a local CUP proto that we can't deserialize. This should only happen
-                    // if this is the first CUP we are reading on a new replica version, after an
+                    // We found a local CUP proto that we can't deserialize. This may only happen
+                    // if this is the first CUP we are reading on a new replica version after an
                     // upgrade. This means we have to be an assigned node, otherwise we would have
                     // left the subnet and deleted the CUP before upgrading to this version.
                     // The only way to leave this branch is via subnet recovery.
 
-                    // Try to find the subnet ID by deserializing only the NiDkgId
+                    // Try to find the subnet ID by deserializing only the NiDkgId. If it fails
+                    // we will have to recover using failover nodes.
                     let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
                         .map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
@@ -183,7 +184,7 @@ impl Upgrade {
                             // If this CUP was created by a remote subnet, then it is a genesis/recovery
                             // CUP. This is the only case in the branch where we can trust the subnet ID
                             // of the latest registry version, as switching to a registry CUP "resets" the
-                            // "oldest registry version in use".
+                            // "oldest registry version in use" which is responsible for subnet membership.
                             match self.registry.get_subnet_id(latest_registry_version) {
                                 Ok(subnet_id) => subnet_id,
                                 Err(OrchestratorError::NodeUnassignedError(_, _)) => {
