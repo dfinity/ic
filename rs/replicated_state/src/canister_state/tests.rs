@@ -625,7 +625,7 @@ fn canister_state_log_visibility_round_trip() {
     // LogVisibilityV2.
     for initial in LogVisibilityV2::iter() {
         let encoded = pb::LogVisibilityV2::from(&initial);
-        let round_trip = LogVisibilityV2::try_from(encoded).unwrap_or_default();
+        let round_trip = LogVisibilityV2::try_from(encoded).unwrap();
 
         assert_eq!(initial, round_trip);
     }
@@ -636,7 +636,7 @@ fn canister_state_log_visibility_round_trip() {
         user_test_id(2).get(),
     ]));
     let encoded = pb::LogVisibilityV2::from(&initial);
-    let round_trip = LogVisibilityV2::try_from(encoded).unwrap_or_default();
+    let round_trip = LogVisibilityV2::try_from(encoded).unwrap();
 
     assert_eq!(initial, round_trip);
 }
