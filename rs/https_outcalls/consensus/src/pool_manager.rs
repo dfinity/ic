@@ -291,7 +291,7 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
 
-        let existing_signed_requests: BTreeSet<_> = canister_http_pool
+        let mut existing_signed_requests: BTreeSet<_> = canister_http_pool
             .get_validated_shares()
             .map(|share| (share.signature.signer, share.content.id))
             .collect();
@@ -339,6 +339,8 @@ impl CanisterHttpPoolManagerImpl {
                         format!("Unable to verify signature of share, {}", err),
                     ))
                 } else {
+                    // Update the set of existing signed requests.
+                    existing_signed_requests.insert((share.signature.signer, share.content.id));
                     self.metrics.shares_validated.inc();
                     Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
                 }
