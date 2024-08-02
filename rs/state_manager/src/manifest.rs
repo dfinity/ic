@@ -27,7 +27,7 @@ use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::page_map::StorageLayout;
 use ic_replicated_state::PageIndex;
-use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE};
+use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
 use rand::{Rng, SeedableRng};
@@ -882,7 +882,7 @@ pub fn compute_manifest(
     };
 
     #[cfg(debug_assertions)]
-    let files_to_check_in_debug_mode = files.clone();
+    let original_files = files.clone();
 
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
     // If it accidentally exists, the marker file should be excluded from manifest computation and a critical alert will be raised.
@@ -892,12 +892,16 @@ pub fn compute_manifest(
         files.retain(|FileWithSize(p, _)| {
             checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
         });
+        assert!(!files
+            .iter()
+            .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)));
     }
 
-    debug_assert!(!files_to_check_in_debug_mode
-        .iter()
-        .any(|FileWithSize(p, _)| checkpoint.raw_path().join(p)
-            == checkpoint.unverified_checkpoint_marker()));
+    #[cfg(debug_assertions)]
+    debug_assert_eq!(
+        original_files, files,
+        "the unverified checkpoint marker file is not expected to exist"
+    );
 
     let chunk_actions = match opt_manifest_delta {
         Some(manifest_delta) => {
