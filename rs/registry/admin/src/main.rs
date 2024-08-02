@@ -53,10 +53,13 @@ use ic_nns_governance::{
             swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
             SwapParameters,
         },
+        install_code::CanisterInstallMode as GovernanceInstallMode,
         manage_neuron::Command,
         proposal::Action,
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
-        NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
+        stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCode,
+        ManageNeuron, NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
+        StopOrStartCanister,
     },
     proposals::proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
@@ -811,6 +814,11 @@ impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConvers
 struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Remove `no_` prefix after the InstallCode proposal is supported.
+    #[clap(long)]
+    no_use_legacy_execute_nns_function: bool,
 }
 
 impl ProposalTitle for StartCanisterCmd {
@@ -838,6 +846,11 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
 struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Remove `no_` prefix after the InstallCode proposal is supported.
+    #[clap(long)]
+    no_use_legacy_execute_nns_function: bool,
 }
 
 impl ProposalTitle for StopCanisterCmd {
@@ -1003,6 +1016,11 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
+
+    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Remove `no_` prefix after the InstallCode proposal is supported.
+    #[clap(long)]
+    no_use_legacy_execute_nns_function: bool,
 }
 
 #[async_trait]
@@ -3938,21 +3956,19 @@ async fn main() {
         }
         SubCommand::ProposeToChangeNnsCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            if cmd.canister_id == ROOT_CANISTER_ID {
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.no_use_legacy_execute_nns_function {
+                propose_to_install_code(cmd, canister_client, proposer).await;
+            } else if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
                     UpgradeRootProposal,
                     ProposeToChangeNnsCanisterCmd,
-                >(
-                    cmd,
-                    NnsFunction::NnsRootUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
-                    proposer,
-                )
+                >(cmd, NnsFunction::NnsRootUpgrade, canister_client, proposer)
                 .await;
             } else {
                 propose_external_proposal_from_command::<
@@ -3961,12 +3977,7 @@ async fn main() {
                 >(
                     cmd,
                     NnsFunction::NnsCanisterUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
+                    canister_client,
                     proposer,
                 )
                 .await;
@@ -4022,33 +4033,43 @@ async fn main() {
         }
         SubCommand::ProposeToStartCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.no_use_legacy_execute_nns_function {
+                propose_to_start_canister(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToStopCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.no_use_legacy_execute_nns_function {
+                propose_to_stop_canister(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5530,6 +5551,129 @@ async fn propose_to_add_or_remove_node_provider(
     };
 }
 
+async fn propose_to_install_code(
+    cmd: ProposeToChangeNnsCanisterCmd,
+    agent: Agent,
+    proposer: NeuronId,
+) {
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+
+    let canister_id = Some(PrincipalId::try_from(cmd.canister_id).unwrap());
+    let wasm_module = Some(
+        read_wasm_module(
+            &cmd.wasm_module_path,
+            &cmd.wasm_module_url,
+            &cmd.wasm_module_sha256,
+        )
+        .await,
+    );
+    let arg = cmd.arg.as_ref().map(|path| read_file_fully(path));
+    let skip_stopping_before_installing = Some(cmd.skip_stopping_before_installing);
+    let install_mode = match cmd.mode {
+        CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
+        CanisterInstallMode::Reinstall => Some(GovernanceInstallMode::Reinstall as i32),
+        CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
+    };
+
+    let install_code = InstallCode {
+        skip_stopping_before_installing,
+        install_mode,
+        canister_id,
+        wasm_module,
+        arg,
+    };
+
+    print_proposal(&install_code, &cmd);
+
+    if cmd.is_dry_run() {
+        return;
+    }
+
+    let proposal_id = canister_client
+        .submit_install_code_proposal(install_code, cmd.url(), cmd.title(), cmd.summary())
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("propose_to_install_code error: {:?}", e);
+            std::process::exit(1);
+        });
+
+    println!("proposal {}", proposal_id);
+}
+
+async fn propose_to_stop_canister(cmd: StopCanisterCmd, agent: Agent, proposer: NeuronId) {
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+
+    let canister_id = PrincipalId::try_from(cmd.canister_id).unwrap();
+    let stop_canister = StopOrStartCanister {
+        canister_id: Some(canister_id),
+        action: Some(GovernanceCanisterAction::Stop as i32),
+    };
+
+    print_proposal(&stop_canister, &cmd);
+
+    if cmd.is_dry_run() {
+        return;
+    }
+
+    let proposal_id = canister_client
+        .submit_stop_or_start_canister_proposal(
+            stop_canister,
+            cmd.url(),
+            cmd.title(),
+            cmd.summary(),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("propose_to_stop_canister error: {:?}", e);
+            std::process::exit(1);
+        });
+
+    println!("proposal {}", proposal_id);
+}
+
+async fn propose_to_start_canister(cmd: StartCanisterCmd, agent: Agent, proposer: NeuronId) {
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+
+    let canister_id = PrincipalId::try_from(cmd.canister_id).unwrap();
+    let start_canister = StopOrStartCanister {
+        canister_id: Some(canister_id),
+        action: Some(GovernanceCanisterAction::Start as i32),
+    };
+
+    print_proposal(&start_canister, &cmd);
+
+    if cmd.is_dry_run() {
+        return;
+    }
+
+    let proposal_id = canister_client
+        .submit_stop_or_start_canister_proposal(
+            start_canister,
+            cmd.url(),
+            cmd.title(),
+            cmd.summary(),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("propose_to_start_canister error: {:?}", e);
+            std::process::exit(1);
+        });
+
+    println!("proposal {}", proposal_id);
+}
+
 /// Returns the threshold signing public key of the roo (NNS) subnet.
 fn get_root_subnet_pub_key(
     client: Arc<RegistryClientImpl>,
@@ -5839,6 +5983,70 @@ impl GovernanceCanisterClient {
         .map_err(|e| {
             format!(
                 "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
+                e
+            )
+        })?;
+        let response = self
+            .0
+            .execute_update("manage_neuron", serialized)
+            .await?
+            .ok_or_else(|| "submit_proposal replied nothing.".to_string())?;
+
+        decode_make_proposal_response(response)
+    }
+
+    pub async fn submit_install_code_proposal(
+        &self,
+        payload: InstallCode,
+        url: String,
+        title: String,
+        summary: String,
+    ) -> Result<ProposalId, String> {
+        let serialized = Encode!(&ManageNeuron {
+            neuron_id_or_subaccount: None,
+            command: Some(Command::MakeProposal(Box::new(Proposal {
+                title: Some(title),
+                summary,
+                url,
+                action: Some(Action::InstallCode(payload)),
+            }))),
+            id: Some((*self.0.proposal_author()).into()),
+        })
+        .map_err(|e| {
+            format!(
+                "Cannot candid-serialize the submit_install_code_proposal payload: {}",
+                e
+            )
+        })?;
+        let response = self
+            .0
+            .execute_update("manage_neuron", serialized)
+            .await?
+            .ok_or_else(|| "submit_proposal replied nothing.".to_string())?;
+
+        decode_make_proposal_response(response)
+    }
+
+    pub async fn submit_stop_or_start_canister_proposal(
+        &self,
+        payload: StopOrStartCanister,
+        url: String,
+        title: String,
+        summary: String,
+    ) -> Result<ProposalId, String> {
+        let serialized = Encode!(&ManageNeuron {
+            neuron_id_or_subaccount: None,
+            command: Some(Command::MakeProposal(Box::new(Proposal {
+                title: Some(title),
+                summary,
+                url,
+                action: Some(Action::StopOrStartCanister(payload)),
+            }))),
+            id: Some((*self.0.proposal_author()).into()),
+        })
+        .map_err(|e| {
+            format!(
+                "Cannot candid-serialize the submit_stop_or_start_canister_proposal payload: {}",
                 e
             )
         })?;

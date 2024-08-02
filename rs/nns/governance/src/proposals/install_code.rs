@@ -6,6 +6,7 @@ use crate::{
 
 use candid::{CandidType, Deserialize, Encode};
 use ic_base_types::CanisterId;
+use ic_crypto_sha2::Sha256;
 use ic_management_canister_types::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
