@@ -867,6 +867,7 @@ pub enum LogVisibilityV2 {
 impl Payload<'_> for LogVisibilityV2 {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
         match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+            // Fall back to the default value.
             Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
             Ok(log_visibility_v2) => Ok(log_visibility_v2),
             Err(err) => Err(err),
