@@ -12,7 +12,9 @@ use crate::{
     util::GOVERNANCE_CANISTER_ID,
 };
 use ic_base_types::NumSeconds;
-use ic_config::{execution_environment::MAX_NUMBER_OF_CANISTER_SNAPSHOTS, flag_status::FlagStatus};
+use ic_config::{
+    execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
+};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -1806,11 +1808,11 @@ impl CanisterManager {
                 if state
                     .canister_snapshots
                     .snapshots_count(&canister.canister_id())
-                    >= MAX_NUMBER_OF_CANISTER_SNAPSHOTS
+                    >= MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER
                 {
                     return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
                         canister_id: canister.canister_id(),
-                        limit: MAX_NUMBER_OF_CANISTER_SNAPSHOTS,
+                        limit: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
                     });
                 }
             }
