@@ -255,6 +255,13 @@ struct CheckpointRefData {
 /// │   │       ├── software.wasm
 /// │   │       ├── stable_memory.bin
 /// │   │       └── vmemory_0.bin
+/// │   ├── snapshots
+/// │   │   └── <hex(canister_id)>
+/// │   │       └──  <hex(snapshot_id)>
+/// │   │           ├── snapshot.pbuf
+/// │   │           ├── software.wasm
+/// │   │           ├── stable_memory.bin
+/// │   │           └── vmemory_0.bin
 /// │   ├── ingress_history.pbuf
 /// │   ├── split_from.pbuf
 /// │   ├── subnet_queues.pbuf
@@ -270,6 +277,13 @@ struct CheckpointRefData {
 /// │      │       ├── stable_memory.bin
 /// │      │       ├── vmemory_0.bin
 /// │      │       └── wasm_chunk_store.bin
+/// │      ├── snapshots
+/// │      │   └── <hex(canister_id)>
+/// │      │       └──  <hex(snapshot_id)>
+/// │      │           ├── snapshot.pbuf
+/// │      │           ├── software.wasm
+/// │      │           ├── stable_memory.bin
+/// │      │           └── vmemory_0.bin
 /// │      ├── ingress_history.pbuf
 /// │      ├── split_from.pbuf
 /// │      ├── subnet_queues.pbuf
@@ -1205,6 +1219,10 @@ fn is_already_exists_err(err: &std::io::Error) -> bool {
 /// Iterates over all the children at exact `depth` of the specified directory, applies
 /// the provided transformation to each, collects them into a vector and sorts
 /// them.
+///
+/// This function is used to list canister's in the `canister_states` directory as well as snaphots
+/// in the `snapshots` directory. Note that canisters are listed at depth 0, but snapshots are at depth 1
+/// as they are further grouped by their controlling canister.
 fn collect_subdirs<F, T>(dir: &Path, depth: u64, transform: F) -> Result<Vec<T>, LayoutError>
 where
     F: Fn(&str) -> Result<T, String>,

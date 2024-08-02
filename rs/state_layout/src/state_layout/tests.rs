@@ -597,7 +597,7 @@ fn read_back_checkpoint_directory_names(heights in random_sorted_unique_heights(
 
 #[test]
 fn read_back_canister_snapshot_ids(mut snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
-    let tmp = tmpdir("canister");
+    let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<WriteOnly> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
     for snapshot_id in &snapshot_ids {
@@ -612,7 +612,7 @@ fn read_back_canister_snapshot_ids(mut snapshot_ids in random_unique_snapshot_id
 
 #[test]
 fn can_add_and_delete_canister_snapshots(snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
-    let tmp = tmpdir("canister");
+    let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<WriteOnly> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
 
