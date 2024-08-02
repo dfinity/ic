@@ -49,3 +49,56 @@ pub struct Advert {
     #[prost(bytes = "vec", tag = "2")]
     pub attribute: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetIngressMessageInBlockRequest {
+    #[prost(message, optional, tag = "1")]
+    pub ingress_message_id: ::core::option::Option<super::super::types::v1::IngressMessageId>,
+    #[prost(message, optional, tag = "2")]
+    pub block_proposal_id: ::core::option::Option<super::super::types::v1::ConsensusMessageId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetIngressMessageInBlockResponse {
+    #[prost(bytes = "vec", tag = "1")]
+    pub ingress_message: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedBlockProposal {
+    #[prost(message, optional, tag = "1")]
+    pub stripped_block: ::core::option::Option<super::super::types::v1::Block>,
+    /// / Hash of the pre-stripped block
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    /// / Signature of the pre-stripped block
+    #[prost(bytes = "vec", tag = "3")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "4")]
+    pub signer: ::core::option::Option<super::super::types::v1::NodeId>,
+    #[prost(message, optional, tag = "5")]
+    pub unstripped_id: ::core::option::Option<super::super::types::v1::ConsensusMessageId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedConsensusMessage {
+    #[prost(oneof = "stripped_consensus_message::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<stripped_consensus_message::Msg>,
+}
+/// Nested message and enum types in `StrippedConsensusMessage`.
+pub mod stripped_consensus_message {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        StrippedBlockProposal(super::StrippedBlockProposal),
+        #[prost(message, tag = "2")]
+        Unstripped(super::super::super::types::v1::ConsensusMessage),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedConsensusMessageId {
+    #[prost(message, optional, tag = "1")]
+    pub unstripped_id: ::core::option::Option<super::super::types::v1::ConsensusMessageId>,
+}

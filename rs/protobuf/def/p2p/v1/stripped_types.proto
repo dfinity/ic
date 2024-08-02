@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package p2p.v1;
+
+import "types/v1/artifact.proto";
+import "types/v1/consensus.proto";
+import "types/v1/types.proto";
+
+message StrippedBlockProposal {
+  types.v1.Block stripped_block = 1;
+  /// Hash of the pre-stripped block
+  bytes hash = 2;
+  /// Signature of the pre-stripped block
+  bytes signature = 3;
+  types.v1.NodeId signer = 4;
+  types.v1.ConsensusMessageId unstripped_id = 5;
+}
+
+message StrippedConsensusMessage {
+  oneof msg {
+    StrippedBlockProposal stripped_block_proposal = 1;
+    types.v1.ConsensusMessage unstripped = 2;
+  }
+}
+
+message StrippedConsensusMessageId  {
+  types.v1.ConsensusMessageId unstripped_id = 1;
+}
