@@ -1,13 +1,18 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
     pb::v1::{
-        update_canister_settings::CanisterSettings, GovernanceError, Topic, UpdateCanisterSettings,
+        update_canister_settings::LogVisibility, GovernanceError, Topic, UpdateCanisterSettings,
     },
     proposals::call_canister::CallCanister,
 };
 
+use candid::{Encode, Nat};
 use ic_base_types::CanisterId;
+use ic_nervous_system_clients::update_settings::{
+    CanisterSettings as RootCanisterSettings, LogVisibility as RootLogVisibility,
+};
 use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_handler_root_interface::UpdateCanisterSettingsRequest;
 
 impl UpdateCanisterSettings {
     pub fn validate(&self) -> Result<(), GovernanceError> {
@@ -39,7 +44,18 @@ impl UpdateCanisterSettings {
         topic_to_manage_canister(&canister_id)
     }
 
-    fn valid_canister_settings(&self) -> Result<CanisterSettings, GovernanceError> {
+    fn valid_log_visibility(log_visibility_i32: i32) -> Result<RootLogVisibility, GovernanceError> {
+        let log_visibility = LogVisibility::try_from(log_visibility_i32);
+        match log_visibility {
+            Ok(LogVisibility::Controllers) => Ok(RootLogVisibility::Controllers),
+            Ok(LogVisibility::Public) => Ok(RootLogVisibility::Public),
+            Ok(LogVisibility::Unspecified) | Err(_) => Err(invalid_proposal_error(&format!(
+                "Invalid log visibility {log_visibility_i32}"
+            ))),
+        }
+    }
+
+    fn valid_canister_settings(&self) -> Result<RootCanisterSettings, GovernanceError> {
         let settings = self
             .settings
             .as_ref()
@@ -57,7 +73,29 @@ impl UpdateCanisterSettings {
             ));
         }
 
-        Ok(settings.clone())
+        let controllers = settings
+            .controllers
+            .as_ref()
+            .map(|controllers| controllers.controllers.clone());
+        let compute_allocation = settings.compute_allocation.map(Nat::from);
+        let memory_allocation = settings.memory_allocation.map(Nat::from);
+        let freezing_threshold = settings.freezing_threshold.map(Nat::from);
+        let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
+        let log_visibility = match settings.log_visibility {
+            Some(log_visibility_i32) => Some(Self::valid_log_visibility(log_visibility_i32)?),
+            None => None,
+        };
+        // Reserved cycles limit is not supported yet.
+        let reserved_cycles_limit = None;
+        Ok(RootCanisterSettings {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            wasm_memory_limit,
+            log_visibility,
+            reserved_cycles_limit,
+        })
     }
 }
 
@@ -67,10 +105,14 @@ impl CallCanister for UpdateCanisterSettings {
     }
 
     fn payload(&self) -> Result<Vec<u8>, GovernanceError> {
-        // TODO(NNS1-2522): convert to payload to be sent to Root.
-        Err(invalid_proposal_error(
-            "UpdateCanisterSettings not yet supported",
-        ))
+        let canister_id = self.valid_canister_id()?.get();
+        let settings = self.valid_canister_settings()?;
+        let update_settings = UpdateCanisterSettingsRequest {
+            canister_id,
+            settings,
+        };
+        Encode!(&update_settings)
+            .map_err(|err| invalid_proposal_error(&format!("Failed to encode payload: {err}")))
     }
 }
 
@@ -79,6 +121,9 @@ mod tests {
     use super::*;
 
     use crate::pb::v1::governance_error::ErrorType;
+    #[cfg(feature = "test")]
+    use crate::pb::v1::update_canister_settings::{CanisterSettings, Controllers};
+
     use ic_nns_constants::LEDGER_CANISTER_ID;
 
     #[cfg(not(feature = "test"))]
@@ -154,16 +199,47 @@ mod tests {
             },
             vec!["at least one setting", "provided"],
         );
+
+        is_invalid_proposal_with_keywords(
+            UpdateCanisterSettings {
+                settings: Some(CanisterSettings {
+                    log_visibility: Some(4),
+                    ..Default::default()
+                }),
+                ..valid_update_canister_settings.clone()
+            },
+            vec!["invalid log visibility", "4"],
+        );
+
+        is_invalid_proposal_with_keywords(
+            UpdateCanisterSettings {
+                settings: Some(CanisterSettings {
+                    log_visibility: Some(LogVisibility::Unspecified as i32),
+                    ..Default::default()
+                }),
+                ..valid_update_canister_settings.clone()
+            },
+            vec!["invalid log visibility", "0"],
+        );
     }
 
     #[cfg(feature = "test")]
     #[test]
     fn test_update_ledger_canister_settings() {
+        use candid::Decode;
+        use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+
         let update_ledger_canister_settings = UpdateCanisterSettings {
             canister_id: Some(LEDGER_CANISTER_ID.get()),
             settings: Some(CanisterSettings {
-                memory_allocation: Some(1 << 30),
-                ..Default::default()
+                controllers: Some(Controllers {
+                    controllers: vec![GOVERNANCE_CANISTER_ID.get()],
+                }),
+                memory_allocation: Some(1 << 32),
+                wasm_memory_limit: Some(1 << 31),
+                compute_allocation: Some(10),
+                freezing_threshold: Some(100),
+                log_visibility: Some(LogVisibility::Public as i32),
             }),
         };
 
@@ -177,6 +253,25 @@ mod tests {
             Ok((ROOT_CANISTER_ID, "update_canister_settings"))
         );
 
-        // TODO(NNS1-2522): test payload after it's implemented.
+        let decoded_payload = Decode!(
+            &update_ledger_canister_settings.payload().unwrap(),
+            UpdateCanisterSettingsRequest
+        )
+        .unwrap();
+        assert_eq!(
+            decoded_payload,
+            UpdateCanisterSettingsRequest {
+                canister_id: LEDGER_CANISTER_ID.get(),
+                settings: RootCanisterSettings {
+                    controllers: Some(vec![GOVERNANCE_CANISTER_ID.get()]),
+                    memory_allocation: Some(Nat::from(1u64 << 32)),
+                    wasm_memory_limit: Some(Nat::from(1u64 << 31)),
+                    compute_allocation: Some(Nat::from(10u64)),
+                    freezing_threshold: Some(Nat::from(100u64)),
+                    log_visibility: Some(RootLogVisibility::Public),
+                    reserved_cycles_limit: None,
+                }
+            }
+        );
     }
 }
