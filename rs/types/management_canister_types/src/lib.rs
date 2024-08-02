@@ -799,14 +799,20 @@ impl Payload<'_> for LogVisibility {
             match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
                 Ok(log_visibility) => log_visibility,
                 // Try to decode as LogVisibilityV2 and convert to LogVisibility
-                Err(_) => match LogVisibilityV2::decode(blob)? {
-                    LogVisibilityV2::Controllers => Self::Controllers,
-                    LogVisibilityV2::Public => Self::Public,
-                    // Fall back to the default value.
-                    LogVisibilityV2::AllowedViewers(_) => Self::default(),
-                },
+                Err(_) => Self::from(LogVisibilityV2::decode(blob)?),
             };
         Ok(result)
+    }
+}
+
+impl From<LogVisibilityV2> for LogVisibility {
+    fn from(item: LogVisibilityV2) -> Self {
+        match item {
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::Public => Self::Public,
+            // Fall back to the default value.
+            LogVisibilityV2::AllowedViewers(_) => Self::default(),
+        }
     }
 }
 
@@ -865,6 +871,15 @@ impl Payload<'_> for LogVisibilityV2 {
             Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
             Ok(log_visibility_v2) => Ok(log_visibility_v2),
             Err(err) => Err(err),
+        }
+    }
+}
+
+impl From<LogVisibility> for LogVisibilityV2 {
+    fn from(item: LogVisibility) -> Self {
+        match item {
+            LogVisibility::Controllers => Self::Controllers,
+            LogVisibility::Public => Self::Public,
         }
     }
 }
