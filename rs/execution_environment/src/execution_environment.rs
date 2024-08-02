@@ -2111,6 +2111,7 @@ impl ExecutionEnvironment {
 
         let result = match result {
             Ok(new_canister) => {
+                state.metadata.heap_delta_estimate += NumBytes::from(new_canister.memory_usage());
                 state.put_canister_state(new_canister);
                 Ok(EmptyBlob.encode())
             }
