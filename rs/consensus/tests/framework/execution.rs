@@ -73,7 +73,7 @@ fn execute_instance(
                         timestamp,
                     });
                 }
-                InputMessage::Ecdsa(msg) => {
+                InputMessage::IDkg(msg) => {
                     let mut idkg_pool = instance.driver.idkg_pool.write().unwrap();
                     idkg_pool.insert(UnvalidatedArtifact {
                         message: msg,

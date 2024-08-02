@@ -274,6 +274,8 @@ pub struct SystemState {
     queues: CanisterQueues,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
+    /// Threshold used for activation of canister_on_low_wasm_memory hook.
+    pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: Running, Stopping, or Stopped.
     /// Different statuses allow for different behaviors on the SystemState.
@@ -453,6 +455,10 @@ pub enum ExecutionTask {
     /// The task exists only within an execution round, it never gets serialized.
     GlobalTimer,
 
+    /// On low Wasm memory hook.
+    /// The task exists only within an execution round, it never gets serialized.
+    OnLowWasmMemory,
+
     /// A paused execution task exists only within an epoch (between
     /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
     /// before the checkpoint or when there are too many long-running executions.
@@ -498,6 +504,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
@@ -705,6 +712,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
             certified_data: Default::default(),
@@ -727,6 +735,7 @@ impl SystemState {
         canister_id: CanisterId,
         queues: CanisterQueues,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         certified_data: Vec<u8>,
@@ -751,6 +760,7 @@ impl SystemState {
             canister_id,
             queues,
             memory_allocation,
+            wasm_memory_threshold,
             freeze_threshold,
             status,
             certified_data,

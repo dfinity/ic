@@ -168,6 +168,7 @@ pub mod wasm_method {
         CanisterInspectMessage = 5,
         CanisterHeartbeat = 6,
         CanisterGlobalTimer = 8,
+        CanisterOnLowWasmMemory = 9,
     }
     impl SystemMethod {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -184,6 +185,9 @@ pub mod wasm_method {
                 SystemMethod::CanisterInspectMessage => "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE",
                 SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
                 SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
+                SystemMethod::CanisterOnLowWasmMemory => {
+                    "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY"
+                }
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -197,6 +201,7 @@ pub mod wasm_method {
                 "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE" => Some(Self::CanisterInspectMessage),
                 "SYSTEM_METHOD_CANISTER_HEARTBEAT" => Some(Self::CanisterHeartbeat),
                 "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER" => Some(Self::CanisterGlobalTimer),
+                "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY" => Some(Self::CanisterOnLowWasmMemory),
                 _ => None,
             }
         }
@@ -374,6 +379,7 @@ pub mod execution_task {
         Unspecified = 0,
         Heartbeat = 1,
         Timer = 2,
+        OnLowWasmMemory = 3,
     }
     impl CanisterTask {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -385,6 +391,7 @@ pub mod execution_task {
                 CanisterTask::Unspecified => "CANISTER_TASK_UNSPECIFIED",
                 CanisterTask::Heartbeat => "CANISTER_TASK_HEARTBEAT",
                 CanisterTask::Timer => "CANISTER_TASK_TIMER",
+                CanisterTask::OnLowWasmMemory => "CANISTER_TASK_ON_LOW_WASM_MEMORY",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -393,6 +400,7 @@ pub mod execution_task {
                 "CANISTER_TASK_UNSPECIFIED" => Some(Self::Unspecified),
                 "CANISTER_TASK_HEARTBEAT" => Some(Self::Heartbeat),
                 "CANISTER_TASK_TIMER" => Some(Self::Timer),
+                "CANISTER_TASK_ON_LOW_WASM_MEMORY" => Some(Self::OnLowWasmMemory),
                 _ => None,
             }
         }
@@ -660,6 +668,8 @@ pub struct CanisterStateBits {
     pub priority_credit: i64,
     #[prost(enumeration = "LongExecutionMode", tag = "49")]
     pub long_execution_mode: i32,
+    #[prost(uint64, optional, tag = "50")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

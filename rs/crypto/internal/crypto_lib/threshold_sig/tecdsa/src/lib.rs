@@ -1567,11 +1567,11 @@ impl From<CanisterThresholdError> for ThresholdVerifyOpeningInternalError {
 /// * The dealing has already been publicly verified
 /// # Errors
 /// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
-/// not match with the polynomial commitment.
+///   not match with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::MismatchingType` if the opening
-/// has a type that is inconsistent with the polynomial commitment.
+///   has a type that is inconsistent with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::InternalError` if there is an
-/// unexpected internal error.
+///   unexpected internal error.
 pub fn verify_dealing_opening(
     verified_dealing: &IDkgDealingInternal,
     opener_index: NodeIndex,

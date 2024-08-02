@@ -24,12 +24,10 @@ Success::
 end::catalog[] */
 
 use crate::message_routing::xnet_slo_test;
-use crate::orchestrator::utils::{
-    rw_message::install_nns_and_check_progress,
-    upgrade::{
-        assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-        UpdateImageType,
-    },
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::upgrade::{
+    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    UpdateImageType,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};

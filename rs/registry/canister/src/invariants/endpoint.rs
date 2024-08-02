@@ -27,6 +27,7 @@ use dfn_core::println;
 ///      ip:port pairs for anything, no node has the same ip:port for multiple
 ///      endpoints), i.e., all IP:port-pairs of all nodes are mutually exclusive
 ///      (this includes the prometheus-endpoints)
+///
 /// Strict check imposes stricter rules on IP addresses
 pub(crate) fn check_endpoint_invariants(
     snapshot: &RegistrySnapshot,

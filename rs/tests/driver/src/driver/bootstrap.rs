@@ -19,7 +19,6 @@ use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
-use flate2::{write::GzEncoder, Compression};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -44,6 +43,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 use url::Url;
+use zstd::stream::write::Encoder;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -54,7 +54,7 @@ const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.gz", CONF_IMG_FNAME)
+    format!("{}.zst", CONF_IMG_FNAME)
 }
 
 pub fn init_ic(
@@ -212,13 +212,6 @@ pub fn init_ic(
     );
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
-
-    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        ic_config.set_whitelisted_prefixes(Some("::/0".to_string()));
-        ic_config.set_whitelisted_ports(Some(
-            "22,2497,4100,7070,8080,9090,9091,9100,19100,19531".to_string(),
-        ));
-    }
 
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
@@ -546,7 +539,7 @@ fn create_config_disk_image(
     let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
-    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
@@ -653,7 +646,7 @@ fn configure_setupos_image(
         .arg("--cpu-mode")
         .arg(cpu_mode)
         .arg("--nns-url")
-        .arg(&nns_url.to_string())
+        .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
         .env(path_key, &new_path);
@@ -676,7 +669,7 @@ fn configure_setupos_image(
 
     let mut img_file = File::open(&uncompressed_image)?;
     let configured_image_file = File::create(configured_image.clone())?;
-    let mut encoder = GzEncoder::new(configured_image_file, Compression::default());
+    let mut encoder = Encoder::new(configured_image_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;

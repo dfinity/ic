@@ -34,13 +34,13 @@ use crate::{
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use flate2::{write::GzEncoder, Compression};
 use ic_agent::{Agent, AgentError};
 use kube::ResourceExt;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
+use zstd::stream::write::Encoder;
 
 use crate::driver::{farm::PlaynetCertificate, test_env_api::HasIcDependencies};
 
@@ -58,7 +58,7 @@ const PLAYNET_PATH: &str = "playnet.json";
 const BN_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.gz", CONF_IMG_FNAME)
+    format!("{}.zst", CONF_IMG_FNAME)
 }
 
 #[derive(Clone)]
@@ -80,7 +80,7 @@ pub struct BoundaryNodeCustomDomainsConfig {
 }
 
 /// A builder for the initial configuration of an IC boundary node.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct BoundaryNode {
     pub name: String,
     pub vm_resources: VmResources,
@@ -215,9 +215,15 @@ impl BoundaryNodeWithVm {
         let opt_existing_playnet = if self.use_real_certs_and_dns {
             let playnet_domain_path = env.get_json_path(PLAYNET_PATH);
             let mut existing_playnet: Playnet = if playnet_domain_path.exists() {
-                env.read_json_object(PLAYNET_PATH)?
+                let p: Playnet = env.read_json_object(PLAYNET_PATH)?;
+                info!(
+                    &logger,
+                    "using existing playnet: {}", p.playnet_cert.playnet
+                );
+                p
             } else {
                 let playnet_cert = env.acquire_playnet_certificate();
+                info!(&logger, "acquired playnet: {}", playnet_cert.playnet);
                 Playnet {
                     playnet_cert,
                     aaaa_records: vec![],
@@ -225,27 +231,48 @@ impl BoundaryNodeWithVm {
                 }
             };
 
+            let bn_fqdn = existing_playnet.playnet_cert.playnet.clone();
             existing_playnet
                 .aaaa_records
                 .push(self.allocated_vm.ipv6.to_string());
-            let bn_fqdn = existing_playnet.playnet_cert.playnet.clone();
-            env.create_playnet_dns_records(vec![
-                DnsRecord {
-                    name: "".to_string(),
-                    record_type: DnsRecordType::AAAA,
-                    records: existing_playnet.aaaa_records.clone(),
-                },
-                DnsRecord {
-                    name: "*".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.clone()],
-                },
-                DnsRecord {
-                    name: "*.raw".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.clone()],
-                },
-            ]);
+            if InfraProvider::read_attribute(env) == InfraProvider::Farm {
+                env.create_playnet_dns_records(vec![
+                    DnsRecord {
+                        name: "".to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: existing_playnet.aaaa_records.clone(),
+                    },
+                    DnsRecord {
+                        name: "*".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![bn_fqdn.clone()],
+                    },
+                    DnsRecord {
+                        name: "*.raw".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![bn_fqdn.clone()],
+                    },
+                ]);
+            } else {
+                env.create_playnet_dns_records(vec![
+                    DnsRecord {
+                        name: bn_fqdn.clone(),
+                        record_type: DnsRecordType::AAAA,
+                        records: existing_playnet.aaaa_records.clone(),
+                    },
+                    DnsRecord {
+                        name: format!("{}.{}", "*", bn_fqdn),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![bn_fqdn.clone()],
+                    },
+                    DnsRecord {
+                        name: format!("{}.{}", "*.raw", bn_fqdn),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![bn_fqdn.clone()],
+                    },
+                ]);
+            }
+            // TODO: The AAAA record is incorrect for k8s, but leaving it like this for now just for compatibility.
             // Emit a json log event, to be consumed by log post-processing tools.
             emit_bn_aaaa_records_event(&logger, &bn_fqdn, existing_playnet.aaaa_records.clone());
             Some(existing_playnet)
@@ -281,6 +308,10 @@ impl BoundaryNodeWithVm {
                 .as_ref()
                 .map(|existing_playnet| existing_playnet.playnet_cert.clone())
         };
+        info!(
+            &logger,
+            "debug: existing playnet {:?}", opt_existing_playnet
+        );
 
         env.write_boundary_node_vm(
             &self.name,
@@ -343,15 +374,17 @@ impl BoundaryNodeWithVm {
 
                 existing_playnet.a_records.push(ipv4_address);
 
-                let bn_fqdn = env.create_playnet_dns_records(vec![DnsRecord {
-                    name: "".to_string(),
-                    record_type: DnsRecordType::A,
-                    records: existing_playnet.a_records.clone(),
-                }]);
-                info!(
-                    &logger,
-                    "Created A record {} to {:?}", bn_fqdn, existing_playnet.a_records
-                );
+                if InfraProvider::read_attribute(env) == InfraProvider::Farm {
+                    let bn_fqdn = env.create_playnet_dns_records(vec![DnsRecord {
+                        name: "".to_string(),
+                        record_type: DnsRecordType::A,
+                        records: existing_playnet.a_records.clone(),
+                    }]);
+                    info!(
+                        &logger,
+                        "Created A record {} to {:?}", bn_fqdn, existing_playnet.a_records
+                    );
+                }
             }
         }
 
@@ -642,7 +675,7 @@ fn create_config_disk_image(
     let compressed_img_path = boundary_node_dir.join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
 
-    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;

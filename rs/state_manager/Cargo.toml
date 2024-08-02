@@ -45,7 +45,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
-uuid = { version = "1.2.1", features = ["v4", "serde"] }
+uuid = { workspace = true }
 
 [lib]
 bench = false

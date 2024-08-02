@@ -18,6 +18,15 @@ use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+#[cfg(target_os = "linux")]
+use ic_sys::HUGE_PAGE_SIZE;
+#[cfg(target_os = "linux")]
+use ic_types::NumOsPages;
+/// The minimum number of huge pages where the actual huge page optimization
+/// will kick in. This corresponds to 64 MiB of memory (because the huge page size is 2 MiB)
+#[cfg(target_os = "linux")]
+const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
+
 const MIN_PAGES_TO_FREE: usize = 10000;
 // The start address of a page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -136,6 +145,7 @@ impl PageInner {
 /// - the physical memory of a dropped page is freed using `madvise` when
 ///   there is sufficient number of dropped pages.
 /// - all virtual memory is freed at once the page allocator itself is dropped.
+///
 /// This approach works well with the checkpoints and allows us to avoid all
 /// the complexity and inefficiency of maintaining a thread-safe free-list.
 ///
@@ -563,6 +573,30 @@ impl MmapBasedPageAllocatorCore {
                 mmap_size, self.file_descriptor, mmap_file_offset, err,
             )
         }) as *mut u8;
+
+        // Do madvise transparent huge page performance optimization only on Linux.
+        #[cfg(target_os = "linux")]
+        {
+            // Huge pages are 2MiB on x86_64. We only use huge pages for
+            // memory allocations that are at least MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION huge pages (i.e., 64 MiB).
+            if mmap_size >= MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.get() as usize * HUGE_PAGE_SIZE {
+                unsafe {
+                    madvise(
+                        mmap_ptr as *mut c_void,
+                        mmap_size,
+                        MmapAdvise::MADV_HUGEPAGE,
+                    )
+                }.unwrap_or_else(|err| {
+                    // We don't need to panic, madvise failing is not a problem, 
+                    // it will only mean that we are not using huge pages.
+                    println!(
+                    "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",
+                    mmap_size, mmap_ptr, self.file_descriptor, err
+                    )
+                });
+            }
+        }
+
         self.chunks.push(Chunk {
             ptr: mmap_ptr,
             size: mmap_size,

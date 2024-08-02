@@ -12,13 +12,20 @@ type CanisterStatusResultV2 = record {
   module_hash : opt blob;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
-type CfInvestment = record { hotkey_principal : text; nns_neuron_id : nat64 };
+type CfInvestment = record {
+  controller : opt principal;
+  hotkey_principal : text;
+  hotkeys : opt Principals;
+  nns_neuron_id : nat64;
+};
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
+  hotkeys : opt Principals;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
 type CfParticipant = record {
+  controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
@@ -182,11 +189,6 @@ type Ok_1 = record {
   neurons_fund_neurons_count : opt nat64;
 };
 type Ok_2 = record { ticket : opt Ticket };
-type OpenRequest = record {
-  cf_participants : vec CfParticipant;
-  params : opt Params;
-  open_sns_token_swap_proposal_id : opt nat64;
-};
 type Params = record {
   min_participant_icp_e8s : nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
@@ -211,6 +213,7 @@ type Possibility = variant {
 type Possibility_1 = variant { Ok : Response; Err : CanisterCallError };
 type Possibility_2 = variant { Ok : Ok_1; Err : Error };
 type Possibility_3 = variant { Ok : record {}; Err : CanisterCallError };
+type Principals = record { principals : vec principal };
 type RefreshBuyerTokensRequest = record {
   confirmation_text : opt text;
   buyer : text;
@@ -303,7 +306,6 @@ service : (Init) -> {
     ) query;
   new_sale_ticket : (NewSaleTicketRequest) -> (NewSaleTicketResponse);
   notify_payment_failure : (record {}) -> (Ok_2);
-  open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
     );

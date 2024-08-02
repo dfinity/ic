@@ -1,10 +1,13 @@
 load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "global_reboot_test",
+    env = {
+        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -16,7 +19,24 @@ system_test(
 )
 
 system_test(
+    name = "memory_safety_test",
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+        "system_test_hourly",
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
     name = "rejoin_test",
+    env = {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -31,6 +51,9 @@ system_test(
 
 system_test(
     name = "rejoin_test_large_state",
+    env = {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -46,6 +69,9 @@ system_test(
 
 system_test(
     name = "state_sync_malicious_chunk_test",
+    env = {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
+    },
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -65,6 +91,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
         "//rs/replicated_state:replicated_state_test_binary",
+        "//testnet:mainnet_revisions",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )

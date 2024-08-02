@@ -25,4 +25,4 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
