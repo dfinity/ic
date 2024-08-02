@@ -292,8 +292,8 @@ name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
 
 [[bin]]
-name = "ic-systest-cow-safety-test"
-path = "consensus/cow_safety_test.rs"
+name = "ic-systest-memory-safety-test"
+path = "message_routing/memory_safety_test.rs"
 
 [[bin]]
 name = "ic-systest-system-api-security-test"
