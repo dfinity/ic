@@ -1937,6 +1937,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility: pb_canister_state_bits::LogVisibility::from(&item.log_visibility)
                 .into(),
+            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(
+                &LogVisibilityV2::from(item.log_visibility),
+            )
+            .into(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -1946,10 +1950,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
-            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(
-                &LogVisibilityV2::from(item.log_visibility),
-            )
-            .into(),
         }
     }
 }
