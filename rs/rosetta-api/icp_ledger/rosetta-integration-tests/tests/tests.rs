@@ -1025,7 +1025,7 @@ async fn test_block_transaction() {
 
 #[tokio::test]
 async fn test_network_status_multiple_genesis_transactions() {
-    // We start of by testing the case with no rosetta blocks enabled
+    // We start off by testing the case with no rosetta blocks enabled
     let mut env = TestEnv::setup(false, true).await.unwrap();
     let network_status = env.rosetta.network_status().await.unwrap();
     let genesis_block = env
