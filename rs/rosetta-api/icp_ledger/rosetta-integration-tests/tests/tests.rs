@@ -121,17 +121,6 @@ impl RosettaTestingClient {
             .await
     }
 
-    async fn block_transaction(
-        &self,
-        block_id: BlockIdentifier,
-        tx_id: TransactionIdentifier,
-    ) -> Result<rosetta_core::response_types::BlockTransactionResponse, Error> {
-        let network = self.network_or_panic().await;
-        self.rosetta_client
-            .block_transaction(network, block_id.clone(), tx_id.clone())
-            .await
-    }
-
     async fn network_list_or_panic(&self) -> NetworkListResponse {
         self.rosetta_client
             .network_list()
