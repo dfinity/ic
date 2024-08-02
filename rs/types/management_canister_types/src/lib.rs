@@ -791,16 +791,17 @@ pub enum LogVisibility {
 }
 
 // Ensure forward compatibility with the new `LogVisibilityV2`.
-// First read the old `LogVisibility`, if it fails (eg for `LogVisibilityV2::AllowedViewers`),
+// First read the old `LogVisibility`, if it fails (e.g., for `LogVisibilityV2::AllowedViewers`),
 // try to read the new `LogVisibilityV2`.
 impl Payload<'_> for LogVisibility {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
-        let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
-        {
-            Ok(record) => record,
-            Err(_) => LogVisibilityV2::decode(blob)?.into(),
-        };
-        Ok(args)
+        let result =
+            match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+                Ok(log_visibility) => log_visibility,
+                // Try to decode as LogVisibilityV2 and convert to LogVisibility
+                Err(_) => Self::from(LogVisibilityV2::decode(blob)?),
+            };
+        Ok(result)
     }
 }
 
@@ -860,27 +861,15 @@ pub enum LogVisibilityV2 {
 }
 
 // Ensure backward compatibility with the old `LogVisibility`.
-// First read the new `LogVisibilityV2`, if it fails, try to read the old `LogVisibility`.
+// `LogVisibilityV2` extends `LogVisibility` with an additional variant, `AllowedViewers`.
+// When decoding, if `AllowedViewers` is encountered, it is changed to a default value
+// to maintain compatibility with the old `LogVisibility`.
 impl Payload<'_> for LogVisibilityV2 {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
-        let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
-        {
-            Ok(record) => match record {
-                // TODO(EXC-1670): ignore receiving `AllowedViewers` variant, fallback to default.
-                Self::AllowedViewers(_) => Self::default(),
-                _ => record,
-            },
-            Err(_) => LogVisibility::decode(blob)?.into(),
-        };
-        Ok(args)
-    }
-}
-
-impl From<LogVisibility> for LogVisibilityV2 {
-    fn from(item: LogVisibility) -> Self {
-        match item {
-            LogVisibility::Controllers => Self::Controllers,
-            LogVisibility::Public => Self::Public,
+        match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+            Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
+            Ok(log_visibility_v2) => Ok(log_visibility_v2),
+            Err(err) => Err(err),
         }
     }
 }
@@ -931,6 +920,67 @@ impl From<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
                 }
             },
         }
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_serialization_roundtrip() {
+    // Test `LogVisibilityV2` canidid serialization/deserialization.
+    for (initial, expected) in [
+        (LogVisibilityV2::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibilityV2::Public, LogVisibilityV2::Public),
+        (
+            LogVisibilityV2::AllowedViewers(Default::default()),
+            LogVisibilityV2::default(),
+        ),
+    ] {
+        let encoded = LogVisibilityV2::encode(&initial);
+        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_default_canidid_backward_compatibility() {
+    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`
+    // via default canidid serialization.
+    for (initial, expected) in [
+        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibility::Public, LogVisibilityV2::Public),
+    ] {
+        let encoded = Encode!(&initial).unwrap();
+        let decoded = Decode!(&encoded, LogVisibilityV2).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_backward_compatibility() {
+    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`.
+    for (initial, expected) in [
+        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibility::Public, LogVisibilityV2::Public),
+    ] {
+        let encoded = LogVisibility::encode(&initial);
+        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_forward_compatibility() {
+    // Test `LogVisibilityV2` is forward compatible with `LogVisibility`.
+    for (initial, expected) in [
+        (LogVisibilityV2::Controllers, LogVisibility::Controllers),
+        (LogVisibilityV2::Public, LogVisibility::Public),
+        (
+            LogVisibilityV2::AllowedViewers(Default::default()),
+            LogVisibility::default(),
+        ),
+    ] {
+        let encoded = LogVisibilityV2::encode(&initial);
+        let decoded = LogVisibility::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
     }
 }
 
