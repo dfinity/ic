@@ -21,6 +21,7 @@ def sanitize_external_crates(sanitizers_enabled):
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
+IC_AGENT_DYNAMIC_ROUTE = "30107322c97e842cb1a51b05e9162f9ef8118f96"
 
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
@@ -566,6 +567,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.37.1",
                 features = [
                     "experimental_sync_call",
+                    "hyper",
+                    "reqwest",
+                    "pem",
+                ],
+            ),
+            "ic-agent-dynamic-route": crate.spec(
+                package = "ic-agent",
+                git = "https://github.com/dfinity/agent-rs",
+                rev = IC_AGENT_DYNAMIC_ROUTE,
+                features = [
                     "hyper",
                     "reqwest",
                     "pem",

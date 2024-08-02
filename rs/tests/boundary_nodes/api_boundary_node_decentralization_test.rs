@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use ic_agent_dynamic_route;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_tests::boundary_nodes::{
     api_boundary_nodes_integration::decentralization_test, setup::setup_ic,
