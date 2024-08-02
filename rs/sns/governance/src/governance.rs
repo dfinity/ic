@@ -3889,6 +3889,7 @@ impl Governance {
 
         // TODO(NNS1-3198): Simplify this code after `NeuronParameters` is made obsolete.
         let neuron_recipes_from_new_source = request.neuron_recipes;
+        #[allow(deprecated)]
         let neuron_recipes_from_legacy_source =
             Some(NeuronRecipes::from(request.neuron_parameters));
         let neuron_recipes = neuron_recipes_from_new_source

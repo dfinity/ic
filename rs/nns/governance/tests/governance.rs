@@ -9878,7 +9878,7 @@ fn test_neuron_set_visibility() {
                 .with_neuron(&neuron_id, |neuron| neuron.clone())
                 .unwrap();
 
-            assert_eq!(neuron.visibility, expected_visibility, "{:#?}", neuron,);
+            assert_eq!(neuron.visibility(), expected_visibility, "{:#?}", neuron,);
         };
 
     assert_neuron_visibility(typical_neuron.id.unwrap(), Some(Visibility::Public));
@@ -9977,11 +9977,7 @@ fn test_include_public_neurons_in_full_neurons() {
     assert_eq!(
         list_neurons_response.full_neurons,
         vec![
-            Neuron {
-                // Thanks to normalization.
-                visibility: Some(Visibility::Public as i32),
-                ..known_neuron
-            },
+            known_neuron,
             explicitly_public_neuron,
             // In particular, legacy and explicitly_private are NOT in the result.
 
@@ -11406,7 +11402,6 @@ lazy_static! {
                             1_200_000 * E8,
                         ),
                         controller: Some(principal(1)),
-                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11427,7 +11422,6 @@ lazy_static! {
                             600_000 * E8,
                         ),
                         controller: Some(principal(2)),
-                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11542,7 +11536,6 @@ lazy_static! {
                             120000000000000,
                         ),
                         controller: Some(principal(1)),
-                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11564,7 +11557,6 @@ lazy_static! {
                             60000000000000,
                         ),
                         controller: Some(principal(2)),
-                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11626,7 +11618,6 @@ lazy_static! {
                     120000000000000,
                 ),
                 controller: Some(principal(1)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
@@ -11649,7 +11640,6 @@ lazy_static! {
                     60000000000000,
                 ),
                 controller: Some(principal(2)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
@@ -11675,7 +11665,6 @@ lazy_static! {
                     15666666667,
                 ),
                 controller: Some(principal(1)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     120000000000000,
@@ -11697,7 +11686,6 @@ lazy_static! {
                     7833333333,
                 ),
                 controller: Some(principal(2)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,

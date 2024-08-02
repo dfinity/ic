@@ -39,7 +39,6 @@ fn nid(id: u64) -> NeuronId {
 #[test]
 fn test() {
     let controller = PrincipalId::default();
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let small_neuron = NeuronsFundNeuron {
         id: nid(111),

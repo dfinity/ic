@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::NeuronType,
+    pb::v1::{KnownNeuronData, NeuronType},
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
@@ -591,7 +591,11 @@ fn test_compute_neuron_metrics_public_neurons() {
     .with_cached_neuron_stake_e8s(300_000_000)
     .with_staked_maturity_e8s_equivalent(303_000_000)
     .with_maturity_e8s_equivalent(330_000_000)
-    .with_visibility(Some(Visibility::Public))
+    // (Nominally) the neuron should be treated as public.
+    .with_known_neuron_data(Some(KnownNeuronData {
+        name: "Daniel Wong".to_string(),
+        description: Some("Best engineer of all time. Of all time.".to_string()),
+    }))
     .build();
 
     let voting_power_1 = neuron_1.voting_power(now_seconds);
@@ -609,6 +613,16 @@ fn test_compute_neuron_metrics_public_neurons() {
         2 => neuron_2,
         3 => neuron_3,
     });
+    neuron_store
+        .with_neuron(&NeuronId { id: 3 }, |neuron| {
+            assert_eq!(
+                neuron.visibility(),
+                Some(Visibility::Public),
+                "{:#?}",
+                neuron,
+            );
+        })
+        .unwrap(); // Explode if neuron is not found.
 
     // Step 2: Call code under test.
 
