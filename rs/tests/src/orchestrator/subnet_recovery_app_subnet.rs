@@ -539,6 +539,8 @@ fn halt_subnet(
     .expect("Failed to detect broken subnet.");
 }
 
+// Corrupt the latest cup of all subnet nodes by change the CUP's replica version field.
+// This will change the hash of the block, thus making the CUP non-deserializable.
 fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Logger) {
     const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
     const NEW_CUP_PATH: &str = "/var/lib/ic/data/cups/new_cup.pb";
