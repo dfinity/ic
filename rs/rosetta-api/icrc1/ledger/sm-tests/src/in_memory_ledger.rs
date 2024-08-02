@@ -11,6 +11,9 @@ use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct ApprovalKey(Account, Account);
 
