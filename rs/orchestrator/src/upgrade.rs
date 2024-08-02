@@ -144,7 +144,7 @@ impl Upgrade {
             let maybe_proto = self.cup_provider.get_local_cup_proto();
             let maybe_cup = maybe_proto.as_ref().and_then(|proto| {
                 CatchUpPackage::try_from(proto)
-                    .map_err(|err| {
+                    .inspect_err(|err| {
                         error!(self.logger, "Failed to deserialize CatchUpPackage: {}", err);
                     })
                     .ok()
