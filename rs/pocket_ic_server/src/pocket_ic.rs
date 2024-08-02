@@ -272,6 +272,8 @@ impl PocketIc {
         hypervisor_config.embedders_config.min_sandbox_count = 0;
         hypervisor_config.embedders_config.max_sandbox_count = 64;
         hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
+        // shorter query stats epoch length for faster query stats aggregation
+        hypervisor_config.query_stats_epoch_length = 60;
         // enable canister debug prints
         hypervisor_config
             .embedders_config
