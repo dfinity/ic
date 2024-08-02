@@ -17,6 +17,7 @@ use crate::FetchArtifact;
 
 use super::{
     download::download_ingress,
+    metrics::FetchStrippedConsensusArtifactMetrics,
     types::stripped::{MaybeStrippedConsensusMessage, Strippable, StrippableData, StrippableId},
 };
 
@@ -35,9 +36,13 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
 {
     fn get(
         &self,
-        _id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
+        id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
     ) -> Option<MaybeStrippedConsensusMessage> {
-        None
+        self.consensus_pool
+            .read()
+            .unwrap()
+            .get(&id.0)
+            .map(MaybeStrippedConsensusMessage::Unstripped)
     }
 
     fn get_all_validated(&self) -> Box<dyn Iterator<Item = MaybeStrippedConsensusMessage> + '_> {
@@ -70,8 +75,7 @@ pub struct FetchStrippedConsensusArtifact {
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
-    // TODO: create metrics
-    // metrics: FetchStrippedArtifactContentMetrics,
+    metrics: FetchStrippedConsensusArtifactMetrics,
     // TODO: decide if needed
     // priority_fn: watch::Receiver<PriorityFn<>>,
 }
@@ -113,6 +117,7 @@ impl FetchStrippedConsensusArtifact {
                 fetch_stripped,
                 transport,
                 node_id,
+                metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
             }
         };
 
@@ -125,7 +130,10 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 {
     fn disassemble_message(&self, msg: ConsensusMessage) -> MaybeStrippedConsensusMessage {
         match msg {
-            ConsensusMessage::BlockProposal(block_proposal) => {
+            ConsensusMessage::BlockProposal(block_proposal)
+                if block_proposal.as_ref().payload.payload_type()
+                    == ic_types::consensus::PayloadType::Data =>
+            {
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(
                     // strip all the ingress messages from the block
                     block_proposal.strip_ingresses(|_| true),
@@ -152,7 +160,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             let mut stripped_block_proposal = match stripped_artifact {
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
                 MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
-                    return Ok((unstripped, peer))
+                    return Ok((unstripped, peer));
                 }
             };
 
@@ -160,9 +168,15 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 
             let mut join_set = tokio::task::JoinSet::new();
 
+            let missing_ingresses = stripped_block_proposal.missing();
+            let total_ingresses_count = stripped_block_proposal
+                .payload
+                .ingress
+                .ingress_messages
+                .len();
             // For each stripped object in the message, try to fetch it either from the local pools
             // or from a random peer who is advertising it.
-            for stripped_object_id in stripped_block_proposal.missing() {
+            for stripped_object_id in missing_ingresses {
                 join_set.spawn(get_or_fetch(
                     stripped_object_id,
                     self.ingress_pool.clone(),
@@ -174,15 +188,43 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 ));
             }
 
-            // TODO: fix this
-            while let Some(Ok(Ok((ingress, _)))) = join_set.join_next().await {
-                stripped_block_proposal
-                    .try_insert(StrippableData::IngressMessage(ingress))
-                    .map_err(|_| Aborted {})?;
+            let mut found_stripped_ingress_messages = 0;
+            let mut missing_stripped_ingress_messages = 0;
+
+            if !join_set.is_empty() {
+                let timer = self
+                    .metrics
+                    .download_missing_ingress_messages_duration
+                    .start_timer();
+
+                // TODO: fix this
+                while let Some(Ok(Ok((ingress, peer_id)))) = join_set.join_next().await {
+                    if peer_id == self.node_id {
+                        found_stripped_ingress_messages += 1;
+                    } else {
+                        missing_stripped_ingress_messages += 1;
+                    }
+
+                    stripped_block_proposal
+                        .try_insert(StrippableData::IngressMessage(ingress))
+                        .map_err(|_| Aborted {})?;
+                }
+
+                timer.stop_and_record();
             }
 
             // FIXME(kpop): remove the `unwrap()`.
             let reconstructed_block_proposal = stripped_block_proposal.try_assemble().unwrap();
+
+            self.metrics
+                .found_stripped_ingress_messages
+                .observe(found_stripped_ingress_messages as f64);
+            self.metrics
+                .missing_stripped_ingress_messages
+                .observe(missing_stripped_ingress_messages as f64);
+            self.metrics
+                .total_ingress_messages
+                .observe(total_ingresses_count as f64);
 
             Ok((
                 ConsensusMessage::BlockProposal(reconstructed_block_proposal),

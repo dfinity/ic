@@ -1,44 +1,52 @@
-use ic_consensus_manager::uri_prefix;
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_types::artifact::PbArtifact;
-use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter};
+use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
+use prometheus::{histogram_opts, labels, Histogram};
 
 #[derive(Clone)]
-pub(crate) struct FetchArtifactMetrics {
-    // Download management
-    pub download_task_stashed_total: IntCounter,
-    pub download_task_artifact_download_duration: Histogram,
-    pub download_task_artifact_download_errors_total: IntCounter,
+pub(crate) struct FetchStrippedConsensusArtifactMetrics {
+    pub(crate) missing_stripped_ingress_messages: Histogram,
+    pub(crate) found_stripped_ingress_messages: Histogram,
+    pub(crate) total_ingress_messages: Histogram,
+    pub(crate) download_missing_ingress_messages_duration: Histogram,
 }
 
-impl FetchArtifactMetrics {
-    pub fn new<Artifact: PbArtifact>(metrics_registry: &MetricsRegistry) -> Self {
-        let prefix = uri_prefix::<Artifact>();
-        let const_labels_string = labels! {"client".to_string() => prefix.clone()};
-        let const_labels = labels! {"client" => prefix.as_str()};
+impl FetchStrippedConsensusArtifactMetrics {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            download_task_stashed_total: metrics_registry.register(
-                IntCounter::with_opts(opts!(
-                    "ic_consensus_manager_download_task_stashed_total",
-                    "Adverts stashed at least once.",
-                    const_labels.clone(),
-                ))
-                .unwrap(),
-            ),
-            download_task_artifact_download_duration: metrics_registry.register(
+            missing_stripped_ingress_messages: metrics_registry.register(
                 Histogram::with_opts(histogram_opts!(
-                    "ic_consensus_manager_download_task_artifact_download_duration",
-                    "Download time for artifact.",
-                    decimal_buckets(-2, 1),
-                    const_labels_string.clone(),
+                    "ic_stripped_consensus_artifact_downloader_missing_stripped_ingress_messages",
+                    "Number of stripped ingress messages in a block which are not in the local \
+                    ingress pool and which have to be downloaded from peers",
+                    decimal_buckets_with_zero(0, 3),
+                    labels! {}
                 ))
                 .unwrap(),
             ),
-            download_task_artifact_download_errors_total: metrics_registry.register(
-                IntCounter::with_opts(opts!(
-                    "ic_consensus_manager_download_task_artifact_download_errors_total",
-                    "Error occurred when downloading artifact.",
-                    const_labels.clone(),
+            found_stripped_ingress_messages: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ic_stripped_consensus_artifact_downloader_found_stripped_ingress_messages",
+                    "Number of stripped ingress messages in a block which are in the local \
+                    ingress pool and which don't have to be downloaded from peers",
+                    decimal_buckets_with_zero(0, 3),
+                    labels! {}
+                ))
+                .unwrap(),
+            ),
+            total_ingress_messages: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ic_stripped_consensus_artifact_downloader_total_ingress_messages",
+                    "Total number of ingress messages in the block",
+                    decimal_buckets_with_zero(0, 3),
+                    labels! {}
+                ))
+                .unwrap(),
+            ),
+            download_missing_ingress_messages_duration: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ic_stripped_consensus_artifact_downloader_missing_stripped_ingress_messages_fetch_duration",
+                    "Download time for all the missing ingress messages in the block",
+                    decimal_buckets_with_zero(-2, 1),
+                    labels! {}
                 ))
                 .unwrap(),
             ),

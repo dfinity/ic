@@ -20,20 +20,22 @@ use ic_types::{
 };
 
 #[allow(clippy::large_enum_variant)]
-enum MaybeStrippedIngress {
+#[derive(Debug)]
+pub(crate) enum MaybeStrippedIngress {
     Full(IngressMessageId, SignedIngress),
     Stripped(IngressMessageId),
 }
 
 /// Stripped version of the [`IngressPayload`].
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct StrippedIngressPayload {
-    ingress_messages: Vec<MaybeStrippedIngress>,
+    pub(crate) ingress_messages: Vec<MaybeStrippedIngress>,
 }
 
 /// Stripped version of the [`DataPayload`].
+#[derive(Debug)]
 pub(crate) struct StrippedDataPayload {
-    ingress: StrippedIngressPayload,
+    pub(crate) ingress: StrippedIngressPayload,
     xnet: XNetPayload,
     self_validating: SelfValidatingPayload,
     canister_http: Vec<u8>,
@@ -43,6 +45,7 @@ pub(crate) struct StrippedDataPayload {
 }
 
 /// Stripped version of the [`BlockProposal`].
+#[derive(Debug)]
 pub struct StrippedBlockProposal {
     pub(crate) version: ReplicaVersion,
     pub(crate) parent: CryptoHashOf<Block>,
@@ -56,6 +59,7 @@ pub struct StrippedBlockProposal {
     pub(crate) signature: BasicSignature<BlockMetadata>,
 }
 
+#[derive(Debug)]
 pub enum MaybeStrippedConsensusMessage {
     StrippedBlockProposal(StrippedBlockProposal),
     Unstripped(ConsensusMessage),
