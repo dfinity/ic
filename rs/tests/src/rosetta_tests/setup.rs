@@ -3,7 +3,7 @@ use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
-use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
+use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
 use prost::Message;
@@ -142,9 +142,13 @@ fn create_governance_canister(
             "Installing governance canister code on canister {}",
             canister.canister_id().get()
         );
-        let path_to_wasm =
-            env.get_dependency_path("rs/tests/tip-nns-canisters/governance-canister_test");
-        install_rust_canister_from_path(&mut canister, path_to_wasm, Some(serialized)).await;
+        install_rust_canister(
+            &mut canister,
+            "governance-canister",
+            &["test"],
+            Some(serialized),
+        )
+        .await;
 
         info!(
             &logger,
@@ -211,10 +215,14 @@ fn create_ledger_canister(
             "Installing ledger canister code on canister {}",
             canister.canister_id().get()
         );
-        let path_to_wasm =
-            env.get_dependency_path("rs/tests/tip-nns-canisters/ledger-canister_notify-method");
         let encoded = Encode!(&ledger_init_args).unwrap();
-        install_rust_canister_from_path(&mut canister, path_to_wasm, Some(encoded)).await;
+        install_rust_canister(
+            &mut canister,
+            "ledger-canister",
+            &["notify-method"],
+            Some(encoded),
+        )
+        .await;
 
         canister.canister_id()
     })

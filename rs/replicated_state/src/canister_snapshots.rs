@@ -125,6 +125,14 @@ impl CanisterSnapshots {
         snapshots
     }
 
+    /// Returns the number of snapshots stored for the given canister id.
+    pub fn snapshots_count(&self, canister_id: &CanisterId) -> usize {
+        match self.snapshot_ids.get(canister_id) {
+            Some(snapshot_ids) => snapshot_ids.len(),
+            None => 0,
+        }
+    }
+
     /// Adds a new restore snapshot operation in the unflushed changes.
     pub fn add_restore_operation(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.unflushed_changes
