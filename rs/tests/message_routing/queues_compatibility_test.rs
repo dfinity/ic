@@ -1,4 +1,4 @@
-//! This a WIP upgrade/downgrade test for canister queues. The approach (following
+//! This is an upgrade/downgrade test for canister queues. The approach (following
 //! the CUP compatibility tests):
 //!
 //! 1. At each commit to master, we create a binary that can serialize and
@@ -16,11 +16,7 @@
 //!    by the other. As the today's special (free of charge), we also check that the
 //!    current version can deserialize its own stuff.
 //!
-//! We don't yet download the mainnet release version, since they don't have the
-//! required binaries published. We just download some random previous version
-//! that does.
-//!
-//! We also follow he approach from the CUP compatibility tests in that the binary
+//! We follow the approach from the CUP compatibility tests in that the binary
 //! used is actually the binary produced by the rust_test, and not a separate
 //! target. The second step then uses the fact that Rust test binaries can be passed
 //! the name of the test as the argument, to perform the
@@ -35,7 +31,9 @@
 //! neither fun nor profitable.
 
 use anyhow::Result;
+use serde::Deserialize;
 use slog::{info, Logger};
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -187,6 +185,11 @@ impl TestCase {
     }
 }
 
+#[derive(Deserialize)]
+struct Subnets {
+    subnets: HashMap<String, String>,
+}
+
 fn test(env: TestEnv) {
     let logger = env.logger();
 
@@ -195,9 +198,15 @@ fn test(env: TestEnv) {
         "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
         "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
     );
-    // TODO: read this from mainnet_revisions.json once the mainnet releases
-    // have the fixture binaries published
-    let mainnet_versions = vec!["38565ef90ef16d47f0d4646903bba61226f36d40".to_string()];
+
+    let versions_json = env
+        .read_dependency_to_string("testnet/mainnet_revisions.json")
+        .expect("mainnet IC versions");
+
+    let parsed: Subnets =
+        serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");
+    let mainnet_versions: Vec<String> = parsed.subnets.values().cloned().collect();
+
     info!(logger, "Mainnet versions: {:?}", mainnet_versions);
 
     for mainnet_version in mainnet_versions {

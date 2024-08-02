@@ -25,7 +25,6 @@ system_test(
         "//rs/backup",
         "//rs/recovery",
         "//rs/registry/subnet_type",
-        "//rs/tests",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
@@ -102,18 +101,6 @@ system_test(
         "//rs/types/types",
         "@crate_index//:anyhow",
     ],
-)
-
-system_test(
-    name = "cow_safety_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
@@ -345,12 +332,19 @@ system_test(
 
 system_test(
     name = "consensus_performance",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -367,7 +361,10 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:chrono",
         "@crate_index//:futures",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],

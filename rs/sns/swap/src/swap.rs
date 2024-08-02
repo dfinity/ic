@@ -871,23 +871,24 @@ impl Swap {
 
         // Create the neuron basket for the Neuron Fund investors. The unique
         // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
-        // is a hash of PrincipalId and some unique memo. Since NF
+        // is a hash of PrincipalId and some unique memo. Since Neurons' Fund
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
         // for all NF investors.
-        let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
-        for cf_participant in self.cf_participants.iter_mut() {
-            let controller = cf_participant.try_get_controller();
+        let mut global_neurons_fund_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
+        for neurons_fund_participant in self.cf_participants.iter_mut() {
+            let controller = neurons_fund_participant.try_get_controller();
 
-            for cf_neuron in cf_participant.cf_neurons.iter_mut() {
-                // Create a closure to ensure `global_cf_memo` is incremented in all cases
-                let mut process_cf_neuron = || {
+            for neurons_fund_neuron in neurons_fund_participant.cf_neurons.iter_mut() {
+                // Create a closure to ensure `global_neurons_fund_memo` is incremented in all cases
+                let hotkeys = neurons_fund_neuron.hotkeys.clone().unwrap_or_default();
+                let process_neurons_fund_neuron = || {
                     let controller = match controller.clone() {
                         Ok(nns_neuron_controller_principal) => nns_neuron_controller_principal,
                         Err(e) => {
                             log!(
                                 ERROR,
-                                "Error getting the controller for {cf_neuron:?} principal: {e}"
+                                "Error getting the controller for {neurons_fund_neuron:?} principal: {e}"
                             );
                             sweep_result.invalid +=
                                 neuron_basket_construction_parameters.count as u32;
@@ -898,25 +899,24 @@ impl Swap {
                     // The case that on a previous attempt at creating this neuron recipe, it was
                     // successfully created and recorded. Count the number of neuron recipes that
                     // would have been created.
-                    if cf_neuron.has_created_neuron_recipes == Some(true) {
+                    if neurons_fund_neuron.has_created_neuron_recipes == Some(true) {
                         sweep_result.skipped += neuron_basket_construction_parameters.count as u32;
                         return;
                     }
 
                     let amount_sns_e8s = Swap::scale(
-                        cf_neuron.amount_icp_e8s,
+                        neurons_fund_neuron.amount_icp_e8s,
                         sns_being_offered_e8s,
                         total_participant_icp_e8s,
                     );
 
-                    match create_sns_neuron_basket_for_cf_participant(
+                    match create_sns_neuron_basket_for_neurons_fund_participant(
                         &controller,
-                        // TODO(NNS1-3199): Populate this field
-                        Vec::new(),
-                        cf_neuron.nns_neuron_id,
+                        hotkeys.principals,
+                        neurons_fund_neuron.nns_neuron_id,
                         amount_sns_e8s,
                         neuron_basket_construction_parameters,
-                        global_cf_memo,
+                        global_neurons_fund_memo,
                         nns_governance_canister_id.get(),
                     ) {
                         Ok(cf_participants_sns_neuron_recipes) => {
@@ -926,7 +926,7 @@ impl Swap {
                                 .extend(cf_participants_sns_neuron_recipes);
                             total_sns_tokens_sold_e8s =
                                 total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
-                            cf_neuron.has_created_neuron_recipes = Some(true);
+                            neurons_fund_neuron.has_created_neuron_recipes = Some(true);
                         }
                         Err(error_message) => {
                             log!(
@@ -942,13 +942,15 @@ impl Swap {
                 };
 
                 // Call the closure
-                process_cf_neuron();
+                process_neurons_fund_neuron();
 
                 // Increment the memo by the number neurons in a neuron basket. This means that
-                // previous idempotent calls should increment global_cf_memo and handle overflow
-                match global_cf_memo.checked_add(neuron_basket_construction_parameters.count) {
+                // previous idempotent calls should increment global_neurons_fund_memo and handle overflow
+                match global_neurons_fund_memo
+                    .checked_add(neuron_basket_construction_parameters.count)
+                {
                     Some(new_value) => {
-                        global_cf_memo = new_value;
+                        global_neurons_fund_memo = new_value;
                     }
                     None => {
                         sweep_result.global_failures += 1;
@@ -1806,6 +1808,7 @@ impl Swap {
             let reply = sns_governance_client
                 .claim_swap_neurons(ClaimSwapNeuronsRequest {
                     neuron_parameters: batch,
+                    neuron_recipes: None,
                 })
                 .await;
 
@@ -3400,7 +3403,7 @@ fn create_sns_neuron_basket_for_direct_participant(
 }
 
 /// Create the basket of SNS Neuron Recipes for a single Neurons' Fund participant.
-fn create_sns_neuron_basket_for_cf_participant(
+fn create_sns_neuron_basket_for_neurons_fund_participant(
     controller: &PrincipalId,
     hotkeys: Vec<PrincipalId>,
     nns_neuron_id: u64,
@@ -4004,42 +4007,22 @@ mod tests {
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(992899)),
                 hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    1,
-                    698047,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                cf_neurons: vec![CfNeuron::try_new(1, 698047, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(800257)),
                 hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    2,
-                    678574,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                cf_neurons: vec![CfNeuron::try_new(2, 678574, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(818371)),
                 hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    3,
-                    305256,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                cf_neurons: vec![CfNeuron::try_new(3, 305256, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(657894)),
                 hotkey_principal: PrincipalId::new_user_test_id(657894).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    4,
-                    339747,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                cf_neurons: vec![CfNeuron::try_new(4, 339747, Vec::new()).unwrap()],
             },
         ];
         let swap = Swap {

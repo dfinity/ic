@@ -2,13 +2,13 @@
 //! The requirements of when we should create a CatchUpPackage are given below:
 //!
 //! 1. CatchUpPackage has to include (the block of) a DKG summary that is
-//! considered finalized.
+//!    considered finalized.
 //!
 //! 2. DKG has to traverse blocks to lookup DKG payloads, therefore the interval
-//! between CatchUpPackages has to be bigger than or equal to the DKG interval.
+//!    between CatchUpPackages has to be bigger than or equal to the DKG interval.
 //!
 //! 3. The block in the CatchUpPackage has been executed, and its execution
-//! state is known.
+//!    state is known.
 //!
 //! At the moment, we will start to make a CatchUpPackage once a DKG summary
 //! block is considered finalized.

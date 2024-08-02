@@ -20,11 +20,11 @@ Success::
 
 end::catalog[] */
 
-use crate::orchestrator::utils::upgrade::{
-    fetch_unassigned_node_version, get_blessed_replica_versions,
-};
 use anyhow::bail;
 use ic_canister_client::Sender;
+use ic_consensus_system_test_utils::upgrade::{
+    fetch_unassigned_node_version, get_blessed_replica_versions,
+};
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{

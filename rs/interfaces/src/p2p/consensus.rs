@@ -17,14 +17,14 @@ pub trait ChangeSetProducer<Pool>: Send {
     /// that P2P clients (e.g. consensus) do not directly mutate the objects are:
     ///
     /// 1. The actual mutation may need to be coupled with other things,
-    /// performed in a single transaction, and so on. So it is better to leave
-    /// it to the caller to decide.
+    ///    performed in a single transaction, and so on. So it is better to leave
+    ///    it to the caller to decide.
     ///
     /// 2. Because `Pool` is passed as an read-only reference, the
-    /// caller is free to run other readers concurrently should it choose to.
+    ///    caller is free to run other readers concurrently should it choose to.
     ///
     /// 3. The call can take long time, hence the pool should _not_ be guarded
-    /// by a write lock which prevents other accesses to the pool.
+    ///    by a write lock which prevents other accesses to the pool.
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
