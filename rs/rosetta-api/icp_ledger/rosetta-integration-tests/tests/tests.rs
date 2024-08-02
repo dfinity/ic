@@ -463,8 +463,10 @@ async fn test_rosetta_blocks_mode_enabled() {
             first_rosetta_block_index
         }
     );
+
     // Currently there exists no rosetta block.
     // We need to create one or otherwise rosetta will simply return an error stating that the blockchain is empty
+    assert!(env.rosetta.network_status().await.is_err());
     env.icrc1_transfers(vec![TransferArg {
         from_subaccount: None,
         to: Account::from(Principal::anonymous()),
