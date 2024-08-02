@@ -22,7 +22,7 @@ use ic_types::{
 };
 use std::{
     cell::RefCell,
-    collections::BTreeSet,
+    collections::{BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
     time::Duration,
@@ -291,7 +291,7 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
 
-        let mut existing_signed_requests: BTreeSet<_> = canister_http_pool
+        let mut existing_signed_requests: HashSet<_> = canister_http_pool
             .get_validated_shares()
             .map(|share| (share.signature.signer, share.content.id))
             .collect();
