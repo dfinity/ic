@@ -13089,6 +13089,7 @@ dependencies = [
 name = "icp-rosetta-integration-tests"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "candid",
  "ic-agent",
  "ic-icrc-rosetta",
