@@ -94,16 +94,7 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["purge_shares"])
             .start_timer();
 
-        let active_callback_ids: BTreeSet<_> = self
-            .state_reader
-            .get_latest_state()
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .keys()
-            .copied()
-            .collect();
+        let active_callback_ids = self.active_callback_ids();
 
         let ids_to_remove_from_cache: Vec<_> = self
             .requested_id_cache
@@ -291,6 +282,8 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
 
+        let active_callback_ids = self.active_callback_ids();
+
         let mut existing_signed_requests: HashSet<_> = canister_http_pool
             .get_validated_shares()
             .map(|share| (share.signature.signer, share.content.id))
@@ -304,6 +297,10 @@ impl CanisterHttpPoolManagerImpl {
                         share.clone(),
                         "Redundant share".into(),
                     ));
+                }
+
+                if !active_callback_ids.contains(&share.content.id) {
+                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 }
 
                 let node_is_in_committee = self
@@ -387,6 +384,18 @@ impl CanisterHttpPoolManagerImpl {
             .set(self.requested_id_cache.borrow().len().try_into().unwrap());
 
         change_set
+    }
+
+    fn active_callback_ids(&self) -> BTreeSet<CallbackId> {
+        self.state_reader
+            .get_latest_state()
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .keys()
+            .copied()
+            .collect()
     }
 }
 
