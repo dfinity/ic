@@ -297,8 +297,9 @@ fn fetch_canister_logs(
 
     match canister.log_visibility() {
         LogVisibility::Public => Ok(()),
+        LogVisibility::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
         LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibility::Controllers => Err(UserError::new(
+        LogVisibility::AllowedViewers(_) | LogVisibility::Controllers => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
                 "Caller {} is not allowed to query ic00 method {}",
