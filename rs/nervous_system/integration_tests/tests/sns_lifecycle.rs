@@ -1620,9 +1620,9 @@ fn test_sns_lifecycle(
                 .iter()
                 .filter_map(|recipe| {
                     if let Some(Investor::CommunityFund(ref investment)) = recipe.investor {
-                        let hotkey_principal = investment.hotkey_principal.clone();
+                        let controller = investment.try_get_controller().unwrap();
                         let amount_sns_e8s = recipe.sns.clone().unwrap().amount_e8s;
-                        Some((hotkey_principal, amount_sns_e8s))
+                        Some((controller, amount_sns_e8s))
                     } else {
                         None
                     }

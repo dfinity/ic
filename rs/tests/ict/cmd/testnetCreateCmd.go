@@ -32,7 +32,7 @@ var MAX_TESTNET_LIFETIME_MINS = 1440 * 7
 var DEFAULT_RESULTS_DIR = "ict_testnets"
 
 // Logs are streamed into this file during testnet deployment.
-var SUFFIX_LOG_FILE = "log.txt"
+var SUFFIX_LOG_FILE = ".log"
 
 // Filenames are prefixed with this datetime format up to milliseconds.
 var DATE_TIME_FORMAT = "2006-01-02_15-04-05.000"
@@ -69,7 +69,7 @@ type OutputFilepath struct {
 
 func NewOutputFilepath(outputDir string, time time.Time) *OutputFilepath {
 	return &OutputFilepath{
-		logPath: filepath.Join(outputDir, fmt.Sprintf("%s_%s", time.Format(DATE_TIME_FORMAT), SUFFIX_LOG_FILE)),
+		logPath: filepath.Join(outputDir, fmt.Sprintf("%s%s", time.Format(DATE_TIME_FORMAT), SUFFIX_LOG_FILE)),
 	}
 }
 
@@ -139,17 +139,24 @@ func ValidateTestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []
 
 func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		maybe_config := ""
+		config := ""
 		if cfg.icConfigPath != "" {
 			if len(args) > 0 {
 				return fmt.Errorf("Cannot provide both `--from-ic-config-path` and a name for testnet configuration: %s", args[0])
 			}
 			args = append(args, FROM_CONFIG)
-			bytes, err := os.ReadFile(cfg.icConfigPath)
+			json_bytes, err := os.ReadFile(cfg.icConfigPath)
 			if err != nil {
 				return err
 			}
-			maybe_config = string(bytes)
+			if !json.Valid(json_bytes) {
+				return fmt.Errorf("File provided isn't valid json")
+			}
+			dst := &bytes.Buffer{}
+			if err := json.Compact(dst, json_bytes); err != nil {
+				return fmt.Errorf("Cannot minify json: %s", err)
+			}
+			config = dst.String()
 		}
 
 		// If the target name is not fully qualified, we make it to be such.
@@ -181,8 +188,8 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
 		}
 		// If the user provided a special config path we add it as an environment variable
-		if cfg.icConfigPath != "" {
-			command = append(command, fmt.Sprintf("--test_env=IC_CONFIG='%s'", maybe_config))
+		if config != "" {
+			command = append(command, fmt.Sprintf("--test_env=IC_CONFIG='%s'", config))
 		}
 		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
 		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.

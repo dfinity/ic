@@ -229,10 +229,6 @@ pub(super) fn resolve_destination(
             let canister_id = args.get_canister_id();
             route_canister_id(canister_id, Ic00Method::StoredChunks, network_topology)
         }
-        Ok(Ic00Method::DeleteChunks) => Err(ResolveDestinationError::UserError(UserError::new(
-            ic_error_types::ErrorCode::CanisterRejectedMessage,
-            "Delete chunks API is not yet implemented",
-        ))),
         Ok(Ic00Method::TakeCanisterSnapshot) => {
             let args = TakeCanisterSnapshotArgs::decode(payload)?;
             let canister_id = args.get_canister_id();

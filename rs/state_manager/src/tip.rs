@@ -840,6 +840,7 @@ fn serialize_canister_to_tip(
             long_execution_mode: canister_state.scheduler_state.long_execution_mode,
             accumulated_priority: canister_state.scheduler_state.accumulated_priority,
             memory_allocation: canister_state.system_state.memory_allocation,
+            wasm_memory_threshold: canister_state.system_state.wasm_memory_threshold,
             freeze_threshold: canister_state.system_state.freeze_threshold,
             cycles_balance: canister_state.system_state.balance(),
             cycles_debit: canister_state.system_state.ingress_induction_cycles_debit(),

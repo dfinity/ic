@@ -21,7 +21,7 @@ http-body-util = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { workspace = true }
-hyper-util = { version = "0.1.3", features = ["full"] }
+hyper-util = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
