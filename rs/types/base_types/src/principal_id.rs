@@ -196,11 +196,23 @@ impl PrincipalId {
         PrincipalId::new(len + 1, blob)
     }
 
-    pub fn new_user_test_id(n: u64) -> Self {
-        let mut bytes = n.to_le_bytes().to_vec();
-        bytes.push(0xfe); // internal marker for user test ids
-        Self::new_opaque(&bytes[..])
+    pub const fn new_user_test_id(n: u64) -> Self {
+        let mut bytes = [0u8; Self::MAX_LENGTH_IN_BYTES];
+        let n_bytes = n.to_le_bytes();
+
+        // Copy the u64 bytes into the array
+        let mut i = 0;
+        while i < n_bytes.len() {
+            bytes[i] = n_bytes[i];
+            i += 1;
+        }
+
+        // Append the internal marker
+        bytes[8] = 0xfe;
+
+        Self::new_opaque_from_array(bytes, 9)
     }
+
     pub fn new_node_test_id(n: u64) -> Self {
         let mut bytes = n.to_le_bytes().to_vec();
         bytes.push(0xfd); // internal marker for node test ids
