@@ -13,7 +13,7 @@ TEST_CANISTERS_RUNTIME_DEPS = [
 ]
 
 system_test_nns(
-    name = "boundary_node_integration_test",
+    name = "boundary_node_intgrtn_test",
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
@@ -29,7 +29,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "boundary_node_integration_on_playnet_test",
+    name = "boundary_node_intgrtn_on_playnet_test",
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
