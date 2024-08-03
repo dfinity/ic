@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -14,7 +14,7 @@ TEST_CANISTERS_RUNTIME_DEPS = [
 
 system_test(
     name = "boundary_node_integration_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
     },
@@ -30,7 +30,7 @@ system_test(
 
 system_test(
     name = "boundary_node_integration_on_playnet_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
     },
@@ -47,6 +47,7 @@ system_test(
 
 system_test(
     name = "boundary_node_update_workload_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -60,7 +61,7 @@ system_test(
 
 system_test(
     name = "certificate_orchestrator_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -84,6 +85,7 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    env = NNS_CANISTER_ENV,
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["manual"],
@@ -100,6 +102,7 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    env = NNS_CANISTER_ENV,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -120,6 +123,7 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    env = NNS_CANISTER_ENV,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -134,7 +138,7 @@ system_test(
 
 system_test(
     name = "custom_domains_integration_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -153,6 +157,7 @@ system_test(
 
 system_test(
     name = "api_boundary_node_decentralization_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

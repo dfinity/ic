@@ -1,7 +1,7 @@
 use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState, Tokens};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::CheckedSub;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -270,6 +270,98 @@ fn should_reset_allowance_with_second_approve() {
         arrived_at: later,
     };
     assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+fn should_remove_allowance_when_set_to_zero() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let later = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_LATER);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &None,
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(ZERO_AMOUNT),
+            &None,
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            later,
+        )
+        .build();
+
+    let expected_balance1 = Tokens::from(MINT_AMOUNT)
+        .checked_sub(&Tokens::from(FEE_AMOUNT))
+        .unwrap()
+        .checked_sub(&Tokens::from(FEE_AMOUNT))
+        .unwrap();
+    assert_eq!(ledger.total_supply, expected_balance1);
+    assert_eq!(ledger.balances.len(), 1);
+    assert!(ledger.allowances.is_empty());
+    let actual_balance1 = ledger.balances.get(&account_from_u64(ACCOUNT_ID_1));
+    assert_eq!(Some(&expected_balance1), actual_balance1);
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    assert_eq!(account2_allowance, None);
+}
+
+#[test]
+fn should_remove_allowance_when_used_up() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT)
+                .checked_add(&Tokens::from(FEE_AMOUNT))
+                .unwrap(),
+            &None,
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_transfer(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_3),
+            &Some(account_from_u64(ACCOUNT_ID_2)),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(FEE_AMOUNT)),
+        )
+        .build();
+
+    let expected_total_supply = Tokens::from(MINT_AMOUNT)
+        .checked_sub(&Tokens::from(FEE_AMOUNT))
+        .unwrap()
+        .checked_sub(&Tokens::from(FEE_AMOUNT))
+        .unwrap();
+    let expected_balance1 = expected_total_supply
+        .checked_sub(&Tokens::from(APPROVE_AMOUNT))
+        .unwrap();
+    assert_eq!(ledger.total_supply, expected_total_supply);
+    assert_eq!(ledger.balances.len(), 2);
+    assert!(ledger.allowances.is_empty());
+    let actual_balance1 = ledger.balances.get(&account_from_u64(ACCOUNT_ID_1));
+    assert_eq!(Some(&expected_balance1), actual_balance1);
+    let actual_balance3 = ledger.balances.get(&account_from_u64(ACCOUNT_ID_3));
+    assert_eq!(Some(&Tokens::from(APPROVE_AMOUNT)), actual_balance3);
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    assert_eq!(account2_allowance, None);
 }
 
 #[test]
