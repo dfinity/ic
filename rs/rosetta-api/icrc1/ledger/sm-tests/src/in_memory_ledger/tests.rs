@@ -36,7 +36,9 @@ impl LedgerBuilder {
     }
 
     fn with_burn(mut self, from: &Account, spender: &Option<Account>, amount: &Tokens) -> Self {
-        self.ledger.process_burn(from, spender, amount);
+        let irrelevant_index = 0;
+        self.ledger
+            .process_burn(from, spender, amount, irrelevant_index);
         self.ledger.validate_invariants();
         self
     }
