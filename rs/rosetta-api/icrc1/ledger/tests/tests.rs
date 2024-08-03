@@ -2,6 +2,7 @@ use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_ledger::{ChangeFeeCollector, FeatureFlags, InitArgs, LedgerArgument};
+use ic_icrc1_ledger_sm_tests::in_memory_ledger::verify_ledger_state;
 use ic_icrc1_ledger_sm_tests::{
     get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
     BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
@@ -1047,6 +1048,8 @@ fn test_icrc3_get_blocks() {
 
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
+
+    verify_ledger_state(&env, ledger_id);
 }
 
 #[test]
