@@ -1,5 +1,5 @@
 {
-  "checksum": "5d815f09484e8c3700569828efe9c7cf3d9a1ee161331da6a1594082eaa99734",
+  "checksum": "74a78ec75bce5fb795eb1b07067a370679236206c6891f2fbd43a7b520e01d36",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11760,9 +11760,9 @@
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/blind-oracle/cloudflare-rs.git",
+          "remote": "https://github.com/r-birkner/cloudflare-rs.git",
           "commitish": {
-            "Rev": "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+            "Rev": "966e23a7d63f5a3e91471d4e045b3855f38cb329"
           },
           "strip_prefix": "cloudflare"
         }
@@ -51459,7 +51459,11 @@
           "common": [
             "__rustls",
             "__tls",
+            "async-compression",
             "blocking",
+            "brotli",
+            "deflate",
+            "gzip",
             "hyper-rustls",
             "json",
             "mime_guess",
@@ -51531,6 +51535,10 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "async-compression 0.4.3",
+                "target": "async_compression"
+              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
