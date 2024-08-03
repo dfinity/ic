@@ -12,7 +12,9 @@ use crate::{
     util::GOVERNANCE_CANISTER_ID,
 };
 use ic_base_types::NumSeconds;
-use ic_config::flag_status::FlagStatus;
+use ic_config::{
+    execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
+};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -465,6 +467,7 @@ impl CanisterManager {
             // Bitcoin messages require cycles, so we reject all ingress messages.
             | Ok(Ic00Method::BitcoinGetBalance)
             | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinGetBlockHeaders)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
@@ -1778,24 +1781,40 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
 
-        // Check that replace snapshot ID exists if provided.
-        if let Some(replace_snapshot) = replace_snapshot {
-            match state.canister_snapshots.get(replace_snapshot) {
-                None => {
-                    // If not found, the operation fails due to invalid parameters.
-                    return Err(CanisterManagerError::CanisterSnapshotNotFound {
-                        canister_id: canister.canister_id(),
-                        snapshot_id: replace_snapshot,
-                    });
-                }
-                Some(snapshot) => {
-                    // Verify the provided replacement snapshot belongs to this canister.
-                    if snapshot.canister_id() != canister.canister_id() {
-                        return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+        match replace_snapshot {
+            // Check that replace snapshot ID exists if provided.
+            Some(replace_snapshot) => {
+                match state.canister_snapshots.get(replace_snapshot) {
+                    None => {
+                        // If not found, the operation fails due to invalid parameters.
+                        return Err(CanisterManagerError::CanisterSnapshotNotFound {
                             canister_id: canister.canister_id(),
                             snapshot_id: replace_snapshot,
                         });
                     }
+                    Some(snapshot) => {
+                        // Verify the provided replacement snapshot belongs to this canister.
+                        if snapshot.canister_id() != canister.canister_id() {
+                            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                canister_id: canister.canister_id(),
+                                snapshot_id: replace_snapshot,
+                            });
+                        }
+                    }
+                }
+            }
+            // No replace snapshot ID provided, check whether the maximum number of snapshots
+            // has been reached.
+            None => {
+                if state
+                    .canister_snapshots
+                    .snapshots_count(&canister.canister_id())
+                    >= MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER
+                {
+                    return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
+                        canister_id: canister.canister_id(),
+                        limit: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+                    });
                 }
             }
         }
@@ -2228,6 +2247,10 @@ pub(crate) enum CanisterManagerError {
     CanisterSnapshotExecutionStateNotFound {
         canister_id: CanisterId,
     },
+    CanisterSnapshotLimitExceeded {
+        canister_id: CanisterId,
+        limit: usize,
+    },
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -2275,6 +2298,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::CanisterHeapDeltaRateLimited { .. }
             | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
             | CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. }
+            | CanisterManagerError::CanisterSnapshotLimitExceeded { .. }
             | CanisterManagerError::LongExecutionAlreadyInProgress { .. }
             | CanisterManagerError::MissingUpgradeOptionError { .. }
             | CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
@@ -2563,6 +2587,14 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::CanisterRejectedMessage,
                     format!(
                         "Failed to create snapshot for empty canister {}:", canister_id,
+                    )
+                )
+            }
+            CanisterSnapshotLimitExceeded { canister_id, limit } => {
+                Self::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Canister {} has reached the maximum number of snapshots allowed: {}.{additional_help}", canister_id, limit,
                     )
                 )
             }

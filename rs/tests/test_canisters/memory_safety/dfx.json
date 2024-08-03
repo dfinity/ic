@@ -1,9 +1,9 @@
 {
   "version": 1,
   "canisters": {
-    "cow_safety": {
+    "memory_safety": {
       "type": "motoko",
-      "main": "src/cow_safety/main.mo"
+      "main": "src/memory_safety/main.mo"
     }
   },
   "defaults": {
