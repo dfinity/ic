@@ -3,12 +3,13 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method, Payload,
-    SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -712,6 +713,58 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
             .build(),
     )
     .unwrap();
+}
+
+#[test]
+fn take_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_capacity() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_canister_snapshots_heap_delta_capacity = NumBytes::from(60_000); // 60KB
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_canister_snapshots_heap_delta_capacity,
+            canister_snapshots: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs {
+        canister_id: canister_id.get(),
+        replace_snapshot: None,
+    })
+    .map(|_| ())
+    .unwrap();
+
+    let other_canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let error = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: other_canister_id.get(),
+            replace_snapshot: None,
+        })
+        .map(|_| ())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::SubnetCanisterSnapshotsRateLimited);
+    assert_eq!(
+        error.description(),
+        format!(
+            "Subnet has reached its canister snapshots rate limit per checkpoint: current usage is 65536, but limit is {}.",
+            subnet_canister_snapshots_heap_delta_capacity
+        )
+    );
 }
 
 fn assert_replied(result: Result<WasmResult, UserError>) {

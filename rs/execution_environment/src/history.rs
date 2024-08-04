@@ -272,6 +272,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
                 in the previous install_code messages"
         }
         CanisterHeapDeltaRateLimited => "Canister Heap Delta Rate Limited",
+        SubnetCanisterSnapshotsRateLimited => "Subnet Canister Snapshots Rate Limited",
         // 3xx -- `RejectCode::DestinationInvalid`
         CanisterNotFound => "Canister Not Found",
         CanisterSnapshotNotFound => "Canister Snapshot Not Found",

@@ -61,6 +61,17 @@ pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60)
 /// memory can succeed.
 pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
 
+/// This is the upper limit on how big heap deltas canisters can produce due to
+/// snapshots on a subnet between checkpoints. Once, the total delta size is
+/// above this limit, further `take_canister_snapshot` calls will be rejected
+/// until the next checkpoint is taken. This is a soft limit in the sense that
+/// the actual delta can grow above this limit but no new snapshots will be
+/// taken once the current delta is above this limit.
+///
+/// The limit is set to half the subnet's total heap delta (which includes deltas
+/// from message execution).
+const SUBNET_CANISTER_SNAPSHOTS_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(70 * GIB);
+
 /// The maximum number of instructions for inspect_message calls.
 const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =
     NumInstructions::new(200_000_000);
@@ -168,6 +179,14 @@ pub struct Config {
     /// The maximum amount of logical storage available to wasm custom sections
     /// across the whole subnet.
     pub subnet_wasm_custom_sections_memory_capacity: NumBytes,
+
+    /// This specifies the upper limit on how much heap delta all canisters
+    /// can use on the subnet due to snapshots in between checkpoints. This
+    /// is a soft limit in the sense that we will continue to take snapshots
+    /// as long as the current delta size is below this limit and stop if the
+    /// current size is above this limit. Hence, it is possible that the actual
+    /// usage of the subnet's heap delta for snapshots goes above this limit.
+    pub subnet_canister_snapshots_heap_delta_capacity: NumBytes,
 
     /// The number of bytes reserved for response callback execution.
     pub subnet_memory_reservation: NumBytes,
@@ -300,6 +319,8 @@ impl Default for Config {
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
+            subnet_canister_snapshots_heap_delta_capacity:
+                SUBNET_CANISTER_SNAPSHOTS_HEAP_DELTA_CAPACITY,
             subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,

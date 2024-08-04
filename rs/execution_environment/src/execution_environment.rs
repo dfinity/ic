@@ -380,6 +380,7 @@ impl ExecutionEnvironment {
         );
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
             config.subnet_memory_capacity,
+            config.subnet_canister_snapshots_heap_delta_capacity,
             config.default_provisional_cycles_balance,
             config.default_freeze_threshold,
             own_subnet_id,

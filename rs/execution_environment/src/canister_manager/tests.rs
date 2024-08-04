@@ -281,6 +281,7 @@ fn canister_manager_config(
 ) -> CanisterMgrConfig {
     CanisterMgrConfig::new(
         MEMORY_CAPACITY,
+        MEMORY_CAPACITY / 2,
         DEFAULT_PROVISIONAL_BALANCE,
         NumSeconds::from(100_000),
         subnet_id,

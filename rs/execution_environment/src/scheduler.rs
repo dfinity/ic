@@ -1324,6 +1324,7 @@ impl SchedulerImpl {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
                 state.metadata.heap_delta_estimate = NumBytes::from(0);
+                state.metadata.canister_snapshots_heap_delta_estimate = NumBytes::from(0);
                 // The set of compiled Wasms must be cleared when taking a
                 // checkpoint to keep it in sync with the protobuf serialization
                 // of `ReplicatedState` which doesn't store this field.

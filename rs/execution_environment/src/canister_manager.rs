@@ -112,6 +112,7 @@ pub(crate) enum StopCanisterResult {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) subnet_memory_capacity: NumBytes,
+    pub(crate) subnet_canister_snapshots_heap_delta_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
     pub(crate) default_freeze_threshold: NumSeconds,
     pub(crate) compute_capacity: u64,
@@ -130,6 +131,7 @@ impl CanisterMgrConfig {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         subnet_memory_capacity: NumBytes,
+        subnet_canister_snapshots_heap_delta_capacity: NumBytes,
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
         own_subnet_id: SubnetId,
@@ -146,6 +148,7 @@ impl CanisterMgrConfig {
     ) -> Self {
         Self {
             subnet_memory_capacity,
+            subnet_canister_snapshots_heap_delta_capacity,
             default_provisional_cycles_balance,
             default_freeze_threshold,
             own_subnet_id,
@@ -1819,6 +1822,17 @@ impl CanisterManager {
             }
         }
 
+        if state.metadata.canister_snapshots_heap_delta_estimate
+            >= self.config.subnet_canister_snapshots_heap_delta_capacity
+        {
+            return Err(
+                CanisterManagerError::CanisterSnapshotsHeapDeltaRateLimited {
+                    value: state.metadata.canister_snapshots_heap_delta_estimate,
+                    limit: self.config.subnet_canister_snapshots_heap_delta_capacity,
+                },
+            );
+        }
+
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
@@ -1923,6 +1937,7 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += new_snapshot.heap_delta();
         }
         state.metadata.heap_delta_estimate += new_snapshot.heap_delta();
+        state.metadata.canister_snapshots_heap_delta_estimate += new_snapshot.heap_delta();
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
@@ -2246,6 +2261,10 @@ pub(crate) enum CanisterManagerError {
         value: NumBytes,
         limit: NumBytes,
     },
+    CanisterSnapshotsHeapDeltaRateLimited {
+        value: NumBytes,
+        limit: NumBytes,
+    },
     CanisterSnapshotInvalidOwnership {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
@@ -2302,6 +2321,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::WasmChunkStoreError { .. }
             | CanisterManagerError::CanisterSnapshotNotFound { .. }
             | CanisterManagerError::CanisterHeapDeltaRateLimited { .. }
+            | CanisterManagerError::CanisterSnapshotsHeapDeltaRateLimited { .. }
             | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
             | CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. }
             | CanisterManagerError::CanisterSnapshotLimitExceeded { .. }
@@ -2578,6 +2598,15 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterHeapDeltaRateLimited,
                     format!("Canister {} is heap delta rate limited: current delta debit is {}, but limit is {}.{additional_help}", canister_id, value, limit)
+                )
+            }
+            CanisterSnapshotsHeapDeltaRateLimited { value, limit } => {
+                Self::new(
+                    ErrorCode::SubnetCanisterSnapshotsRateLimited,
+                    format!(
+                        "Subnet has reached its canister snapshots rate limit per checkpoint: current usage is {}, but limit is {}.{additional_help}",
+                        value, limit
+                    )
                 )
             }
             CanisterSnapshotInvalidOwnership { canister_id, snapshot_id } => {

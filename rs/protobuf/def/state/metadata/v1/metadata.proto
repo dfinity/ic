@@ -339,6 +339,8 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  uint64 canister_snapshots_heap_delta_estimate = 22;
 }
 
 message StableMemory {

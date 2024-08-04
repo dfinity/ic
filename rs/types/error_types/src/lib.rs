@@ -110,6 +110,7 @@ impl From<ErrorCode> for RejectCode {
             CertifiedStateUnavailable => SysTransient,
             CanisterInstallCodeRateLimited => SysTransient,
             CanisterHeapDeltaRateLimited => SysTransient,
+            SubnetCanisterSnapshotsRateLimited => SysTransient,
             // Invalid destination errors.
             CanisterNotFound => DestinationInvalid,
             CanisterSnapshotNotFound => DestinationInvalid,
@@ -184,6 +185,7 @@ pub enum ErrorCode {
     CertifiedStateUnavailable = 208,
     CanisterInstallCodeRateLimited = 209,
     CanisterHeapDeltaRateLimited = 210,
+    SubnetCanisterSnapshotsRateLimited = 211,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
@@ -258,6 +260,9 @@ impl TryFrom<ErrorCodeProto> for ErrorCode {
             }
             ErrorCodeProto::CanisterHeapDeltaRateLimited => {
                 Ok(ErrorCode::CanisterHeapDeltaRateLimited)
+            }
+            ErrorCodeProto::SubnetCanisterSnapshotsRateLimited => {
+                Ok(ErrorCode::SubnetCanisterSnapshotsRateLimited)
             }
             ErrorCodeProto::CanisterNotFound => Ok(ErrorCode::CanisterNotFound),
             ErrorCodeProto::CanisterSnapshotNotFound => Ok(ErrorCode::CanisterSnapshotNotFound),
@@ -351,6 +356,9 @@ impl From<ErrorCode> for ErrorCodeProto {
                 ErrorCodeProto::CanisterInstallCodeRateLimited
             }
             ErrorCode::CanisterHeapDeltaRateLimited => ErrorCodeProto::CanisterHeapDeltaRateLimited,
+            ErrorCode::SubnetCanisterSnapshotsRateLimited => {
+                ErrorCodeProto::SubnetCanisterSnapshotsRateLimited
+            }
             ErrorCode::CanisterNotFound => ErrorCodeProto::CanisterNotFound,
             ErrorCode::CanisterSnapshotNotFound => ErrorCodeProto::CanisterSnapshotNotFound,
             ErrorCode::InsufficientMemoryAllocation => ErrorCodeProto::InsufficientMemoryAllocation,
@@ -538,6 +546,7 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
             | ErrorCode::CanisterHeapDeltaRateLimited
+            | ErrorCode::SubnetCanisterSnapshotsRateLimited
             | ErrorCode::CanisterWasmMemoryLimitExceeded => false,
         }
     }
@@ -603,7 +612,7 @@ mod tests {
             ErrorCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
             [
                 101, 102,
-                201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211,
                 301, 305,
                 402, 403, 404, 405, 406, 407, 408,
                 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,

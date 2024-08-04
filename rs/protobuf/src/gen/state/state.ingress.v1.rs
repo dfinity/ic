@@ -159,6 +159,7 @@ pub enum ErrorCode {
     CertifiedStateUnavailable = 208,
     CanisterInstallCodeRateLimited = 209,
     CanisterHeapDeltaRateLimited = 210,
+    SubnetCanisterSnapshotsRateLimited = 211,
     /// 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
@@ -228,6 +229,9 @@ impl ErrorCode {
             }
             ErrorCode::CanisterHeapDeltaRateLimited => {
                 "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED"
+            }
+            ErrorCode::SubnetCanisterSnapshotsRateLimited => {
+                "ERROR_CODE_SUBNET_CANISTER_SNAPSHOTS_RATE_LIMITED"
             }
             ErrorCode::CanisterNotFound => "ERROR_CODE_CANISTER_NOT_FOUND",
             ErrorCode::CanisterSnapshotNotFound => "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND",
@@ -317,6 +321,9 @@ impl ErrorCode {
             }
             "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED" => {
                 Some(Self::CanisterHeapDeltaRateLimited)
+            }
+            "ERROR_CODE_SUBNET_CANISTER_SNAPSHOTS_RATE_LIMITED" => {
+                Some(Self::SubnetCanisterSnapshotsRateLimited)
             }
             "ERROR_CODE_CANISTER_NOT_FOUND" => Some(Self::CanisterNotFound),
             "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND" => Some(Self::CanisterSnapshotNotFound),

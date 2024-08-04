@@ -150,6 +150,10 @@ pub struct SystemMetadata {
     /// 2).
     pub heap_delta_estimate: NumBytes,
 
+    /// Similar to `heap_delta_estimate`, but for the heap delta produced by taking
+    /// canister snapshots.
+    pub canister_snapshots_heap_delta_estimate: NumBytes,
+
     pub subnet_metrics: SubnetMetrics,
 
     /// The set of Wasm modules we expect to be present in the [`Hypervisor`]'s
@@ -592,6 +596,9 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             state_sync_version: item.state_sync_version as u32,
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
+            canister_snapshots_heap_delta_estimate: item
+                .canister_snapshots_heap_delta_estimate
+                .get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
@@ -746,6 +753,9 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             },
 
             heap_delta_estimate: NumBytes::from(item.heap_delta_estimate),
+            canister_snapshots_heap_delta_estimate: NumBytes::from(
+                item.canister_snapshots_heap_delta_estimate,
+            ),
             subnet_metrics: match item.subnet_metrics {
                 Some(subnet_metrics) => subnet_metrics.try_into()?,
                 None => SubnetMetrics::default(),
@@ -789,6 +799,7 @@ impl SystemMetadata {
             // hard-to-track bugs in state manager.
             certification_version: CertificationVersion::V0,
             heap_delta_estimate: NumBytes::from(0),
+            canister_snapshots_heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
@@ -1058,6 +1069,7 @@ impl SystemMetadata {
             // Set by `commit_and_certify()` at the end of the round. Not used before.
             certification_version: _,
             ref heap_delta_estimate,
+            ref canister_snapshots_heap_delta_estimate,
             subnet_metrics: _,
             ref expected_compiled_wasms,
             bitcoin_get_successors_follow_up_responses: _,
@@ -1067,6 +1079,7 @@ impl SystemMetadata {
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(0, heap_delta_estimate.get());
+        assert_eq!(0, canister_snapshots_heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
         // Prune the ingress history.
@@ -2431,6 +2444,7 @@ pub(crate) mod testing {
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CertificationVersion::V0,
             heap_delta_estimate: Default::default(),
+            canister_snapshots_heap_delta_estimate: Default::default(),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: Default::default(),
             bitcoin_get_successors_follow_up_responses: Default::default(),
