@@ -997,6 +997,7 @@ fn stable_grow_updates_subnet_available_memory() {
         initial_subnet_memory,
         initial_subnet_memory,
         initial_subnet_memory,
+        initial_subnet_memory,
     ));
 
     // Growing stable memory should reduce the subnet total memory.

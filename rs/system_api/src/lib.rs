@@ -833,6 +833,7 @@ impl MemoryUsage {
                     execution_bytes,
                     NumBytes::from(0),
                     NumBytes::from(0),
+                    NumBytes::from(0),
                 ) {
                     Ok(()) => {
                         sandbox_safe_system_state.reserve_storage_cycles(
@@ -843,7 +844,12 @@ impl MemoryUsage {
                         // All state changes after this point should not fail
                         // because the cycles have already been reserved.
                         self.subnet_available_memory
-                            .try_decrement(execution_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .try_decrement(
+                                execution_bytes,
+                                NumBytes::from(0),
+                                NumBytes::from(0),
+                                NumBytes::from(0),
+                            )
                             .expect(
                                 "Decrementing subnet available memory is \
                                  guaranteed to succeed by check_available_memory().",
@@ -907,6 +913,7 @@ impl MemoryUsage {
             NumBytes::from(0),
             message_bytes,
             NumBytes::from(0),
+            NumBytes::from(0),
         ) {
             Ok(()) => {
                 self.allocated_message_memory += message_bytes;
@@ -933,8 +940,12 @@ impl MemoryUsage {
             self.current_message_usage,
             message_bytes
         );
-        self.subnet_available_memory
-            .increment(NumBytes::from(0), message_bytes, NumBytes::from(0));
+        self.subnet_available_memory.increment(
+            NumBytes::from(0),
+            message_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
         self.allocated_message_memory -= message_bytes;
         self.current_message_usage -= message_bytes;
     }

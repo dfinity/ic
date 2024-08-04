@@ -105,9 +105,11 @@ pub enum SubnetAvailableMemoryError {
         execution_requested: NumBytes,
         message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
+        canister_snapshots_requested: NumBytes,
         available_execution: i64,
         available_messages: i64,
         available_wasm_custom_sections: i64,
+        available_canister_snapshots: i64,
     },
 }
 
@@ -286,6 +288,8 @@ pub struct SubnetAvailableMemory {
     message_memory: i64,
     /// The memory available for Wasm custom sections.
     wasm_custom_sections_memory: i64,
+    /// The memory available for canister snapshots.
+    canister_snapshots_memory: i64,
     /// Specifies the factor by which the subnet available memory was scaled
     /// using the division operator. It is useful for approximating the global
     /// available memory from the per-thread available memory.
@@ -297,11 +301,13 @@ impl SubnetAvailableMemory {
         execution_memory: i64,
         message_memory: i64,
         wasm_custom_sections_memory: i64,
+        canister_snapshots_memory: i64,
     ) -> Self {
         SubnetAvailableMemory {
             execution_memory,
             message_memory,
             wasm_custom_sections_memory,
+            canister_snapshots_memory,
             // The newly created value is not scaled (divided), which
             // corresponds to the scaling factor of 1.
             scaling_factor: 1,
@@ -322,6 +328,11 @@ impl SubnetAvailableMemory {
     /// execution available memory.
     pub fn get_wasm_custom_sections_memory(&self) -> i64 {
         self.wasm_custom_sections_memory
+    }
+
+    /// Returns the memory available for canister snapshots.
+    pub fn get_canister_snapshots_memory(&self) -> i64 {
+        self.canister_snapshots_memory
     }
 
     /// Returns the scaling factor that specifies by how much the initial
@@ -346,6 +357,7 @@ impl SubnetAvailableMemory {
         execution_requested: NumBytes,
         message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
+        canister_snapshots_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
         let is_available =
             |requested: NumBytes, available: i64| match i64::try_from(requested.get()) {
@@ -359,6 +371,7 @@ impl SubnetAvailableMemory {
                 wasm_custom_sections_requested,
                 self.wasm_custom_sections_memory,
             )
+            && is_available(canister_snapshots_requested, self.canister_snapshots_memory)
         {
             Ok(())
         } else {
@@ -366,9 +379,11 @@ impl SubnetAvailableMemory {
                 execution_requested,
                 message_requested,
                 wasm_custom_sections_requested,
+                canister_snapshots_requested,
                 available_execution: self.execution_memory,
                 available_messages: self.message_memory,
                 available_wasm_custom_sections: self.wasm_custom_sections_memory,
+                available_canister_snapshots: self.canister_snapshots_memory,
             })
         }
     }
@@ -383,15 +398,18 @@ impl SubnetAvailableMemory {
         execution_requested: NumBytes,
         message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
+        canister_snapshots_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
         self.check_available_memory(
             execution_requested,
             message_requested,
             wasm_custom_sections_requested,
+            canister_snapshots_requested,
         )?;
         self.execution_memory -= execution_requested.get() as i64;
         self.message_memory -= message_requested.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
+        self.canister_snapshots_memory -= canister_snapshots_requested.get() as i64;
         Ok(())
     }
 
@@ -400,10 +418,12 @@ impl SubnetAvailableMemory {
         execution_amount: NumBytes,
         message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
+        canister_snapshots_amount: NumBytes,
     ) {
         self.execution_memory += execution_amount.get() as i64;
         self.message_memory += message_amount.get() as i64;
         self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
+        self.canister_snapshots_memory += canister_snapshots_amount.get() as i64;
     }
 
     /// Increments the available memory by the given number of bytes.
@@ -441,6 +461,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
             execution_memory: self.execution_memory / rhs,
             message_memory: self.message_memory / rhs,
             wasm_custom_sections_memory: self.wasm_custom_sections_memory / rhs,
+            canister_snapshots_memory: self.canister_snapshots_memory / rhs,
             scaling_factor: self.scaling_factor * rhs,
         }
     }
@@ -1292,94 +1313,147 @@ mod tests {
 
     #[test]
     fn test_available_memory() {
-        let available = SubnetAvailableMemory::new(20, 10, 4);
+        let available = SubnetAvailableMemory::new(20, 10, 4, 6);
         assert_eq!(available.get_execution_memory(), 20);
         assert_eq!(available.get_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
+        assert_eq!(available.get_canister_snapshots_memory(), 6);
 
         let available = available / 2;
         assert_eq!(available.get_execution_memory(), 10);
         assert_eq!(available.get_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);
+        assert_eq!(available.get_canister_snapshots_memory(), 3);
     }
 
     #[test]
     fn test_subnet_available_memory() {
         let mut available: SubnetAvailableMemory =
-            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20);
+            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20, 1 << 30);
         assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
+            .try_decrement(
+                NumBytes::from(10),
+                NumBytes::from(5),
+                NumBytes::from(5),
+                NumBytes::from(10)
+            )
             .is_ok());
         assert!(available
             .try_decrement(
                 NumBytes::from((1 << 30) - 10),
                 NumBytes::from((1 << 30) - 10),
                 NumBytes::from(0),
+                NumBytes::from(0),
             )
             .is_ok());
         assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+            .try_decrement(
+                NumBytes::from(1),
+                NumBytes::from(1),
+                NumBytes::from(1),
+                NumBytes::from(1)
+            )
             .is_err());
         assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+            .try_decrement(
+                NumBytes::from(1),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0)
+            )
             .is_err());
 
         let mut available: SubnetAvailableMemory =
-            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20);
+            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20, 1 << 30);
         assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
+            .try_decrement(
+                NumBytes::from(10),
+                NumBytes::from(5),
+                NumBytes::from(5),
+                NumBytes::from(10)
+            )
             .is_ok());
         assert!(available
             .try_decrement(
                 NumBytes::from((1 << 20) - 5),
                 NumBytes::from(0),
                 NumBytes::from((1 << 20) - 5),
+                NumBytes::from((1 << 20) - 5),
             )
             .is_ok());
         assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+            .try_decrement(
+                NumBytes::from(1),
+                NumBytes::from(1),
+                NumBytes::from(1),
+                NumBytes::from(1)
+            )
             .is_err());
         assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+            .try_decrement(
+                NumBytes::from(1),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0)
+            )
             .is_ok());
 
-        let mut available: SubnetAvailableMemory = SubnetAvailableMemory::new(1 << 30, -1, -1);
+        let mut available: SubnetAvailableMemory = SubnetAvailableMemory::new(1 << 30, -1, -1, -1);
         assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+            .try_decrement(
+                NumBytes::from(1),
+                NumBytes::from(1),
+                NumBytes::from(1),
+                NumBytes::from(1)
+            )
             .is_err());
         assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(0), NumBytes::from(0))
+            .try_decrement(
+                NumBytes::from(10),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0)
+            )
             .is_ok());
         assert!(available
             .try_decrement(
                 NumBytes::from((1 << 30) - 10),
                 NumBytes::from(0),
-                NumBytes::from(0)
+                NumBytes::from(0),
+                NumBytes::from(0),
             )
             .is_ok());
         assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+            .try_decrement(
+                NumBytes::from(1),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0)
+            )
             .is_err());
 
         assert!(available
             .try_decrement(
                 NumBytes::from(u64::MAX),
                 NumBytes::from(0),
-                NumBytes::from(0)
+                NumBytes::from(0),
+                NumBytes::from(0),
             )
             .is_err());
         assert!(available
             .try_decrement(
                 NumBytes::from(u64::MAX),
                 NumBytes::from(u64::MAX),
-                NumBytes::from(u64::MAX)
+                NumBytes::from(u64::MAX),
+                NumBytes::from(u64::MAX),
             )
             .is_err());
         assert!(available
             .try_decrement(
                 NumBytes::from(i64::MAX as u64 + 1),
                 NumBytes::from(0),
-                NumBytes::from(0)
+                NumBytes::from(0),
+                NumBytes::from(0),
             )
             .is_err());
         assert!(available
@@ -1387,16 +1461,24 @@ mod tests {
                 NumBytes::from(i64::MAX as u64 + 1),
                 NumBytes::from(i64::MAX as u64 + 1),
                 NumBytes::from(i64::MAX as u64 + 1),
+                NumBytes::from(i64::MAX as u64 + 1),
             )
             .is_err());
 
-        let mut available = SubnetAvailableMemory::new(44, 45, 30);
+        let mut available = SubnetAvailableMemory::new(44, 45, 30, 40);
         assert_eq!(available.get_execution_memory(), 44);
         assert_eq!(available.get_message_memory(), 45);
         assert_eq!(available.get_wasm_custom_sections_memory(), 30);
-        available.increment(NumBytes::from(1), NumBytes::from(2), NumBytes::from(3));
+        assert_eq!(available.get_canister_snapshots_memory(), 40);
+        available.increment(
+            NumBytes::from(1),
+            NumBytes::from(2),
+            NumBytes::from(3),
+            NumBytes::from(4),
+        );
         assert_eq!(available.get_execution_memory(), 45);
         assert_eq!(available.get_message_memory(), 47);
         assert_eq!(available.get_wasm_custom_sections_memory(), 33);
+        assert_eq!(available.get_canister_snapshots_memory(), 44);
     }
 }

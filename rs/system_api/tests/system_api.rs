@@ -1316,7 +1316,8 @@ fn call_perform_not_enough_cycles_does_not_trap() {
 fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0, 0);
     let wasm_custom_sections_available_memory_before =
         subnet_available_memory.get_wasm_custom_sections_memory();
     let system_state = SystemStateBuilder::default().build();
@@ -1374,6 +1375,7 @@ fn push_output_request_respects_memory_limits() {
     let subnet_available_memory = SubnetAvailableMemory::new(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
+        0,
         0,
     );
     let mut system_state = SystemStateBuilder::default().build();
@@ -1485,6 +1487,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory = SubnetAvailableMemory::new(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
+        0,
         0,
     );
     let mut system_state = SystemStateBuilder::default().build();

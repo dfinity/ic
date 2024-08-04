@@ -201,6 +201,7 @@ pub fn get_system_api(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
         ),
         EmbeddersConfig::default()
             .feature_flags

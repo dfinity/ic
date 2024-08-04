@@ -40,6 +40,11 @@ const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GIB);
 /// sections on a given subnet.
 const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * GIB);
 
+/// This is the upper limit on how much memory can be used by canister snapshots
+/// on a given subnet.
+/// (TODO): Capacity to use should be discussed.
+const SUBNET_CANISTER_SNAPSHOTS_MEMORY_CAPACITY: NumBytes = NumBytes::new(100 * GIB);
+
 /// The number of bytes reserved for response callback executions.
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 
@@ -168,6 +173,10 @@ pub struct Config {
     /// The maximum amount of logical storage available to wasm custom sections
     /// across the whole subnet.
     pub subnet_wasm_custom_sections_memory_capacity: NumBytes,
+
+    /// The maximum amount of logical storage available to canister snapshots
+    /// across the whole subnet.
+    pub subnet_canister_snapshots_memory_capacity: NumBytes,
 
     /// The number of bytes reserved for response callback execution.
     pub subnet_memory_reservation: NumBytes,
@@ -300,6 +309,7 @@ impl Default for Config {
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
+            subnet_canister_snapshots_memory_capacity: SUBNET_CANISTER_SNAPSHOTS_MEMORY_CAPACITY,
             subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,

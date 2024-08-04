@@ -1817,6 +1817,16 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_subnet_canister_snapshots_memory(
+        mut self,
+        subnet_canister_snapshots_memory: i64,
+    ) -> Self {
+        self.execution_config
+            .subnet_canister_snapshots_memory_capacity =
+            NumBytes::from(subnet_canister_snapshots_memory as u64);
+        self
+    }
+
     pub fn with_subnet_features(self, subnet_features: &str) -> Self {
         Self {
             subnet_features: String::from(subnet_features),
@@ -2219,6 +2229,9 @@ impl ExecutionTestBuilder {
                 self.execution_config.subnet_message_memory_capacity.get() as i64,
                 self.execution_config
                     .subnet_wasm_custom_sections_memory_capacity
+                    .get() as i64,
+                self.execution_config
+                    .subnet_canister_snapshots_memory_capacity
                     .get() as i64,
             ),
             time: self.time,

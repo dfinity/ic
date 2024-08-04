@@ -422,6 +422,7 @@ fn try_apply_canister_state_changes(
             output.allocated_bytes,
             output.allocated_message_bytes,
             NumBytes::from(0),
+            NumBytes::from(0),
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 

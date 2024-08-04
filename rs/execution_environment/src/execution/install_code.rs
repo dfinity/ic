@@ -376,20 +376,24 @@ impl InstallCodeHelper {
             self.deallocated_bytes,
             NumBytes::from(0),
             self.deallocated_wasm_custom_sections_bytes,
+            NumBytes::from(0),
         );
         if let Err(err) = subnet_available_memory.try_decrement(
             self.allocated_bytes,
             self.allocated_message_bytes,
             self.allocated_wasm_custom_sections_bytes,
+            NumBytes::from(0),
         ) {
             match err {
                 SubnetAvailableMemoryError::InsufficientMemory {
                     execution_requested,
                     message_requested: _,
                     wasm_custom_sections_requested,
+                    canister_snapshots_requested: _,
                     available_execution,
                     available_messages: _,
                     available_wasm_custom_sections,
+                    available_canister_snapshots: _,
                 } => {
                     let err = if wasm_custom_sections_requested.get() as i128
                         > available_wasm_custom_sections as i128

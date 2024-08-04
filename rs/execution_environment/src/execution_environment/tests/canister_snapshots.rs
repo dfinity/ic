@@ -507,7 +507,7 @@ fn grow_stable_memory(
 }
 
 #[test]
-fn canister_request_take_canister_reserves_cycles() {
+fn canister_request_take_canister_snapshot_reserves_cycles() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
     const CAPACITY: u64 = 1_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
@@ -520,6 +520,7 @@ fn canister_request_take_canister_reserves_cycles() {
         .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
         .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_canister_snapshots_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
@@ -566,21 +567,10 @@ fn canister_request_take_canister_reserves_cycles() {
     );
 }
 
-#[test]
-fn take_canister_snapshot_fails_subnet_memory_exceeded() {
+fn take_canister_snapshot_fails_subnet_memory_exceeded_helper(mut test: ExecutionTest) {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-    const CAPACITY: u64 = 500_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
     const NUM_PAGES: u64 = 2_400;
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
-        .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
 
     let mut canisters = vec![];
     for _ in 0..2 {
@@ -611,6 +601,40 @@ fn take_canister_snapshot_fails_subnet_memory_exceeded() {
 }
 
 #[test]
+fn take_canister_snapshot_fails_subnet_memory_exceeded_not_enough_execution_memory() {
+    const CAPACITY: u64 = 500_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+
+    let test = ExecutionTestBuilder::new()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_canister_snapshots_memory(i64::MAX)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .build();
+
+    take_canister_snapshot_fails_subnet_memory_exceeded_helper(test);
+}
+
+#[test]
+fn take_canister_snapshot_fails_subnet_memory_exceeded_not_enough_snapshots_memory() {
+    const CAPACITY: u64 = 300_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+
+    let test = ExecutionTestBuilder::new()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
+        .with_subnet_execution_memory(i64::MAX)
+        .with_subnet_canister_snapshots_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .build();
+
+    take_canister_snapshot_fails_subnet_memory_exceeded_helper(test);
+}
+
+#[test]
 fn take_canister_snapshot_increases_heap_delta() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
     const CAPACITY: u64 = 1_000_000_000;
@@ -624,6 +648,7 @@ fn take_canister_snapshot_increases_heap_delta() {
     let mut test = ExecutionTestBuilder::new()
         .with_snapshots(FlagStatus::Enabled)
         .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_canister_snapshots_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
@@ -661,6 +686,7 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(80_000))
         .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_canister_snapshots_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
@@ -725,6 +751,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
         .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(1_000_000))
         .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_canister_snapshots_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
@@ -1216,6 +1243,7 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(150_000))
         .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_canister_snapshots_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();

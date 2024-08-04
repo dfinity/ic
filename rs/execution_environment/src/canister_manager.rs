@@ -19,6 +19,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
+    SubnetAvailableMemoryError,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types::{
@@ -689,11 +690,17 @@ impl CanisterManager {
             // Settings were validated before so this should always succeed.
             round_limits
                 .subnet_available_memory
-                .try_decrement(new_mem - old_mem, NumBytes::from(0), NumBytes::from(0))
+                .try_decrement(
+                    new_mem - old_mem,
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                )
                 .ok();
         } else {
             round_limits.subnet_available_memory.increment(
                 old_mem - new_mem,
+                NumBytes::from(0),
                 NumBytes::from(0),
                 NumBytes::from(0),
             );
@@ -1436,7 +1443,12 @@ impl CanisterManager {
         // settings were validated before so this should always succeed
         round_limits
             .subnet_available_memory
-            .try_decrement(new_mem, NumBytes::from(0), NumBytes::from(0))
+            .try_decrement(
+                new_mem,
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+            )
             .ok();
 
         round_limits.compute_allocation_used = round_limits
@@ -1665,7 +1677,12 @@ impl CanisterManager {
                 // Verify subnet has enough memory.
                 round_limits
                     .subnet_available_memory
-                    .check_available_memory(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
+                    .check_available_memory(
+                        chunk_bytes,
+                        NumBytes::from(0),
+                        NumBytes::from(0),
+                        NumBytes::from(0),
+                    )
                     .map_err(
                         |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                             requested: chunk_bytes,
@@ -1701,7 +1718,7 @@ impl CanisterManager {
                 // Actually deduct memory from the subnet. It's safe to unwrap
                 // here because we already checked the available memory above.
                 round_limits.subnet_available_memory
-                            .try_decrement(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .try_decrement(chunk_bytes, NumBytes::from(0), NumBytes::from(0), NumBytes::from(0))
                             .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
             }
         };
@@ -1865,21 +1882,45 @@ impl CanisterManager {
                     threshold,
                 });
             }
+
             // Verify that the subnet has enough memory.
             round_limits
                 .subnet_available_memory
-                .check_available_memory(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
-                .map_err(
-                    |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                        requested: new_snapshot_size,
-                        available: NumBytes::from(
-                            round_limits
-                                .subnet_available_memory
-                                .get_execution_memory()
-                                .max(0) as u64,
-                        ),
-                    },
-                )?;
+                .check_available_memory(
+                    new_snapshot_size,
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    new_snapshot_size,
+                )
+                .map_err(|err| match err {
+                    SubnetAvailableMemoryError::InsufficientMemory {
+                        execution_requested,
+                        available_execution,
+                        ..
+                    } => {
+                        if (execution_requested.get() as i64) < available_execution {
+                            CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                                requested: new_snapshot_size,
+                                available: NumBytes::from(
+                                    round_limits
+                                        .subnet_available_memory
+                                        .get_execution_memory()
+                                        .max(0) as u64,
+                                ),
+                            }
+                        } else {
+                            CanisterManagerError::SubnetCanisterSnapshotsCapacityOverSubscribed {
+                                requested: new_snapshot_size,
+                                available: NumBytes::from(
+                                    round_limits
+                                        .subnet_available_memory
+                                        .get_canister_snapshots_memory()
+                                        .max(0) as u64,
+                                ),
+                            }
+                        }
+                    }
+                })?;
             // Reserve needed cycles if the subnet is becoming saturated.
             canister
                 .system_state
@@ -1903,9 +1944,10 @@ impl CanisterManager {
                 })?;
             // Actually deduct memory from the subnet. It's safe to unwrap
             // here because we already checked the available memory above.
-            round_limits.subnet_available_memory
-                        .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
-                        .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+            round_limits
+                .subnet_available_memory
+                .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0), new_snapshot_size)
+                .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
         }
 
         // Create new snapshot.
@@ -2175,6 +2217,10 @@ pub(crate) enum CanisterManagerError {
         requested: NumBytes,
         available: NumBytes,
     },
+    SubnetCanisterSnapshotsCapacityOverSubscribed {
+        requested: NumBytes,
+        available: NumBytes,
+    },
     SubnetWasmCustomSectionCapacityOverSubscribed {
         requested: NumBytes,
         available: NumBytes,
@@ -2282,6 +2328,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::CanisterNonEmpty(_)
             | CanisterManagerError::SubnetComputeCapacityOverSubscribed { .. }
             | CanisterManagerError::SubnetMemoryCapacityOverSubscribed { .. }
+            | CanisterManagerError::SubnetCanisterSnapshotsCapacityOverSubscribed { .. }
             | CanisterManagerError::SubnetWasmCustomSectionCapacityOverSubscribed { .. }
             | CanisterManagerError::DeleteCanisterNotStopped(_)
             | CanisterManagerError::DeleteCanisterSelf(_)
@@ -2359,6 +2406,16 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::SubnetOversubscribed,
                     format!(
                         "Canister requested {} of memory but only {} are available in the subnet.{additional_help}",
+                        requested.display(),
+                        available.display(),
+                    )
+                )
+            }
+            SubnetCanisterSnapshotsCapacityOverSubscribed {requested, available} => {
+                Self::new(
+                    ErrorCode::SubnetOversubscribed,
+                    format!(
+                        "Canister requested {} of canister snapshots memory but only {} are available in the subnet.{additional_help}",
                         requested.display(),
                         available.display(),
                     )

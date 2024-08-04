@@ -440,6 +440,8 @@ impl ExecutionEnvironment {
                 .subnet_wasm_custom_sections_memory_capacity
                 .get() as i64
                 - memory_taken.wasm_custom_sections().get() as i64,
+            self.config.subnet_canister_snapshots_memory_capacity.get() as i64
+                - memory_taken.canister_snapshots().get() as i64,
         )
     }
 
@@ -3560,6 +3562,7 @@ pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailabl
         config.subnet_memory_capacity.get() as i64,
         config.subnet_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
+        config.subnet_canister_snapshots_memory_capacity.get() as i64,
     )
 }
 

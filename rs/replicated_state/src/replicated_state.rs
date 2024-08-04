@@ -334,6 +334,8 @@ pub struct MemoryTaken {
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
     canister_history: NumBytes,
+    /// Memory taken by canister snapshots.
+    canister_snapshots: NumBytes,
 }
 
 impl MemoryTaken {
@@ -355,6 +357,10 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by canister history.
     pub fn canister_history(&self) -> NumBytes {
         self.canister_history
+    }
+
+    pub fn canister_snapshots(&self) -> NumBytes {
+        self.canister_snapshots
     }
 }
 
@@ -590,6 +596,7 @@ impl ReplicatedState {
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
             wasm_chunk_store_memory_usage,
+            canister_snapshots_memory_taken,
         ) = self
             .canisters_iter()
             .map(|canister| {
@@ -604,6 +611,7 @@ impl ReplicatedState {
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
                     canister.wasm_chunk_store_memory_usage(),
+                    canister.snapshot_memory_usage(),
                 )
             })
             .reduce(|accum, val| {
@@ -613,6 +621,7 @@ impl ReplicatedState {
                     accum.2 + val.2,
                     accum.3 + val.3,
                     accum.4 + val.4,
+                    accum.5 + val.5,
                 )
             })
             .unwrap_or_default();
@@ -627,6 +636,7 @@ impl ReplicatedState {
             guaranteed_response_messages: guaranteed_response_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
+            canister_snapshots: canister_snapshots_memory_taken,
         }
     }
 

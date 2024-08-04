@@ -822,13 +822,13 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Subnet has memory for 4 initial requests and 2 additional requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 75 / 10, 0),
+        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 75 / 10, 0, 0),
         SubnetType::Application,
     );
 
     // On system subnets limits will not be enforced for local messages, so running with 0 available
     // memory should also lead to inducting messages on local subnet.
-    run_test(SubnetAvailableMemory::new(0, 0, 0), SubnetType::System);
+    run_test(SubnetAvailableMemory::new(0, 0, 0, 0), SubnetType::System);
 }
 
 /// Verifies that the [`SchedulerConfig::instruction_overhead_per_execution`] puts
