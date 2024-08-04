@@ -952,9 +952,7 @@ fn get_most_recent_monthly_node_provider_rewards() {
 #[candid_method(query, rename = "get_most_recent_monthly_node_provider_rewards")]
 fn get_most_recent_monthly_node_provider_rewards_() -> Option<MonthlyNodeProviderRewards> {
     governance()
-        .heap_data
-        .most_recent_monthly_node_provider_rewards
-        .clone()
+        .get_most_recent_monthly_node_provider_rewards()
         .map(MonthlyNodeProviderRewards::from)
 }
 

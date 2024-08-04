@@ -33,7 +33,6 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-tests = { path = "../.." }
 tokio = { workspace = true }
 url = { workspace = true }
 
@@ -88,3 +87,6 @@ path = "tecdsa_two_signing_subnets_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-complaint-test"
 path = "tecdsa_complaint_test.rs"
+
+[features]
+upload_perf_systest_results = []

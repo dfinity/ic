@@ -58,3 +58,6 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-bitcoin-canister-mock = { path = "../../mock" }
 proptest = "1.0"
 simple_asn1 = { workspace = true }
+
+[features]
+self_check = []

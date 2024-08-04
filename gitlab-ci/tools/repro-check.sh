@@ -287,7 +287,7 @@ download_ci_files() {
     fi
 
     if [ "$os_type" == "setup-os" ]; then
-        os_url="${BASE_URL}/${os_type}/disk-img/disk-img.tar.gz"
+        os_url="${BASE_URL}/${os_type}/disk-img/disk-img.tar.zst"
         sha_url="${BASE_URL}/${os_type}/disk-img/SHA256SUMS"
     fi
 
@@ -323,7 +323,7 @@ log "Validating that uploaded image hashes match the provided proposal hashes"
 
 check_ci_hash "guestos" "update-img.tar.gz" "ci_package_guestos_sha256_hex"
 check_ci_hash "hostos" "update-img.tar.gz" "ci_package_hostos_sha256_hex"
-check_ci_hash "setupos" "disk-img.tar.gz" "ci_package_setupos_sha256_hex"
+check_ci_hash "setupos" "disk-img.tar.zst" "ci_package_setupos_sha256_hex"
 
 log_success "The CI's artifacts and hash match"
 
@@ -379,7 +379,7 @@ log_success "Built IC-OS successfully"
 
 mv artifacts/icos/guestos/update-img.tar.gz "$dev_out/guestos"
 mv artifacts/icos/hostos/update-img.tar.gz "$dev_out/hostos"
-mv artifacts/icos/setupos/disk-img.tar.gz "$dev_out/setupos"
+mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
 
 compute_dev_hash() {
     local os_dir="$1"
@@ -395,7 +395,7 @@ compute_dev_hash() {
 
 compute_dev_hash "guestos" "update-img.tar.gz" "dev_package_guestos_sha256_hex"
 compute_dev_hash "hostos" "update-img.tar.gz" "dev_package_hostos_sha256_hex"
-compute_dev_hash "setupos" "disk-img.tar.gz" "dev_package_setupos_sha256_hex"
+compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
 
 compare_hashes() {
     local local_hash_var="$1"

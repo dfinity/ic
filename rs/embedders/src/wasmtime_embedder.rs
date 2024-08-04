@@ -1,3 +1,8 @@
+// False positive clippy lint.
+// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+#![allow(clippy::needless_borrows_for_generic_args)]
+
 pub mod host_memory;
 mod signal_stack;
 mod system_api;

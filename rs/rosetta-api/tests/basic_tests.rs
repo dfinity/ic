@@ -19,7 +19,7 @@ use ic_rosetta_api::models::{
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
     ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
     MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest,
-    SearchTransactionsResponse, SyncStatus,
+    SearchTransactionsResponse,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
@@ -93,12 +93,7 @@ async fn smoke_test() {
             .unwrap(),
             block_id(scribe.blockchain.front().unwrap()).unwrap(),
             None,
-            SyncStatus {
-                current_index: scribe.blockchain.back().unwrap().index as i64,
-                target_index: None,
-                stage: None,
-                synced: None
-            },
+            None,
             vec![]
         ))
     );

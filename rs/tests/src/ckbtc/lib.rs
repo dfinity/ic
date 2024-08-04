@@ -311,7 +311,7 @@ pub(crate) async fn install_minter(
     install_rust_canister_from_path(
         canister,
         env.get_dependency_path(
-            &env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
+            env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
         ),
         Some(Encode!(&minter_arg).unwrap()),
     )
@@ -336,7 +336,7 @@ pub(crate) async fn install_kyt(
     install_rust_canister_from_path(
         kyt_canister,
         env.get_dependency_path(
-            &env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
+            env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
         ),
         Some(Encode!(&kyt_init_args).unwrap()),
     )
@@ -408,10 +408,15 @@ pub(crate) async fn install_bitcoin_canister_with_network(
             get_current_fee_percentiles_maximum: 0,
             send_transaction_base: 0,
             send_transaction_per_byte: 0,
+            get_block_headers_base: 0,
+            get_block_headers_cycles_per_ten_instructions: 0,
+            get_block_headers_maximum: 0,
         },
         api_access: Flag::Enabled,
         disable_api_if_not_fully_synced: Flag::Disabled,
         watchdog_canister: None,
+        burn_cycles: Flag::Enabled,
+        lazily_evaluate_fee_percentiles: Flag::Enabled,
     };
 
     install_rust_canister_from_path(
