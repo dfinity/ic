@@ -743,8 +743,8 @@ pub async fn assert_create_agent(url: &str) -> Agent {
 pub async fn assert_create_agent_using_call_v2(url: &str) -> Agent {
     let start = Instant::now();
     while start.elapsed() < READY_WAIT_TIMEOUT {
-        if let Ok(v) = create_agent(url).await {
-            return v;
+        if let Ok(agent) = agent_using_call_v2_endpoint(url, None).await {
+            return agent;
         }
         tokio::time::sleep(RETRY_BACKOFF).await;
     }
