@@ -10,7 +10,7 @@ use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     consensus::ConsensusMessage,
     messages::SignedIngress,
-    NodeId,
+    CountBytes, NodeId,
 };
 
 use crate::FetchArtifact;
@@ -20,6 +20,8 @@ use super::{
     metrics::FetchStrippedConsensusArtifactMetrics,
     types::stripped::{MaybeStrippedConsensusMessage, Strippable},
 };
+
+const STRIP_THRESHOLD: usize = 1000;
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
@@ -135,8 +137,9 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                     == ic_types::consensus::PayloadType::Data =>
             {
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(
-                    // strip all the ingress messages from the block
-                    block_proposal.strip_ingresses(|_| true),
+                    block_proposal.strip_ingresses(|ingress_message| {
+                        ingress_message.count_bytes() > STRIP_THRESHOLD
+                    }),
                 )
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
