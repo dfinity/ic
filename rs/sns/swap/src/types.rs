@@ -712,7 +712,7 @@ impl CfInvestment {
 }
 
 impl SnsNeuronRecipe {
-    pub fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if let Some(sns) = &self.sns {
             sns.validate()?;
         } else {
@@ -1079,19 +1079,10 @@ impl From<NeuronId> for SwapNeuronId {
     }
 }
 
-// TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
-// SNS governance.proto
-impl TryInto<NeuronId> for SwapNeuronId {
-    type Error = String;
-
-    fn try_into(self) -> Result<NeuronId, Self::Error> {
-        match Subaccount::try_from(self.id) {
-            Ok(subaccount) => Ok(NeuronId::from(subaccount)),
-            Err(err) => Err(format!(
-                "Followee could not be parsed into NeuronId. Err {:?}",
-                err
-            )),
-        }
+impl From<SwapNeuronId> for NeuronId {
+    fn from(src: SwapNeuronId) -> Self {
+        let SwapNeuronId { id } = src;
+        NeuronId { id }
     }
 }
 

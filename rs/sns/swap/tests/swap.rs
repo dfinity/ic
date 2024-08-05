@@ -2669,60 +2669,98 @@ async fn test_sweep_sns_handles_missing_state() {
     );
 }
 
+fn dummy_valid_sns_neuron_recipe() -> SnsNeuronRecipe {
+    SnsNeuronRecipe {
+        neuron_attributes: Some(NeuronAttributes::default()),
+        investor: Some(Investor::Direct(DirectInvestment {
+            buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
+        })),
+        sns: Some(TransferableAmount {
+            amount_e8s: 10 * E8,
+            ..Default::default()
+        }),
+        claimed_status: Some(ClaimedStatus::Pending as i32),
+    }
+}
+
 /// Test that sweep_sns will handles invalid SnsNeuronRecipes gracefully by incrementing the correct
 /// SweepResult fields
 #[tokio::test]
 async fn test_sweep_sns_handles_invalid_neuron_recipes() {
     // Step 1: Prepare the world
 
+    let neuron_recipes_and_validation_errors = vec![
+        (dummy_valid_sns_neuron_recipe(), None),
+        (
+            SnsNeuronRecipe {
+                neuron_attributes: None,
+                ..dummy_valid_sns_neuron_recipe()
+            },
+            Some("Missing neuron_attributes"),
+        ),
+        (
+            SnsNeuronRecipe {
+                investor: None,
+                ..dummy_valid_sns_neuron_recipe()
+            },
+            Some("Missing investor"),
+        ),
+        (
+            SnsNeuronRecipe {
+                investor: Some(Investor::Direct(DirectInvestment {
+                    buyer_principal: "GARBAGE_DATA".to_string(),
+                })),
+                ..dummy_valid_sns_neuron_recipe()
+            },
+            Some("Invalid principal"),
+        ),
+        (
+            SnsNeuronRecipe {
+                sns: None,
+                ..dummy_valid_sns_neuron_recipe()
+            },
+            Some("Missing transferable_amount (field `sns`)"),
+        ),
+    ];
+
+    // Assert that the individual recipes are invalid for the exact reasons we expect.
+    let nns_governance = NNS_GOVERNANCE_CANISTER_ID;
+    let sns_transaction_fee_e8s = 10_000;
+    for (neuron_recipe, expected_err_substring) in &neuron_recipes_and_validation_errors {
+        let observed = neuron_recipe.to_neuron_recipe(nns_governance, sns_transaction_fee_e8s);
+        match (observed, expected_err_substring.as_ref()) {
+            (Err((_, observed_err)), Some(expected_err_substring)) => {
+                assert!(
+                    observed_err.contains(expected_err_substring),
+                    "Observed error `{}` does not contain the expected substring `{}`.",
+                    observed_err,
+                    expected_err_substring
+                );
+            }
+            (Err((_, observed_err)), None) => {
+                panic!("Expected valid neuron recipe, observed {:?}.", observed_err);
+            }
+            (Ok(_), Some(expected_err_substring)) => {
+                panic!(
+                    "Expected neuron recipe validation error matching `{}`, got ok.",
+                    expected_err_substring
+                );
+            }
+            (Ok(_), None) => (), // all good
+        }
+    }
+
+    let neuron_recipes = neuron_recipes_and_validation_errors
+        .into_iter()
+        .map(|(neuron_recipe, _)| neuron_recipe)
+        .collect();
+
     // Create some valid and invalid NeuronRecipes in the state
     let mut swap = Swap {
+        neuron_recipes,
         lifecycle: Committed as i32,
         init: Some(init()),
         params: Some(params()),
-        neuron_recipes: vec![
-            // Invalid: Missing NeuronAttributes field
-            SnsNeuronRecipe {
-                neuron_attributes: None, // Invalid
-                ..Default::default()
-            },
-            // Invalid: Missing Investor field
-            SnsNeuronRecipe {
-                neuron_attributes: Some(NeuronAttributes::default()),
-                investor: None, // Invalid
-                ..Default::default()
-            },
-            // Invalid: buyer_principal is not a valid PrincipalId
-            SnsNeuronRecipe {
-                neuron_attributes: Some(NeuronAttributes::default()),
-                investor: Some(Investor::Direct(DirectInvestment {
-                    // Invalid
-                    buyer_principal: "GARBAGE_DATA".to_string(),
-                })),
-                ..Default::default()
-            },
-            // Invalid: sns field set to None
-            SnsNeuronRecipe {
-                neuron_attributes: Some(NeuronAttributes::default()),
-                investor: Some(Investor::Direct(DirectInvestment {
-                    buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
-                })),
-                sns: None, // Invalid
-                ..Default::default()
-            },
-            // Valid
-            SnsNeuronRecipe {
-                neuron_attributes: Some(NeuronAttributes::default()),
-                investor: Some(Investor::Direct(DirectInvestment {
-                    buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
-                })),
-                sns: Some(TransferableAmount {
-                    amount_e8s: 10 * E8,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-        ],
         ..Default::default()
     };
 

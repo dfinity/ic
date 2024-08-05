@@ -3365,14 +3365,15 @@ fn create_sns_neuron_basket_for_neurons_fund_participant(
     Ok(recipes)
 }
 
-enum ConversionError {
+#[derive(Clone, Debug)]
+pub enum ConversionError {
     Invalid,
     AlreadyProcessed,
 }
 
 impl SnsNeuronRecipe {
     /// Converts a SnsNeuronRecipe (a Swap concept) to an SnsNeuronRecipe (an SNS Governance concept)
-    fn to_neuron_recipe(
+    pub fn to_neuron_recipe(
         &self,
         nns_governance: CanisterId,
         sns_transaction_fee_e8s: u64,
@@ -3448,9 +3449,9 @@ impl SnsNeuronRecipe {
                         ),
                     ));
                 }
-                ClaimedStatus::Invalid => {
-                    // If the Recipe is marked as invalid, intervention is needed to make valid
-                    // again. As part of that intervention, the recipe must be marked
+                ClaimedStatus::Invalid | ClaimedStatus::Unspecified => {
+                    // If the Recipe is marked as invalid or unspecified, intervention is needed
+                    // to make valid again. As part of that intervention, the recipe must be marked
                     // as ClaimedStatus::Pending to attempt again.
                     return Err((
                         ConversionError::Invalid,
@@ -3460,8 +3461,10 @@ impl SnsNeuronRecipe {
                     ),
                     ));
                 }
-                // Remaining cases are tolerable. TODO: explain why.
-                ClaimedStatus::Unspecified | ClaimedStatus::Pending | ClaimedStatus::Failed => (),
+                // Remaining cases are tolerable:
+                // - Pending status indicates there hasn't been a claim yet for this neuron.
+                // - Failed status indicates it is okay to retry to claim a previously failed one.
+                ClaimedStatus::Pending | ClaimedStatus::Failed => (),
             }
         }
 
@@ -3523,17 +3526,8 @@ impl SnsNeuronRecipe {
 
         let followees = followees
             .iter()
-            .filter_map(|neuron_id| match neuron_id.clone().try_into() {
-                Ok(neuron_id) => Some(neuron_id),
-                Err(err) => {
-                    log!(
-                        ERROR,
-                        "Error converting followee: ({}). Ignoring followee.",
-                        err
-                    );
-                    None
-                }
-            })
+            .cloned()
+            .map(NeuronId::from)
             .collect::<Vec<_>>();
         let followees = Some(NeuronIds::from(followees.clone()));
 
