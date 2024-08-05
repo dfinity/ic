@@ -95,6 +95,7 @@ impl CanisterHttpPoolManagerImpl {
             .start_timer();
 
         let active_callback_ids = self.active_callback_ids();
+        let next_callback_id = self.next_callback_id();
 
         let ids_to_remove_from_cache: Vec<_> = self
             .requested_id_cache
@@ -119,6 +120,8 @@ impl CanisterHttpPoolManagerImpl {
             .chain(
                 canister_http_pool
                     .get_unvalidated_shares()
+                    // Only check the unvalidated shares belonging to the requests that we can't validate.
+                    .filter(|share| share.content.id <= next_callback_id)
                     .filter_map(|share| {
                         if active_callback_ids.contains(&share.content.id) {
                             None
@@ -283,6 +286,7 @@ impl CanisterHttpPoolManagerImpl {
         };
 
         let active_callback_ids = self.active_callback_ids();
+        let next_callback_id = self.next_callback_id();
 
         let mut existing_signed_requests: HashSet<_> = canister_http_pool
             .get_validated_shares()
@@ -291,6 +295,8 @@ impl CanisterHttpPoolManagerImpl {
 
         canister_http_pool
             .get_unvalidated_shares()
+            // Only consider shares belonging to the requests that we can validate.
+            .filter(|share| share.content.id <= next_callback_id)
             .filter_map(|share| {
                 if existing_signed_requests.contains(&(share.signature.signer, share.content.id)) {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
@@ -396,6 +402,15 @@ impl CanisterHttpPoolManagerImpl {
             .keys()
             .copied()
             .collect()
+    }
+
+    fn next_callback_id(&self) -> CallbackId {
+        self.state_reader
+            .get_latest_state()
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .next_callback_id()
     }
 }
 
