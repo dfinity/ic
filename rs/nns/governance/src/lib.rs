@@ -155,13 +155,13 @@ mod garbage_collection;
 pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
-pub mod init;
 mod known_neuron_index;
 mod migrations;
 mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
 pub mod neurons_fund;
+mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
 mod reward;
@@ -498,6 +498,7 @@ pub fn encode_metrics(
             total_voting_power_non_self_authenticating_controller: _,
             total_staked_e8s_non_self_authenticating_controller: _,
             non_self_authenticating_controller_neuron_subset_metrics,
+            public_neuron_subset_metrics,
         } = metrics;
 
         w.encode_gauge(
@@ -719,7 +720,15 @@ pub fn encode_metrics(
                 "non_self_authenticating_controller",
                 "have a controller that is not self-authenticating with \
                  one exception: neurons controlled by the genesis token \
-                 canister are not counted here.",
+                 canister are not counted here",
+                w,
+            )?;
+        }
+
+        if let Some(public_neuron_subset_metrics) = public_neuron_subset_metrics {
+            public_neuron_subset_metrics.encode(
+                "public",
+                "that have visibility set to public",
                 w,
             )?;
         }

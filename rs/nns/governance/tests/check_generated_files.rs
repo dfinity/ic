@@ -1,5 +1,5 @@
 use ic_nns_governance_protobuf_generator::{generate_prost_files, ProtoPaths};
-use ic_test_utilities_compare_dirs::{compare, compare_right_contains_left, CompareError};
+use ic_test_utilities_compare_dirs::{compare, CompareError};
 use std::path::PathBuf;
 
 #[test]
@@ -45,25 +45,6 @@ fn check_generated_files() {
                 gen.display(),
                 command_to_regenerate
             )
-        }
-        Err(CompareError::ContentDiffers { path }) => {
-            panic!(
-                "Source file {} is outdated, run {}",
-                path.display(),
-                command_to_regenerate
-            )
-        }
-        Err(CompareError::IoError { path, cause }) => {
-            panic!("I/O error on {}: {}", path.display(), cause)
-        }
-    }
-
-    let api = manifest_dir.join("api/src");
-
-    match compare_right_contains_left(out_dir.path(), &api) {
-        Ok(_) => {}
-        Err(CompareError::PathsDiffer { .. }) => {
-            panic!("Error should not be possible")
         }
         Err(CompareError::ContentDiffers { path }) => {
             panic!(

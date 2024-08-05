@@ -2,8 +2,6 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//visibility:public"])
-
 BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
@@ -119,6 +117,8 @@ rust_binary(
     testonly = True,
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    # TODO: restrict the visibility
+    visibility = ["//visibility:public"],
     deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
 )
 
@@ -157,9 +157,7 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
-    aliases = {
-        "@crate_index//:ic_agent_call_v3": "ic_agent_call_v3",
-    },
+    aliases = {},
     data = [
         ":pocket-ic-server",
         "@ii_dev_canister//file",
@@ -169,7 +167,7 @@ rust_test(
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     tags = ["cpu:8"],
-    deps = TEST_DEPENDENCIES + ["@crate_index//:ic_agent_call_v3"],
+    deps = TEST_DEPENDENCIES,
 )
 
 rust_test(

@@ -694,9 +694,7 @@ fn list_neurons() {
 
 #[candid_method(query, rename = "list_neurons")]
 fn list_neurons_(req: ListNeurons) -> ListNeuronsResponse {
-    governance()
-        .list_neurons_by_principal(&(req.into()), &caller())
-        .into()
+    governance().list_neurons(&(req.into()), caller()).into()
 }
 
 #[export_name = "canister_query get_metrics"]
@@ -849,13 +847,13 @@ fn manage_neuron_pb() {
 #[export_name = "canister_update claim_or_refresh_neuron_from_account_pb"]
 fn claim_or_refresh_neuron_from_account_pb() {
     debug_log("claim_or_refresh_neuron_from_account_pb");
-    over_async(protobuf, claim_or_refresh_neuron_from_account_)
+    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
 
 #[export_name = "canister_query list_proposals_pb"]
 fn list_proposals_pb() {
     debug_log("list_proposals_pb");
-    over(protobuf, list_proposals_)
+    panic!("Method removed.  Please use list_proposals instead.")
 }
 
 #[export_name = "canister_query list_neurons_pb"]
@@ -954,9 +952,7 @@ fn get_most_recent_monthly_node_provider_rewards() {
 #[candid_method(query, rename = "get_most_recent_monthly_node_provider_rewards")]
 fn get_most_recent_monthly_node_provider_rewards_() -> Option<MonthlyNodeProviderRewards> {
     governance()
-        .heap_data
-        .most_recent_monthly_node_provider_rewards
-        .clone()
+        .get_most_recent_monthly_node_provider_rewards()
         .map(MonthlyNodeProviderRewards::from)
 }
 
