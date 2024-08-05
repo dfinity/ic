@@ -108,7 +108,7 @@ default_vm_resources = {
 
 def system_test(
         name,
-        variant = "",
+        test_driver_target = None,
         runtime_deps = [],
         tags = [],
         test_timeout = "long",
@@ -130,7 +130,7 @@ def system_test(
 
     Args:
       name: base name to use for the binary and test rules.
-      variant: string to identify the variant of this test. Defaults to "".
+      test_driver_target: optional string to identify the target of the test driver binary. Defaults to None
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
@@ -160,25 +160,22 @@ def system_test(
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
-      3 bazel targets:
-        * A rust_binary <name>_bin which is the test driver.
-        * A test target <name>[_<variant>] which runs the test.
-        * A test taget <name>_colocate[_<variant>] which runs the test in a colocated way.
-
-    Note that the variant allows us to have multiple variants of a system-test
-    which all share the same test driver (<name>_bin) but have different test targets,
-    with different environment variables or runtime dependencies for example.
+      This macro declares 3 bazel targets:
+        * If test_driver_target == Noone, a rust_binary <name>_bin which is the test driver.
+        * A test target <name> which runs the test.
+        * A test taget <name>_colocate which runs the test in a colocated way.
+      It returns the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
 
-    bin_name = name + "_bin"
-
-    if variant == "":
+    if test_driver_target == None:
+        bin_name = name + "_bin"
         rust_binary(
             name = bin_name,
             testonly = True,
             srcs = [name + ".rs"],
             **kwargs
         )
+        test_driver_target = bin_name
 
     # Automatically detect system tests that use guestos dev for back compatibility.
     for _d in runtime_deps:
@@ -223,11 +220,9 @@ def system_test(
         _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos_malicous + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256"
 
-    variant_suffix = "" if variant == "" else "_" + variant
-
     run_system_test(
-        name = name + variant_suffix,
-        src = bin_name,
+        name = name,
+        src = test_driver_target,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
         env = env,
@@ -257,12 +252,12 @@ def system_test(
         env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
 
     run_system_test(
-        name = name + "_colocate" + variant_suffix,
+        name = name + "_colocate",
         src = "//rs/tests/testing_verification:colocate_test_bin",
-        colocated_test_bin = bin_name,
+        colocated_test_bin = test_driver_target,
         runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
             "//rs/tests:colocate_uvm_config_image",
-            bin_name,
+            test_driver_target,
         ],
         env_deps = _env_deps,
         env_inherit = env_inherit,
@@ -273,6 +268,7 @@ def system_test(
         timeout = test_timeout,
         flaky = flaky,
     )
+    return test_driver_target
 
 def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
@@ -300,7 +296,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     runtime_deps = kwargs.pop("runtime_deps", [])
     env = kwargs.pop("env", {})
 
-    system_test(
+    test_driver_target = system_test(
         name,
         env = env | MAINNET_NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + MAINNET_NNS_CANISTER_RUNTIME_DEPS,
@@ -309,8 +305,8 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
 
     original_tags = kwargs.pop("tags", [])
     system_test(
-        name,
-        variant = "head_nns",
+        name + "_head_nns",
+        test_driver_target = test_driver_target,
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
