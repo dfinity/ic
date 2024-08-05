@@ -76,3 +76,7 @@ path = "query_workload_long_test.rs"
 [[bin]]
 name = "ic-systest-update-workload-large-payload-test"
 path = "update_workload_large_payload.rs"
+
+[[bin]]
+name = "ic-systest-cloner-canisters-workload"
+path = "cloner_canisters_workload.rs"
