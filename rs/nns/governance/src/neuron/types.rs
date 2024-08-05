@@ -21,10 +21,7 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
-use std::{
-    borrow::Cow,
-    collections::{BTreeSet, HashMap},
-};
+use std::collections::{BTreeSet, HashMap};
 
 /// A neuron type internal to the governance crate. Currently, this type is identical to the
 /// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
@@ -115,27 +112,7 @@ pub struct Neuron {
     pub neuron_type: Option<i32>,
     /// How much unprivileged principals (i.e. is neither controller, nor
     /// hotkey) can see about this neuron.
-    pub visibility: Option<Visibility>,
-}
-
-#[must_use]
-pub fn normalized(mut neuron: Cow<Neuron>) -> Cow<Neuron> {
-    if neuron.known_neuron_data.is_some() {
-        // Log if there is an inconsistency, but otherwise, do not interrupt the flow.
-        if neuron.visibility == Some(Visibility::Private) {
-            println!(
-                "{}WARNING: Neuron {:?} is a known neuron, but its visibility field is \
-                 set to private. This in-memory neuron will now quietly be set to public. \
-                 However, the underlying source of this inconsistent neuron is not \
-                 being updated.",
-                LOG_PREFIX, neuron.id,
-            );
-        }
-
-        neuron.to_mut().visibility = Some(Visibility::Public);
-    }
-
-    neuron
+    visibility: Option<Visibility>,
 }
 
 impl Neuron {
@@ -162,6 +139,17 @@ impl Neuron {
     /// Returns an enum representing the dissolve state and age of a neuron.
     pub fn dissolve_state_and_age(&self) -> DissolveStateAndAge {
         self.dissolve_state_and_age
+    }
+
+    /// When we turn on enforcement of private neurons, this will only return
+    /// Public or Private, not None. When that happens, we should define another
+    /// Visibility that does NOT have Unspecified.
+    pub fn visibility(&self) -> Option<Visibility> {
+        if self.known_neuron_data.is_some() {
+            return Some(Visibility::Public);
+        }
+
+        self.visibility
     }
 
     /// Sets a neuron's dissolve state and age.

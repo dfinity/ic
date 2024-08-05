@@ -60,6 +60,7 @@ use ic_nns_governance::{
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
+        install_code::CanisterInstallMode,
         manage_neuron::{
             self,
             claim_or_refresh::{By, MemoAndController},
@@ -78,7 +79,7 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
         BallotInfoChange, CreateServiceNervousSystem, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceChange, GovernanceError,
-        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
+        IdealMatchedParticipationFunction, InstallCode, KnownNeuron, KnownNeuronData, ListNeurons,
         ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
         NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
@@ -7590,6 +7591,68 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
 }
 
 #[test]
+fn test_list_proposals_removes_install_code_large_fields() {
+    let original_install_code = InstallCode {
+        wasm_module: Some(vec![0; 100_000]),
+        arg: Some(vec![0; 1_000]),
+        install_mode: Some(CanisterInstallMode::Upgrade as i32),
+        canister_id: Some(GOVERNANCE_CANISTER_ID.into()),
+        skip_stopping_before_installing: Some(false),
+    };
+    let proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        proposals: btreemap! {
+            1 => ProposalData {
+                id: Some(ProposalId { id: 1 }),
+                proposal: Some(Proposal {
+                    title: Some("Upgrade canister".to_string()),
+                    action: Some(proposal::Action::InstallCode(original_install_code.clone())),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        },
+        ..Default::default()
+    };
+    let driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+    let caller = &principal(1);
+
+    let results = gov.list_proposals(
+        caller,
+        &ListProposalInfo {
+            ..Default::default()
+        },
+    );
+
+    let action = results.proposal_info[0]
+        .proposal
+        .as_ref()
+        .unwrap()
+        .action
+        .as_ref()
+        .unwrap();
+    match action {
+        proposal::Action::InstallCode(install_code) => {
+            assert_eq!(
+                install_code,
+                &InstallCode {
+                    wasm_module: None,
+                    arg: None,
+                    ..original_install_code
+                }
+            );
+        }
+        _ => panic!("Unexpected action"),
+    };
+}
+
+#[test]
 fn test_list_proposals_retains_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
@@ -9878,7 +9941,7 @@ fn test_neuron_set_visibility() {
                 .with_neuron(&neuron_id, |neuron| neuron.clone())
                 .unwrap();
 
-            assert_eq!(neuron.visibility, expected_visibility, "{:#?}", neuron,);
+            assert_eq!(neuron.visibility(), expected_visibility, "{:#?}", neuron,);
         };
 
     assert_neuron_visibility(typical_neuron.id.unwrap(), Some(Visibility::Public));
@@ -9977,11 +10040,7 @@ fn test_include_public_neurons_in_full_neurons() {
     assert_eq!(
         list_neurons_response.full_neurons,
         vec![
-            Neuron {
-                // Thanks to normalization.
-                visibility: Some(Visibility::Public as i32),
-                ..known_neuron
-            },
+            known_neuron,
             explicitly_public_neuron,
             // In particular, legacy and explicitly_private are NOT in the result.
 
@@ -11406,7 +11465,6 @@ lazy_static! {
                             1_200_000 * E8,
                         ),
                         controller: Some(principal(1)),
-                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11427,7 +11485,6 @@ lazy_static! {
                             600_000 * E8,
                         ),
                         controller: Some(principal(2)),
-                        // TODO(NNS1-3199): Populate this if it is or can be made relevant for the tests below.
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11542,7 +11599,6 @@ lazy_static! {
                             120000000000000,
                         ),
                         controller: Some(principal(1)),
-                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11564,7 +11620,6 @@ lazy_static! {
                             60000000000000,
                         ),
                         controller: Some(principal(2)),
-                        // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                         hotkeys: Vec::new(),
                         is_capped: Some(
                             false,
@@ -11626,7 +11681,6 @@ lazy_static! {
                     120000000000000,
                 ),
                 controller: Some(principal(1)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
@@ -11649,7 +11703,6 @@ lazy_static! {
                     60000000000000,
                 ),
                 controller: Some(principal(2)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 is_capped: Some(
                     false,
@@ -11675,7 +11728,6 @@ lazy_static! {
                     15666666667,
                 ),
                 controller: Some(principal(1)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     120000000000000,
@@ -11697,7 +11749,6 @@ lazy_static! {
                     7833333333,
                 ),
                 controller: Some(principal(2)),
-                // TODO(NNS1-3199): Populate hotkeys if it's relevant for this test
                 hotkeys: Vec::new(),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,

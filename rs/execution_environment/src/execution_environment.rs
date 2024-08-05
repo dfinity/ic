@@ -1300,6 +1300,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::BitcoinGetBalance)
             | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinGetBlockHeaders)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
                 // Code path can only be triggered if there are no bitcoin canisters to route
@@ -2063,10 +2064,7 @@ impl ExecutionEnvironment {
                 round_limits,
                 &resource_saturation,
             )
-            .map(|response| {
-                state.metadata.heap_delta_estimate += NumBytes::from(response.total_size());
-                response.encode()
-            })
+            .map(|response| response.encode())
             .map_err(|err| err.into());
         // Put canister back.
         state.put_canister_state(canister);
