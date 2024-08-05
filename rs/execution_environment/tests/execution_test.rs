@@ -716,7 +716,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
 }
 
 #[test]
-fn stops_executing_take_canister_snapshot_requests_when_subnet_capacity_reached() {
+fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
