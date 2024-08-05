@@ -1032,7 +1032,7 @@ mod evm_rpc_conversion {
                             .values()
                             // It generally doesn't make sense for `T` to implement `Ord`,
                             // but in this context it can always be serialized to JSON,
-                            // which we use for comparison purposes
+                            // which we use for comparison purposes.
                             .map(|v| serde_json::to_string(v).unwrap())
                             .collect::<BTreeSet<_>>(),
                         right_inconsistent_results
@@ -1066,7 +1066,7 @@ mod evm_rpc_conversion {
 
     pub fn arb_evm_rpc_block(minter_block: Block) -> impl Strategy<Value = EvmBlock> {
         use proptest::{array, collection::vec};
-        //prop_map is limited to tuple of at most 11 elements, so we group the Nat and String fields
+        //prop_map is limited to tuples of at most 11 elements, so we group the Nat and String fields
         (
             array::uniform7(arb_nat_256()),
             array::uniform9(".*"),
