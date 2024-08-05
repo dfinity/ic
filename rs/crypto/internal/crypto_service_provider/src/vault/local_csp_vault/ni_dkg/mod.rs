@@ -410,14 +410,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 // Check if threshold key has been computed already
                 let threshold_secret_key: Option<CspSecretKey> =
                     self.sks_read_lock().get(&threshold_key_id);
-                if let Some(secret_key) = threshold_secret_key {
-                    // this adds a sanity check to ensure the key is well formed:
-                    return specialise::groth20::threshold_secret_key(secret_key)
-                        .map(|_| ())
-                        .map_err(
-                            ni_dkg_errors::CspDkgLoadPrivateKeyError::MalformedSecretKeyError,
-                        );
-                }
 
                 // Compute the key
                 let fs_decryption_key = {
@@ -449,6 +441,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     epoch,
                 )
                 .map(CspSecretKey::ThresBls12_381)?;
+
+                if let Some(secret_key) = threshold_secret_key {
+                    // this adds a sanity check to ensure the key is well formed:
+                    return specialise::groth20::threshold_secret_key(secret_key)
+                        .map(|_| ())
+                        .map_err(
+                            ni_dkg_errors::CspDkgLoadPrivateKeyError::MalformedSecretKeyError,
+                        );
+                }
 
                 let result = self.sks_write_lock().insert(
                     threshold_key_id,

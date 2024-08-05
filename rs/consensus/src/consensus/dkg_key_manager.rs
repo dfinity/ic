@@ -346,6 +346,7 @@ impl DkgKeyManager {
 
                 let result = loop {
                     let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
+                    let _ = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
                     let elapsed = since.elapsed().as_secs_f64();
 
                     match &result {
