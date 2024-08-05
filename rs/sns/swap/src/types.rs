@@ -8,7 +8,7 @@ use crate::{
         settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
-        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
         Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
@@ -1065,7 +1065,7 @@ impl SettleNeuronsFundParticipationResult {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<[u8; 32]> for SaleNeuronId {
+impl From<[u8; 32]> for SwapNeuronId {
     fn from(value: [u8; 32]) -> Self {
         Self { id: value.to_vec() }
     }
@@ -1073,7 +1073,7 @@ impl From<[u8; 32]> for SaleNeuronId {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<NeuronId> for SaleNeuronId {
+impl From<NeuronId> for SwapNeuronId {
     fn from(neuron_id: NeuronId) -> Self {
         Self { id: neuron_id.id }
     }
@@ -1081,7 +1081,7 @@ impl From<NeuronId> for SaleNeuronId {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl TryInto<NeuronId> for SaleNeuronId {
+impl TryInto<NeuronId> for SwapNeuronId {
     type Error = String;
 
     fn try_into(self) -> Result<NeuronId, Self::Error> {

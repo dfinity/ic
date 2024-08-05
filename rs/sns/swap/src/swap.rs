@@ -19,7 +19,7 @@ use crate::{
         GetStateResponse, Icrc1Account, Init, Lifecycle, ListCommunityFundParticipantsRequest,
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
+        NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NewSaleTicketRequest,
         NewSaleTicketResponse, NotifyPaymentFailureResponse, Participant,
         RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
         SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
@@ -1621,19 +1621,21 @@ impl Swap {
         // be accessed in O(1) time.
         let mut claimable_neurons_index = btreemap! {};
 
-        // The `NeuronRecipe`s that will be used to create neurons.
-        // We are converting `SnsNeuronRecipe`s to a type with a type with a similar name,
-        // `NeuronRecipe`, as this is the type expected by the SNS Governance canister.
+        // The `NeuronRecipe`s that will be used to create neurons. We are converting
+        // `SnsNeuronRecipe`s to a type with a similar name, `NeuronRecipe`, as this is the type
+        // expected by the SNS Governance canister.
         let mut neuron_recipes = vec![];
 
         for recipe in &mut self.neuron_recipes {
-            // Here we convert the SnsNeuronRecipe (a Swap concept) to an SnsNeuronRecipe (an SNS Governance concept)
+            // Here we convert the SnsNeuronRecipe (a Swap concept) to an SnsNeuronRecipe (an SNS
+            // Governance concept).
             match recipe.to_neuron_recipe(nns_governance, sns_transaction_fee_e8s) {
                 Ok(neuron_recipe) => {
-                    claimable_neurons_index.insert(
-                        neuron_recipe.neuron_id.as_ref().unwrap().clone(), // Will never be set to None by SnsNeuronRecipe::to_sns_neuron_recipe
-                        recipe,
+                    let neuron_id = neuron_recipe.neuron_id.clone().expect(
+                        "NeuronRecipe.neuron_id is always set by \
+                        SnsNeuronRecipe::to_sns_neuron_recipe",
                     );
+                    claimable_neurons_index.insert(neuron_id, recipe);
                     neuron_recipes.push(neuron_recipe);
                 }
                 Err((error_type, error_message)) => {
@@ -3249,7 +3251,7 @@ fn create_sns_neuron_basket_for_direct_participant(
         neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s)?;
 
     let memo_of_longest_dissolve_delay = memo_offset + (vesting_schedule.len() - 1) as u64;
-    let neuron_id_with_longest_dissolve_delay = SaleNeuronId::from(
+    let neuron_id_with_longest_dissolve_delay = SwapNeuronId::from(
         compute_neuron_staking_subaccount_bytes(*buyer_principal, memo_of_longest_dissolve_delay),
     );
 
@@ -3311,7 +3313,7 @@ fn create_sns_neuron_basket_for_neurons_fund_participant(
     // Each basket uses an offset to start its range of memos.
     let memo_of_longest_dissolve_delay = memo_offset + (vesting_schedule.len() - 1) as u64;
     let neuron_id_with_longest_dissolve_delay =
-        SaleNeuronId::from(compute_neuron_staking_subaccount_bytes(
+        SwapNeuronId::from(compute_neuron_staking_subaccount_bytes(
             nns_governance_canister_id,
             memo_of_longest_dissolve_delay,
         ));
@@ -3374,128 +3376,182 @@ impl SnsNeuronRecipe {
         nns_governance: CanisterId,
         sns_transaction_fee_e8s: u64,
     ) -> Result<NeuronRecipe, (ConversionError, String)> {
-        let (participant, controller) = match self.investor.as_ref() {
-            Some(Investor::Direct(DirectInvestment { buyer_principal })) => {
-                let parsed_buyer_principal = match string_to_principal(buyer_principal) {
+        let SnsNeuronRecipe {
+            sns: transferable_amount, // Mitigating a historical misnomer.
+            neuron_attributes,
+            claimed_status,
+            investor,
+        } = self;
+
+        // SnsNeuronRecipe.investor should always be present as it is set in `commit`.
+        // In the case of a bug due to programmer error, increment the invalid field.
+        // This will require a manual intervention via an upgrade to correct.
+        let investor = investor.as_ref().ok_or_else(|| {
+            (
+                ConversionError::Invalid,
+                format!("Missing investor information for neuron recipe {:?}", self),
+            )
+        })?;
+
+        // SnsNeuronRecipe.neuron_attributes should always be present as it is set in `commit`.
+        // This will require a manual intervention via an upgrade to correct
+        let neuron_attributes = neuron_attributes.as_ref().ok_or_else(|| {
+            (
+                ConversionError::Invalid,
+                format!(
+                    "Missing neuron_attributes information for neuron recipe {:?}",
+                    self
+                ),
+            )
+        })?;
+        // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
+        // This will require a manual intervention via an upgrade to correct
+        let transferable_amount = transferable_amount.as_ref().ok_or_else(|| {
+            (
+                ConversionError::Invalid,
+                format!(
+                    "Missing transferable_amount (field `sns`) for neuron recipe {:?}",
+                    self
+                ),
+            )
+        })?;
+
+        // Claimed status is used for sanitization only, it does not affect the Ok result.
+        {
+            let claimed_status = claimed_status.ok_or_else(|| {
+                (
+                    ConversionError::Invalid,
+                    format!(
+                        "Missing claimed_status information for neuron recipe {:?}",
+                        self
+                    ),
+                )
+            })?;
+            let claimed_status = ClaimedStatus::try_from(claimed_status).map_err(|err| {
+                (
+                    ConversionError::Invalid,
+                    format!(
+                    "Error interpreting claimed_status `{}` as ClaimedStatus for neuron recipe \
+                    {:?}: {}", claimed_status, self, err
+                ),
+                )
+            })?;
+            match claimed_status {
+                ClaimedStatus::Success => {
+                    return Err((
+                        ConversionError::Skip,
+                        format!(
+                            "Recipe {:?} was claimed in previous invocation of \
+                             claim_swap_neurons(). Skipping",
+                            self,
+                        ),
+                    ));
+                }
+                ClaimedStatus::Invalid => {
+                    // If the Recipe is marked as invalid, intervention is needed to make valid
+                    // again. As part of that intervention, the recipe must be marked
+                    // as ClaimedStatus::Pending to attempt again.
+                    return Err((
+                        ConversionError::Invalid,
+                        format!(
+                        "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). \
+                        Skipping", self
+                    ),
+                    ));
+                }
+                // Remaining cases are tolerable. TODO: explain why.
+                ClaimedStatus::Unspecified | ClaimedStatus::Pending | ClaimedStatus::Failed => (),
+            }
+        }
+
+        let NeuronAttributes {
+            dissolve_delay_seconds,
+            memo,
+            followees,
+            ..
+        } = neuron_attributes;
+
+        let (participant, controller) = match investor {
+            Investor::Direct(DirectInvestment { buyer_principal }) => {
+                let parsed_buyer_principal = match string_to_principal(&buyer_principal) {
                     Some(p) => p,
                     // principal_str should always be parseable as a PrincipalId as that is enforced
-                    // in `refresh_buyer_tokens`. In the case of a bug due to programmer error, increment
-                    // the invalid field. This will require a manual intervention via an upgrade to correct
+                    // in `refresh_buyer_tokens`. In the case of a bug due to programmer error,
+                    // increment the invalid field. This will require a manual intervention via
+                    // an upgrade to correct.
                     None => {
                         return Err((
                             ConversionError::Invalid,
                             format!(
-                                "Invalid principal: recipe={self:?} principal={buyer_principal}"
+                                "Invalid principal: recipe={:?} principal={}",
+                                self, buyer_principal
                             ),
                         ));
                     }
                 };
-
                 let participant = neuron_recipe::Participant::Direct(neuron_recipe::Direct {});
                 (participant, parsed_buyer_principal)
             }
-            Some(Investor::CommunityFund(cf_investment)) => {
-                let nf_neuron_nns_controller = match cf_investment.try_get_controller() {
-                    Ok(controller) => controller,
+            Investor::CommunityFund(cf_investment) => {
+                let nns_neuron_controller = match cf_investment.try_get_controller() {
+                    Ok(controller) => Some(controller),
                     Err(e) => {
                         return Err((
                             ConversionError::Invalid,
-                            format!("Invalid NF neuron: recipe={self:?} error={e}"),
+                            format!(
+                                "Invalid Neurons' Fund neuron: recipe={:?} error={}",
+                                self, e
+                            ),
                         ));
                     }
                 };
+                let nns_neuron_id = Some(cf_investment.nns_neuron_id);
+                let nns_neuron_hotkeys = cf_investment.hotkeys.clone();
                 let participant =
                     neuron_recipe::Participant::NeuronsFund(neuron_recipe::NeuronsFund {
-                        nns_neuron_controller: Some(nf_neuron_nns_controller),
-                        nns_neuron_id: Some(cf_investment.nns_neuron_id),
-                        nns_neuron_hotkeys: cf_investment.hotkeys.clone(),
+                        nns_neuron_controller,
+                        nns_neuron_id,
+                        nns_neuron_hotkeys,
                     });
                 (participant, PrincipalId::from(nns_governance))
             }
-            // SnsNeuronRecipe.investor should always be present as it is set in `commit`.
-            // In the case of a bug due to programmer error, increment the invalid field.
-            // This will require a manual intervention via an upgrade to correct
-            None => {
-                return Err((
-                    ConversionError::Invalid,
-                    format!("Missing investor information for neuron recipe {:?}", self,),
-                ));
-            }
         };
-        let (dissolve_delay_seconds, memo, followees) = match self.neuron_attributes.as_ref() {
-            Some(neuron_attribute) => (
-                neuron_attribute.dissolve_delay_seconds,
-                neuron_attribute.memo,
-                neuron_attribute.followees.clone(),
-            ),
-            // SnsNeuronRecipe.neuron_attributes should always be present as it is set in `commit`.
-            // This will require a manual intervention via an upgrade to correct
-            None => {
-                return Err((
-                    ConversionError::Invalid,
-                    format!(
-                        "Missing neuron_attributes information for neuron recipe {:?}",
-                        self,
-                    ),
-                ));
-            }
-        };
-        let amount_e8s = match self.sns.as_ref() {
-            Some(transferable_amount) => transferable_amount.amount_e8s,
-            // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
-            // This will require a manual intervention via an upgrade to correct
-            None => {
-                return Err((
-                    ConversionError::Invalid,
-                    format!("Missing transfer information for neuron recipe {:?}", self,),
-                ));
-            }
-        };
-        if self.claimed_status == Some(ClaimedStatus::Success as i32) {
-            return Err((
-                ConversionError::Skip,
-                format!(
-                "Recipe {:?} was claimed in previous invocation of claim_swap_neurons(). Skipping",
-                self,
-            ),
-            ));
-        }
-        if self.claimed_status == Some(ClaimedStatus::Invalid as i32) {
-            // If the Recipe is marked as invalid, intervention is needed to make valid again.
-            // As part of that intervention, the recipe must be marked as ClaimedStatus::Pending
-            // to attempt again.
-            return Err((ConversionError::Invalid, format!(
-                "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). Skipping",
-                self
-            )));
-        }
-        let neuron_id = NeuronId::from(compute_neuron_staking_subaccount_bytes(controller, memo));
-        let followees = NeuronIds::from(
-            followees
-                .into_iter()
-                .filter_map(|sale_neuron_id| match sale_neuron_id.try_into() {
-                    Ok(neuron_id) => Some(neuron_id),
-                    Err(error_message) => {
-                        log!(
-                            ERROR,
-                            "Error converting followee: ({}). Ignoring followee.",
-                            error_message
-                        );
-                        None
-                    }
-                })
-                .collect::<Vec<_>>(),
+
+        let neuron_id = Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
+            controller, *memo,
+        )));
+
+        let followees = followees
+            .into_iter()
+            .filter_map(|neuron_id| match neuron_id.clone().try_into() {
+                Ok(neuron_id) => Some(neuron_id),
+                Err(err) => {
+                    log!(
+                        ERROR,
+                        "Error converting followee: ({}). Ignoring followee.",
+                        err
+                    );
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let followees = Some(NeuronIds::from(followees.clone()));
+
+        // Since claim_swap_neurons is a permission-ed API on governance, account for
+        // the transfer_fee that is applied with the sns ledger transfer.
+        let stake_e8s = Some(
+            transferable_amount
+                .amount_e8s
+                .saturating_sub(sns_transaction_fee_e8s),
         );
 
         Ok(NeuronRecipe {
-            neuron_id: Some(neuron_id),
-            controller: Some(controller),
-            // Since claim_swap_neurons is  a permission-ed API on governance, account
-            // for the transfer_fee that is applied with the sns ledger transfer
-            stake_e8s: Some(amount_e8s.saturating_sub(sns_transaction_fee_e8s)),
-            dissolve_delay_seconds: Some(dissolve_delay_seconds),
-            followees: Some(followees),
             participant: Some(participant),
+            controller: Some(controller),
+            neuron_id,
+            dissolve_delay_seconds: Some(*dissolve_delay_seconds),
+            followees,
+            stake_e8s,
         })
     }
 }
