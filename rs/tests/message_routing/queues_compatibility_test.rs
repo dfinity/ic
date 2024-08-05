@@ -258,13 +258,13 @@ fn test(env: TestEnv) {
         basic_test.run(&mainnet_version, &logger)
     }
 
-    let iterator_test = TestCase::new(
+    let input_order_test = TestCase::new(
         TestType::SelfTestOnly,
         "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
-        "canister_state::queues::tests::mainnet_compatibility_tests::input_iterator_test",
+        "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
     );
 
-    iterator_test.run("", &logger);
+    input_order_test.run("", &logger);
 }
 
 fn main() -> Result<()> {

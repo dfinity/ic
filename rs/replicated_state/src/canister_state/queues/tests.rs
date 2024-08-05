@@ -2350,8 +2350,9 @@ mod mainnet_compatibility_tests {
         }
     }
 
-    /// Test that, with multiple input queues of different types, the iterators behave the same way
-    mod input_iterator_test {
+    /// Test that, with multiple input queues of different types, the order in which they
+    /// are consumed stays the same
+    mod input_order_test {
         use super::super::*;
         use super::*;
 
