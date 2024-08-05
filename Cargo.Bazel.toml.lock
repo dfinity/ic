@@ -2014,8 +2014,8 @@ dependencies = [
 
 [[package]]
 name = "cloudflare"
-version = "0.11.0"
-source = "git+https://github.com/r-birkner/cloudflare-rs.git?rev=966e23a7d63f5a3e91471d4e045b3855f38cb329#966e23a7d63f5a3e91471d4e045b3855f38cb329"
+version = "0.12.0"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
 dependencies = [
  "chrono",
  "http 0.2.12",

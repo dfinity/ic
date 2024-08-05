@@ -1,5 +1,5 @@
 {
-  "checksum": "74a78ec75bce5fb795eb1b07067a370679236206c6891f2fbd43a7b520e01d36",
+  "checksum": "74141f3f2cc8a906034be21622aa5dbd271a54f38b140c3b1cad846ecb847b1c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11754,15 +11754,15 @@
       ],
       "license_file": null
     },
-    "cloudflare 0.11.0": {
+    "cloudflare 0.12.0": {
       "name": "cloudflare",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/r-birkner/cloudflare-rs.git",
+          "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "966e23a7d63f5a3e91471d4e045b3855f38cb329"
+            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
           },
           "strip_prefix": "cloudflare"
         }
@@ -11842,7 +11842,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.0"
+        "version": "0.12.0"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -16980,7 +16980,7 @@
               "target": "clap"
             },
             {
-              "id": "cloudflare 0.11.0",
+              "id": "cloudflare 0.12.0",
               "target": "cloudflare"
             },
             {
@@ -78405,7 +78405,7 @@
     "cidr 0.2.3",
     "clap 3.2.25",
     "clap 4.4.8",
-    "cloudflare 0.11.0",
+    "cloudflare 0.12.0",
     "colored 2.0.4",
     "comparable 0.5.4",
     "console 0.11.3",

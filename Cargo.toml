@@ -468,11 +468,11 @@ chrono = { version = "0.4.38", default-features = false, features = [
 ] }
 ciborium = "0.2.1"
 clap = { version = "4.4.6", features = ["derive", "string"] }
-# cloudflare v0.11 is broken, master is partly fixed but unreleased yet.
+# cloudflare v0.12 is broken, master is partly fixed but unreleased yet.
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/r-birkner/cloudflare-rs.git", rev = "966e23a7d63f5a3e91471d4e045b3855f38cb329", default-features = false, feature = [
+cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false, feature = [
     "rustls-tls",
 ] }
 humantime-serde = "1.1.1"
