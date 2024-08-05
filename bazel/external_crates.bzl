@@ -956,14 +956,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                git = "https://github.com/quinn-rs/quinn",
-                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                version = "^0.11.3",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
-                git = "https://github.com/quinn-rs/quinn",
-                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                version = "^0.5.4",
             ),
             "quote": crate.spec(
                 version = "^1.0",
