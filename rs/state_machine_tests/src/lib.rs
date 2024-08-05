@@ -45,8 +45,8 @@ use ic_management_canister_types::{
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
-    HttpHeader, HttpMethod, SignWithECDSAReply, SignWithSchnorrReply, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs,
+    HttpHeader, HttpMethod, LoadCanisterSnapshotArgs, SignWithECDSAReply, SignWithSchnorrReply,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -2592,6 +2592,21 @@ impl StateMachine {
             WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
             WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
         })?
+    }
+
+    pub fn load_canister_snapshot(&self, args: LoadCanisterSnapshotArgs) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::LoadCanisterSnapshot,
+            args.encode(),
+        )
+        .map(|_| ())
     }
 
     /// Returns true if the canister with the specified id exists.

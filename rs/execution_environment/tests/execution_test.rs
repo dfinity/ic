@@ -8,8 +8,9 @@ use ic_config::{
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method, Payload,
-    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method, Payload, SignWithECDSAArgs, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -755,6 +756,53 @@ fn take_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
             canister_id: other_canister_id.get(),
             replace_snapshot: None,
         })
+        .map(|_| ())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::SubnetCanisterSnapshotsRateLimited);
+    assert_eq!(
+        error.description(),
+        format!(
+            "Subnet has reached its canister snapshots rate limit per checkpoint: current usage is 65536, but limit is {}.",
+            subnet_canister_snapshots_heap_delta_capacity
+        )
+    );
+}
+
+#[test]
+fn load_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_capacity() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_canister_snapshots_heap_delta_capacity = NumBytes::from(60_000); // 60KB
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_canister_snapshots_heap_delta_capacity,
+            canister_snapshots: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let res = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.get(),
+            replace_snapshot: None,
+        })
+        .unwrap();
+
+    let error = env
+        .load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+            canister_id,
+            res.snapshot_id(),
+            None,
+        ))
         .map(|_| ())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::SubnetCanisterSnapshotsRateLimited);

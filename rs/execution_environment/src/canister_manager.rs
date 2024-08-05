@@ -1967,6 +1967,20 @@ impl CanisterManager {
             return (NumInstructions::new(0), Err(err));
         }
 
+        if state.metadata.canister_snapshots_heap_delta_estimate
+            >= self.config.subnet_canister_snapshots_heap_delta_capacity
+        {
+            return (
+                NumInstructions::new(0),
+                Err(
+                    CanisterManagerError::CanisterSnapshotsHeapDeltaRateLimited {
+                        value: state.metadata.canister_snapshots_heap_delta_estimate,
+                        limit: self.config.subnet_canister_snapshots_heap_delta_capacity,
+                    },
+                ),
+            );
+        }
+
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
