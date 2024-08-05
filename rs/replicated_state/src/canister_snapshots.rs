@@ -335,7 +335,7 @@ impl CanisterSnapshot {
     /// Returns the heap delta produced by this snapshot.
     ///
     /// The heap delta includes the delta of the wasm memory, stable memory and
-    /// the chunk store.
+    /// the chunk store, i.e. the snapshot parts that are backed by `PageMap`s.
     pub fn heap_delta(&self) -> NumBytes {
         let delta_pages = self
             .execution_snapshot
