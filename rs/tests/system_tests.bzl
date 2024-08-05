@@ -130,7 +130,7 @@ def system_test(
 
     Args:
       name: base name to use for the binary and test rules.
-      variant: string to identify the variant of this test.
+      variant: string to identify the variant of this test. Defaults to "".
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
@@ -158,11 +158,17 @@ def system_test(
       the external environment when the test is executed by bazel test.
       additional_colocate_tags: additional tags to pass to the colocated test.
       **kwargs: additional arguments to pass to the rust_binary rule.
-    """
 
-    # Names are used as part of domain names; thus, limit their length
-    if len(name) > 50 or len(variant) > 25:
-        fail("Name of system test group too long (max 50): " + name)
+    Returns:
+      3 bazel targets:
+        * A rust_binary <name>_bin which is the test driver.
+        * A test target <name>[_<variant>] which runs the test.
+        * A test taget <name>_colocate[_<variant>] which runs the test in a colocated way.
+
+    Note that the variant allows us to have multiple variants of a system-test
+    which all share the same test driver (<name>_bin) but have different test targets,
+    with different environment variables or runtime dependencies for example.
+    """
 
     bin_name = name + "_bin"
 
