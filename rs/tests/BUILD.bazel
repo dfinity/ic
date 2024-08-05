@@ -34,6 +34,7 @@ rust_library(
         "src/memory_safety.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
+        "src/cloner_canister.wasm,
     ],
     crate_name = "ic_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
