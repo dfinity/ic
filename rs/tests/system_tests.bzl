@@ -164,7 +164,7 @@ def system_test(
         * If test_driver_target == None, a rust_binary <name>_bin which is the test driver.
         * A test target <name> which runs the test.
         * A test target <name>_colocate which runs the test in a colocated way.
-      It returns the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
+      It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
 
     if test_driver_target == None:
@@ -268,7 +268,7 @@ def system_test(
         timeout = test_timeout,
         flaky = flaky,
     )
-    return test_driver_target
+    return struct(test_driver_target = test_driver_target)
 
 def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
@@ -296,7 +296,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     runtime_deps = kwargs.pop("runtime_deps", [])
     env = kwargs.pop("env", {})
 
-    test_driver_target = system_test(
+    mainnet_nns_systest = system_test(
         name,
         env = env | MAINNET_NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + MAINNET_NNS_CANISTER_RUNTIME_DEPS,
@@ -306,7 +306,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     original_tags = kwargs.pop("tags", [])
     system_test(
         name + "_head_nns",
-        test_driver_target = test_driver_target,
+        test_driver_target = mainnet_nns_systest.test_driver_target,
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
