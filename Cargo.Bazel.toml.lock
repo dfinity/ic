@@ -2958,6 +2958,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "hkdf",
+ "hmac",
  "http 0.2.12",
  "http 1.1.0",
  "http-body 0.4.6",

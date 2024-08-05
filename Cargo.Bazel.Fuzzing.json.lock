@@ -1,5 +1,5 @@
 {
-  "checksum": "76ff8cb6c4b75b56a5adc32bdd3d62f96e04772b2049bb13c732a869c0107a4a",
+  "checksum": "92a7576657e18564e2349fcc09286f4f7c815faa8f2ded784428b29940e6ecaf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17289,6 +17289,10 @@
             {
               "id": "hkdf 0.12.4",
               "target": "hkdf"
+            },
+            {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
             },
             {
               "id": "http 0.2.12",
@@ -78316,6 +78320,7 @@
     "hex 0.4.3",
     "hex-literal 0.4.1",
     "hkdf 0.12.4",
+    "hmac 0.12.1",
     "http 0.2.12",
     "http 1.1.0",
     "http-body 0.4.6",
