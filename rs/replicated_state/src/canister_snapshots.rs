@@ -3,6 +3,7 @@ use crate::{
     canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
     PageMap,
 };
+use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
 use ic_wasm_types::CanisterModule;
 
@@ -241,8 +242,6 @@ pub struct CanisterSnapshot {
     /// Snapshot of chunked store.
     chunk_store: WasmChunkStore,
     execution_snapshot: ExecutionStateSnapshot,
-    /// Amount of heap delta produced by this snapshot.
-    heap_delta: NumBytes,
 }
 
 impl CanisterSnapshot {
@@ -254,7 +253,6 @@ impl CanisterSnapshot {
         chunk_store: WasmChunkStore,
         execution_snapshot: ExecutionStateSnapshot,
         size: NumBytes,
-        heap_delta: NumBytes,
     ) -> CanisterSnapshot {
         Self {
             canister_id,
@@ -264,7 +262,6 @@ impl CanisterSnapshot {
             chunk_store,
             execution_snapshot,
             size,
-            heap_delta,
         }
     }
 
@@ -292,7 +289,6 @@ impl CanisterSnapshot {
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
             size: canister.snapshot_memory_usage(),
-            heap_delta: canister.heap_delta(),
         })
     }
 
@@ -336,8 +332,22 @@ impl CanisterSnapshot {
         &self.certified_data
     }
 
+    /// Returns the heap delta produced by this snapshot.
+    ///
+    /// The heap delta includes the delta of the wasm memory, stable memory and
+    /// the chunk store.
     pub fn heap_delta(&self) -> NumBytes {
-        self.heap_delta
+        let delta_pages = self
+            .execution_snapshot
+            .wasm_memory
+            .page_map
+            .num_delta_pages()
+            + self
+                .execution_snapshot
+                .stable_memory
+                .page_map
+                .num_delta_pages();
+        NumBytes::from((delta_pages * PAGE_SIZE) as u64) + self.chunk_store.heap_delta()
     }
 }
 
@@ -387,7 +397,6 @@ mod tests {
             vec![],
             WasmChunkStore::new_for_testing(),
             execution_snapshot,
-            NumBytes::from(0),
             NumBytes::from(0),
         );
 
