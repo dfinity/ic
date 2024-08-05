@@ -39,7 +39,8 @@ lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
         SUBNET_MEMORY_CAPACITY,
         SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
+        SUBNET_MEMORY_CAPACITY,
+        SUBNET_MEMORY_CAPACITY,
     );
 }
 

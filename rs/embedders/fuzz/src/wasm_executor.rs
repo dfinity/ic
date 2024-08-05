@@ -125,6 +125,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         subnet_memory_capacity,
         subnet_memory_capacity,
         subnet_memory_capacity,
+        subnet_memory_capacity,
     );
 
     let compilation_cache = Arc::new(CompilationCache::new(NumBytes::new(0)));
