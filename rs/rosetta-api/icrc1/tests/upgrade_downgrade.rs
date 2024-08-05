@@ -146,7 +146,7 @@ fn should_upgrade_and_downgrade_with_memory_manager() {
     env.advance_time(Duration::from_secs(60));
     env.tick();
 
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);    
+    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
     env.upgrade_canister(
         ledger_id,
         ledger_mainnet_wasm(),
