@@ -167,6 +167,7 @@ impl Upgrade {
                     // upgrade. This means we have to be an assigned node, otherwise we would have
                     // left the subnet and deleted the CUP before upgrading to this version.
                     // The only way to leave this branch is via subnet recovery.
+                    self.metrics.critical_error_cup_deserialization_failed.inc();
 
                     // Try to find the subnet ID by deserializing only the NiDkgId. If it fails
                     // we will have to recover using failover nodes.
