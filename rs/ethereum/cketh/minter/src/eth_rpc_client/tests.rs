@@ -846,7 +846,7 @@ mod evm_rpc_conversion {
 
     proptest! {
         #[test]
-        fn should_be_consistent_block_between_minter_and_evm_rpc
+        fn should_have_consistent_block_between_minter_and_evm_rpc
         (
             blocks in minter_and_evm_rpc_blocks(),
             first_error in arb_evm_rpc_error(),
@@ -860,7 +860,7 @@ mod evm_rpc_conversion {
 
     proptest! {
         #[test]
-        fn should_be_consistent_log_entries_between_minter_and_evm_rpc
+        fn should_have_consistent_log_entries_between_minter_and_evm_rpc
         (
             minter_logs in vec(arb_log_entry(), 1..=100),
             first_error in arb_evm_rpc_error(),
@@ -874,7 +874,7 @@ mod evm_rpc_conversion {
 
     proptest! {
         #[test]
-        fn should_be_consistent_fee_history_between_minter_and_evm_rpc(
+        fn should_have_consistent_fee_history_between_minter_and_evm_rpc(
             minter_fee_history in arb_fee_history(),
             gas_used_ratio in arb_gas_used_ratio(),
             first_error in arb_evm_rpc_error(),
