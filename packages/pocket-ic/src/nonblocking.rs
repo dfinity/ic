@@ -353,7 +353,7 @@ impl PocketIc {
 
     async fn start_http_gateway(
         &mut self,
-        listen_at: Option<u16>,
+        port: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
@@ -362,7 +362,8 @@ impl PocketIc {
         }
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
-            listen_at,
+            ip_addr: None,
+            port,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),
             https_config: https_config.clone(),

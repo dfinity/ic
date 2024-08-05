@@ -36,8 +36,7 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
-            SshSession, TopologySnapshot,
+            IcNodeContainer, IcNodeSnapshot, NnsCustomizations, SshSession, TopologySnapshot,
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
@@ -445,7 +444,6 @@ fn setup_ic(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 }

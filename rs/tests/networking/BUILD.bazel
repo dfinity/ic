@@ -1,7 +1,7 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 PROXY_CANISTER_RUNTIME_DEPS = [
     # Keep sorted.
@@ -24,7 +24,7 @@ CANISTER_HTTP_BASE_DEPS = [
 
 system_test(
     name = "canister_http_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
@@ -41,7 +41,7 @@ system_test(
 
 system_test(
     name = "canister_http_socks_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
@@ -67,7 +67,7 @@ system_test(
 
 system_test(
     name = "canister_http_correctness_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
@@ -90,7 +90,7 @@ system_test(
 
 system_test(
     name = "canister_http_fault_tolerance_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
@@ -117,7 +117,7 @@ system_test(
 
 system_test(
     name = "canister_http_time_out_test",
-    env = {
+    env = NNS_CANISTER_ENV | {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
@@ -138,6 +138,7 @@ system_test(
 
 system_test(
     name = "firewall_max_connections_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -151,6 +152,7 @@ system_test(
 
 system_test(
     name = "firewall_priority_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -164,6 +166,7 @@ system_test(
 
 system_test(
     name = "network_reliability_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -177,6 +180,7 @@ system_test(
 
 system_test(
     name = "network_large_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -191,6 +195,7 @@ system_test(
 
 system_test(
     name = "query_workload_long_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -206,6 +211,7 @@ system_test(
 
 system_test(
     name = "update_workload_large_payload",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -220,6 +226,7 @@ system_test(
 
 system_test(
     name = "p2p_performance",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

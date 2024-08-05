@@ -1,7 +1,7 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 BTC_RUNTIME_DEPS = [
     # Keep sorted.
@@ -16,6 +16,7 @@ LEDGER_CANISTER_RUNTIME_DEPS = [
 
 system_test(
     name = "btc_get_balance_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -48,6 +49,7 @@ system_test(
 
 system_test(
     name = "token_fault_tolerance_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -62,6 +64,7 @@ system_test(
 
 system_test(
     name = "transaction_ledger_correctness_test",
+    env = NNS_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

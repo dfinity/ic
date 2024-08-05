@@ -41,7 +41,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                 // If retrieval of public keys from the registry was successful, check to make sure
                 // we have the public keys, and the corresponding secret keys locally
                 let pks_and_sks_contains_result =
-                    self.csp.pks_and_sks_contains(registry_public_keys);
+                    self.vault.pks_and_sks_contains(registry_public_keys);
                 match pks_and_sks_contains_result {
                     Ok(()) => {
                         self.observe_all_key_counts(
@@ -102,7 +102,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
     fn current_node_public_keys(
         &self,
     ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
-        let result = self.csp.current_node_public_keys()?;
+        let result = self.vault.current_node_public_keys()?;
         Ok(result)
     }
 
@@ -342,7 +342,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         &self,
     ) -> Result<(PublicKeyProto, Option<Time>), IDkgDealingEncryptionKeyRotationError> {
         let current_idkg_public_key_proto = self
-            .csp
+            .vault
             .current_node_public_keys()
             .map_err(
                 |CspPublicKeyStoreError::TransientInternalError(internal_error)| {
@@ -352,7 +352,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             .idkg_dealing_encryption_public_key
             .ok_or(IDkgDealingEncryptionKeyRotationError::PublicKeyNotFound)?;
         let current_idkg_public_key_proto_with_timestamp = self
-            .csp
+            .vault
             .current_node_public_keys_with_timestamps()
             .map_err(
                 |CspPublicKeyStoreError::TransientInternalError(internal_error)| {
@@ -448,7 +448,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     }
 
     fn observe_number_of_idkg_dealing_encryption_public_keys(&self) {
-        match self.csp.idkg_dealing_encryption_pubkeys_count() {
+        match self.vault.idkg_dealing_encryption_pubkeys_count() {
             Ok(num_idkg_dealing_encryption_pubkeys) => {
                 self.metrics.observe_idkg_dealing_encryption_pubkey_count(
                     num_idkg_dealing_encryption_pubkeys,

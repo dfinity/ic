@@ -127,6 +127,7 @@ rust_ic_test_suite(
     size = "large",
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
+    compile_data = glob(["tests/test-data/**"]),
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

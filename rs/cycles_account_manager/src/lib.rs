@@ -38,13 +38,11 @@ pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
 pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 256;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,9 +172,6 @@ pub struct CyclesAccountManager {
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
-
-    /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
-    use_cost_scaling_flag: bool,
 }
 
 impl CyclesAccountManager {
@@ -193,18 +188,7 @@ impl CyclesAccountManager {
             own_subnet_type,
             own_subnet_id,
             config,
-            use_cost_scaling_flag: USE_COST_SCALING_FLAG,
         }
-    }
-
-    /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
-    pub fn set_using_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
-        self.use_cost_scaling_flag = use_cost_scaling_flag;
-    }
-
-    /// [EXC-1168] Helper function to read the flag to enable cost scaling according to subnet size.
-    pub fn use_cost_scaling(&self) -> bool {
-        self.use_cost_scaling_flag
     }
 
     /// Returns the subnet type of this [`CyclesAccountManager`].
@@ -219,10 +203,7 @@ impl CyclesAccountManager {
 
     // Scale cycles cost according to a subnet size.
     fn scale_cost(&self, cycles: Cycles, subnet_size: usize) -> Cycles {
-        match self.use_cost_scaling_flag {
-            false => cycles,
-            true => (cycles * subnet_size) / self.config.reference_subnet_size,
-        }
+        (cycles * subnet_size) / self.config.reference_subnet_size
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -994,7 +975,7 @@ impl CyclesAccountManager {
     /// 1. It burns no more cycles than the `amount_to_burn`.
     ///
     /// 2. It burns no more cycles than `balance` - `freezing_limit`, where `freezing_limit`
-    /// is the amount of idle cycles burned by the canister during its `freezing_threshold`.
+    ///    is the amount of idle cycles burned by the canister during its `freezing_threshold`.
     ///
     /// Returns the number of cycles that were burned.
     pub fn cycles_burn(
@@ -1169,7 +1150,6 @@ mod tests {
             own_subnet_type: SubnetType::Application,
             own_subnet_id: subnet_test_id(0),
             config,
-            use_cost_scaling_flag: true,
         }
     }
 
@@ -1183,7 +1163,15 @@ mod tests {
                 .build(),
             sender_canister_version: None, // ingress messages are not supposed to set this field
         };
-        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
+
+        let payload_size = 2 * Encode!(&payload).unwrap().len();
+
+        assert!(
+            payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
+            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
+            payload_size,
+            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+        );
     }
 
     #[test]

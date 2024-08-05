@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic-server"
-version = "4.0.0"
+version = "5.0.0"
 edition = "2021"
 
 [dependencies]
@@ -30,7 +30,6 @@ ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-https-outcalls-service = { path = "../https_outcalls/service" }
 ic-agent = { workspace = true }
-ic-agent-call-v3 = { workspace = true }
 ic-utils = { workspace = true }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
