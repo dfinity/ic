@@ -722,7 +722,7 @@ impl CanisterQueues {
 
     /// Returns a reference to the message at the head of the respective output
     /// queue, if any.
-    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
+    pub(crate) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
         self.canister_queues.get(canister_id)?.1.peek()
     }
 
