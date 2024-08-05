@@ -2064,10 +2064,7 @@ impl ExecutionEnvironment {
                 round_limits,
                 &resource_saturation,
             )
-            .map(|response| {
-                state.metadata.heap_delta_estimate += NumBytes::from(response.total_size());
-                response.encode()
-            })
+            .map(|response| response.encode())
             .map_err(|err| err.into());
         // Put canister back.
         state.put_canister_state(canister);
