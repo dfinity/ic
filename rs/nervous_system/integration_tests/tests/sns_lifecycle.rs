@@ -21,8 +21,7 @@ use ic_nns_governance::{
     pb::v1::{
         create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
         get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-        settle_neurons_fund_participation_response::NeuronsFundNeuron, CreateServiceNervousSystem,
-        Neuron,
+        CreateServiceNervousSystem, Neuron,
     },
 };
 use ic_sns_governance::{governance::TREASURY_SUBACCOUNT_NONCE, pb::v1 as sns_pb};
