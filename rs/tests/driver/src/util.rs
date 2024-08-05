@@ -734,6 +734,26 @@ pub async fn assert_create_agent(url: &str) -> Agent {
         .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
 }
 
+/// Initializes an `Agent` using the provided URL.
+/// The root key is fetched as part of the initialization in order
+/// to validate certificates from the replica.
+///
+/// The created agent will route call requests to the
+/// asynchronous V2 call endpoint.
+pub async fn assert_create_agent_using_call_v2(url: &str) -> Agent {
+    let start = Instant::now();
+    while start.elapsed() < READY_WAIT_TIMEOUT {
+        if let Ok(v) = create_agent(url).await {
+            return v;
+        }
+        tokio::time::sleep(RETRY_BACKOFF).await;
+    }
+
+    agent_using_call_v2_endpoint(url, None)
+        .await
+        .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
+}
+
 /// Initializes an `Agent` using the provided URL and identity.
 pub async fn assert_create_agent_with_identity(
     url: &str,
@@ -820,22 +840,27 @@ pub async fn agent_with_client_identity(
 /// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
 pub async fn agent_using_call_v2_endpoint(
     url: &str,
-    addr_mapping: IpAddr,
+    addr_mapping: Option<IpAddr>,
 ) -> Result<Agent, AgentError> {
     let identity = get_identity();
     let parsed_url = reqwest::Url::parse(url).expect("is valid url");
 
-    let reqwest = reqwest::Client::builder()
+    let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(true)
-        .resolve(
-            parsed_url.domain().expect("url has domain"),
-            (addr_mapping, 0).into(),
-        )
-        .build()
-        .expect("Is valid reqwest client");
+        .danger_accept_invalid_certs(true);
 
-    let transport = ReqwestTransport::create_with_client(url, reqwest)?;
+    let builder = match (
+        addr_mapping,
+        reqwest::Url::parse(url).as_ref().map(|u| u.domain()),
+    ) {
+        (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
+        _ => builder,
+    };
+
+    let transport = ReqwestTransport::create_with_client(
+        url,
+        builder.build().expect("Is valid reqwest client"),
+    )?;
 
     let agent = Agent::builder()
         .with_transport(transport)
