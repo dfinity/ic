@@ -296,9 +296,10 @@ pub fn verify_sharing(
                 ik[i] *= Scalar::from_u64((i + 1) as u64);
             }
         }
-        let lhs = G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
-            * &x_challenge
-            + &nizk.aa;
+        let lhs =
+            G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
+                * &x_challenge
+                + &nizk.aa;
 
         let rhs = &instance.g2_gen * &nizk.z_alpha;
 
