@@ -111,6 +111,7 @@ pub struct UpgradeArgs {
     pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
     pub change_archive_options: Option<ChangeArchiveOptions>,
+    pub test_upgrade_with_memory_manager: Option<bool>,
 }
 
 #[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]

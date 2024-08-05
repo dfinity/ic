@@ -147,6 +147,7 @@ type UpgradeArgs = record {
     maximum_number_of_accounts: opt nat64;
     accounts_overflow_trim_quantity: opt nat64;
     change_archive_options : opt ChangeArchiveOptions;
+    test_upgrade_with_memory_manager: opt bool;
 };
 
 type LedgerArg = variant {

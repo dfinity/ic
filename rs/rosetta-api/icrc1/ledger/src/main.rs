@@ -129,7 +129,7 @@ fn pre_upgrade() {
     let _p = canbench_rs::bench_scope("pre_upgrade");
 
     let start = ic_cdk::api::instruction_counter();
-    if true {
+    if !Access::with_ledger(|ledger| ledger.upgrade_with_memory_manager()) {
         let mut stable_writer = StableWriter::default();
         Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, &mut stable_writer))
             .expect("failed to encode ledger state");
@@ -187,8 +187,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         Err(_) => {
             let state: Ledger<Tokens> = UPGRADES_MEMORY.with_borrow(|bs| {
                 let mut reader = Reader::new(bs, 0);
-                let state = ciborium::de::from_reader(&mut reader)
-                    .expect("Failed to read the Ledger state from stable memory");
+                let state = ciborium::de::from_reader(&mut reader).expect(
+                    "Failed to read the Ledger state from memory manager managed stable structures",
+                );
                 let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
                 pre_upgrade_instructions_consumed =
                     match reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
@@ -200,7 +201,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
                     };
                 state
             });
-            ic_cdk::println!("Successfully read state from stable structures");
+            ic_cdk::println!(
+                "Successfully read state from memory manager managed stable structures"
+            );
             LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
         }
     }
