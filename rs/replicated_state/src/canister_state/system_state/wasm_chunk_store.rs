@@ -174,6 +174,10 @@ impl WasmChunkStore {
     fn page_index(chunk_index: u64) -> PageIndex {
         (chunk_index * PAGES_PER_CHUNK).into()
     }
+
+    pub(crate) fn heap_delta(&self) -> NumBytes {
+        NumBytes::from((self.data.num_delta_pages() * PAGE_SIZE) as u64)
+    }
 }
 
 /// Mapping from chunk hash to location in the store. It is cheap to clone
