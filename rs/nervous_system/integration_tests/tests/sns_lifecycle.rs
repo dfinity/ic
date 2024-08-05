@@ -24,7 +24,10 @@ use ic_nns_governance::{
         CreateServiceNervousSystem, Neuron,
     },
 };
-use ic_sns_governance::{governance::TREASURY_SUBACCOUNT_NONCE, pb::v1 as sns_pb};
+use ic_sns_governance::{
+    governance::TREASURY_SUBACCOUNT_NONCE,
+    pb::v1::{self as sns_pb, NeuronPermissionType},
+};
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_swap::{
     pb::v1::{
@@ -1266,80 +1269,97 @@ fn test_sns_lifecycle(
         btreemap! {}
     };
 
-    // Inspect SNS neurons. We perform these checks by comparing neuron controllers.
+    // Inspect SNS neurons.
     {
-        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
-        let expected_neuron_controller_principal_ids = {
-            let neurons_fund_neuron_controller_principal_ids: BTreeSet<_> =
-                neurons_fund_neuron_controllers_to_neuron_portions
-                    .values()
-                    .map(|neurons_fund_neuron_portion| {
-                        neurons_fund_neuron_portion
-                            .controller
-                            .or(neurons_fund_neuron_portion.hotkey_principal)
-                            .unwrap()
-                    })
-                    .collect();
+        // Note that in the check of neuron permissions, we ignore the `NeuronId`, which means that
+        // it does not effectively check that each principal has permissions on the expected number of neurons,
+        // or even that it has permissions on the correct neuron, or that there is at least one neuron
+        // for which it has a set of permissions that this principal was expected to have
+        let expected_neuron_permissions =
+            {
+                let neuron_claimer_permissions = nervous_system_parameters
+                    .neuron_claimer_permissions
+                    .clone()
+                    .unwrap()
+                    .permissions
+                    .into_iter()
+                    .map(|permission| NeuronPermissionType::try_from(permission).unwrap())
+                    .collect::<BTreeSet<_>>();
 
-            // The set of principal IDs of all neuron hotkeys and controllers of this SNS.
-            let mut expected_neuron_controller_principal_ids = BTreeSet::new();
-            // Initial neurons are always expected to be present.
-            expected_neuron_controller_principal_ids
-                .extend(developer_neuron_controller_principal_ids.iter());
+                let neurons_fund_participant_neuron_permissions =
+                    neurons_fund_neuron_controllers_to_neuron_portions
+                        .values()
+                        .flat_map(|neurons_fund_neuron_portion| {
+                            // The controller of Neurons' Fund neurons is NNS Governance.
+                            let controller = PrincipalId::from(GOVERNANCE_CANISTER_ID);
+                            vec![
+                                // Add governance as the controller
+                                (controller, neuron_claimer_permissions.clone()),
+                                // Add the controller of the NNS neuron as a hotkey that also has ManageVotingPermissions
+                                (
+                                    neurons_fund_neuron_portion.controller.unwrap(),
+                                    BTreeSet::from([
+                                        NeuronPermissionType::Vote,
+                                        NeuronPermissionType::SubmitProposal,
+                                        NeuronPermissionType::ManageVotingPermission,
+                                    ]),
+                                ),
+                            ]
+                            .into_iter()
+                            .chain(
+                                neurons_fund_neuron_portion.hotkeys.clone().into_iter().map(
+                                    |hotkey| {
+                                        (
+                                            hotkey,
+                                            BTreeSet::from([
+                                                NeuronPermissionType::Vote,
+                                                NeuronPermissionType::SubmitProposal,
+                                            ]),
+                                        )
+                                    },
+                                ),
+                            )
+                        });
 
-            if swap_finalization_status == SwapFinalizationStatus::Committed {
-                // Direct and Neurons' Fund participants are only expected to get their SNS neurons
-                // in case the swap succeeds.
-                expected_neuron_controller_principal_ids.extend(direct_participants.keys());
+                let direct_participant_neuron_permissions = direct_participants
+                    .keys()
+                    .map(|principal_id| (*principal_id, neuron_claimer_permissions.clone()));
 
-                // Note that we include SNS neuron hotkeys into the set of expected controllers. For
-                // the Neuron's Fund participants, we could make a stricted check that would assert
-                // that the NNS neurons' controllers are the hotkeys of the corresponding SNS
-                // neurons, where a hotkey is represented by:
-                // ```
-                // NeuronPermission {
-                //     principal: Some(NF_NNS_NEURON_CONTROLLER_PRINCIPAL),
-                //     permission_type: [
-                //         ManageVotingPermission, SubmitProposal, Vote
-                //     ]
-                // }
-                // ```
-                // while (full) controllers are represented by:
-                // ```
-                // NeuronPermission {
-                //     principal: Some(NNS_GOVERNANCE),
-                //     permission_type: [
-                //         Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission
-                //     ]
-                // }
-                // ```
-                expected_neuron_controller_principal_ids
-                    .extend(neurons_fund_neuron_controller_principal_ids.iter());
-                if expect_neurons_fund_participation {
-                    // NNS Governance is the expected controller of SNS neurons created for
-                    // the Neurons' Fund participants.
-                    expected_neuron_controller_principal_ids.insert(GOVERNANCE_CANISTER_ID.get());
+                let developer_neuron_permissions = developer_neuron_controller_principal_ids
+                    .iter()
+                    .map(|principal_id| (*principal_id, neuron_claimer_permissions.clone()));
+
+                if swap_finalization_status == SwapFinalizationStatus::Committed {
+                    neurons_fund_participant_neuron_permissions
+                        .chain(direct_participant_neuron_permissions)
+                        .chain(developer_neuron_permissions)
+                        .collect::<BTreeSet<_>>()
+                } else {
+                    // Developer neurons are always expected to be present
+                    developer_neuron_permissions.collect()
                 }
-            }
-            expected_neuron_controller_principal_ids
-        };
+            };
         let sns_neurons =
             sns::governance::list_neurons(&pocket_ic, sns_governance_canister_id).neurons;
         // Validate that the set of SNS neuron hotkeys and controllers is expected.
         {
-            let observed_neuron_controller_principal_ids = sns_neurons
+            let observed_neuron_permissions = sns_neurons
                 .iter()
                 .flat_map(|neuron| {
-                    neuron
-                        .permissions
-                        .iter()
-                        .map(|neuron_permission| neuron_permission.principal.unwrap())
+                    neuron.permissions.iter().map(|neuron_permission| {
+                        let permissions = neuron_permission
+                            .permission_type
+                            .iter()
+                            .map(|permission_type| {
+                                NeuronPermissionType::try_from(*permission_type).unwrap()
+                            })
+                            .collect::<BTreeSet<_>>();
+                        (neuron_permission.principal.unwrap(), permissions)
+                    })
                 })
                 .collect::<BTreeSet<_>>();
-            assert_eq!(
-                observed_neuron_controller_principal_ids,
-                expected_neuron_controller_principal_ids
-            );
+
+            assert_eq!(observed_neuron_permissions, expected_neuron_permissions);
         }
         // Collect all SNS neurons except the initial ones that were not created as a result of
         // the SNS swap.

@@ -101,7 +101,8 @@ impl GovernanceCanisterInitPayloadBuilder {
             Neuron {
                 id: Some(neuron_id),
                 controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                hot_keys: (0..20)
+                // Use large values to avoid the possibility of collisions with other self-authenticating hotkeys
+                hot_keys: (10_000..10_020)
                     .map(|i: u64| {
                         if i % 2 == 0 {
                             // Model some self-authenticating hotkeys.
