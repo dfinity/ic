@@ -15,13 +15,8 @@ use crate::certified_slice_pool::{
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
-use hyper::{body::Body, Request, StatusCode, Uri};
-use hyper_rustls::HttpsConnector;
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
-use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
+use hyper::{Request, StatusCode, Uri};
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
@@ -50,7 +45,7 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
-use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
+use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
@@ -1567,21 +1562,11 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        runtime_handle: runtime::Handle,
+        _runtime_handle: runtime::Handle,
         tls: Arc<dyn TlsConfig + Send + Sync>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
-        // let tls_config = tls
-        //     .client_config(xnet_auth.node_id, xnet_auth.registry_version)
-        //     .map_err(Box::new)?;
         // TODO(MR-28) Make timeout configurable.
-
-        // let https: HttpsConnector<HttpConnector> = hyper_rustls::HttpsConnectorBuilder::new()
-        //     .with_native_roots()
-        //     .unwrap()
-        //     .https_or_http()
-        //     .enable_http1()
-        //     .build();
         #[cfg(not(test))]
         let https = TlsConnector::new(tls);
         #[cfg(test)]
@@ -1590,19 +1575,7 @@ impl XNetClientImpl {
             Client::builder(TokioExecutor::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
-                // .executor(ExecuteOnRuntime(runtime_handle))
-                .build(
-                    https, // #[cfg(not(test))]
-                          // {
-                          //     let tls_config = tls
-                          //         .client_config(xnet_auth.node_id, xnet_auth.registry_version)
-                          //         .map_err(Box::new)?;
-                          //     let tls_connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
-                          //     tls_connector
-                          // },
-                          // #[cfg(test)]
-                          // TlsConnector::new_for_tests(tls),
-                );
+                .build(https);
 
         let response_body_size = metrics_registry.histogram_vec(
             METRIC_RESPONSE_BODY_SIZE,
@@ -1653,7 +1626,7 @@ impl XNetClient for XNetClientImpl {
 
             let content = http_body_util::Limited::new(
                 response.into_body(),
-                (5 * POOL_SLICE_BYTE_SIZE_MAX).into(),
+                5 * POOL_SLICE_BYTE_SIZE_MAX,
             )
             .collect()
             .await

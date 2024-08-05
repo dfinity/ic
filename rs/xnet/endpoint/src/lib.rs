@@ -5,10 +5,7 @@ mod tests;
 
 use axum::{body::Body, extract::State, response::IntoResponse, routing::any};
 use hyper::{body::Incoming, Request, Response, StatusCode};
-use hyper_util::{
-    rt::{TokioExecutor, TokioIo},
-    server::{conn::auto::Builder, graceful::GracefulShutdown},
-};
+use hyper_util::{rt::TokioIo, server::graceful::GracefulShutdown};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
@@ -20,11 +17,11 @@ use ic_registry_client_helpers::node::NodeRegistry;
 use ic_types::{xnet::StreamIndex, NodeId, PrincipalId, SubnetId};
 use prometheus::{Histogram, HistogramVec};
 use serde::Serialize;
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{borrow::BorrowMut, net::SocketAddr};
-use std::{convert::Infallible, sync::Mutex};
 use threadpool::ThreadPool;
 use tokio::{
     net::TcpListener,
