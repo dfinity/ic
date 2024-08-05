@@ -26,7 +26,11 @@ use std::time::Instant;
 use std::{borrow::BorrowMut, net::SocketAddr};
 use std::{convert::Infallible, sync::Mutex};
 use threadpool::ThreadPool;
-use tokio::{net::TcpListener, runtime, sync::oneshot};
+use tokio::{
+    net::TcpListener,
+    runtime, select,
+    sync::{oneshot, Notify},
+};
 use tower::Service;
 use url::Url;
 
@@ -111,7 +115,7 @@ pub struct XNetEndpoint {
     server_address: SocketAddr,
     handler_thread_pool: threadpool::ThreadPool,
     request_sender: crossbeam_channel::Sender<WorkerMessage>,
-    graceful_shutdown: Arc<GracefulShutdown>,
+    shutdown_notify: Arc<Notify>,
     log: ReplicaLogger,
 }
 
@@ -122,10 +126,7 @@ impl Drop for XNetEndpoint {
         info!(self.log, "Shutting down XNet endpoint");
 
         // Request graceful shutdown of the HTTP server and the background thread.
-        // TODO: Figure out graceful shutdown..
-        Arc::try_unwrap(self.graceful_shutdown.clone())
-            .ok()
-            .map(|thing| thing.shutdown());
+        self.shutdown_notify.notify_one();
 
         for _ in 0..XNET_ENDPOINT_NUM_WORKER_THREADS {
             self.request_sender
@@ -142,6 +143,143 @@ impl Drop for XNetEndpoint {
 
 const API_URL_STREAMS: &str = "/api/v1/streams";
 const API_URL_STREAM_PREFIX: &str = "/api/v1/stream/";
+
+#[derive(Clone)]
+struct Context {
+    request_sender: crossbeam_channel::Sender<WorkerMessage>,
+    metrics: Arc<XNetEndpointMetrics>,
+}
+
+fn ok<T>(t: T) -> Result<T, Infallible> {
+    Ok(t)
+}
+
+async fn func(State(ctx): State<Context>, request: Request<Body>) -> impl IntoResponse {
+    let (response_sender, response_receiver) = oneshot::channel();
+    let task = WorkerMessage::HandleRequest {
+        request,
+        response_sender,
+    };
+
+    // NOTE: we must use non-blocking send here, otherwise we might
+    // delay the event thread.
+    if ctx.request_sender.try_send(task).is_err() {
+        ctx.metrics
+            .request_duration
+            .with_label_values(&[RESOURCE_UNKNOWN, StatusCode::SERVICE_UNAVAILABLE.as_str()])
+            .observe(0.0);
+
+        return ok(Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::from("Queue full"))
+            .unwrap());
+    }
+
+    ok(response_receiver
+        .await
+        .unwrap_or_else(|e| panic!("XNet Endpoint Handler shut down unexpectedly: {}", e)))
+}
+
+async fn start_server(
+    address: SocketAddr,
+    ctx: Context,
+    runtime_handle: runtime::Handle,
+    tls: Arc<dyn TlsConfig + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient + Send + Sync>,
+    log: ReplicaLogger,
+    shutdown_notify: Arc<Notify>,
+) -> SocketAddr {
+    let thing = any(func).with_state(ctx);
+    let hyper_service =
+        hyper::service::service_fn(move |request: Request<Incoming>| thing.clone().call(request));
+
+    // let http = Builder::new(TokioExecutor::new());
+    let http = hyper::server::conn::http1::Builder::new();
+    // let http = hyper::server::conn::http2::Builder::new(TokioExecutor::new());
+
+    let graceful_shutdown = GracefulShutdown::new();
+
+    let socket = ic_xnet_hyper::bind_tcp_socket_with_reuse(&address).unwrap();
+    socket.listen(128).unwrap();
+
+    let address = {
+        let listener = {
+            let _guard = runtime_handle.enter();
+            TcpListener::from_std(socket.into()).unwrap()
+        };
+        let address = listener.local_addr().unwrap();
+        let logger = log.clone();
+
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    Ok((stream, _peer_addr)) = listener.accept() => {
+                        let logger = logger.clone();
+                        let hyper_service = hyper_service.clone();
+
+                        #[cfg(test)]
+                        {
+                            let _ = tls;
+                            let _ = registry_client;
+                            let io = TokioIo::new(stream);
+                            let conn = http.serve_connection(io, hyper_service);
+                            let wrapped = graceful_shutdown.watch(conn);
+                            tokio::spawn(async move {
+                                if let Err(err) = wrapped.await {
+                                    warn!(logger, "failed to serve connection: {err}");
+                                }
+                            });
+                        }
+
+                        #[cfg(not(test))]
+                        {
+                            let tls = tls.clone();
+                            let registry_client = registry_client.clone();
+
+                                let registry_version = registry_client.get_latest_version();
+                                let server_config = match tls.server_config(
+                                    ic_crypto_tls_interfaces::SomeOrAllNodes::All,
+                                    registry_version,
+                                ) {
+                                    Ok(config) => config,
+                                    Err(err) => {
+                                        warn!(logger, "Failed to get server config from crypto {err}");
+                                        return;
+                                    }
+                                };
+
+                                let tls_acceptor =
+                                    tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+                                match tls_acceptor.accept(stream).await {
+                                    Ok(tls_stream) => {
+                                        let io = TokioIo::new(tls_stream);
+                                        let conn = http.serve_connection(io, hyper_service);
+                                        let wrapped = graceful_shutdown.watch(conn);
+                                        tokio::spawn(async move {
+                                            if let Err(err) = wrapped.await {
+                                                warn!(logger, "failed to serve connection: {err}");
+                                            }
+                                        });
+                                    }
+                                    Err(err) => {
+                                        warn!(logger, "Error setting up TLS stream: {err}");
+                                    }
+                                };
+                        }
+                    }
+                    _ = shutdown_notify.notified() => {
+                        graceful_shutdown.shutdown().await;
+                        break;
+                    }
+                };
+            }
+        });
+
+        address
+    };
+
+    address
+}
 
 impl XNetEndpoint {
     /// Creates and starts an `XNetEndpoint` to publish XNet `Streams`.
@@ -173,132 +311,22 @@ impl XNetEndpoint {
         let (request_sender, request_receiver) =
             crossbeam_channel::bounded(XNET_ENDPOINT_NUM_WORKER_THREADS);
 
-        #[derive(Clone)]
-        struct Context {
-            // log: ReplicaLogger,
-            request_sender: crossbeam_channel::Sender<WorkerMessage>,
-            metrics: Arc<XNetEndpointMetrics>,
-        }
-
         let ctx = Context {
-            // log: log.clone(),
             metrics: Arc::clone(&metrics),
             request_sender: request_sender.clone(),
         };
-        fn ok<T>(t: T) -> Result<T, Infallible> {
-            Ok(t)
-        }
 
-        async fn func(State(ctx): State<Context>, request: Request<Body>) -> impl IntoResponse {
-            let (response_sender, response_receiver) = oneshot::channel();
-            let task = WorkerMessage::HandleRequest {
-                request,
-                response_sender,
-            };
+        let shutdown_notify = Arc::new(Notify::new());
 
-            // NOTE: we must use non-blocking send here, otherwise we might
-            // delay the event thread.
-            if ctx.request_sender.try_send(task).is_err() {
-                ctx.metrics
-                    .request_duration
-                    .with_label_values(&[
-                        RESOURCE_UNKNOWN,
-                        StatusCode::SERVICE_UNAVAILABLE.as_str(),
-                    ])
-                    .observe(0.0);
-
-                return ok(Response::builder()
-                    .status(StatusCode::SERVICE_UNAVAILABLE)
-                    .body(Body::from("Queue full"))
-                    .unwrap());
-            }
-
-            ok(response_receiver
-                .await
-                .unwrap_or_else(|e| panic!("XNet Endpoint Handler shut down unexpectedly: {}", e)))
-        }
-
-        let thing = any(func).with_state(ctx);
-        let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
-            thing.clone().call(request)
-        });
-        let graceful_shutdown = Arc::new(GracefulShutdown::new());
-
-        let socket = ic_xnet_hyper::bind_tcp_socket_with_reuse(&config.address).unwrap();
-        socket.listen(128).unwrap();
-
-        let address = {
-            let _guard = runtime_handle.enter();
-
-            let listener = TcpListener::from_std(socket.into()).unwrap();
-            let address = listener.local_addr().unwrap();
-            let logger = log.clone();
-            let graceful_shutdown = graceful_shutdown.clone();
-
-            tokio::spawn(async move {
-                loop {
-                    let (stream, _peer_addr) = listener.accept().await.unwrap();
-                    let logger = logger.clone();
-                    let hyper_service = hyper_service.clone();
-                    let graceful_shutdown = graceful_shutdown.clone();
-
-                    #[cfg(not(test))]
-                    {
-                        let tls = tls.clone();
-                        let registry_client = registry_client.clone();
-                        tokio::spawn(async move {
-                            let registry_version = registry_client.get_latest_version();
-                            let server_config = match tls.server_config(
-                                ic_crypto_tls_interfaces::SomeOrAllNodes::All,
-                                registry_version,
-                            ) {
-                                Ok(config) => config,
-                                Err(err) => {
-                                    warn!(logger, "Failed to get server config from crypto {err}");
-                                    return;
-                                }
-                            };
-
-                            let tls_acceptor =
-                                tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
-                            match tls_acceptor.accept(stream).await {
-                                Ok(tls_stream) => {
-                                    let io = TokioIo::new(tls_stream);
-
-                                    let builder = Builder::new(TokioExecutor::new());
-                                    let conn = builder.serve_connection(io, hyper_service);
-                                    let wrapped = graceful_shutdown.watch(conn);
-
-                                    if let Err(err) = wrapped.await {
-                                        warn!(logger, "failed to serve connection: {err}");
-                                    }
-                                }
-                                Err(err) => {
-                                    warn!(logger, "Error setting up TLS stream: {err}");
-                                }
-                            };
-                        });
-                    }
-
-                    #[cfg(test)]
-                    {
-                        let _ = tls;
-                        let _ = registry_client;
-                        tokio::spawn(async move {
-                            let io = TokioIo::new(stream);
-                            let builder = Builder::new(TokioExecutor::new());
-                            let conn = builder.serve_connection(io, hyper_service);
-                            let wrapped = graceful_shutdown.watch(conn);
-                            if let Err(err) = wrapped.await {
-                                warn!(logger, "failed to serve connection: {err}");
-                            }
-                        });
-                    }
-                }
-            });
-
-            address
-        };
+        let address = runtime_handle.block_on(start_server(
+            config.address,
+            ctx,
+            runtime_handle.clone(),
+            tls,
+            registry_client,
+            log.clone(),
+            shutdown_notify.clone(),
+        ));
 
         info!(log, "XNet Endpoint listening on {}", address);
 
@@ -345,7 +373,7 @@ impl XNetEndpoint {
             server_address: address,
             handler_thread_pool,
             request_sender,
-            graceful_shutdown,
+            shutdown_notify,
             log,
         }
     }
