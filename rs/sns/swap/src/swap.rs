@@ -2409,13 +2409,10 @@ impl Swap {
         }
 
         // Convert the intermediate format into its final format
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         let cf_participants: Vec<CfParticipant> = cf_participant_map
             .into_iter()
             .map(|(nf_neuron_nns_controller, cf_neurons)| CfParticipant {
                 controller: Some(nf_neuron_nns_controller),
-                // TODO(NNS1-3198): Remove once hotkey_principal is removed
-                hotkey_principal: nf_neuron_nns_controller.to_string(),
                 cf_neurons,
             })
             .collect();
@@ -3337,7 +3334,6 @@ fn create_sns_neuron_basket_for_neurons_fund_participant(
             vec![neuron_id_with_longest_dissolve_delay.clone()]
         };
 
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is no longer used
         recipes.push(SnsNeuronRecipe {
             sns: Some(TransferableAmount {
                 amount_e8s: scheduled_vesting_event.amount_e8s,
@@ -3350,8 +3346,6 @@ fn create_sns_neuron_basket_for_neurons_fund_participant(
                 controller: Some(*controller),
                 hotkeys: Some(Principals::from(hotkeys.clone())),
                 nns_neuron_id,
-                // TODO(NNS1-3198): Remove
-                hotkey_principal: controller.to_string(),
             })),
             neuron_attributes: Some(NeuronAttributes {
                 memo,

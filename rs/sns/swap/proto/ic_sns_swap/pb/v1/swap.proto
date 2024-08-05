@@ -527,11 +527,6 @@ message CfParticipant {
   optional ic_base_types.pb.v1.PrincipalId controller = 3;
   // Information about the participating neurons. Must not be empty.
   repeated CfNeuron cf_neurons = 2;
-
-  // The principal that can vote on behalf of these Neurons' Fund neurons.
-  // Deprecated. Please use `controller` instead (not `hotkeys`!)
-  // TODO(NNS1-3198): Remove
-  string hotkey_principal = 1 [deprecated = true];
 }
 
 // The construction parameters for the basket of neurons created for all
@@ -701,10 +696,6 @@ message CfInvestment {
   optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
 
   fixed64 nns_neuron_id = 2;
-
-  // Deprecated. Please use `controller` instead (not `hotkey_principal`)!
-  // TODO(NNS1-3198): Remove
-  string hotkey_principal = 1 [deprecated = true];
 }
 
 message TimeWindow {
@@ -1194,10 +1185,6 @@ message SettleNeuronsFundParticipationResponse {
     // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
-
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    // TODO(NNS1-3198): Remove
-    optional string hotkey_principal = 3 [deprecated = true];
   }
 
   // Request was completed successfully.

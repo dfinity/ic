@@ -685,28 +685,11 @@ impl CfInvestment {
         Ok(())
     }
 
-    /// Tries to get the controller, which may be either in the `controller` or `hotkey_principal` field.
-    /// If both fields are set, requires that they refer to the same principal before returning one.
     pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
-        match (
-            self.controller,
-            crate::swap::string_to_principal(&self.hotkey_principal),
-        ) {
-            (Some(p1), Some(p2)) if p1 == p2 => Ok(p1),
-            // If hotkey_principal refers to a different principal than controller,
-            // or if neither is set, something has gone wrong.
-            (Some(_), Some(_)) => {
-                Err("Invalid NF neuron: controller and hotkey_principal do not match".to_string())
-            }
-            // If both fields are none, something has also gone wrong.
-            (None, None) => Err(
-                "Invalid NF neuron: controller is unset and hotkey_principal is invalid"
-                    .to_string(),
-            ),
-            // If only one is set, just use that one
-            (Some(p), None) => Ok(p),
-            (None, Some(p)) => Ok(p),
+        if let Some(p) = self.controller {
+            return Ok(p);
+        } else {
+            return Err("Invalid NF participant: controller unset".to_string());
         }
     }
 }
@@ -751,25 +734,10 @@ impl CfParticipant {
     }
 
     pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
-        match (
-            self.controller,
-            crate::swap::string_to_principal(&self.hotkey_principal),
-        ) {
-            (Some(p1), Some(p2)) if p1 == p2 => Ok(p1),
-            // If hotkey_principal refers to a different principal than controller,
-            // or if neither is set, something has gone wrong.
-            (Some(_), Some(_)) => Err(
-                "Invalid NF participant: controller and hotkey_principal do not match".to_string(),
-            ),
-            // If both fields are none, something has also gone wrong.
-            (None, None) => Err(
-                "Invalid NF participant: controller and hotkey_principal are both unset"
-                    .to_string(),
-            ),
-            // If only one is set, just use that one
-            (Some(p), None) => Ok(p),
-            (None, Some(p)) => Ok(p),
+        if let Some(p) = self.controller {
+            return Ok(p);
+        } else {
+            return Err("Invalid NF participant: controller unset".to_string());
         }
     }
 }
@@ -1139,25 +1107,17 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
     fn try_from(
         value: crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron,
     ) -> Result<Self, Self::Error> {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed
         let crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron {
             nns_neuron_id,
             amount_icp_e8s,
             controller,
             hotkeys,
             is_capped,
-            hotkey_principal,
         } = value;
         let hotkeys = hotkeys.unwrap_or_default().principals;
 
-        let controller = match (controller, hotkey_principal) {
-            (Some(controller), _) => controller,
-            // TODO(NNS1-3198): Remove this case once hotkey_principal is removed
-            (None, Some(hotkey_principal)) => PrincipalId::from_str(&hotkey_principal)
-                .map_err(|_| format!("Invalid hotkey_principal {}", hotkey_principal))?,
-            (None, None) => {
-                return Err("Either controller or hotkey_principal must be specified".to_string())
-            }
+        let Some(controller) = controller else {
+            return Err("Either controller or hotkey_principal must be specified".to_string());
         };
 
         match (nns_neuron_id, amount_icp_e8s, is_capped) {

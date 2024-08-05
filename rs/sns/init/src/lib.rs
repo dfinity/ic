@@ -337,14 +337,12 @@ impl From<NeuronBasketConstructionParametersValidationError> for Result<(), Stri
 
 impl From<NeuronsFundParticipants> for ic_sns_swap::pb::v1::NeuronsFundParticipants {
     fn from(value: NeuronsFundParticipants) -> Self {
-        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         Self {
             cf_participants: value
                 .participants
                 .iter()
                 .map(|cf_participant| ic_sns_swap::pb::v1::CfParticipant {
                     controller: cf_participant.controller,
-                    hotkey_principal: cf_participant.hotkey_principal.clone(),
                     cf_neurons: cf_participant.cf_neurons.clone(),
                 })
                 .collect(),

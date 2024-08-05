@@ -511,12 +511,6 @@ pub struct CfParticipant {
     /// Information about the participating neurons. Must not be empty.
     #[prost(message, repeated, tag = "2")]
     pub cf_neurons: ::prost::alloc::vec::Vec<CfNeuron>,
-    /// The principal that can vote on behalf of these Neurons' Fund neurons.
-    /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-    /// TODO(NNS1-3198): Remove
-    #[deprecated]
-    #[prost(string, tag = "1")]
-    pub hotkey_principal: ::prost::alloc::string::String,
 }
 /// The construction parameters for the basket of neurons created for all
 /// investors in the decentralization swap.
@@ -705,11 +699,6 @@ pub struct CfInvestment {
     pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     #[prost(fixed64, tag = "2")]
     pub nns_neuron_id: u64,
-    /// Deprecated. Please use `controller` instead (not `hotkey_principal`)!
-    /// TODO(NNS1-3198): Remove
-    #[deprecated]
-    #[prost(string, tag = "1")]
-    pub hotkey_principal: ::prost::alloc::string::String,
 }
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Copy,
@@ -1531,11 +1520,6 @@ pub mod settle_neurons_fund_participation_response {
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        /// TODO(NNS1-3198): Remove
-        #[deprecated]
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
