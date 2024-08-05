@@ -2590,7 +2590,9 @@ impl StateMachine {
         )
         .map(|res| match res {
             WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
-            WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+            WasmResult::Reject(reason) => {
+                panic!("take_canister_snapshot call rejected: {}", reason)
+            }
         })?
     }
 
