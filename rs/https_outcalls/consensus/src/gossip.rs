@@ -16,10 +16,10 @@ use ic_types::{
 };
 use std::{collections::BTreeSet, sync::Arc};
 
-/// The upper bound of how many HTTP outcall requests unknown to the local replica will be
+/// The upper bound of how many shares of HTTP outcall requests unknown to the local replica will be
 /// requested via P2P in advance. Since the request ids are strictly increasing, we can simply add
 /// the constant to the latest known request id.
-const MAX_NUMBER_OF_REQUESTS_AHEAD: usize = 10;
+const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 10;
 
 /// The canonical implementation of [`PriorityFnFactory`]
 pub struct CanisterHttpGossipImpl {
@@ -73,7 +73,7 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
             }
 
             let highest_accepted_request_id =
-                next_callback_id + CallbackId::from(MAX_NUMBER_OF_REQUESTS_AHEAD);
+                CallbackId::from(next_callback_id.get() + MAX_NUMBER_OF_REQUESTS_AHEAD);
 
             // The https outcalls share should be fetched in two cases:
             //  - The Id of the share is part of the state which means it is active.

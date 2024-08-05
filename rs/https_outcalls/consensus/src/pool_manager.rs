@@ -487,6 +487,103 @@ pub mod test {
     }
 
     #[test]
+    pub fn test_validation_of_shares_above_known_requests() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Try to insert a share for request id 1 (while the next expected one is the
+                // default value 0).
+                {
+                    let response_metadata = CanisterHttpResponseMetadata {
+                        id: CallbackId::from(1),
+                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    };
+
+                    let signature = crypto
+                        .sign(
+                            &response_metadata,
+                            replica_config.node_id,
+                            RegistryVersion::from(1),
+                        )
+                        .unwrap();
+
+                    let share = Signed {
+                        content: response_metadata.clone(),
+                        signature,
+                    };
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: share,
+                        peer_id: replica_config.node_id,
+                        timestamp: UNIX_EPOCH,
+                    });
+                }
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                // Make sure the changes are empty (share was filtered out)
+                assert!(changes.is_empty());
+            })
+        });
+    }
+
+    #[test]
     pub fn test_invalidation_of_redundant_shares() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
@@ -520,13 +617,13 @@ pub mod test {
                     .return_const(Labeled::new(
                         Height::from(1),
                         Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            CallbackId::from(7),
+                            CallbackId::from(0),
                             request,
                         )]))),
                     ));
 
                 let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(7),
+                    id: CallbackId::from(0),
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
