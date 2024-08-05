@@ -4,7 +4,7 @@ mod queue;
 mod tests;
 
 use self::message_pool::{Context, MessagePool};
-use self::queue::{CanisterQueue, IngressQueue};
+use self::queue::{CanisterQueue, CanisterQueueItem, IngressQueue};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
@@ -74,11 +74,13 @@ pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
     ingress_queue: IngressQueue,
 
-    /// Per remote canister input and output queues.
+    /// Per remote canister input and output queues. Queues hold references into the
+    /// message pool, some of which may be stale due to expiration or load shedding.
+    /// The item at the head of each queue, if any, is guaranteed tp be non-stale.
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
-    /// Pool holding all messages in `canister_queues`, with support for time-based
-    /// expiration and load shedding.
+    /// Pool holding the messages referenced by `canister_queues`, with support for
+    /// time-based expiration and load shedding.
     pool: MessagePool,
 
     /// Slot and memory reservation stats. Message count and size stats are
@@ -145,59 +147,33 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         CanisterOutputQueuesIterator { queues, pool, size }
     }
 
-    /// Returns the first (non-stale) message from the first queue holding one.
-    ///
-    /// Consumes all encountered stale references. Removes all consumed queues from
-    /// the iteration order.
-    ///
-    /// Note: While it is slightly unusual to pass a mutable reference to an
-    /// apparently read-only operation such as `peek()`, we need to be able to prune
-    /// stale queue entries whenever we see them or else risk turning this into an
-    /// `O(N)` time operation. We could instead fall back on internal mutability,
-    /// but the additional complexity is unnecessary given the current uses.
-    pub fn peek(&mut self) -> Option<&RequestOrResponse> {
-        while let Some((_, queue)) = self.queues.front_mut() {
-            while let Some(item) = queue.peek() {
-                if let msg @ Some(_) = self.pool.get(item.id()) {
-                    return msg;
-                }
+    /// Returns the first message from the next queue.
+    pub fn peek(&self) -> Option<&RequestOrResponse> {
+        let item = self.queues.front()?.1.peek().unwrap();
 
-                // Stale reference, pop it and try again.
-                assert_eq!(Some(*item), queue.pop());
-                self.size -= 1;
-            }
-
-            // Queue only contained stale references and was exhausted.
-            self.queues.pop_front();
-        }
-        None
+        let msg = self.pool.get(item.id());
+        assert!(msg.is_some(), "stale reference at the head of output queue");
+        return msg;
     }
 
-    /// Pops the first (non-stale) message from the first queue holding one. If this
-    /// was not the last message in that queue, the queue is moved to the back of
-    /// the iteration order.
+    /// Pops the first message from the next queue.
     ///
-    /// Consumes all encountered stale references. Removes all consumed queues from
-    /// the iteration order.
+    /// Advances the queue to the next non-stale message. If such a message exists,
+    /// the queue is moved to the back of the iteration order, else it is dropped.
     pub fn pop(&mut self) -> Option<RequestOrResponse> {
-        while let Some((receiver, queue)) = self.queues.pop_front() {
-            while let Some(item) = queue.pop() {
-                self.size -= 1;
+        let (receiver, queue) = self.queues.pop_front()?;
+        self.size -= queue.len();
 
-                // If the message is in the pool return it; else continue to the next reference.
-                if let msg @ Some(_) = self.pool.take(item.id()) {
-                    if queue.len() > 0 {
-                        self.queues.push_back((receiver, queue));
-                    }
-                    debug_assert_eq!(Self::compute_size(&self.queues), self.size);
+        // Queue must be non-empty and message at the head of queue non-stale.
+        let msg = pop_and_advance(queue, self.pool).unwrap();
 
-                    return msg;
-                }
-            }
+        if queue.len() > 0 {
+            self.size += queue.len();
+            self.queues.push_back((receiver, queue));
         }
-
         debug_assert_eq!(Self::compute_size(&self.queues), self.size);
-        None
+
+        return Some(msg);
     }
 
     /// Permanently excludes from iteration the next queue (i.e. all messages
@@ -299,7 +275,7 @@ impl CanisterQueues {
                     // `f` rejected the message, move on to next queue.
                     Err(_) => break,
 
-                    // Message consumed, pop it and update the stats.
+                    // Message consumed, pop it.
                     Ok(_) => {
                         self.pool
                             .take(id)
@@ -428,21 +404,23 @@ impl CanisterQueues {
             InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
         };
 
+        // It is possible for an input schedule to contain an empty input queue if e.g.
+        // all messages in said queue have expired / were shed since it was scheduled.
+        // Meaning that iteration may be required.
         while let Some(sender) = input_schedule.pop_front() {
-            // The sender's input queue.
+            // FIXME: an input schedule may contain a sender whose messages have all timed
+            // out / been shed and its queue garbage collected.
             let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
+            let msg = pop_and_advance(input_queue, &mut self.pool);
 
-            // Consume any stale references.
-            while let Some(item) = input_queue.pop() {
-                if let Some(msg) = self.pool.take(item.id()) {
-                    // If the input queue is non-empty, re-enqueue the sender at the back of the
-                    // input schedule queue.
-                    if input_queue.len() != 0 {
-                        input_schedule.push_back(sender);
-                    }
+            // If the input queue is non-empty, re-enqueue the sender at the back of the
+            // input schedule queue.
+            if input_queue.len() != 0 {
+                input_schedule.push_back(sender);
+            }
 
-                    return Some(msg.into());
-                }
+            if let Some(msg) = msg {
+                return Some(msg.into());
             }
         }
 
@@ -450,6 +428,11 @@ impl CanisterQueues {
     }
 
     /// Peeks the next canister input queue message.
+    ///
+    /// It is possible for an input schedule to contain an empty input queue if e.g.
+    /// all messages in said queue have expired / were shed since it was scheduled.
+    /// Meaning that it may be necessary to iterate over and mutate input schedules
+    /// in order to achieve amortized `O(1)` time complexity.
     fn peek_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterMessage> {
         let input_schedule = match input_queue {
             InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
@@ -460,17 +443,15 @@ impl CanisterQueues {
             // The sender's input queue.
             let input_queue = &mut self.canister_queues.get_mut(sender).unwrap().0;
 
-            while let Some(item) = input_queue.peek() {
-                // Look up the message.
-                if let Some(msg) = self.pool.get(item.id()) {
-                    return Some(msg.clone().into());
-                }
-
-                // Stale reference, pop it and try again.
-                assert_eq!(Some(*item), input_queue.pop());
+            if let Some(item) = input_queue.peek() {
+                let msg = self
+                    .pool
+                    .get(item.id())
+                    .expect("stale reference at the head of input queue");
+                return Some(msg.clone().into());
             }
 
-            // Queue only contained stale references and was exhausted.
+            // All messages in the queue had expired / were shed.
             input_schedule.pop_front();
         }
 
@@ -503,14 +484,11 @@ impl CanisterQueues {
         self.pool.message_stats().outbound_message_count > 0
     }
 
-    /// Peeks the next inter-canister or ingress message (round-robin) from
-    /// `self.subnet_queues`.
+    /// Peeks the ingress or inter-canister input message that would be returned by
+    /// `pop_input()`.
     ///
-    /// Note: While it is slightly unusual to pass a mutable reference to an
-    /// apparently read-only operation such as `peek()`, we need to be able to prune
-    /// stale queue entries whenever we see them or else risk turning this into an
-    /// `O(N)` time operation. We could instead fall back on internal mutability,
-    /// but the additional complexity is unnecessary given the current uses.
+    /// Requires a `&mut self` reference in order to be able to drop empty queues
+    /// from the input schedule, in order to achieve amortized `O(1)` time complexity.
     pub(crate) fn peek_input(&mut self) -> Option<CanisterMessage> {
         // Try all 3 inputs: Ingress, Local, and Remote subnets
         for _ in 0..3 {
@@ -540,7 +518,7 @@ impl CanisterQueues {
         None
     }
 
-    /// Skips the next inter-canister or ingress message from `self.subnet_queues`.
+    /// Skips the next ingress or inter-canister input message.
     pub(crate) fn skip_input(&mut self, loop_detector: &mut CanisterQueuesLoopDetector) {
         let current_input_queue = self.next_input_queue;
         match current_input_queue {
@@ -564,7 +542,7 @@ impl CanisterQueues {
         }
     }
 
-    /// Extracts the next ingress, priority, or normal message (round-robin).
+    /// Pops the next ingress or inter-canister input message (round-robin).
     ///
     /// We define three buckets of queues: messages from canisters on the same
     /// subnet (local subnet), ingress, and messages from canisters on other
@@ -719,28 +697,14 @@ impl CanisterQueues {
         debug_assert!(self.stats_ok());
     }
 
-    /// Returns a reference to the first non-stale message in the respective output
-    /// queue, if any.
-    ///
-    /// Note: While it is slightly unusual to pass a mutable reference to an
-    /// apparently read-only operation such as `peek()`, we need to be able to prune
-    /// stale queue entries whenever we see them or else risk turning this into an
-    /// `O(N)` time operation. We could instead fall back on internal mutability,
-    /// but the additional complexity is unnecessary given the current uses.
-    pub(super) fn peek_output(&mut self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
-        // Get the message queue of this canister.
-        let output_queue = &mut self.canister_queues.get_mut(canister_id)?.1;
+    /// Returns a reference to the (non-stale) message at the head of the respective
+    /// output queue, if any.
+    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
+        let output_queue = &self.canister_queues.get(canister_id)?.1;
 
-        while let Some(item) = output_queue.peek() {
-            let msg = self.pool.get(item.id());
-            if msg.is_some() {
-                return msg;
-            }
-            // Stale reference, pop it and try again.
-            assert_eq!(Some(*item), output_queue.pop());
-        }
-
-        None
+        let msg = self.pool.get(output_queue.peek()?.id());
+        assert!(msg.is_some(), "stale reference at the head of output queue");
+        msg
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
@@ -752,16 +716,13 @@ impl CanisterQueues {
         self.push_input(msg, InputQueueType::LocalSubnet)
             .map_err(|_| ())?;
 
-        let item = self
+        let queue = &mut self
             .canister_queues
             .get_mut(&own_canister_id)
             .expect("Output queue existed above so lookup should not fail.")
-            .1
-            .pop()
+            .1;
+        pop_and_advance(queue, &mut self.pool)
             .expect("Message peeked above so pop should not fail.");
-        self.pool
-            .take(item.id())
-            .expect("Message peeked above so take should not fail.");
 
         Ok(())
     }
@@ -916,20 +877,6 @@ impl CanisterQueues {
             return;
         }
 
-        // Adjust stats for any queue pairs we are going to GC.
-        let mut have_empty_pair = false;
-        for (_canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
-            if !input_queue.has_used_slots() && !output_queue.has_used_slots() {
-                have_empty_pair = true;
-                break;
-            }
-        }
-        // Bail out early if there is nothing to GC.
-        if !have_empty_pair {
-            return;
-        }
-
-        // Actually drop empty queue pairs.
         self.canister_queues
             .retain(|_canister_id, (input_queue, output_queue)| {
                 input_queue.has_used_slots() || output_queue.has_used_slots()
@@ -1022,8 +969,27 @@ impl CanisterQueues {
     ) {
         use Context::*;
 
+        // Ensure that the first reference in a queue is never stale: if we dropped the
+        // message at the head of a queue, advance to the first non-stale reference.
+        let context = id.context();
+        let remote = match context {
+            Inbound => msg.sender(),
+            Outbound => msg.receiver(),
+        };
+        let (input_queue, output_queue) = self.canister_queues.get_mut(&remote).unwrap();
+        let queue = match context {
+            Inbound => input_queue,
+            Outbound => output_queue,
+        };
+        // Defensive check, reference may have already been popped by an earlier
+        // `on_message_dropped()` call if multiple messages got dropped at once.
+        if queue.peek() == Some(&CanisterQueueItem::Reference(*id)) {
+            queue.pop();
+            queue.pop_while(|item| self.pool.get(item.id()).is_none());
+        }
+
         // Generate reject response, if necessary.
-        let request = match (id.context(), msg) {
+        let request = match (context, msg) {
             // Outbound request: produce a `SYS_TRANSIENT` timeout response.
             (Outbound, RequestOrResponse::Request(request)) => request,
 
@@ -1042,10 +1008,10 @@ impl CanisterQueues {
 
         // If this was a previously empty input queue, add it to input queue schedule.
         if input_queue.len() == 1 {
-            if destination == own_canister_id || local_canisters.contains_key(destination) {
-                self.local_subnet_input_schedule.push_back(*destination)
+            if &remote == own_canister_id || local_canisters.contains_key(&remote) {
+                self.local_subnet_input_schedule.push_back(remote)
             } else {
-                self.remote_subnet_input_schedule.push_back(*destination)
+                self.remote_subnet_input_schedule.push_back(remote)
             }
         }
     }
@@ -1131,12 +1097,8 @@ impl CanisterQueues {
             }
         }
 
-        if !local_schedule.is_empty() || !remote_schedule.is_empty() {
-            return Err(format!(
-                "Canister(s) with no inputs enqueued in input schedule:\n  local: {:?}\n  remote: {:?}",
-                local_schedule, remote_schedule,
-            ));
-        }
+        // Note that a currently empty input queue may have been enqueued into an input
+        // schedule before all its messages expired or were shed.
 
         Ok(())
     }
@@ -1164,6 +1126,17 @@ impl CanisterQueues {
             transient_stream_responses_size_bytes: 0,
         }
     }
+}
+
+/// Pops and returns the item at the head of the queue and advances the queue
+/// to the next non-stale item.
+fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<RequestOrResponse> {
+    let item = queue.pop()?;
+    queue.pop_while(|item| pool.get(item.id()).is_none());
+
+    let msg = pool.take(item.id());
+    assert!(msg.is_some(), "stale reference at the head of queue");
+    msg
 }
 
 /// Generates a timeout reject response from a request, refunding its payment.
@@ -1283,14 +1256,30 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                 .map(|qp| {
                     let canister_id: CanisterId =
                         try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
-                    let iq: CanisterQueue = try_from_option_field(
+                    let mut iq: CanisterQueue = try_from_option_field(
                         qp.input_queue.map(|q| (q, Context::Inbound)),
                         "CanisterQueuePair::input_queue",
                     )?;
-                    let oq: CanisterQueue = try_from_option_field(
+                    if let Some(item) = iq.peek() {
+                        if pool.get(item.id()).is_none() {
+                            metrics.observe_broken_soft_invariant(format!(
+                                "CanisterQueues: Stale message at the head of input queue"
+                            ));
+                        }
+                        iq.pop_while(|item| pool.get(item.id()).is_none());
+                    }
+                    let mut oq: CanisterQueue = try_from_option_field(
                         qp.output_queue.map(|q| (q, Context::Outbound)),
                         "CanisterQueuePair::output_queue",
                     )?;
+                    if let Some(item) = oq.peek() {
+                        if pool.get(item.id()).is_none() {
+                            metrics.observe_broken_soft_invariant(format!(
+                                "CanisterQueues: Stale message at the head of output queue"
+                            ));
+                        }
+                        oq.pop_while(|item| pool.get(item.id()).is_none());
+                    }
 
                     iq.iter().chain(oq.iter()).for_each(|queue_item| {
                         if pool.get(queue_item.id()).is_some()
@@ -1548,16 +1537,8 @@ pub mod testing {
         }
 
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
-            // Advance to the first non-stale message if any.
-            self.peek_output(dst_canister)?;
-
-            let item = self
-                .canister_queues
-                .get_mut(dst_canister)
-                .unwrap()
-                .1
-                .pop()?;
-            self.pool.take(item.id())
+            let queue = &mut self.canister_queues.get_mut(dst_canister).unwrap().1;
+            super::pop_and_advance(queue, &mut self.pool)
         }
 
         fn output_queues_len(&self) -> usize {

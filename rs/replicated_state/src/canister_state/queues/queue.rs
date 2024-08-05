@@ -245,6 +245,17 @@ impl CanisterQueue {
         self.queue.len()
     }
 
+    /// Discards all items at the front of the queue for which the predicate holds.
+    /// Stops when it encounters the first item for which the predicate is false.
+    pub(super) fn pop_while(&mut self, predicate: impl Fn(&CanisterQueueItem) -> bool) {
+        while let Some(item) = self.peek() {
+            if !predicate(item) {
+                break;
+            }
+            self.pop();
+        }
+    }
+
     /// Queue invariant check that panics if any invariant does not hold. Intended
     /// to be called from within a `debug_assert!()` in production code.
     ///

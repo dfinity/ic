@@ -249,7 +249,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
     /// Peeks into the iterator and returns a reference to the item that `next()`
     /// would return.
-    fn peek(&mut self) -> Option<&RequestOrResponse>;
+    fn peek(&self) -> Option<&RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The messages are retained
@@ -262,23 +262,8 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> 
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&mut self) -> Option<&RequestOrResponse> {
-        while let Some(canister_iterator) = self.canister_iterators.front_mut() {
-            // `peek()` may consume an arbitrary number of stale references.
-            self.size -= canister_iterator.size();
-            let peeked_some = canister_iterator.peek().is_some();
-            self.size += canister_iterator.size();
-
-            if peeked_some {
-                // Borrow checker won't let us return here, so bail out and peek again.
-                break;
-            }
-
-            self.canister_iterators.pop_front();
-        }
-        debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
-
-        self.canister_iterators.front_mut()?.peek()
+    fn peek(&self) -> Option<&RequestOrResponse> {
+        self.canister_iterators.front()?.peek()
     }
 
     fn exclude_queue(&mut self) {

@@ -323,6 +323,36 @@ fn test_backpressure_with_timed_out_requests() {
     assert!(queues.push_output_request().is_err());
 }
 
+/// Checks that `available_output_request_slots` counts timed out output
+/// requests.
+#[test]
+fn test_has_output() {
+    let mut queues = CanisterQueuesFixture::new();
+
+    // Fill the output queue with requests.
+    for _ in 0..DEFAULT_QUEUE_CAPACITY {
+        queues.push_output_request().unwrap();
+    }
+    // No output request slots are available.
+    assert_eq!(0, queues.available_output_request_slots());
+
+    // Time out all output requests.
+    queues.time_out_all_output_requests();
+
+    // Consume the reject responses, to free up input queue response slots.
+    for _ in 0..DEFAULT_QUEUE_CAPACITY {
+        queues.pop_input().unwrap();
+    }
+
+    // There is no output.
+    assert!(!queues.queues.has_output());
+    // And all output request slots are available.
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY,
+        queues.available_output_request_slots()
+    );
+}
+
 #[test]
 fn test_shed_largest_message() {
     let this = canister_test_id(13);
