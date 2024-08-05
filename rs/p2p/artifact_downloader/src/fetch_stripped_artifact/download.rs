@@ -184,8 +184,6 @@ pub(crate) async fn download_ingress<P: Peers>(
                     // metrics.download_task_artifact_download_errors_total.inc();
                 }
             }
-        } else {
-            // TODO(kpop): Abort?
         }
 
         // Wait before checking the priority so we might be able to avoid an unnecessary download.

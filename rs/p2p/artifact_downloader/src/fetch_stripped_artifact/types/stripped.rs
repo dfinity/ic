@@ -210,9 +210,7 @@ impl StrippedIngressPayload {
             .into_iter()
             .map(|msg| match msg {
                 MaybeStrippedIngress::Full(_, message) => Ok(message),
-                MaybeStrippedIngress::Stripped(id) => {
-                    Err(AssemblyError::Missing(StrippableId::IngressMessage(id)))
-                }
+                MaybeStrippedIngress::Stripped(id) => Err(AssemblyError::Missing(id)),
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -221,24 +219,15 @@ impl StrippedIngressPayload {
 }
 
 impl StrippedBlockProposal {
-    pub(crate) fn missing(&self) -> Vec<StrippableId> {
-        self.payload
-            .ingress
-            .missing()
-            .into_iter()
-            .map(StrippableId::IngressMessage)
-            .collect()
+    pub(crate) fn missing(&self) -> Vec<IngressMessageId> {
+        self.payload.ingress.missing().into_iter().collect()
     }
 
     pub(crate) fn try_insert(
         &mut self,
-        stripped_data: StrippableData,
+        ingress_message: SignedIngress,
     ) -> Result<(), InsertionError> {
-        match stripped_data {
-            StrippableData::IngressMessage(ingress_message) => {
-                self.payload.ingress.try_insert(ingress_message)
-            }
-        }
+        self.payload.ingress.try_insert(ingress_message)
     }
 
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
@@ -544,15 +533,6 @@ pub(crate) trait Strippable {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum StrippableId {
-    IngressMessage(IngressMessageId),
-}
-
-pub(crate) enum StrippableData {
-    IngressMessage(SignedIngress),
-}
-
-#[derive(Debug, PartialEq)]
 pub(crate) enum InsertionError {
     AlreadyInserted,
     NotNeeded,
@@ -560,7 +540,7 @@ pub(crate) enum InsertionError {
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum AssemblyError {
-    Missing(StrippableId),
+    Missing(IngressMessageId),
 }
 
 #[cfg(test)]

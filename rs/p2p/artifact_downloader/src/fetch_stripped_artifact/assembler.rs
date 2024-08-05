@@ -7,7 +7,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{ConsensusMessageId, IdentifiableArtifact},
+    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     consensus::ConsensusMessage,
     messages::SignedIngress,
     NodeId,
@@ -18,7 +18,7 @@ use crate::FetchArtifact;
 use super::{
     download::download_ingress,
     metrics::FetchStrippedConsensusArtifactMetrics,
-    types::stripped::{MaybeStrippedConsensusMessage, Strippable, StrippableData, StrippableId},
+    types::stripped::{MaybeStrippedConsensusMessage, Strippable},
 };
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
@@ -206,7 +206,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                     }
 
                     stripped_block_proposal
-                        .try_insert(StrippableData::IngressMessage(ingress))
+                        .try_insert(ingress)
                         .map_err(|_| Aborted {})?;
                 }
 
@@ -241,7 +241,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 /// Tries to get the missing object either from the pool(s) or from the peers who are advertising
 /// it.
 async fn get_or_fetch<P: Peers>(
-    stripped_object_id: StrippableId,
+    ingress_message_id: IngressMessageId,
     ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
     transport: Arc<dyn Transport>,
     // Id of the *full* artifact which should contain the missing data
@@ -250,21 +250,17 @@ async fn get_or_fetch<P: Peers>(
     node_id: NodeId,
     peer_rx: P,
 ) -> Result<(SignedIngress, NodeId), ()> {
-    match stripped_object_id {
-        StrippableId::IngressMessage(ingress_message_id) => {
-            // First check if the ingress message exists in the Ingress Pool.
-            if let Some(ingress_message) = ingress_pool.read().unwrap().get(&ingress_message_id) {
-                return Ok((ingress_message, node_id));
-            }
-
-            download_ingress(
-                transport,
-                ingress_message_id,
-                full_consensus_message_id,
-                &log,
-                peer_rx,
-            )
-            .await
-        }
+    // First check if the ingress message exists in the Ingress Pool.
+    if let Some(ingress_message) = ingress_pool.read().unwrap().get(&ingress_message_id) {
+        return Ok((ingress_message, node_id));
     }
+
+    download_ingress(
+        transport,
+        ingress_message_id,
+        full_consensus_message_id,
+        &log,
+        peer_rx,
+    )
+    .await
 }
