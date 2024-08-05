@@ -1624,14 +1624,12 @@ impl XNetClient for XNetClientImpl {
 
             let status = response.status();
 
-            let content = http_body_util::Limited::new(
-                response.into_body(),
-                5 * POOL_SLICE_BYTE_SIZE_MAX,
-            )
-            .collect()
-            .await
-            .map(|col| col.to_bytes())
-            .map_err(XNetClientError::BodyReadError)?;
+            let content =
+                http_body_util::Limited::new(response.into_body(), 5 * POOL_SLICE_BYTE_SIZE_MAX)
+                    .collect()
+                    .await
+                    .map(|col| col.to_bytes())
+                    .map_err(XNetClientError::BodyReadError)?;
 
             // let content = receive_body_without_timeout(
             //     response.into_body(),
