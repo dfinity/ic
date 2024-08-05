@@ -47,3 +47,31 @@ path = "canister_http_test.rs"
 [[bin]]
 name = "ic-systest-canister-http-time-out"
 path = "canister_http_time_out_test.rs"
+
+[[bin]]
+name = "ic-systest-firewall-max-connections-test"
+path = "firewall_max_connections_test.rs"
+
+[[bin]]
+name = "ic-systest-firewall-priority-test"
+path = "firewall_priority_test.rs"
+
+[[bin]]
+name = "ic-systest-network-large-test"
+path = "network_large_test.rs"
+
+[[bin]]
+name = "ic-systest-network-reliability-test"
+path = "network_reliability_test.rs"
+
+[[bin]]
+name = "ic-systest-p2p-performance"
+path = "p2p_performance"
+
+[[bin]]
+name = "ic-systest-query-workload-long-test"
+path = "query_workload_long_test.rs"
+
+[[bin]]
+name = "ic-systest-update-workload-large-payload-test"
+path = "update_workload_large_payload_test.rs"
