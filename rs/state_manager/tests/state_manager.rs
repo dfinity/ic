@@ -6117,12 +6117,12 @@ proptest! {
 
             verify_state(&state);
             state_manager.commit_and_certify(state, height(4), CertificationScope::Full, None);
-            let (_height, state) = state_manager.take_tip();
-            verify_state(&state);
-            state_manager.commit_and_certify(state, height(5), CertificationScope::Full, None);
-            let (_height, state) = state_manager.take_tip();
-            verify_state(&state);
-            state_manager.commit_and_certify(state, height(6), CertificationScope::Full, None);
+
+            for h in 5..8 {
+                let (_height, state) = state_manager.take_tip();
+                verify_state(&state);
+                state_manager.commit_and_certify(state, height(h), CertificationScope::Full, None);
+            }
 
             assert_error_counters(metrics);
         });

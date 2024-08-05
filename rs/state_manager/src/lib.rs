@@ -2059,7 +2059,10 @@ impl StateManagerImpl {
         let snapshot_operations = tip_state.canister_snapshots.take_unflushed_changes();
 
         for op in &snapshot_operations {
+            // Only CanisterSnapshots that are new since the last flush will have PageMaps that need to be flushed. They will
+            // have a corresponding Backup in the snapshot operations list.
             if let SnapshotOperation::Backup(_canister_id, snapshot_id) = op {
+                // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
                 if let Some(canister_snapshot) = tip_state.canister_snapshots.get_mut(*snapshot_id)
                 {
                     let new_snapshot = Arc::make_mut(canister_snapshot);

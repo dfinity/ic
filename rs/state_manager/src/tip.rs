@@ -450,11 +450,10 @@ pub(crate) fn spawn_tip_thread(
                             execution_state,
                         } => {
                             debug_assert!(
-                                checkpointed_state.canister_snapshots
-                                    == execution_state.canister_snapshots,
+                                checkpointed_state == execution_state,
                                 "Divergence: checkpointed {:#?}, \nexecution: {:#?}",
-                                checkpointed_state.canister_snapshots,
-                                execution_state.canister_snapshots,
+                                checkpointed_state,
+                                execution_state,
                             );
                         }
 
@@ -822,7 +821,7 @@ fn serialize_to_tip(
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    // Snapshots should have been handler earlier in `flush_page_delta`.
+    // Snapshots should have been handled earlier in `flush_page_delta`.
     debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
 
     // Serialize ingress history separately. The `SystemMetadata` proto does not
