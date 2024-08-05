@@ -204,7 +204,7 @@ impl PageAllocatorInner {
 
         // Copy the contents of the pages in parallel using rayon parallel iterators.
         // NB: the number of threads used are the same as the ones allocated when starting
-        // the sandbox, controlled by the embedders_config.num_rayon_compilation_threads.
+        // the sandbox, controlled by the embedders_config.num_rayon_page_allocator_threads.
         allocated_pages_vec
             .par_iter_mut()
             .zip(pages.par_iter())

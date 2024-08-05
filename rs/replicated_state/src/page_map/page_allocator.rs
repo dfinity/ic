@@ -19,6 +19,10 @@ use ic_sys::PAGE_SIZE;
 
 static ALLOCATED_PAGES: PageCounter = PageCounter::new();
 
+/// Any allocation that is larger than this threshold will be copied in parallel
+/// instead of the sequential code for smaller allocations.
+const MIN_MEMORY_ALLOCATION_FOR_PARALLEL_COPY: usize = 64 * 1024 * 1024;
+
 /// A clonable wrapper around a 4KiB memory page implementation.
 /// It is mostly immutable after creation with the only exception of `Buffer`
 /// modifying privately owned pages. The only way to create a page is via a
@@ -87,8 +91,7 @@ impl PageAllocator {
     pub fn allocate(&self, pages: &[(PageIndex, &PageBytes)]) -> Vec<(PageIndex, Page)> {
         // If the pages that need to be allocated and copied are more than 100 MB,
         // then we can call the fastpath allocator, which does parallel copying.
-        const MB: usize = 1024 * 1024;
-        if pages.len() * PAGE_SIZE > 100 * MB {
+        if pages.len() * PAGE_SIZE >= MIN_MEMORY_ALLOCATION_FOR_PARALLEL_COPY {
             return PageAllocatorInner::allocate_fastpath(&self.0, pages);
         }
         PageAllocatorInner::allocate(&self.0, pages)
