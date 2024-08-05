@@ -1077,6 +1077,9 @@ fn should_retrieve_minter_info() {
                 max_priority_fee_per_gas: price.max_priority_fee_per_gas,
                 timestamp: price.timestamp.unwrap(),
             }),
+            eth_balance: info_after_deposit
+                .eth_balance
+                .map(|balance| balance - withdrawal_amount),
             ..info_after_deposit
         }
     );

@@ -818,6 +818,9 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> TransactionReceiptProcessWithdr
         (override_mock)(default_eth_get_transaction_receipt)
             .build()
             .expect_rpc_calls(&self.setup);
+        if self.setup.as_ref().evm_rpc_id.is_some() {
+            self.setup.as_ref().env.tick();
+        }
         self
     }
 
