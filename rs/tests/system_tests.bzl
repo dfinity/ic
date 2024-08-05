@@ -273,7 +273,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
 
     Declares two system-tests:
 
-    * One with the given name which uses the NNS from mainnet as specified by testnet/mainnet_revisions.json
+    * One with the given name which uses the NNS from mainnet as specified by mainnet-canisters.bzl.
     * One with the given name suffixed with "_head_nns" which uses the NNS from the HEAD of the repo.
 
     The latter one is additionally tagged with "system_test_nightly" such that it only runs daily and not on PRs.
