@@ -210,7 +210,7 @@ impl PrincipalId {
         // Append the internal marker
         bytes[n_bytes.len()] = 0xfe;
 
-        Self::new_opaque_from_array(bytes, 9)
+        Self::new_opaque_from_array(bytes, n_bytes.len() + 1)
     }
 
     pub fn new_node_test_id(n: u64) -> Self {
