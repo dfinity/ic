@@ -78,6 +78,9 @@ pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 pub const CFG_TEMPLATE_BYTES: &[u8] =
     include_bytes!("../../../../ic-os/components/ic/ic.json5.template");
 
+// Requests are multiplexed over H2 requests.
+pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
+
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
         .expect("Invalid secret key.")
@@ -790,9 +793,11 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
+    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
     let a = Agent::builder()
-        .with_transport(ReqwestTransport::create_with_client(url, client)?)
+        .with_transport(transport)
         .with_identity(identity)
+        .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
         // behind, for example when the subnet has many modes and the progress of consensus is
@@ -810,6 +815,36 @@ pub async fn agent_with_client_identity(
         .unwrap();
     a.fetch_root_key().await?;
     Ok(a)
+}
+
+/// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
+pub async fn agent_using_call_v2_endpoint(
+    url: &str,
+    addr_mapping: IpAddr,
+) -> Result<Agent, AgentError> {
+    let identity = get_identity();
+    let parsed_url = reqwest::Url::parse(url).expect("is valid url");
+
+    let reqwest = reqwest::Client::builder()
+        .timeout(AGENT_REQUEST_TIMEOUT)
+        .danger_accept_invalid_certs(true)
+        .resolve(
+            parsed_url.domain().expect("url has domain"),
+            (addr_mapping, 0).into(),
+        )
+        .build()
+        .expect("Is valid reqwest client");
+
+    let transport = ReqwestTransport::create_with_client(url, reqwest)?;
+
+    let agent = Agent::builder()
+        .with_transport(transport)
+        .with_identity(identity)
+        .build()
+        .unwrap();
+    agent.fetch_root_key().await?;
+
+    Ok(agent)
 }
 
 // Creates an identity to be used with `Agent`.

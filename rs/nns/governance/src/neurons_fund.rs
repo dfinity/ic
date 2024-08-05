@@ -1744,8 +1744,7 @@ where
                 maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
                 is_capped: Some(neuron.is_capped),
                 controller: Some(neuron.controller),
-                // TODO(NNS1-3199): populate
-                hotkeys: Vec::new(),
+                hotkeys: neuron.hotkeys.clone(),
                 // TODO(NNS1-3198): remove due to the  very misleading name
                 hotkey_principal: Some(neuron.controller),
             })

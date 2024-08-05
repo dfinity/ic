@@ -1,3 +1,4 @@
+use ic00::BitcoinGetBlockHeadersArgs;
 use ic_async_utils::incoming_from_path;
 use ic_base_types::CanisterId;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
@@ -474,6 +475,7 @@ fn mock_bitcoin_canister_wat(network: BitcoinNetwork) -> String {
               (data (i32.const 0) "Hello from {}!")
               (export "canister_update bitcoin_get_balance" (func $ping))
               (export "canister_update bitcoin_get_utxos" (func $ping))
+              (export "canister_update bitcoin_get_block_headers" (func $ping))
               (export "canister_update bitcoin_send_transaction" (func $ping))
               (export "canister_update bitcoin_get_current_fee_percentiles" (func $ping))
             )"#,
@@ -501,6 +503,15 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
                     network,
                     address: String::from(""),
                     filter: None,
+                }
+                .encode(),
+            ),
+            (
+                "bitcoin_get_block_headers",
+                BitcoinGetBlockHeadersArgs {
+                    network,
+                    start_height: 0,
+                    end_height: None,
                 }
                 .encode(),
             ),
@@ -652,6 +663,15 @@ fn requests_are_rejected_if_no_bitcoin_canisters_are_set() {
                     network,
                     address: String::from(""),
                     filter: None,
+                }
+                .encode(),
+            ),
+            (
+                "bitcoin_get_block_headers",
+                BitcoinGetBlockHeadersArgs {
+                    network,
+                    start_height: 0,
+                    end_height: None,
                 }
                 .encode(),
             ),
