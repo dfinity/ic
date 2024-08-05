@@ -843,7 +843,6 @@ pub async fn agent_using_call_v2_endpoint(
     addr_mapping: Option<IpAddr>,
 ) -> Result<Agent, AgentError> {
     let identity = get_identity();
-    let parsed_url = reqwest::Url::parse(url).expect("is valid url");
 
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
