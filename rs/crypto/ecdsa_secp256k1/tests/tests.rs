@@ -286,7 +286,7 @@ i389XZmdlKFbsLkUI9dDQgMP98YnUA==
 
 #[test]
 fn should_match_slip10_derivation_test_data() {
-    /// Test data from https://github.com/satoshilabs/slips/blob/master/slip-0010.md#test-vector-1-for-secp256k1
+    // Test data from https://github.com/satoshilabs/slips/blob/master/slip-0010.md#test-vector-1-for-secp256k1
     let chain_code = hex!("04466b9cc8e161e966409ca52986c584f07e9dc81f735db683c3ff6ec7b1503f");
 
     let private_key = PrivateKey::deserialize_sec1(&hex!(
