@@ -355,7 +355,11 @@ fn key_derivation_matches_bip32() {
 
     let mut derived_keys = Vec::with_capacity(path.len());
     for i in 1..=path.len() {
-        derived_keys.push(master_key.derive_subkey(&DerivationPath::new_bip32(&path[..i])).0);
+        derived_keys.push(
+            master_key
+                .derive_subkey(&DerivationPath::new_bip32(&path[..i]))
+                .0,
+        );
     }
 
     let attrs = bip32::ExtendedKeyAttrs {
@@ -368,7 +372,10 @@ fn key_derivation_matches_bip32() {
     let ext = bip32::ExtendedKey {
         prefix: bip32::Prefix::XPUB,
         attrs,
-        key_bytes: master_key.serialize_sec1(true).try_into().expect("Unexpected size"),
+        key_bytes: master_key
+            .serialize_sec1(true)
+            .try_into()
+            .expect("Unexpected size"),
     };
 
     let bip32_mk = bip32::XPub::try_from(ext).expect("Failed to accept BIP32");
@@ -378,7 +385,10 @@ fn key_derivation_matches_bip32() {
         let derived = bip32_state
             .derive_child(bip32::ChildNumber(*p))
             .expect("Failed to derive child");
-        assert_eq!(derived.to_bytes().to_vec(), derived_keys[i].serialize_sec1(true));
+        assert_eq!(
+            derived.to_bytes().to_vec(),
+            derived_keys[i].serialize_sec1(true)
+        );
         bip32_state = derived;
     }
 }

@@ -485,7 +485,8 @@ impl PrivateKey {
         use k256::NonZeroScalar;
 
         let public_key: AffinePoint = *self.key.verifying_key().as_affine();
-        let (_pt, offset, derived_chain_code) = derivation_path.derive_offset(public_key, chain_code);
+        let (_pt, offset, derived_chain_code) =
+            derivation_path.derive_offset(public_key, chain_code);
 
         let derived_scalar = self.key.as_nonzero_scalar().as_ref().add(&offset);
 
