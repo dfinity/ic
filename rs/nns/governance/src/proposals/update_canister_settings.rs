@@ -1,5 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
+    enable_new_canister_management_topics,
     pb::v1::{
         update_canister_settings::CanisterSettings, GovernanceError, Topic, UpdateCanisterSettings,
     },
@@ -11,7 +12,7 @@ use ic_nns_constants::ROOT_CANISTER_ID;
 
 impl UpdateCanisterSettings {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !cfg!(feature = "test") {
+        if !enable_new_canister_management_topics() {
             return Err(invalid_proposal_error(
                 "UpdateCanisterSettings proposal is not yet supported",
             ));

@@ -1,5 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
+    enable_new_canister_management_topics,
     pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
     proposals::call_canister::CallCanister,
 };
@@ -22,7 +23,7 @@ struct UpgradeRootProposalPayload {
 
 impl InstallCode {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !cfg!(feature = "test") {
+        if !enable_new_canister_management_topics() {
             return Err(invalid_proposal_error(
                 "InstallCode proposal is not yet supported",
             ));

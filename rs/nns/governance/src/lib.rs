@@ -898,5 +898,9 @@ impl NeuronSubsetMetricsPb {
     }
 }
 
+fn enable_new_canister_management_topics() -> bool {
+    cfg!(feature = "test")
+}
+
 #[cfg(test)]
 mod tests;
