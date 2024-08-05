@@ -12,22 +12,21 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::{
-    consensus::tecdsa_performance_test::ChainSignatureRequest,
-    orchestrator::utils::{
-        rw_message::{
-            can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
-            store_message,
-        },
-        subnet_recovery::{enable_chain_key_signing_on_subnet, run_chain_key_signature_test},
-        upgrade::*,
-    },
-    tecdsa::make_key_ids_for_all_schemes,
-};
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message,
+};
+use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
+use ic_consensus_system_test_utils::upgrade::{
+    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    UpdateImageType,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    make_key_ids_for_all_schemes, run_chain_key_signature_test, ChainSignatureRequest,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -54,6 +53,7 @@ const DKG_INTERVAL: u64 = 9;
 
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
+const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
 
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -141,7 +141,7 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
 
     let requests = key_ids
         .iter()
-        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone()))
+        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone(), SCHNORR_MSG_SIZE_BYTES))
         .collect::<Vec<_>>();
 
     let rt: Runtime = Builder::new_multi_thread()

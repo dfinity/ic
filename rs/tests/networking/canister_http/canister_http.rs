@@ -15,6 +15,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::util::{self, create_and_install};
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
+use std::env;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
@@ -47,36 +48,6 @@ pub fn install_nns_canisters(env: &TestEnv) {
         .install(&nns_node, env)
         .expect("NNS canisters not installed");
     info!(&env.logger(), "NNS canisters installed");
-}
-
-// WIP [NNS1-2157]
-pub fn install_mainnet_nns_canisters(env: &TestEnv) {
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .use_mainnet_nns_canisters()
-        .install(&nns_node, env)
-        .expect("Mainnet NNS canisters not installed");
-    info!(&env.logger(), "Mainnet NNS canisters installed");
-}
-
-// WIP [NNS1-2157]
-pub fn install_qualifying_nns_canisters(env: &TestEnv) {
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .use_qualifying_nns_canisters()
-        .install(&nns_node, env)
-        .expect("Qualifying NNS canisters not installed");
-    info!(&env.logger(), "Qualifying NNS canisters installed");
 }
 
 pub fn setup(env: TestEnv) {
@@ -234,7 +205,7 @@ pub fn create_proxy_canister<'a>(
     let proxy_canister_id = rt.block_on(create_and_install(
         &node.build_default_agent(),
         node.effective_canister_id(),
-        &env.load_wasm("rs/rust_canisters/proxy_canister/proxy_canister.wasm"),
+        &env.load_wasm(env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set")),
     ));
     info!(
         &env.logger(),

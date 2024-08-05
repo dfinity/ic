@@ -2020,3 +2020,271 @@ fn best_effort_responses_valid_timeout() {
         expected_deadline_seconds,
     );
 }
+
+#[test]
+fn test_malicious_input() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(
+            r#"(module
+                  (import "ic0" "msg_reply" (func $msg_reply))
+                  (import "ic0" "msg_reply_data_append"
+                    (func $msg_reply_data_append (param i32) (param i32)))
+                  (import "ic0" "msg_arg_data_size"
+                    (func $msg_arg_data_size (result i32)))
+                  (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32) (param i32) (param i32)))
+                  (import "ic0" "msg_caller_size"
+                    (func $msg_caller_size (result i32)))
+                  (import "ic0" "msg_caller_copy"
+                    (func $msg_caller_copy (param i32) (param i32) (param i32)))
+                  (import "ic0" "data_certificate_copy"
+                    (func $data_certificate_copy (param i32) (param i32) (param i32)))
+                  (import "ic0" "data_certificate_size"
+                    (func $data_certificate_size (result i32)))
+                  (import "ic0" "data_certificate_present"
+                    (func $data_certificate_present (result i32)))
+                  (import "ic0" "certified_data_set"
+                    (func $certified_data_set (param i32) (param i32)))
+                  (import "ic0" "call_new"
+                    (func $ic0_call_new
+                    (param i32 i32)
+                    (param $method_name_src i32)    (param $method_name_len i32)
+                    (param $reply_fun i32)          (param $reply_env i32)
+                    (param $reject_fun i32)         (param $reject_env i32)
+                  ))
+                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+    
+                  (func $proxy_msg_reply_data_append
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
+                    (call $msg_reply_data_append (i32.load (i32.const 0)) (i32.load (i32.const 4)))
+                    (call $msg_reply))
+    
+                  (func $proxy_msg_arg_data_copy_from_buffer_without_input
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
+    
+                  (func $proxy_msg_arg_data_copy_to_oob_buffer
+                    (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
+                    (call $msg_reply))
+    
+                  (func $proxy_msg_arg_data_copy_return_last_4_bytes
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 65536))
+                    (call $msg_reply_data_append (i32.const 65532) (i32.const 4))
+                    (call $msg_reply))
+    
+                  ;; All the function below are not used
+                  (func $proxy_data_certificate_present
+                    (i32.const 0)
+                    (call $data_certificate_present)
+                    (i32.store)
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                    (call $msg_reply))
+    
+                  (func $proxy_certified_data_set
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
+                    (call $certified_data_set (i32.const 0) (call $msg_arg_data_size))
+                    (call $msg_reply_data_append (i32.const 0) (call $msg_arg_data_size))
+                    (call $msg_reply))
+    
+                  (func $proxy_data_certificate_copy
+                    (call $data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 32))
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 32))
+                    (call $msg_reply))
+    
+                  (func $f_100 (result i32)
+                    i32.const 100)
+                  (func $f_200 (result i32)
+                    i32.const 200)
+    
+                  (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
+                  (func $callByIndex
+                    (i32.const 0)
+                    (call_indirect (type $return_i32) (i32.const 0))
+                    (i32.store)
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                    (call $msg_reply))
+    
+                  (table funcref (elem $f_100 $f_200))
+                  (memory $memory 1)
+                  (export "memory" (memory $memory))
+                  (export "canister_query callByIndex" (func $callByIndex))
+                  (export "canister_query proxy_msg_reply_data_append" (func $proxy_msg_reply_data_append))
+                  (export "canister_query proxy_msg_arg_data_copy_from_buffer_without_input" (func $proxy_msg_arg_data_copy_from_buffer_without_input))
+                  (export "canister_query proxy_msg_arg_data_copy_to_oob_buffer" (func $proxy_msg_arg_data_copy_to_oob_buffer))
+                  (export "canister_query proxy_data_certificate_present" (func $proxy_data_certificate_present))
+                  (export "canister_update proxy_certified_data_set" (func $proxy_certified_data_set))
+                  (export "canister_query proxy_data_certificate_copy" (func $proxy_data_certificate_copy))
+                  )"#,
+        ).unwrap();
+
+    let canister_id = create_canister_with_cycles(&env, wasm.clone(), None, INITIAL_CYCLES_BALANCE);
+
+    helper_tests_for_illegal_wasm_memory_access(&env, &canister_id);
+
+    helper_tests_for_stale_data_in_buffer_between_calls(&env, &canister_id);
+
+    helper_tests_for_illegal_data_buffer_access(&env, &canister_id);
+}
+
+fn helper_tests_for_illegal_wasm_memory_access(env: &StateMachine, canister_id: &CanisterId) {
+    // msg_reply_data_append(0, 65536) => expect no error
+    let ret_val = env.query(
+        *canister_id,
+        "proxy_msg_reply_data_append",
+        vec![0, 0, 0, 0, 0, 0, 1, 0],
+    );
+
+    assert!(
+        ret_val.is_ok(),
+        "msg_reply_data_append(0, 65536) failed. Error: {}",
+        ret_val.unwrap_err()
+    );
+
+    // msg_reply_data_append(0, 65537) => expect no error
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_reply_data_append",
+            vec![0, 0, 0, 0, 1, 0, 1, 0],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str =
+        "violated contract: msg.reply: src=0 + length=65537 exceeds the slice size=65536";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "expected msg_reply_data_append(0, 65537) to fail"
+    );
+
+    // msg_reply_data_append(65536, 10) => expect error
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_reply_data_append",
+            vec![0, 0, 1, 0, 10, 0, 0, 0],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str =
+        "violated contract: msg.reply: src=65536 + length=10 exceeds the slice size=65536";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "expected msg_reply_data_append(65536, 10) to fail"
+    );
+}
+
+fn helper_tests_for_stale_data_in_buffer_between_calls(
+    env: &StateMachine,
+    canister_id: &CanisterId,
+) {
+    // Between every query the input data buffer is expected to be reset
+    // and no stale data from previous query can be found. The following
+    // test check this case
+    let mut input = vec![10; (32 * 1024) + 8];
+    for i in input.iter_mut().take(8) {
+        *i = 0;
+    }
+    input[0] = 8; //bytes 0x00 0x00 0x00 0x08 start index = 8 - Little Endian
+    input[5] = 128; //bytes 0x00 0x00 0x80 0x00 size = 32768 - Little Endian
+    let ret_val = env.query(*canister_id, "proxy_msg_reply_data_append", input);
+
+    assert!(
+        ret_val.is_ok(),
+        "Check for stale data step 1 failed. Error: {}",
+        ret_val.unwrap_err()
+    );
+
+    let data = match ret_val.unwrap() {
+        WasmResult::Reply(data) => data,
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+    };
+
+    assert_eq!(
+        [10, 10, 10, 10],
+        &data[0..4],
+        "first read - expected [10, 10, 10, 10] at data index 0 to 4 {:?}",
+        &data[0..4]
+    );
+    assert_eq!(
+        [10, 10, 10, 10],
+        &data[32764..32768],
+        "first read - expected [10, 10, 10, 10] at data index 32765 to 32768 {:?}",
+        &data[32764..32768]
+    );
+
+    let ret_val = env.query(
+        *canister_id,
+        "proxy_msg_reply_data_append",
+        vec![8, 0, 0, 0, 0, 128, 0, 0],
+    );
+
+    assert!(
+        ret_val.is_ok(),
+        "Check for stale data step 2 failed. Error: {}",
+        ret_val.unwrap_err()
+    );
+
+    let data = match ret_val.unwrap() {
+        WasmResult::Reply(data) => data,
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+    };
+
+    assert_eq!(
+        [0, 0, 0, 0],
+        &data[0..4],
+        "second read - stale data present, expected [0, 0, 0, 0] at data index 0 to 4 {:?}",
+        &data[0..4]
+    );
+    assert_eq!(
+        [0, 0, 0, 0],
+        &data[32764..32768],
+        "second read - stale data present, expected [0, 0, 0, 0] at data index 32765 to 32768 {:?}",
+        &data[32764..32768]
+    );
+}
+
+fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: &CanisterId) {
+    // No input given but still read the input buffer
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_arg_data_copy_from_buffer_without_input",
+            vec![],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str = "violated contract: ic0.msg_arg_data_copy payload: src=0 + length=10 exceeds the slice size=0";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "Should return error if try to read input buffer on no input"
+    );
+
+    // copy data from argument buffer to out of bound internal buffer
+    let ret_val = env
+        .query(
+            *canister_id,
+            "proxy_msg_arg_data_copy_to_oob_buffer",
+            vec![1; 10],
+        )
+        .unwrap_err();
+
+    assert_eq!(ret_val.code(), ErrorCode::CanisterContractViolation);
+
+    let containing_str = "violated contract: ic0.msg_arg_data_copy heap: src=65536 + length=10 exceeds the slice size=65536";
+
+    assert!(
+        ret_val.description().contains(containing_str),
+        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
+    );
+}

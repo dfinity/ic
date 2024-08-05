@@ -7,8 +7,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmR
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, NnsCanisterWasmStrategy, NnsInstallationBuilder, SubnetSnapshot,
-    TopologySnapshot,
+    IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_types::SubnetId;
@@ -34,8 +33,6 @@ const EXCLUDED: &[&str] = &[
 ];
 
 pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
-    use hyper::Client;
-    use hyper_rustls::HttpsConnectorBuilder;
     use ic_system_test_driver::driver::test_env_api::secs;
     use ic_system_test_driver::util::block_on;
     use std::env;
@@ -74,7 +71,6 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             .next()
             .unwrap();
         NnsInstallationBuilder::new()
-            .with_canister_wasm_strategy(NnsCanisterWasmStrategy::TakeBuiltFromSources)
             .install(&nns_node, &env)
             .expect("NNS canisters not installed");
         info!(env.logger(), "NNS canisters are installed.");
@@ -119,24 +115,18 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             secs(10),
             || {
                 block_on(async {
-                    let https_connector = HttpsConnectorBuilder::new()
-                        .with_native_roots()
-                        .https_only()
-                        .enable_http1()
-                        .build();
-                    let client = Client::builder().build::<_, hyper::Body>(https_connector);
+                    let client = reqwest::Client::builder()
+                        .use_rustls_tls()
+                        .https_only(true)
+                        .http1_only()
+                        .build()?;
 
                     let webserver_ipv6 = get_universal_vm_address(&env);
                     let httpbin = format!("https://[{webserver_ipv6}]:20443");
-                    let req = hyper::Request::builder()
-                        .method(hyper::Method::GET)
-                        .uri(httpbin)
-                        .body(hyper::Body::from(""))?;
 
-                    let resp = client.request(req).await?;
+                    let resp = client.get(httpbin).send().await?;
 
-                    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-                    let body = String::from_utf8(body_bytes.to_vec()).unwrap();
+                    let body = String::from_utf8(resp.bytes().await?.to_vec()).unwrap();
 
                     info!(log, "response body from httpbin: {}", body);
 

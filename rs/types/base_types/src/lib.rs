@@ -116,6 +116,15 @@ pub enum SnapshotIdError {
     InvalidFormat(String),
 }
 
+impl fmt::Display for SnapshotIdError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidLength(err) => write!(f, "Invalid length of SnapshotId: {}", err),
+            Self::InvalidFormat(err) => write!(f, "Invalid format of SnapshotId: {}", err,),
+        }
+    }
+}
+
 /// A type representing a canister's snapshot ID.
 /// The ID is unique across all subnets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

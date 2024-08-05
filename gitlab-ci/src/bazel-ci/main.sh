@@ -12,7 +12,7 @@ if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     s3_upload="True"
 fi
 
-if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.+-rc--.+ ]]; then
+if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
 fi
@@ -28,15 +28,6 @@ if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]] || [[ "${C
     s3_upload="True"
 fi
 
-if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
-    && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
-    && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
-    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
-    # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
-fi
-
-# github logic
 if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
@@ -68,10 +59,6 @@ else
     echo '$AWS_SHARED_CREDENTIALS_CONTENT or $AWS_SHARED_CREDENTIALS_FILE has to be set' >&2
     exit 1
 fi
-
-GITLAB_TOKEN="${HOME}/.gitlab/api_token"
-mkdir -p "$(dirname "${GITLAB_TOKEN}")"
-echo "${GITLAB_API_TOKEN:-}" >"${GITLAB_TOKEN}"
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"

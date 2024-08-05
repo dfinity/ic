@@ -348,6 +348,10 @@ pub(crate) fn syscalls<
                     })
             })
             .and_then(|mem| {
+                // False positive clippy lint.
+                // Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+                // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+                #[allow(clippy::needless_borrows_for_generic_args)]
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
                 f(store.system_api_mut()?, mem)
             })
@@ -616,11 +620,7 @@ pub(crate) fn syscalls<
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
-                let canister_logging_is_enabled =
-                    feature_flags.canister_logging == FlagStatus::Enabled;
-                if canister_logging_is_enabled {
-                    num_bytes += logging_charge_bytes(&mut caller, length)?
-                }
+                num_bytes += logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
@@ -629,12 +629,7 @@ pub(crate) fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length = length as usize;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.save_log_message(
-                        canister_logging_is_enabled,
-                        offset,
-                        length,
-                        memory,
-                    );
+                    system_api.save_log_message(offset, length, memory);
                     if debug_print_is_enabled {
                         system_api.ic0_debug_print(offset, length, memory)
                     } else {
@@ -685,22 +680,8 @@ pub(crate) fn syscalls<
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     // A valid function index should be much smaller than u32::max
-                    let reply_fun: u32 = reply_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reply function index out of bounds: {}",
-                                reply_fun
-                            ),
-                        }
-                    })?;
-                    let reject_fun: u32 = reject_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reject function index out of bounds: {}",
-                                reject_fun
-                            ),
-                        }
-                    })?;
+                    let reply_fun: u32 = reply_fun.try_into().unwrap_or(u32::MAX);
+                    let reject_fun: u32 = reject_fun.try_into().unwrap_or(u32::MAX);
                     system_api.ic0_call_new(
                         callee_src,
                         callee_size,
@@ -741,14 +722,7 @@ pub(crate) fn syscalls<
                 charge_for_cpu(&mut caller, overhead::CALL_ON_CLEANUP)?;
                 with_system_api(&mut caller, |s| {
                     // A valid function index should be much smaller than u32::max
-                    let fun: u32 = fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_on_cleanup: function index out of bounds: {}",
-                                fun
-                            ),
-                        }
-                    })?;
+                    let fun: u32 = fun.try_into().unwrap_or(u32::MAX);
                     s.ic0_call_on_cleanup(fun, env)
                 })
             }

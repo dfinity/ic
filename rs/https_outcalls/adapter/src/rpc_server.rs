@@ -1,11 +1,11 @@
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_BODY_RECEIVE_TIMEOUT, LABEL_CONNECT,
-    LABEL_DOWNLOAD, LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME,
-    LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
+    LABEL_DOWNLOAD, LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS,
+    LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use byte_unit::Byte;
 use core::convert::TryFrom;
-use http::{header::USER_AGENT, uri::Scheme, HeaderName, HeaderValue, Uri};
+use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use hyper::{
     client::HttpConnector,
     header::{HeaderMap, ToStrError},
@@ -79,7 +79,9 @@ impl CanisterHttpService for CanisterHttp {
             )
         })?;
 
-        if uri.scheme() != Some(&Scheme::HTTPS) {
+        #[cfg(not(feature = "http"))]
+        if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {
+            use crate::metrics::LABEL_HTTP_SCHEME;
             debug!(
                 self.logger,
                 "Got request with no or http scheme specified. {}", uri

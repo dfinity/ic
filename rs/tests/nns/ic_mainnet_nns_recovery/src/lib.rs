@@ -15,6 +15,9 @@ use dfn_candid::candid_one;
 use flate2::read::GzDecoder;
 use ic_canister_client::Sender;
 use ic_canister_client_sender::{Ed25519KeyPair, SigKeys};
+use ic_consensus_system_test_utils::{
+    rw_message::install_nns_with_customizations_and_check_progress, set_sandbox_env_vars,
+};
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::NnsFunction;
@@ -33,8 +36,7 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
-            SshSession, TopologySnapshot,
+            IcNodeContainer, IcNodeSnapshot, NnsCustomizations, SshSession, TopologySnapshot,
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
@@ -43,10 +45,6 @@ use ic_system_test_driver::{
         submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
     },
     util::{block_on, runtime_from_url},
-};
-use ic_tests::orchestrator::utils::{
-    rw_message::install_nns_with_customizations_and_check_progress,
-    subnet_recovery::set_sandbox_env_vars,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use icp_ledger::AccountIdentifier;
@@ -446,7 +444,6 @@ fn setup_ic(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 }

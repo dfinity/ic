@@ -36,6 +36,7 @@
 
 use anyhow::Result;
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::{
@@ -44,16 +45,13 @@ use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use ic_tests::nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
     set_authorized_subnets, set_sns_subnet,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use slog::info;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
@@ -78,7 +76,6 @@ pub fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
@@ -117,7 +114,7 @@ pub fn setup(env: TestEnv) {
     );
     set_authorized_subnets(&env);
     set_sns_subnet(&env, sns_subnet.subnet_id);
-    add_all_wasms_to_sns_wasm(&env, NnsCanisterWasmStrategy::TakeBuiltFromSources);
+    add_all_wasms_to_sns_wasm(&env);
 
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

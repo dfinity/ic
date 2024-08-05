@@ -40,7 +40,9 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/sns/root",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
+    "//rs/utils",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
@@ -74,16 +76,20 @@ BASE_DEPENDENCIES = [
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/constants",
+    "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/sns/init",
+    "//rs/nns/governance/init",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/constants:constants--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
+    "//rs/nns/governance/init:init--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -257,7 +263,6 @@ generated_files_check(
         ":protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
-        "//rs/nns/governance/api:src",
         "//rs/rosetta-api/icp_ledger:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",

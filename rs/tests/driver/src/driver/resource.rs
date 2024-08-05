@@ -2,7 +2,6 @@ use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
 use anyhow::{self, bail};
-use flate2::{write::GzEncoder, Compression};
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
@@ -13,6 +12,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use url::Url;
+use zstd::stream::write::Encoder;
 
 use crate::driver::farm::FarmResult;
 use crate::driver::farm::FileId;
@@ -44,14 +44,14 @@ pub struct ResourceRequest {
     pub vm_configs: Vec<VmSpec>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct DiskImage {
     pub image_type: ImageType,
     pub url: Url,
     pub sha256: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub enum ImageType {
     IcOsImage,
     PrometheusImage,
@@ -215,7 +215,7 @@ pub fn get_resource_request_for_nested_nodes(
 
     // Build and upload an empty image.
     // TODO: This is temporary until farm can do this natively.
-    let empty_image_name = "empty.img.tar.gz";
+    let empty_image_name = "empty.img.tar.zst";
     let tmp_dir = tempfile::tempdir().unwrap();
     let empty_image = build_empty_image(tmp_dir.path(), empty_image_name)?;
     let image_id = farm.upload_file(group_name, empty_image, empty_image_name)?;
@@ -481,7 +481,7 @@ pub fn build_empty_image(tmp_dir: &Path, out_file_name: &str) -> anyhow::Result<
 
     let mut tar_file = File::open(tar_path)?;
     let compressed_img_file = File::create(&compressed_img_path)?;
-    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut tar_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
