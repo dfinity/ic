@@ -16,10 +16,14 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
-    get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-    CreateServiceNervousSystem, Neuron,
+use ic_nns_governance::{
+    neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
+    pb::v1::{
+        create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
+        get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
+        settle_neurons_fund_participation_response::NeuronsFundNeuron, CreateServiceNervousSystem,
+        Neuron,
+    },
 };
 use ic_sns_governance::{governance::TREASURY_SUBACCOUNT_NONCE, pb::v1 as sns_pb};
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
@@ -57,8 +61,8 @@ struct DirectParticipantConfig {
 /// end by calling this function, instantiating it with a set of parameter values that define
 /// a particular testing scenario. If this function panics, the test fails. Otherwise, it succeeds.
 ///
-/// The direct participants represented by `direct_participant_principal_ids` participate with
-/// `maximum_direct_participation_icp / N` each, where `N==direct_participant_principal_ids.len()`.
+/// The direct participants represented by `direct_participants` participate with
+/// `maximum_direct_participation_icp / N` each, where `N==direct_participants.len()`.
 ///
 /// At a high level, the following aspects of an SNS are covered in this function:
 /// 1. Basic properties on an SNS instance:
@@ -131,7 +135,7 @@ struct DirectParticipantConfig {
 fn test_sns_lifecycle(
     ensure_swap_timeout_is_reached: bool,
     create_service_nervous_system: CreateServiceNervousSystem,
-    direct_participant_principal_ids: BTreeMap<PrincipalId, DirectParticipantConfig>,
+    direct_participants: BTreeMap<PrincipalId, DirectParticipantConfig>,
 ) {
     // 0. Deconstruct and clone some immutable objects for convenience.
     let initial_token_distribution = create_service_nervous_system
@@ -217,13 +221,13 @@ fn test_sns_lifecycle(
         .build();
 
     let participation_amount_per_direct_participant_icp = Tokens::from_e8s(
-        (max_direct_participation_icp_e8s / (direct_participant_principal_ids.len() as u64))
+        (max_direct_participation_icp_e8s / (direct_participants.len() as u64))
             + DEFAULT_TRANSFER_FEE.get_e8s(),
     );
     // Sanity check
     assert!(participation_amount_per_direct_participant_icp.get_e8s() >= min_participant_icp_e8s);
 
-    let direct_participants: BTreeMap<PrincipalId, _> = direct_participant_principal_ids
+    let direct_participants: BTreeMap<PrincipalId, _> = direct_participants
         .iter()
         .map(|(direct_participant, direct_participant_config)| {
             (
@@ -1225,6 +1229,7 @@ fn test_sns_lifecycle(
         );
     }
 
+    // Keys are principals of controllers of the Neurons' Fund-participating NNS neuron.
     let neurons_fund_neuron_controllers_to_neuron_portions: BTreeMap<
         PrincipalId,
         NeuronsFundNeuronPortion,
@@ -1286,8 +1291,7 @@ fn test_sns_lifecycle(
             if swap_finalization_status == SwapFinalizationStatus::Committed {
                 // Direct and Neurons' Fund participants are only expected to get their SNS neurons
                 // in case the swap succeeds.
-                expected_neuron_controller_principal_ids
-                    .extend(direct_participant_principal_ids.keys());
+                expected_neuron_controller_principal_ids.extend(direct_participants.keys());
 
                 // Note that we include SNS neuron hotkeys into the set of expected controllers. For
                 // the Neuron's Fund participants, we could make a stricted check that would assert
@@ -1457,7 +1461,46 @@ fn test_sns_lifecycle(
                                 permission_type: claimer_permissions.permissions.clone(),
                             }]
                         } else {
-                            sorted_permissions(&[
+                            let prototype_nns_neuron_of_this_sns_neuron =
+                                nns_controller_to_neurons_fund_neurons
+                                    .get(principal_id)
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                        "There should be an NNS neuron controlled by the Neurons' \
+                                        Fund user {}", principal_id,
+                                    )
+                                    })
+                                    .iter()
+                                    .filter(|nns_neurons| {
+                                        sns_neuron.source_nns_neuron_id.unwrap()
+                                            == nns_neurons.id.unwrap().id
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .pop()
+                                    .expect(
+                                        "There should be exactly 1 NNS neuron for an SNS neuron",
+                                    );
+
+                            let relevant_hotkeys = pick_most_important_hotkeys(
+                                &prototype_nns_neuron_of_this_sns_neuron.hot_keys,
+                            );
+
+                            let mut expected_permissions = relevant_hotkeys
+                                .into_iter()
+                                .map(|hotkey_principal_id| sns_pb::NeuronPermission {
+                                    principal: Some(hotkey_principal_id),
+                                    permission_type: vec![
+                                        sns_pb::NeuronPermissionType::SubmitProposal as i32,
+                                        sns_pb::NeuronPermissionType::Vote as i32,
+                                    ],
+                                })
+                                .collect::<Vec<_>>();
+
+                            expected_permissions.extend([
+                                sns_pb::NeuronPermission {
+                                    principal: Some(GOVERNANCE_CANISTER_ID.get()),
+                                    permission_type: claimer_permissions.permissions.clone(),
+                                },
                                 sns_pb::NeuronPermission {
                                     principal: Some(*principal_id),
                                     permission_type: vec![
@@ -1466,11 +1509,9 @@ fn test_sns_lifecycle(
                                         sns_pb::NeuronPermissionType::Vote as i32,
                                     ],
                                 },
-                                sns_pb::NeuronPermission {
-                                    principal: Some(GOVERNANCE_CANISTER_ID.get()),
-                                    permission_type: claimer_permissions.permissions.clone(),
-                                },
-                            ])
+                            ]);
+
+                            sorted_permissions(&expected_permissions)
                         };
                         assert_eq!(
                             sorted_permissions(&sns_neuron.permissions),
@@ -1611,8 +1652,7 @@ fn test_sns_lifecycle(
             } else {
                 assert_eq!(
                     direct_participant_sns_neuron_recipes.len() as u128,
-                    (sns_neurons_per_backet as u128)
-                        * (direct_participant_principal_ids.len() as u128)
+                    (sns_neurons_per_backet as u128) * (direct_participants.len() as u128)
                 );
             }
         }

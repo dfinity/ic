@@ -101,6 +101,17 @@ impl GovernanceCanisterInitPayloadBuilder {
             Neuron {
                 id: Some(neuron_id),
                 controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                hot_keys: (0..20)
+                    .map(|i: u64| {
+                        if i % 2 == 0 {
+                            // Model some self-authenticating hotkeys.
+                            PrincipalId::new_self_authenticating(&i.to_be_bytes())
+                        } else {
+                            // Model some non-self-authenticating hotkeys.
+                            PrincipalId::new_user_test_id(i)
+                        }
+                    })
+                    .collect(),
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
                 cached_neuron_stake_e8s: 1_000_000_000, /* invariant: part of
                                                          * TEST_NEURON_TOTAL_STAKE_E8S */
