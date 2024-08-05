@@ -1633,7 +1633,7 @@ impl Swap {
                 Ok(neuron_recipe) => {
                     let neuron_id = neuron_recipe.neuron_id.clone().expect(
                         "NeuronRecipe.neuron_id is always set by \
-                        SnsNeuronRecipe::to_sns_neuron_recipe",
+                        SnsNeuronRecipe::to_neuron_recipe",
                     );
                     claimable_neurons_index.insert(neuron_id, recipe);
                     neuron_recipes.push(neuron_recipe);
