@@ -35,7 +35,7 @@ use ic_rosetta_test_utils::{
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
+    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use ic_system_test_driver::util::block_on;
 use ic_types::{messages::Blob, CanisterId};
@@ -158,9 +158,6 @@ pub fn test_everything(env: TestEnv) {
             .await
             .unwrap();
         assert_eq!(dummy_canister.canister_id(), REGISTRY_CANISTER_ID);
-
-        env.set_nns_canisters_env_vars()
-            .expect("Failed to set environment variables pointing to the NNS canisters WASMs!");
 
         info!(log, "Installing governance canister");
         let governance_future =

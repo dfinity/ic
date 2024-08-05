@@ -83,7 +83,7 @@ impl NeuronMetrics {
     }
 
     fn increment_public_neuron_subset_metrics(&mut self, now_seconds: u64, neuron: &Neuron) {
-        let is_public = neuron.visibility == Some(Visibility::Public);
+        let is_public = neuron.visibility() == Some(Visibility::Public);
         if !is_public {
             return;
         }
