@@ -220,8 +220,8 @@ name = "ic-systest-rosetta-network-test"
 path = "financial_integrations/rosetta/rosetta_network_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-neuron-disbourse-test"
-path = "financial_integrations/rosetta/rosetta_neuron_disbourse_test.rs"
+name = "ic-systest-rosetta-neuron-disburse-test"
+path = "financial_integrations/rosetta/rosetta_neuron_disburse_test.rs"
 
 [[bin]]
 name = "ic-systest-rosetta-neuron-dissolve-test"

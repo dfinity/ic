@@ -3,6 +3,7 @@ use crate::{
     canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
     PageMap,
 };
+use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
 use ic_wasm_types::CanisterModule;
 
@@ -336,8 +337,22 @@ impl CanisterSnapshot {
         &self.certified_data
     }
 
+    /// Returns the heap delta produced by this snapshot.
+    ///
+    /// The heap delta includes the delta of the wasm memory, stable memory and
+    /// the chunk store, i.e. the snapshot parts that are backed by `PageMap`s.
     pub fn heap_delta(&self) -> NumBytes {
-        self.heap_delta
+        let delta_pages = self
+            .execution_snapshot
+            .wasm_memory
+            .page_map
+            .num_delta_pages()
+            + self
+                .execution_snapshot
+                .stable_memory
+                .page_map
+                .num_delta_pages();
+        NumBytes::from((delta_pages * PAGE_SIZE) as u64) + self.chunk_store.heap_delta()
     }
 }
 

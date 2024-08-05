@@ -962,6 +962,11 @@ impl Action {
                 }
                 Action::ExecuteNnsFunction(execute_nns_function)
             }
+            Action::InstallCode(mut install_code) => {
+                install_code.wasm_module = None;
+                install_code.arg = None;
+                Action::InstallCode(install_code)
+            }
             action => action,
         }
     }
@@ -3646,13 +3651,16 @@ impl Governance {
         let voting_period_seconds = self.voting_period_seconds()(topic);
         let reward_status = data.reward_status(now_seconds, voting_period_seconds);
 
-        // If this is part of a "multi" query and an ExecuteNnsFunction
-        // proposal then remove the payload if the payload is larger
-        // than EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX.
+        // For multi-queries, large fields such as WASM blobs need to be omitted. Otherwise the
+        // message limit will be exceeded.
         let proposal = if multi_query {
             if let Some(
                 proposal @ Proposal {
-                    action: Some(proposal::Action::ExecuteNnsFunction(_)),
+                    action:
+                        Some(
+                            proposal::Action::ExecuteNnsFunction(_)
+                            | proposal::Action::InstallCode(_),
+                        ),
                     ..
                 },
             ) = data.proposal.clone()
