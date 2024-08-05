@@ -1639,11 +1639,12 @@ impl Swap {
                     neuron_recipes.push(neuron_recipe);
                 }
                 Err((error_type, error_message)) => {
-                    // In the case of a bug due to programmer error, increment the invalid field.
                     log!(ERROR, "Error creating neuron recipe: {:?}", error_message);
                     match error_type {
+                        // In the case of a bug due to programmer error, increment the invalid field.
                         ConversionError::Invalid => sweep_result.invalid += 1,
-                        ConversionError::Skip => sweep_result.skipped += 1,
+                        // If we've already processed ths neuron, increment the `skip` field.
+                        ConversionError::AlreadyProcessed => sweep_result.skipped += 1,
                     }
                 }
             }
@@ -3366,7 +3367,7 @@ fn create_sns_neuron_basket_for_neurons_fund_participant(
 
 enum ConversionError {
     Invalid,
-    Skip,
+    AlreadyProcessed,
 }
 
 impl SnsNeuronRecipe {
@@ -3439,7 +3440,7 @@ impl SnsNeuronRecipe {
             match claimed_status {
                 ClaimedStatus::Success => {
                     return Err((
-                        ConversionError::Skip,
+                        ConversionError::AlreadyProcessed,
                         format!(
                             "Recipe {:?} was claimed in previous invocation of \
                              claim_swap_neurons(). Skipping",
@@ -3473,12 +3474,11 @@ impl SnsNeuronRecipe {
 
         let (participant, controller) = match investor {
             Investor::Direct(DirectInvestment { buyer_principal }) => {
-                let parsed_buyer_principal = match string_to_principal(&buyer_principal) {
+                let parsed_buyer_principal = match string_to_principal(buyer_principal) {
                     Some(p) => p,
                     // principal_str should always be parseable as a PrincipalId as that is enforced
-                    // in `refresh_buyer_tokens`. In the case of a bug due to programmer error,
-                    // increment the invalid field. This will require a manual intervention via
-                    // an upgrade to correct.
+                    // in `refresh_buyer_tokens`. This is the result of a bug due to programmer error
+                    // and will require a manual intervention via an upgrade to correct.
                     None => {
                         return Err((
                             ConversionError::Invalid,
@@ -3522,7 +3522,7 @@ impl SnsNeuronRecipe {
         )));
 
         let followees = followees
-            .into_iter()
+            .iter()
             .filter_map(|neuron_id| match neuron_id.clone().try_into() {
                 Ok(neuron_id) => Some(neuron_id),
                 Err(err) => {
