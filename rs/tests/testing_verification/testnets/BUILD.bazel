@@ -94,7 +94,7 @@ system_test_nns(
 system_test_nns(
     name = "small_with_query_stats",
     env = {
-        "ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
