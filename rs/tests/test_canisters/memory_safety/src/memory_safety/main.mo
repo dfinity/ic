@@ -1,25 +1,24 @@
-import P "mo:base/Prelude";
-import Array "mo:base/Array";
 import Nat "mo:base/Nat";
+import Nat8 "mo:base/Nat8";
 import Iter "mo:base/Iter";
 import Prim "mo:prim";
 
 actor {
-    var myarray : [var Word8] = [var];
+    var myarray : [var Nat8] = [var];
     var arraysize : Nat = 4096;
     var arraysize_to_write : Nat = 4096;
     var trap : Bool = false;
 
     public func init_array(size : Nat) {
         arraysize := size;
-        myarray := Prim.Array_init<Word8>(arraysize, 0);
+        myarray := Prim.Array_init<Nat8>(arraysize, 0);
     };
 
     public query func get_current_size() : async Nat {
         return arraysize_to_write;
     };
 
-    public func query_and_update(val : Word8, size : Nat) : async Nat {
+    public func query_and_update(val : Nat8, size : Nat) : async Nat {
         if (myarray.size() == 0) {
             Prim.debugPrint("array not initialized, initializing");
             return 0
@@ -47,7 +46,7 @@ actor {
 
             var hi = myarray[arraysize_to_write];
             var lo = myarray[0];
-            Prim.debugPrint("Array before processing" # Nat.toText(Prim.word8ToNat(lo)) # " " # Nat.toText(Prim.word8ToNat(hi)));
+            Prim.debugPrint("Array before processing" # Nat.toText(Nat8.toNat(lo)) # " " # Nat.toText(Nat8.toNat(hi)));
 
             hi += 1;
 
@@ -60,7 +59,7 @@ actor {
 
             hi := myarray[arraysize_to_write];
             lo := myarray[0];
-            Prim.debugPrint("Array after processing" # Nat.toText(Prim.word8ToNat(lo)) # " " # Nat.toText(Prim.word8ToNat(hi)));
+            Prim.debugPrint("Array after processing" # Nat.toText(Nat8.toNat(lo)) # " " # Nat.toText(Nat8.toNat(hi)));
             
             Prim.debugPrint("trapping");
             assert false;
@@ -81,7 +80,7 @@ actor {
         };
 
         for (i in Iter.range(1, arraysize-1)) {
-            sum += Prim.word8ToNat(myarray[i]);  
+            sum += Nat8.toNat(myarray[i]);
         };
 
         // return "Sum is : " # Nat.toText(sum) # "!";
@@ -99,7 +98,7 @@ actor {
         };
 
         for (i in Iter.range(1, arraysize-1)) {
-            sum += Prim.word8ToNat(myarray[i]);  
+            sum += Nat8.toNat(myarray[i]);
         };
 
         Prim.debugPrint("trapping");
