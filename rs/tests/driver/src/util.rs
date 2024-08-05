@@ -742,6 +742,7 @@ pub async fn assert_create_agent(url: &str) -> Agent {
 /// asynchronous V2 call endpoint.
 pub async fn assert_create_agent_using_call_v2(url: &str) -> Agent {
     let start = Instant::now();
+    // The root key might not be ready yet, so we retry until it is.
     while start.elapsed() < READY_WAIT_TIMEOUT {
         if let Ok(agent) = agent_using_call_v2_endpoint(url, None).await {
             return agent;
