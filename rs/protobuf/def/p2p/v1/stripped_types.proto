@@ -4,10 +4,12 @@ package p2p.v1;
 
 import "types/v1/artifact.proto";
 import "types/v1/consensus.proto";
+import "types/v1/dkg.proto";
+import "types/v1/idkg.proto";
 import "types/v1/types.proto";
 
 message StrippedBlockProposal {
-  types.v1.Block stripped_block = 1;
+  StrippedBlock stripped_block = 1;
   /// Hash of the pre-stripped block
   bytes hash = 2;
   /// Signature of the pre-stripped block
@@ -25,4 +27,35 @@ message StrippedConsensusMessage {
 
 message StrippedConsensusMessageId  {
   types.v1.ConsensusMessageId unstripped_id = 1;
+}
+
+message StrippedBlock {
+  string version = 1;
+  bytes parent = 2;
+  types.v1.DkgPayload dkg_payload = 3;
+  uint64 height = 4;
+  uint64 rank = 5;
+  // ValidationContext
+  uint64 time = 6;
+  uint64 registry_version = 7;
+  uint64 certified_height = 8;
+  // Payloads
+  StrippedIngressPayload ingress_payload = 9;
+  types.v1.XNetPayload xnet_payload = 10;
+  bytes payload_hash = 11;
+  types.v1.SelfValidatingPayload self_validating_payload = 12;
+  types.v1.IDkgPayload idkg_payload = 13;
+  bytes canister_http_payload_bytes = 15;
+  bytes query_stats_payload_bytes = 16;
+}
+
+message IngressMessage {
+  uint64 expiry = 1;
+  bytes message_id = 2;
+  // can be empty
+  bytes ingress_message = 3;
+}
+
+message StrippedIngressPayload {
+  repeated IngressMessage ingress_messages = 1;
 }

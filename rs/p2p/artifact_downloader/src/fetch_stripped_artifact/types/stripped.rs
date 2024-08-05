@@ -13,7 +13,7 @@ use ic_types::{
         DataPayload, HashedBlock, Payload, Rank,
     },
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf},
-    messages::{MessageId, SignedIngress},
+    messages::{MessageId, SignedIngress, SignedRequestBytes},
     node_id_into_protobuf, node_id_try_from_option,
     signature::BasicSignature,
     Height, RegistryVersion, ReplicaVersion, Time,
@@ -263,18 +263,28 @@ impl StrippedBlockProposal {
     }
 }
 
-impl TryFrom<pb::IngressPayload> for StrippedIngressPayload {
+impl TryFrom<p2p_pb::StrippedIngressPayload> for StrippedIngressPayload {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb::IngressPayload) -> Result<Self, Self::Error> {
+    fn try_from(value: p2p_pb::StrippedIngressPayload) -> Result<Self, Self::Error> {
         let ingress_messages = value
-            .id_and_pos
+            .ingress_messages
             .into_iter()
-            .map(|ingress_offset| {
-                Ok(MaybeStrippedIngress::Stripped(IngressMessageId::new(
-                    Time::from_nanos_since_unix_epoch(ingress_offset.expiry),
-                    MessageId::try_from(ingress_offset.message_id.as_slice())?,
-                )))
+            .map(|ingress_message| {
+                let ingress_message_id = IngressMessageId::new(
+                    Time::from_nanos_since_unix_epoch(ingress_message.expiry),
+                    MessageId::try_from(ingress_message.message_id.as_slice())?,
+                );
+
+                if ingress_message.ingress_message.is_empty() {
+                    Ok(MaybeStrippedIngress::Stripped(ingress_message_id))
+                } else {
+                    let ingress = SignedIngress::try_from(SignedRequestBytes::from(
+                        ingress_message.ingress_message,
+                    ))
+                    .map_err(|err| ProxyDecodeError::Other(err.to_string()))?;
+                    Ok(MaybeStrippedIngress::Full(ingress_message_id, ingress))
+                }
             })
             .collect::<Result<_, Self::Error>>()?;
 
@@ -282,26 +292,27 @@ impl TryFrom<pb::IngressPayload> for StrippedIngressPayload {
     }
 }
 
-impl From<StrippedIngressPayload> for pb::IngressPayload {
+impl From<StrippedIngressPayload> for p2p_pb::StrippedIngressPayload {
     fn from(value: StrippedIngressPayload) -> Self {
         Self {
-            id_and_pos: value
+            ingress_messages: value
                 .ingress_messages
                 .into_iter()
                 .map(|ingress| {
-                    let id = match ingress {
-                        MaybeStrippedIngress::Full(id, _) => id,
-                        MaybeStrippedIngress::Stripped(id) => id,
+                    let (id, message) = match ingress {
+                        MaybeStrippedIngress::Full(id, message) => {
+                            (id, message.binary().clone().into())
+                        }
+                        MaybeStrippedIngress::Stripped(id) => (id, vec![]),
                     };
 
-                    pb::IngressIdOffset {
+                    p2p_pb::IngressMessage {
                         expiry: id.expiry().as_nanos_since_unix_epoch(),
                         message_id: id.message_id.as_bytes().to_vec(),
-                        offset: 0,
+                        ingress_message: message,
                     }
                 })
                 .collect(),
-            buffer: vec![],
         }
     }
 }
@@ -325,7 +336,7 @@ impl TryFrom<p2p_pb::StrippedConsensusMessage> for MaybeStrippedConsensusMessage
                 signer,
                 unstripped_id,
             }) => {
-                let Some(pb::Block {
+                let Some(p2p_pb::StrippedBlock {
                     version,
                     parent,
                     dkg_payload,
@@ -416,7 +427,7 @@ impl TryFrom<p2p_pb::StrippedConsensusMessage> for MaybeStrippedConsensusMessage
 
 impl From<StrippedBlockProposal> for p2p_pb::StrippedBlockProposal {
     fn from(block_proposal: StrippedBlockProposal) -> Self {
-        let stripped_block = pb::Block {
+        let stripped_block = p2p_pb::StrippedBlock {
             version: block_proposal.version.to_string(),
             parent: block_proposal.parent.clone().get().0,
             dkg_payload: Some(pb::DkgPayload::from(&block_proposal.payload.dealings)),
@@ -580,9 +591,7 @@ mod tests {
 
         assert_eq!(
             reconstructed_payload,
-            Err(AssemblyError::Missing(StrippableId::IngressMessage(
-                ingress_2_id
-            )))
+            Err(AssemblyError::Missing(ingress_2_id))
         );
     }
 
@@ -621,7 +630,7 @@ mod tests {
     #[test]
     fn ingress_payload_insertion_existing_fails_test() {
         let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
-        let (ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
         let mut stripped_payload = StrippedIngressPayload {
             ingress_messages: vec![
                 MaybeStrippedIngress::Full(ingress_1_id, ingress_1.clone()),
@@ -637,8 +646,8 @@ mod tests {
 
     #[test]
     fn ingress_payload_insertion_unknown_fails_test() {
-        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
-        let (ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let (ingress_1, _ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
         let mut stripped_payload = StrippedIngressPayload {
             ingress_messages: vec![MaybeStrippedIngress::Stripped(ingress_2_id)],
         };
