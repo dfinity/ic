@@ -754,7 +754,7 @@ fn take_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
     assert_eq!(
         error.description(),
         format!(
-            "Subnet has reached its canister snapshots rate limit per checkpoint: current usage is 81920, but limit is {}.",
+            "Subnet has reached its canister snapshots rate limit per checkpoint: current usage is 65536, but limit is {}.",
             subnet_canister_snapshots_heap_delta_capacity
         )
     );
@@ -812,7 +812,7 @@ fn load_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
     assert_eq!(
         error.description(),
         format!(
-            "Subnet has reached its canister snapshots rate limit per checkpoint: current usage is 81920, but limit is {}.",
+            "Subnet has reached its canister snapshots rate limit per checkpoint: current usage is 65536, but limit is {}.",
             subnet_canister_snapshots_heap_delta_capacity
         )
     );
