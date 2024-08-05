@@ -304,12 +304,12 @@ name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-integration"
-path = "boundary_nodes/boundary_node_integration_test.rs"
+name = "ic-systest-boundary-node-intgrtn"
+path = "boundary_nodes/boundary_node_intgrtn_test.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-integration-on-playnet"
-path = "boundary_nodes/boundary_node_integration_on_playnet_test.rs"
+name = "ic-systest-boundary-node-intgrtn-on-playnet"
+path = "boundary_nodes/boundary_node_intgrtn_on_playnet_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-update-workload-test"
