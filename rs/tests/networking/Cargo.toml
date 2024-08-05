@@ -25,6 +25,7 @@ ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 reqwest = { workspace = true }
+serde = { workspace = true }
 slog = { workspace = true }
 tests = { path = ".." }
 tokio = { workspace = true }
