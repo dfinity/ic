@@ -130,7 +130,7 @@ def system_test(
 
     Args:
       name: base name to use for the binary and test rules.
-      test_driver_target: optional string to identify the target of the test driver binary. Defaults to None
+      test_driver_target: optional string to identify the target of the test driver binary. Defaults to None which means declare a rust_binary from <name>.rs.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
@@ -161,7 +161,7 @@ def system_test(
 
     Returns:
       This macro declares 3 bazel targets:
-        * If test_driver_target == Noone, a rust_binary <name>_bin which is the test driver.
+        * If test_driver_target == None, a rust_binary <name>_bin which is the test driver.
         * A test target <name> which runs the test.
         * A test taget <name>_colocate which runs the test in a colocated way.
       It returns the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
