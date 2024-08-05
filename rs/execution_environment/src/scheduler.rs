@@ -1323,6 +1323,7 @@ impl SchedulerImpl {
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
+                println!("Inside finish_round");
                 state.metadata.heap_delta_estimate = NumBytes::from(0);
                 state.metadata.canister_snapshots_heap_delta_estimate = NumBytes::from(0);
                 // The set of compiled Wasms must be cleared when taking a

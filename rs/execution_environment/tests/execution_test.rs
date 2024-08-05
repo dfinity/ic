@@ -731,6 +731,7 @@ fn take_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
 
     let now = std::time::SystemTime::now();
     env.set_time(now);
+    env.set_checkpoints_enabled(false);
 
     let canister_id = create_universal_canister_with_cycles(
         &env,
@@ -738,24 +739,15 @@ fn take_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
         INITIAL_CYCLES_BALANCE,
     );
 
-    env.take_canister_snapshot(TakeCanisterSnapshotArgs {
-        canister_id: canister_id.get(),
-        replace_snapshot: None,
-    })
-    .map(|_| ())
-    .unwrap();
-
-    let other_canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
+    let res = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap();
 
     let error = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs {
-            canister_id: other_canister_id.get(),
-            replace_snapshot: None,
-        })
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+            canister_id,
+            Some(res.snapshot_id()),
+        ))
         .map(|_| ())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::SubnetCanisterSnapshotsRateLimited);
@@ -766,6 +758,17 @@ fn take_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
             subnet_canister_snapshots_heap_delta_capacity
         )
     );
+
+    // Enable checkpoints and tick once to trigger a checkpoint. Heap delta should
+    // have cleared and taking another snapshot should succeed.
+    env.set_checkpoints_enabled(true);
+    env.tick();
+
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+        canister_id,
+        Some(res.snapshot_id()),
+    ))
+    .unwrap();
 }
 
 #[test]
@@ -783,6 +786,7 @@ fn load_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
 
     let now = std::time::SystemTime::now();
     env.set_time(now);
+    env.set_checkpoints_enabled(false);
 
     let canister_id = create_universal_canister_with_cycles(
         &env,
@@ -803,7 +807,6 @@ fn load_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
             res.snapshot_id(),
             None,
         ))
-        .map(|_| ())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::SubnetCanisterSnapshotsRateLimited);
     assert_eq!(
@@ -813,6 +816,18 @@ fn load_canister_snapshot_fails_when_exceeding_canister_snapshots_heap_delta_cap
             subnet_canister_snapshots_heap_delta_capacity
         )
     );
+
+    // Enable checkpoints and tick once to trigger a checkpoint. Heap delta should
+    // have cleared and loading the snapshot should succeed.
+    env.set_checkpoints_enabled(true);
+    env.tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        res.snapshot_id(),
+        None,
+    ))
+    .unwrap();
 }
 
 fn assert_replied(result: Result<WasmResult, UserError>) {
