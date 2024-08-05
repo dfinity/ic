@@ -7,26 +7,27 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-proxy_canister = { path = "../../rust_canisters/proxy_canister" }
-tests = { path = ".." }
-ic-system-test-driver = { path = "../driver" }
-canister_http = { path = "./canister_http" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
 anyhow = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+canister_http = { path = "./canister_http" }
 candid = { workspace = true }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-slog = { workspace = true }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-prep = { path = "../../prep" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-canister-test = { path = "../../rust_canisters/canister_test" }
+ic-system-test-driver = { path = "../driver" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
-ic-base-types = { path = "../../types/base_types" }
-tokio = { workspace = true }
-reqwest = { workspace = true }
 ic-utils = { workspace = true }
+proxy_canister = { path = "../../rust_canisters/proxy_canister" }
+reqwest = { workspace = true }
+slog = { workspace = true }
+tests = { path = ".." }
+tokio = { workspace = true }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"

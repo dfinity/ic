@@ -14922,6 +14922,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.13.2",
  "ic-management-canister-types",
+ "ic-prep",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
