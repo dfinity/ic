@@ -4,7 +4,7 @@ use crate::utils::do_copy;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::LogVisibility;
+use ic_management_canister_types::{LogVisibility, LogVisibilityV2};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -2089,6 +2089,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility: pb_canister_state_bits::LogVisibility::from(&item.log_visibility)
                 .into(),
+            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(
+                &LogVisibilityV2::from(item.log_visibility),
+            )
+            .into(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -2168,6 +2172,33 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
+        // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
+        // First try to decode `log_visibility_v2` and if it fails, fallback to `log_visibility`.
+        // This should populate `allowed_viewers` correctly with the list of principals.
+        let log_visibility: LogVisibility = match try_from_option_field::<
+            pb_canister_state_bits::LogVisibilityV2,
+            LogVisibilityV2,
+            _,
+        >(
+            value.log_visibility_v2,
+            "CanisterStateBits::log_visibility_v2",
+        ) {
+            Ok(log_visibility_v2) => LogVisibility::from(log_visibility_v2),
+            Err(_) => {
+                let pb_log_visibility = pb_canister_state_bits::LogVisibility::try_from(
+                    value.log_visibility,
+                )
+                .map_err(|_| ProxyDecodeError::ValueOutOfRange {
+                    typ: "LogVisibility",
+                    err: format!(
+                        "Unexpected value of log visibility: {}",
+                        value.log_visibility
+                    ),
+                })?;
+                LogVisibility::from(pb_log_visibility)
+            }
+        };
+
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -2234,17 +2265,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility: LogVisibility::from(
-                pb_canister_state_bits::LogVisibility::try_from(value.log_visibility).map_err(
-                    |_| ProxyDecodeError::ValueOutOfRange {
-                        typ: "LogVisibility",
-                        err: format!(
-                            "Unexpected value of log visibility: {}",
-                            value.log_visibility
-                        ),
-                    },
-                )?,
-            ),
+            log_visibility,
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value
