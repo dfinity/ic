@@ -6,15 +6,31 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
-Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
+Usage: $0 [--use-dfx-identity] <PROPOSAL_FILE> <NEURON_ID>
     PROPOSAL_FILE: File with proposal created by ./prepare-publish-sns-wasm-proposal-text.sh (or formatted in that way)
     NEURON_ID: Your mainnet neuron ID, associated with your HSM
+    --use-dfx-identity: Optional flag to use dfx identity instead of HSM
 
   This script will create a proposal on mainnet from a given proposal text.
   It outputs the values for confirmation, and ensures that the target version matches the target hash.
   "
     exit 1
 }
+
+USE_DFX_IDENTITY=false
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --use-dfx-identity)
+            USE_DFX_IDENTITY=true
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 if [ $# -ne 2 ]; then
     help
@@ -60,10 +76,8 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
   The WASM hash is $WASM_SHA.
     "
 
-    check_or_set_dfx_hsm_pin
-
-    cmd=($IC_ADMIN --use-hsm --slot=0
-        --key-id=01 --pin="$DFX_HSM_PIN"
+    if [ "$USE_DFX_IDENTITY" = true ]; then
+        cmd=($IC_ADMIN --secret-key-pem ~/.config/dfx/identity/$(dfx identity whoami)/identity.pem
         --nns-url "https://icp-api.io"
         propose-to-add-wasm-to-sns-wasm
         --canister-type=$CANISTER_TYPE
@@ -71,11 +85,22 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
         --wasm-module-sha256=$WASM_SHA
         --summary-file=$PROPOSAL_FILE
         --proposer=$NEURON_ID)
+    else
+        check_or_set_dfx_hsm_pin
+        cmd=($IC_ADMIN --use-hsm --slot=0
+            --key-id=01 --pin="$DFX_HSM_PIN"
+            --nns-url "https://icp-api.io"
+            propose-to-add-wasm-to-sns-wasm
+            --canister-type=$CANISTER_TYPE
+            --wasm-module-path=$WASM_GZ
+            --wasm-module-sha256=$WASM_SHA
+            --summary-file=$PROPOSAL_FILE
+            --proposer=$NEURON_ID)
+    fi
 
     confirm_submit_proposal_command "${cmd[@]}"
 
     "${cmd[@]}"
-
 }
 
 # We download a version of IC_ADMIN compatible with the previous release
