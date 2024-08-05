@@ -80,7 +80,7 @@ impl OrchestratorMetrics {
             ),
             critical_error_cup_deserialization_failed: metrics_registry.int_counter(
                 "orchestrator_cup_deserialization_failed_total",
-                "Number of times the deserialiation of the locally persisted CUP failed",
+                "Number of times the deserialization of the locally persisted CUP failed",
             ),
         }
     }
