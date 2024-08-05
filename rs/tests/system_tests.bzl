@@ -163,7 +163,7 @@ def system_test(
       This macro declares 3 bazel targets:
         * If test_driver_target == None, a rust_binary <name>_bin which is the test driver.
         * A test target <name> which runs the test.
-        * A test taget <name>_colocate which runs the test in a colocated way.
+        * A test target <name>_colocate which runs the test in a colocated way.
       It returns the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
 
