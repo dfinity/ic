@@ -3,12 +3,13 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method, Payload,
-    SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -712,6 +713,47 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
             .build(),
     )
     .unwrap();
+}
+
+#[test]
+fn stops_executing_take_canister_snapshot_requests_when_subnet_capacity_reached() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(10 * 1024 * 1024), // 10 MiB,
+            subnet_memory_reservation: NumBytes::from(0),
+            canister_snapshots: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap();
+
+    // Ensure that at least one round has passed between the attempts to take a snapshot.
+    env.tick();
+
+    let other_canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    let error = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
+        .map(|_| ())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
 }
 
 fn assert_replied(result: Result<WasmResult, UserError>) {

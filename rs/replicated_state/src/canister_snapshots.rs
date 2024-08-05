@@ -188,6 +188,15 @@ impl CanisterSnapshots {
             snapshot_ids: _,
         } = self;
     }
+
+    /// Returns the amount of memory taken by all canister snapshots on
+    /// this subnet.
+    pub(crate) fn memory_taken(&self) -> NumBytes {
+        self.snapshots
+            .values()
+            .map(|snapshot| snapshot.size())
+            .sum::<NumBytes>()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
