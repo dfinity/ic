@@ -343,7 +343,7 @@ system_test_nns(
         "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
         "//conditions:default": [],
     }),
-    extra_head_nns_tags = None,
+    extra_head_nns_tags = [],
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

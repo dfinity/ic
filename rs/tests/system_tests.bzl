@@ -284,7 +284,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
 
     The latter one is additionally tagged with "system_test_nightly" such that it only runs daily and not on PRs.
     You can override the latter behaviour by specifying different `extra_head_nns_tags`.
-    If you set `extra_head_nns_tags` to `None` the head_nns variant will have the same tags as the default variant.
+    If you set `extra_head_nns_tags` to `[]` the head_nns variant will have the same tags as the default variant.
 
     The idea being that for most system-tests which test the replica it's more realistic to test against the
     mainnet NNS since that version would be active when the replica would be released.
@@ -294,7 +294,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
 
     Args:
         name: the name of the system-tests.
-        extra_head_nns_tags: extra tags assigned to the head_nns variant or None to use the original tags.
+        extra_head_nns_tags: extra tags assigned to the head_nns variant (Use `[]` to use the original tags).
         **kwargs: the arguments of the system-tests.
     """
     runtime_deps = kwargs.pop("runtime_deps", [])
@@ -313,8 +313,7 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
         variant = "head_nns",
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
-        tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] +
-               extra_head_nns_tags if extra_head_nns_tags != None else original_tags,
+        tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
 
