@@ -14,6 +14,7 @@ use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
+use ic_icrc1_ledger::UPGRADES_MEMORY;
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
@@ -23,6 +24,10 @@ use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
+use ic_stable_structures::{
+    reader::Reader,
+    writer::{BufferedWriter, Writer},
+};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -124,15 +129,32 @@ fn pre_upgrade() {
     let _p = canbench_rs::bench_scope("pre_upgrade");
 
     let start = ic_cdk::api::instruction_counter();
-    let mut stable_writer = StableWriter::default();
-    Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, &mut stable_writer))
-        .expect("failed to encode ledger state");
-    let end = ic_cdk::api::instruction_counter();
-    let instructions_consumed = end - start;
-    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-    stable_writer
-        .write_all(&counter_bytes)
-        .expect("failed to write instructions consumed to stable memory");
+    if true {
+        let mut stable_writer = StableWriter::default();
+        Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, &mut stable_writer))
+            .expect("failed to encode ledger state");
+        let end = ic_cdk::api::instruction_counter();
+        let instructions_consumed = end - start;
+        let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+        stable_writer
+            .write_all(&counter_bytes)
+            .expect("failed to write instructions consumed to stable memory");
+    } else {
+        UPGRADES_MEMORY.with_borrow_mut(|bs| {
+            Access::with_ledger(|ledger| {
+                let writer = Writer::new(bs, 0);
+                let mut buffered_writer = BufferedWriter::new(8388608, writer);
+                ciborium::ser::into_writer(ledger, &mut buffered_writer)
+                    .expect("Failed to write the Ledger state in stable memory");
+                let end = ic_cdk::api::instruction_counter();
+                let instructions_consumed = end - start;
+                let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+                buffered_writer
+                    .write_all(&counter_bytes)
+                    .expect("failed to write instructions consumed to UPGRADES_MEMORY");
+            });
+        });
+    }
 }
 
 #[post_upgrade]
@@ -142,11 +164,46 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     let start = ic_cdk::api::instruction_counter();
     let mut stable_reader = StableReader::default();
-    LEDGER.with(|cell| {
-        *cell.borrow_mut() = Some(
-            ciborium::de::from_reader(&mut stable_reader).expect("failed to decode ledger state"),
-        );
-    });
+
+    let mut pre_upgrade_instructions_consumed = 0;
+
+    let old_des_result: Result<Ledger<Tokens>, _> = ciborium::de::from_reader(&mut stable_reader);
+
+    match old_des_result {
+        Ok(state) => {
+            LEDGER.with(|cell| {
+                *cell.borrow_mut() = Some(state);
+            });
+            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+            pre_upgrade_instructions_consumed =
+                match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                    Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+                    Err(_) => {
+                        // If upgrading from a version that didn't write the instructions counter to stable memory
+                        0u64
+                    }
+                };
+        }
+        Err(_) => {
+            let state: Ledger<Tokens> = UPGRADES_MEMORY.with_borrow(|bs| {
+                let mut reader = Reader::new(bs, 0);
+                let state = ciborium::de::from_reader(&mut reader)
+                    .expect("Failed to read the Ledger state from stable memory");
+                let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+                pre_upgrade_instructions_consumed =
+                    match reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                        Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+                        Err(_) => {
+                            // If upgrading from a version that didn't write the instructions counter to stable memory
+                            0u64
+                        }
+                    };
+                state
+            });
+            ic_cdk::println!("Successfully read state from stable structures");
+            LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
+        }
+    }
 
     if let Some(args) = args {
         match args {
@@ -158,15 +215,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
             }
         }
     }
-    let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-    let pre_upgrade_instructions_consumed =
-        match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-            Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-            Err(_) => {
-                // If upgrading from a version that didn't write the instructions counter to stable memory
-                0u64
-            }
-        };
+
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
     let end = ic_cdk::api::instruction_counter();
