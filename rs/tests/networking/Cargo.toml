@@ -66,7 +66,7 @@ path = "network_reliability_test.rs"
 
 [[bin]]
 name = "ic-systest-p2p-performance"
-path = "p2p_performance"
+path = "p2p_performance.rs"
 
 [[bin]]
 name = "ic-systest-query-workload-long-test"
@@ -74,4 +74,4 @@ path = "query_workload_long_test.rs"
 
 [[bin]]
 name = "ic-systest-update-workload-large-payload-test"
-path = "update_workload_large_payload_test.rs"
+path = "update_workload_large_payload.rs"
