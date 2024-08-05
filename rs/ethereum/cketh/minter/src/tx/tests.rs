@@ -1,4 +1,3 @@
-use crate::checked_amount::CheckedAmountOf;
 use crate::tx::{GasFeeEstimate, TransactionPrice};
 use proptest::strategy::Strategy;
 
@@ -217,14 +216,9 @@ fn should_cbor_encoding_be_stable() {
     assert_eq!(decoded_signed_tx, signed_tx);
 }
 
-fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
-    use proptest::arbitrary::any;
-    use proptest::array::uniform32;
-    uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
-}
-
 fn arb_transaction_price() -> impl Strategy<Value = TransactionPrice> {
     use crate::numeric::WeiPerGas;
+    use crate::test_fixtures::arb::arb_checked_amount_of;
     use proptest::prelude::any;
     (arb_checked_amount_of(), any::<u128>(), any::<u128>()).prop_map(
         |(gas_limit, delta_to_max_fee_per_gas, max_priority_fee_per_gas)| TransactionPrice {

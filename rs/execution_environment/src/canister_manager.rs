@@ -2100,6 +2100,7 @@ impl CanisterManager {
             new_canister.scheduler_state.heap_delta_debit += new_canister.heap_delta();
         }
         state.metadata.heap_delta_estimate += new_canister.heap_delta();
+        state.metadata.canister_snapshots_heap_delta_estimate += new_canister.heap_delta();
 
         (instructions_used, Ok(new_canister))
     }

@@ -8392,6 +8392,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-crypto-sha2",
+ "ic-icrc1-index-ng",
  "ic-icrc1-ledger",
  "ic-icrc1-ledger-sm-tests",
  "ic-icrc1-test-utils",
@@ -8402,6 +8403,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-nns-test-utils",
  "ic-nns-test-utils-golden-nns-state",
+ "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
@@ -13089,6 +13091,7 @@ dependencies = [
 name = "icp-rosetta-integration-tests"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "candid",
  "ic-agent",
  "ic-icrc-rosetta",
