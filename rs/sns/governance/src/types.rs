@@ -376,7 +376,7 @@ impl NervousSystemParameters {
     /// Decreasing it below this number is problematic because SNS Swap assumes
     /// that there are allowed to be at least 5 principals per
     /// neuron during ClaimSwapNeuronsRequest.
-    pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR: u64 = 5;
+    pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR: u64 = 6;
 
     /// This is an upper bound for `max_dissolve_delay_bonus_percentage`. High values
     /// may improve the incentives when voting, but too-high values may also lead
@@ -441,7 +441,7 @@ impl NervousSystemParameters {
             max_number_of_proposals_with_ballots: Some(700),
             neuron_claimer_permissions: Some(Self::default_neuron_claimer_permissions()),
             neuron_grantable_permissions: Some(NeuronPermissionList::default()),
-            max_number_of_principals_per_neuron: Some(5),
+            max_number_of_principals_per_neuron: Some(6),
             voting_rewards_parameters: Some(VotingRewardsParameters::with_default_values()),
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
