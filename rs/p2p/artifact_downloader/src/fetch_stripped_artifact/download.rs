@@ -137,7 +137,7 @@ pub(crate) async fn download_ingress<P: Peers>(
     block_proposal_id: ConsensusMessageId,
     log: &ReplicaLogger,
     peer_rx: P,
-) -> Result<(SignedIngress, NodeId), ()> {
+) -> (SignedIngress, NodeId) {
     let mut artifact_download_timeout = ExponentialBackoffBuilder::new()
         .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
         .with_max_interval(MAX_ARTIFACT_RPC_TIMEOUT)
@@ -171,7 +171,7 @@ pub(crate) async fn download_ingress<P: Peers>(
                         })
                     {
                         if IngressMessageId::from(&response.ingress_message) == ingress_message_id {
-                            return Ok((response.ingress_message, peer));
+                            return (response.ingress_message, peer);
                         } else {
                             warn!(
                                 log,
@@ -180,13 +180,10 @@ pub(crate) async fn download_ingress<P: Peers>(
                         }
                     }
                 }
-                _ => {
-                    // metrics.download_task_artifact_download_errors_total.inc();
-                }
+                _ => {}
             }
         }
 
-        // Wait before checking the priority so we might be able to avoid an unnecessary download.
         sleep_until(next_request_at).await;
     }
 }

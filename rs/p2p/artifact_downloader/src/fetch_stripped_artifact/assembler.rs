@@ -10,18 +10,15 @@ use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     consensus::ConsensusMessage,
     messages::SignedIngress,
-    CountBytes, NodeId,
+    NodeId,
 };
 
 use crate::FetchArtifact;
 
 use super::{
-    download::download_ingress,
-    metrics::FetchStrippedConsensusArtifactMetrics,
-    types::stripped::{MaybeStrippedConsensusMessage, Strippable},
+    download::download_ingress, metrics::FetchStrippedConsensusArtifactMetrics,
+    stripper::Strippable, types::stripped::MaybeStrippedConsensusMessage,
 };
-
-const STRIP_THRESHOLD: usize = 1000;
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
@@ -43,8 +40,8 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
         self.consensus_pool
             .read()
             .unwrap()
-            .get(&id.0)
-            .map(MaybeStrippedConsensusMessage::Unstripped)
+            .get(id.as_ref())
+            .map(Strippable::strip)
     }
 
     fn get_all_validated(&self) -> Box<dyn Iterator<Item = MaybeStrippedConsensusMessage> + '_> {
@@ -66,7 +63,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
         let pool = pool.consensus_pool.read().unwrap();
         let nested = self.pfn_producer.get_priority_function(&pool);
 
-        Box::new(move |id, attributes| nested(&id.0, attributes))
+        Box::new(move |id, attributes| nested(id.as_ref(), attributes))
     }
 }
 
@@ -77,9 +74,7 @@ pub struct FetchStrippedConsensusArtifact {
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
-    metrics: FetchStrippedConsensusArtifactMetrics,
-    // TODO: decide if needed
-    // priority_fn: watch::Receiver<PriorityFn<>>,
+    _metrics: FetchStrippedConsensusArtifactMetrics,
 }
 
 impl FetchStrippedConsensusArtifact {
@@ -119,7 +114,7 @@ impl FetchStrippedConsensusArtifact {
                 fetch_stripped,
                 transport,
                 node_id,
-                metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
+                _metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
             }
         };
 
@@ -131,19 +126,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
     for FetchStrippedConsensusArtifact
 {
     fn disassemble_message(&self, msg: ConsensusMessage) -> MaybeStrippedConsensusMessage {
-        match msg {
-            ConsensusMessage::BlockProposal(block_proposal)
-                if block_proposal.as_ref().payload.payload_type()
-                    == ic_types::consensus::PayloadType::Data =>
-            {
-                MaybeStrippedConsensusMessage::StrippedBlockProposal(
-                    block_proposal.strip_ingresses(|ingress_message| {
-                        ingress_message.count_bytes() > STRIP_THRESHOLD
-                    }),
-                )
-            }
-            msg => MaybeStrippedConsensusMessage::Unstripped(msg),
-        }
+        msg.strip()
     }
 
     fn assemble_message<P: Peers + Clone + Send + 'static>(
@@ -167,71 +150,36 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 }
             };
 
-            let block_id = id.0;
-
             let mut join_set = tokio::task::JoinSet::new();
 
-            let missing_ingresses = stripped_block_proposal.missing();
-            let total_ingresses_count = stripped_block_proposal
-                .payload
-                .ingress
-                .ingress_messages
-                .len();
+            let missing_ingress_ids = stripped_block_proposal.missing_ingress_messages();
             // For each stripped object in the message, try to fetch it either from the local pools
             // or from a random peer who is advertising it.
-            for stripped_object_id in missing_ingresses {
+            for missing_ingress_id in missing_ingress_ids {
                 join_set.spawn(get_or_fetch(
-                    stripped_object_id,
+                    missing_ingress_id,
                     self.ingress_pool.clone(),
                     self.transport.clone(),
-                    block_id.clone(),
+                    id.as_ref().clone(),
                     self.log.clone(),
                     self.node_id,
                     peer_rx.clone(),
                 ));
             }
 
-            let mut found_stripped_ingress_messages = 0;
-            let mut missing_stripped_ingress_messages = 0;
+            while let Some(join_result) = join_set.join_next().await {
+                let Ok((ingress, _peer_id)) = join_result else {
+                    return Err(Aborted {});
+                };
 
-            if !join_set.is_empty() {
-                let timer = self
-                    .metrics
-                    .download_missing_ingress_messages_duration
-                    .start_timer();
-
-                // TODO: fix this
-                while let Some(Ok(Ok((ingress, peer_id)))) = join_set.join_next().await {
-                    if peer_id == self.node_id {
-                        found_stripped_ingress_messages += 1;
-                    } else {
-                        missing_stripped_ingress_messages += 1;
-                    }
-
-                    stripped_block_proposal
-                        .try_insert(ingress)
-                        .map_err(|_| Aborted {})?;
-                }
-
-                if missing_stripped_ingress_messages > 0 {
-                    timer.stop_and_record();
-                } else {
-                    timer.stop_and_discard();
-                }
+                stripped_block_proposal
+                    .try_insert_ingress_message(ingress)
+                    .map_err(|_| Aborted {})?;
             }
 
-            // FIXME(kpop): remove the `unwrap()`.
-            let reconstructed_block_proposal = stripped_block_proposal.try_assemble().unwrap();
-
-            self.metrics
-                .found_stripped_ingress_messages
-                .observe(found_stripped_ingress_messages as f64);
-            self.metrics
-                .missing_stripped_ingress_messages
-                .observe(missing_stripped_ingress_messages as f64);
-            self.metrics
-                .total_ingress_messages
-                .observe(total_ingresses_count as f64);
+            let reconstructed_block_proposal = stripped_block_proposal
+                .try_assemble()
+                .map_err(|_| Aborted {})?;
 
             Ok((
                 ConsensusMessage::BlockProposal(reconstructed_block_proposal),
@@ -252,10 +200,10 @@ async fn get_or_fetch<P: Peers>(
     log: ReplicaLogger,
     node_id: NodeId,
     peer_rx: P,
-) -> Result<(SignedIngress, NodeId), ()> {
+) -> (SignedIngress, NodeId) {
     // First check if the ingress message exists in the Ingress Pool.
     if let Some(ingress_message) = ingress_pool.read().unwrap().get(&ingress_message_id) {
-        return Ok((ingress_message, node_id));
+        return (ingress_message, node_id);
     }
 
     download_ingress(
