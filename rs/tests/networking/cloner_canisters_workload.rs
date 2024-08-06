@@ -42,29 +42,6 @@ const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
 const SUBNET_SIZE: usize = 13;
 
-/*
-
--- Test timed out at 2024-08-06 01:54:51 UTC --
-[68 / 69] Testing //rs/tests/networking:cloner_canisters_workload; 3600s linux-sandbox
-
-TIMEOUT: //rs/tests/networking:cloner_canisters_workload (Summary)
-      /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/ic/bazel-out/k8-opt/testlogs/rs/tests/networking/cloner_canisters_workload/test.log
-Target //rs/tests/networking:cloner_canisters_workload up-to-date:
-  bazel-bin/rs/tests/networking/cloner_canisters_workload/run-test.sh
-INFO: Elapsed time: 3607.516s, Critical Path: 3606.52s
-INFO: 7 processes: 7 linux-sandbox.
-INFO: Build completed, 1 test FAILED, 7 total actions
-//rs/tests/networking:cloner_canisters_workload                         TIMEOUT in 3600.0s
-  /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/ic/bazel-out/k8-opt/testlogs/rs/tests/networking/cloner_canisters_workload/test.log
-
-Executed 1 out of 1 test: 1 fails locally.
-INFO: Build completed, 1 test FAILED, 7 total actions
-INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/df2d46f4-48ad-42da-8ca5-545234752592
-There was an error while executing CLI: exit status 3
-
-
-*/
-
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
@@ -198,11 +175,11 @@ pub fn install_cloner_canisters(env: TestEnv) {
 
     let time_to_wait_for_download = WORKLOAD_RUNTIME - DOWNLOAD_PROMETHEUS_WAIT_TIME;
     info!(
-        &log,
+        &logger,
         "Waiting {:?} before download.", time_to_wait_for_download
     );
     std::thread::sleep(time_to_wait_for_download);
-    info!(&log, "Step 6: Downloading prometheus data");
+    info!(&logger, "Step 6: Downloading prometheus data");
     env.download_prometheus_data_dir_if_exists();
 }
 
