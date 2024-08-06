@@ -25,6 +25,7 @@ use ic_system_test_driver::{
         },
     },
     nns::{self, vote_execute_proposal_assert_executed},
+    retry_with_msg_async,
     util::{block_on, runtime_from_url},
 };
 use itertools::Itertools;
@@ -35,7 +36,7 @@ use registry_canister::mutations::{
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use ic_agent_dynamic_route::{
     agent::{
         http_transport::{
@@ -220,13 +221,18 @@ async fn test(env: TestEnv) {
             Node::new("api2.com").unwrap(),
         ];
         let snapshot = RoundRobinRoutingSnapshot::new();
+        let root_key = agent_with_identity.read_root_key();
         let route_provider =
             DynamicRouteProviderBuilder::new(snapshot, seed_nodes, http_client.clone())
                 .with_checker(Arc::new(HealthChecker::new(
                     http_client.clone(),
                     Duration::from_secs(5),
                 )))
-                .with_fetcher(Arc::new(NodesFetcher::new(http_client.clone(), subnet_id)))
+                .with_fetcher(Arc::new(NodesFetcher::new(
+                    http_client.clone(),
+                    subnet_id,
+                    Some(root_key),
+                )))
                 .build()
                 .await;
         let route_provider = Arc::new(route_provider) as Arc<dyn RouteProvider>;
@@ -697,60 +703,39 @@ pub async fn set_counters_on_counter_canisters(
     backoff: Duration,
     retry_timeout: Duration,
 ) {
-    let mut requests_all = vec![];
-    // Dispatch all write calls sequentially. As there is no polling, each call should return very fast.
+    let mut requests = vec![];
     for (idx, canister_id) in canisters.into_iter().enumerate() {
-        let mut requests = vec![];
         let calls_count = counter_values[idx];
         for _ in 0..calls_count {
-            let request_id = ic_system_test_driver::retry_with_msg_async!(
+            let agent_clone = agent.clone();
+
+            let request = move || {
+                let agent_clone = agent_clone.clone();
+
+                async move {
+                    agent_clone
+                        .update(&canister_id, "write")
+                        .call_and_wait()
+                        .await
+                        .map(|_| ())
+                        .with_context(|| "write call failed")
+                }
+            };
+
+            let request = retry_with_msg_async!(
                 format!("write call on canister={canister_id}"),
                 log,
                 retry_timeout,
                 backoff,
-                || async {
-                    let result = agent.update(&canister_id, "write").call().await;
-                    if let Ok(id) = result {
-                        Ok(id)
-                    } else {
-                        bail!(
-                            "write call on canister={canister_id} failed, err: {:?}",
-                            result.unwrap_err()
-                        )
-                    }
-                }
-            )
-            .await
-            .expect("write call on canister={canister_id} failed");
+                request
+            );
 
-            requests.push((canister_id, request_id));
+            requests.push(request);
         }
-        requests_all.push(requests);
     }
 
-    // Poll all results sequentially.
-    // Overall polling duration should be roughly equal to a single polling duration. As all requests were submitted at nearly same time.
-    for (canister_id, request_id) in requests_all.into_iter().flatten() {
-        ic_system_test_driver::retry_with_msg_async!(
-            format!("call wait on canister={canister_id}"),
-            log,
-            retry_timeout,
-            backoff,
-            || async {
-                let result = agent.wait(request_id, canister_id).await;
-                if result.is_ok() {
-                    Ok(())
-                } else {
-                    bail!(
-                        "wait call on canister={canister_id} failed, err: {:?}",
-                        result.unwrap_err()
-                    )
-                }
-            }
-        )
-        .await
-        .expect("wait call on canister={canister_id} failed");
-    }
+    // Dispatch all requests in parallel.
+    futures::future::try_join_all(requests).await.unwrap();
 }
 
 pub async fn read_counters_on_counter_canisters(
