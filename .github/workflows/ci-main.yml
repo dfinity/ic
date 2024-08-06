@@ -244,7 +244,10 @@ jobs:
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
-          export ADDITIONAL_FLAGS=$(if [ "${{ github.event_name }}" == "merge_group" ]; then echo '-m "not fails_on_merge_train"'; else echo ""; fi)
+          ADDITIONAL_FLAGS=''
+          if [ "${{ github.event_name }}" == "merge_group" ]; then
+            ADDITIONAL_FLAGS='-m "not fails_on_merge_train"'
+          fi
           pytest --ignore=gitlab_config/ $ADDITIONAL_FLAGS -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
