@@ -414,4 +414,4 @@ jobs:
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              cargo build --release
+              cargo build --release --package ic-types
