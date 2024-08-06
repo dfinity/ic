@@ -1,9 +1,3 @@
-pub mod cycles_balance_change;
-mod request_in_prep;
-mod routing;
-pub mod sandbox_safe_system_state;
-mod stable_memory;
-
 use ic_base_types::PrincipalIdBlobParseError;
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_config::flag_status::FlagStatus;
@@ -39,6 +33,12 @@ use std::{
     convert::{From, TryFrom},
     rc::Rc,
 };
+
+pub mod cycles_balance_change;
+mod request_in_prep;
+mod routing;
+pub mod sandbox_safe_system_state;
+mod stable_memory;
 
 pub const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
@@ -683,6 +683,12 @@ impl std::fmt::Display for ApiType {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ExecutionMemoryType {
+    WasmMemory,
+    StableMemory,
+}
+
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
@@ -694,6 +700,12 @@ struct MemoryUsage {
 
     /// The current amount of execution memory that the canister is using.
     current_usage: NumBytes,
+
+    /// The current amount of stable memory that the canister is using.
+    stable_memory_usage: NumBytes,
+
+    /// The current amount of Wasm memory that the canister is using.
+    wasm_memory_usage: NumBytes,
 
     /// The current amount of message memory that the canister is using.
     current_message_usage: NumBytes,
@@ -720,6 +732,7 @@ impl MemoryUsage {
         limit: NumBytes,
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
+        stable_memory_usage: NumBytes,
         current_message_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
@@ -737,10 +750,18 @@ impl MemoryUsage {
                 limit
             );
         }
+        let (wasm_memory_usage, overflow) = current_usage
+            .get()
+            .overflowing_sub(stable_memory_usage.get());
+
+        debug_assert!(!overflow);
+
         Self {
             limit,
             wasm_memory_limit,
             current_usage,
+            stable_memory_usage,
+            wasm_memory_usage: NumBytes::new(wasm_memory_usage),
             current_message_usage,
             subnet_available_memory,
             allocated_execution_memory: NumBytes::from(0),
@@ -811,6 +832,7 @@ impl MemoryUsage {
         api_type: &ApiType,
         sandbox_safe_system_state: &mut SandboxSafeSystemState,
         subnet_memory_saturation: &ResourceSaturation,
+        execution_memory_type: ExecutionMemoryType,
     ) -> HypervisorResult<()> {
         let (new_usage, overflow) = self
             .current_usage
@@ -850,6 +872,15 @@ impl MemoryUsage {
                             );
                         self.current_usage = NumBytes::from(new_usage);
                         self.allocated_execution_memory += execution_bytes;
+
+                        self.add_execution_memory(execution_bytes, execution_memory_type)?;
+
+                        sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(
+                            None,
+                            self.stable_memory_usage,
+                            self.wasm_memory_usage,
+                        );
+
                         Ok(())
                     }
                     Err(_err) => Err(HypervisorError::OutOfMemory),
@@ -868,9 +899,53 @@ impl MemoryUsage {
                     return Err(HypervisorError::OutOfMemory);
                 }
                 self.current_usage = NumBytes::from(new_usage);
+                self.add_execution_memory(execution_bytes, execution_memory_type)?;
+
+                sandbox_safe_system_state
+                    .system_state_changes
+                    .on_low_wasm_memory_hook_status
+                    .update(
+                        Some(reserved_bytes),
+                        self.stable_memory_usage,
+                        self.wasm_memory_usage,
+                    );
                 Ok(())
             }
         }
+    }
+
+    fn add_execution_memory(
+        &mut self,
+        execution_bytes: NumBytes,
+        execution_memory_type: ExecutionMemoryType,
+    ) {
+        match execution_memory_type {
+            ExecutionMemoryType::WasmMemory => {
+                let (new_usage, overflow) = self
+                    .wasm_memory_usage
+                    .get()
+                    .overflowing_add(execution_bytes.get());
+                if overflow {
+                    return Err(HypervisorError::OutOfMemory);
+                }
+                self.wasm_memory_usage = NumBytes::new(new_usage);
+            }
+            ExecutionMemoryType::StableMemory => {
+                let (new_usage, overflow) = self
+                    .stable_memory_usage
+                    .get()
+                    .overflowing_add(execution_bytes.get());
+                if overflow {
+                    return Err(HypervisorError::OutOfMemory);
+                }
+                self.stable_memory_usage = NumBytes::new(new_usage);
+            }
+        }
+
+        debug_assert_eq!(
+            self.current_usage.get(),
+            self.stable_memory_usage.get() + self.wasm_memory_usage.get()
+        );
     }
 
     /// Tries to allocate the requested amount of message memory.
@@ -1007,12 +1082,19 @@ impl SystemApiImpl {
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
+        let stable_memory_usage = stable_memory
+            .size
+            .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+            .map(NumBytes::new)
+            .ok_or(HypervisorError::OutOfMemory)?;
+
         let memory_usage = MemoryUsage::new(
             log.clone(),
             sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
+            stable_memory_usage,
             canister_current_message_memory_usage,
             subnet_available_memory,
             execution_parameters.memory_allocation,
@@ -1906,9 +1988,9 @@ impl SystemApi for SystemApiImpl {
                 ResponseStatus::NotRepliedYet => {
                     if size as u64 > max_reply_size.get() {
                         let string = format!(
-                        "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
-                        size, max_reply_size
-                    );
+                            "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
+                            size, max_reply_size
+                        );
                         return Err(UserContractViolation {
                             error: string,
                             suggestion: "".to_string(),
@@ -2663,6 +2745,7 @@ impl SystemApi for SystemApiImpl {
                 &self.api_type,
                 &mut self.sandbox_safe_system_state,
                 &self.execution_parameters.subnet_memory_saturation,
+                ExecutionMemoryType::WasmMemory,
             ) {
                 Ok(()) => Ok(()),
                 Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
@@ -2714,6 +2797,7 @@ impl SystemApi for SystemApiImpl {
             &self.api_type,
             &mut self.sandbox_safe_system_state,
             &self.execution_parameters.subnet_memory_saturation,
+            ExecutionMemoryType::StableMemory,
         ) {
             Ok(()) => Ok(StableGrowOutcome::Success),
             Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
@@ -2923,13 +3007,13 @@ impl SystemApi for SystemApiImpl {
                         if overflow || upper_bound > data_certificate.len() {
                             return Err(ToolchainContractViolation {
                                 error: format!(
-                            "ic0_data_certificate_copy failed because offset + size is out \
+                                    "ic0_data_certificate_copy failed because offset + size is out \
                         of bounds. Found offset = {} and size = {} while offset + size \
                         must be <= {}",
-                            offset,
-                            size,
-                            data_certificate.len()
-                        ),
+                                    offset,
+                                    size,
+                                    data_certificate.len()
+                                ),
                             });
                         }
 
@@ -3189,9 +3273,9 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        outgoing_request, ..
-                    },
+                NonReplicatedQueryKind::Stateful {
+                    outgoing_request, ..
+                },
                 ..
             }
             | ApiType::SystemTask {
@@ -3203,13 +3287,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ToolchainContractViolation{
+                None => Err(HypervisorError::ToolchainContractViolation {
                     error: "ic0.call_with_best_effort_response called when no call is under construction."
-                    .to_string(),
+                        .to_string(),
                 }),
                 Some(request) => {
                     if request.is_timeout_set() {
-                        Err(HypervisorError::ToolchainContractViolation{
+                        Err(HypervisorError::ToolchainContractViolation {
                             error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
                         })
                     } else {

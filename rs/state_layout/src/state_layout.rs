@@ -1,6 +1,3 @@
-use crate::error::LayoutError;
-use crate::utils::do_copy;
-
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -41,6 +38,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+use crate::error::LayoutError;
+use crate::utils::do_copy;
 
 #[cfg(test)]
 mod tests;
@@ -174,6 +174,7 @@ pub struct CanisterStateBits {
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -2102,6 +2103,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
+            on_low_wasm_memory_hook_status: Some(item.on_low_wasm_memory_hook_status.into()),
         }
     }
 }
@@ -2276,6 +2278,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
+            on_low_wasm_memory_hook_status: try_from_option_field(
+                value.on_low_wasm_memory_hook_status,
+                "CanisterStateBits::on_low_wasm_memory_hook_status",
+            )
+            .unwrap_or_default(),
         })
     }
 }
