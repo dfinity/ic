@@ -264,14 +264,11 @@ fn test(env: TestEnv) {
                 "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
             )
         })
-        .chain(
-            [TestCase::new(
-                TestType::SelfTestOnly,
-                "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
-                "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
-            )]
-            .into_iter(),
-        );
+        .chain([TestCase::new(
+            TestType::SelfTestOnly,
+            "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+            "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
+        )]);
 
     for t in tests {
         t.run(&logger);
