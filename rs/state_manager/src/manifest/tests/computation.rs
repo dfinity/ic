@@ -338,7 +338,8 @@ fn test_manifest_computation_skips_marker_file() {
 
     let root = dir.path();
     fs::write(root.join("root.bin"), vec![0u8; 1000]).expect("failed to create file 'test.bin'");
-    fs::write(root.join(UNVERIFIED_CHECKPOINT_MARKER), &[]).expect("failed to create marker file");
+    fs::File::create(root.join(UNVERIFIED_CHECKPOINT_MARKER))
+        .expect("failed to create marker file");
 
     let subdir = root.join("subdir");
     fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
@@ -348,9 +349,22 @@ fn test_manifest_computation_skips_marker_file() {
 
     let mut thread_pool = scoped_threadpool::Pool::new(1);
 
-    // The debug_assertion in manifest computation panics in this test.
-    assert!(panic::catch_unwind(AssertUnwindSafe(|| {
-        compute_manifest(
+    if cfg!(debug_assertions) {
+        // The debug assertions in manifest computation panic in debug mode.
+        assert!(panic::catch_unwind(AssertUnwindSafe(|| {
+            compute_manifest(
+                &mut thread_pool,
+                &manifest_metrics,
+                &no_op_logger(),
+                StateSyncVersion::V1,
+                &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+                1024,
+                None,
+            )
+        }))
+        .is_err());
+    } else {
+        let manifest_with_marker_present = compute_manifest(
             &mut thread_pool,
             &manifest_metrics,
             &no_op_logger(),
@@ -359,10 +373,26 @@ fn test_manifest_computation_skips_marker_file() {
             1024,
             None,
         )
-    }))
-    .is_err());
+        .expect("failed to compute manifest");
 
-    // The critical alert in manifest computation is triggered in this test.
+        fs::remove_file(root.join(UNVERIFIED_CHECKPOINT_MARKER))
+            .expect("failed to remove marker file");
+
+        let manifest_with_marker_removed = compute_manifest(
+            &mut thread_pool,
+            &manifest_metrics,
+            &no_op_logger(),
+            StateSyncVersion::V1,
+            &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+            1024,
+            None,
+        )
+        .expect("failed to compute manifest");
+        // The manifest computation should ignores the marker files and produce identical manifest.
+        assert_eq!(manifest_with_marker_present, manifest_with_marker_removed);
+    }
+
+    // The critical alert in manifest computation is triggered once in either branch of the test.
     assert_eq!(
         manifest_metrics
             .manifest_computation_including_marker_critical

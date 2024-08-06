@@ -174,7 +174,7 @@ impl fmt::Display for ChunkValidationError {
 impl std::error::Error for ChunkValidationError {}
 
 /// Relative path to a file and the size of the file.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct FileWithSize(PathBuf, u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
