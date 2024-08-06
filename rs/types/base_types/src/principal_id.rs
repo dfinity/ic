@@ -201,6 +201,8 @@ impl PrincipalId {
         let n_bytes = n.to_le_bytes();
 
         // Copy the u64 bytes into the array
+        // Need a while loop since one can't use a for loop in const functions, see:
+        // https://github.com/rust-lang/rust/issues/87575
         let mut i = 0;
         while i < n_bytes.len() {
             bytes[i] = n_bytes[i];
