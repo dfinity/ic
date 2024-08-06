@@ -2104,6 +2104,19 @@ message UpdateCanisterSettings {
     LOG_VISIBILITY_PUBLIC = 2;
   }
 
+  message LogVisibilityAllowedViewers {
+    repeated ic_base_types.pb.v1.PrincipalId principals = 1;
+  }
+  
+  // Log visibility of a canister.
+  message LogVisibilityV2 {
+    oneof log_visibility_v2 {
+      int32 controllers = 1;
+      int32 public = 2;
+      LogVisibilityAllowedViewers allowed_viewers = 3;
+    }
+  }
+
   // The controllers of the canister. We use a message to wrap the repeated field because prost does
   // not generate `Option<Vec<T>>` for repeated fields.
   message Controllers {
@@ -2119,6 +2132,7 @@ message UpdateCanisterSettings {
     optional uint64 memory_allocation = 3;
     optional uint64 freezing_threshold = 4;
     optional LogVisibility log_visibility = 5;
+    optional LogVisibilityV2 log_visibility_v2 = 7;
     optional uint64 wasm_memory_limit = 6;
   }
 
