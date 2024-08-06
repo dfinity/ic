@@ -154,22 +154,13 @@ impl Neuron {
     }
 
     pub fn stake_e8s(&self) -> u64 {
-        neuron_stake_e8s(
-            self.cached_neuron_stake_e8s,
-            self.neuron_fees_e8s,
-            self.staked_maturity_e8s_equivalent,
-        )
+        let cached_neuron_stake_e8s = self.cached_neuron_stake_e8s;
+        let neuron_fees_e8s = self.neuron_fees_e8s;
+        let staked_maturity_e8s_equivalent = self.staked_maturity_e8s_equivalent;
+        cached_neuron_stake_e8s
+            .saturating_sub(neuron_fees_e8s)
+            .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
     }
-}
-
-fn neuron_stake_e8s(
-    cached_neuron_stake_e8s: u64,
-    neuron_fees_e8s: u64,
-    staked_maturity_e8s_equivalent: Option<u64>,
-) -> u64 {
-    cached_neuron_stake_e8s
-        .saturating_sub(neuron_fees_e8s)
-        .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
 }
 
 impl MigrationStatus {
