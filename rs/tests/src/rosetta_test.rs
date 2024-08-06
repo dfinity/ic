@@ -36,10 +36,7 @@ use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
         test_env::TestEnv,
-        test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsCanisterEnvVars,
-        },
+        test_env_api::{HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     util::block_on,
 };

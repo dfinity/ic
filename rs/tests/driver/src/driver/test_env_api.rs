@@ -151,7 +151,7 @@ use crate::{
     retry_with_msg, retry_with_msg_async,
     util::{block_on, create_agent},
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::{export::Principal, Agent, AgentError};

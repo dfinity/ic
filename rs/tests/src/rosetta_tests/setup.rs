@@ -3,7 +3,7 @@ use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
-use ic_nns_test_utils::itest_helpers::{install_rust_canister, install_rust_canister_from_path};
+use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
 use prost::Message;
