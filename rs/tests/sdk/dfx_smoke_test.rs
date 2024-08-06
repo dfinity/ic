@@ -6,10 +6,7 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
-        RetrieveIpv4Addr,
-    },
+    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr},
 };
 use ic_system_test_driver::systest;
 use ic_tests::nns_dapp::nns_dapp_customizations;
@@ -49,7 +46,6 @@ pub fn setup(env: TestEnv) {
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
 

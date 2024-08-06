@@ -1928,6 +1928,7 @@ struct ExecutionThreadResult {
 /// Executes the given canisters one by one. For each canister it
 /// - runs the heartbeat or timer handlers of the canister if needed,
 /// - executes all messages of the canister.
+///
 /// The execution stops if `total_instruction_limit` is reached
 /// or all canisters are processed.
 #[allow(clippy::too_many_arguments)]
@@ -2378,6 +2379,7 @@ fn get_instructions_limits_for_subnet_message(
             | UpdateSettings
             | BitcoinGetBalance
             | BitcoinGetUtxos
+            | BitcoinGetBlockHeaders
             | BitcoinSendTransaction
             | BitcoinSendTransactionInternal
             | BitcoinGetCurrentFeePercentiles

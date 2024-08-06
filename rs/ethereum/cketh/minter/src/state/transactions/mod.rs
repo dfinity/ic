@@ -583,6 +583,7 @@ impl EthTransactions {
     /// with nonces greater than the latest mined transaction nonce:
     /// * the resubmitted transaction will need to be re-signed if its transaction fee was increased
     /// * the resubmitted transaction can be resent as is if its transaction fee was not increased
+    ///
     /// We stop on the first error since if a transaction with nonce n could not be resubmitted
     /// (e.g., the transaction amount does not cover the new fees),
     /// then the next transactions with nonces n+1, n+2, ... are blocked anyway

@@ -1,28 +1,30 @@
 """
-This module defines Bazel targets for the mainnet versions of the core NNS and SNS canisters.
+This module defines Bazel targets for the mainnet versions of the core NNS, SNS, and ck canisters.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
 # WASM metadata is a 2-tuple of git commit ID and WASM hash.
 CANISTER_NAME_TO_WASM_METADATA = {
-    "governance": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "8f76b2de37197b3ff0ae188f1ef99ddd5bd75cb8f83fb87c2889822ece0b5576"),
+    "governance": ("ae659b2cad97aa3cf07b523907ef079338fc3bf3", "ce18f3eb851c47e27e09df29a44fe4513735fed28949b9d5ddcabfd4fe001fe3"),
     "ledger": ("b43280208c32633a29657a1051660324e88a373d", "209d01896799444a40a80ac21ac22ad23fd7abdde7d6cff0c96326d178e4c5a8"),
     "archive": ("b43280208c32633a29657a1051660324e88a373d", "db0f094005a0e84e243f8f300236be879dcefa412c2fd36d675390caa689d88d"),
     "index": ("b43280208c32633a29657a1051660324e88a373d", "62bbbada301838ad0f6e371415be990ce70e36c6f11267d4ba9fac8ff09aa32d"),
     "root": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "713f44b9d26cfc9ed2083bad954cdfcabb7de211bfc1c4fc811d8c7bb4f47d81"),
-    "registry": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "f1555a94d322d5ffa024748d20a58b88b7bca756a82f5da2b3c7ef0f3cd190ea"),
+    "registry": ("3b3ffedc6aa481fd9b92eefaf46beded9e51a344", "fe7793076ac5b1a0d55a5d38b226c6c1a99b3550c1d28b235c53c1607b04ad6b"),
     "lifeline": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "614d7d418c4eaa9984b6c3f4afe2d1e45b2f110369edcc2dc767792181742348"),
     "genesis-token": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "a403f573c4426065b1a9b7b5b1a7f95c04534c6d79a06be71f1d04212b40e9de"),
-    "cycles-minting": ("b9a20425f94eb1433385a7ed0c59c41095c17b7b", "58ee30cb6cb074dc066b7e8dfc78d8e2b1a9e97a48e39fedbace65c547703d80"),
-    "sns-wasm": ("b39f782ae9e976f6f25c8f1d75b977bd22c81507", "394b936be4af54ad27c1eb44537202549ad8c23445b34f08d4db1ae9e983ed01"),
-    "swap": ("b39f782ae9e976f6f25c8f1d75b977bd22c81507", "67f64e705afd70c0de03529a8b914f122b3fb8920d9e9d81e357b8b5e2a4d10a"),
+    "cycles-minting": ("3b3ffedc6aa481fd9b92eefaf46beded9e51a344", "f24df747ad451a9d45fe2e98aa60b82578203fb73fc24316cd33ce98307e9f0c"),
+    "sns-wasm": ("3b3ffedc6aa481fd9b92eefaf46beded9e51a344", "f4d02df832c1ef951618d954c52ee06cd6046b170d1b360563116c2a40afe643"),
+    "swap": ("ae659b2cad97aa3cf07b523907ef079338fc3bf3", "0f553be99baaaf79f23e85392f4f09dba02f89a2f2ce93f2fa4819f3149b9f84"),
     "sns_root": ("ad5629caa17ac8a4545bc2e3cf0ecc990c9f681e", "2c6018ca27ae077a26acb63821d20328bf1db2dc2710d9a7245cd1c4ae22d388"),
-    "sns_governance": ("a9a67996f7a5f0c4e95a697fafcad6b15a5aae62", "d806d992ccd7f4f6ac0fe9faaed19f2a7b806f2b8136ba5a278fe1d093defc25"),
+    "sns_governance": ("ae659b2cad97aa3cf07b523907ef079338fc3bf3", "a1d73b5e31669edacde9f767ecce598c03fa1cd71fe4873be5e0260076ed4e99"),
     "sns_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
     "sns_ledger": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "26de3e745b0e98cc83850ebf0f8fd1a574905bf7c73d52fcf61ee3f35e4875e1"),
     "sns_archive": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "ea2df4e0e3f4e5e91d43baf281728b2443ab3236ba473d78913cfbe2b5763d3c"),
+    "ck_btc_index": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "cac207cf438df8c9fba46d4445c097f05fd8228a1eeacfe0536b7e9ddefc5f1c"),
     "ck_btc_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "4264ce2952c4e9ff802d81a11519d5e3ffdaed4215d5831a6634e59efd72f7d8"),
+    "ck_eth_index": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "8104acad6105abb069b2dbc8289692bd63c2d110127f8e91f99db51465962606"),
     "ck_eth_ledger": ("a3831c87440df4821b435050c8a8fcb3745d86f6", "e5c8a297d1c0c6d2ab2253c0280aaefd6e23fe3a8a994fc64706a1f3c3116062"),
 }
 
@@ -132,12 +134,28 @@ def mainnet_ck_canisters():
         url = canister_url(git_commit_id, "ic-icrc1-ledger.wasm.gz"),
     )
 
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_btc_index"]
+    http_file(
+        name = "mainnet_ckbtc-index-ng",
+        downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-index-ng.wasm.gz"),
+    )
+
     git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_eth_ledger"]
     http_file(
         name = "mainnet_cketh_ic-icrc1-ledger-u256",
         downloaded_file_path = "ic-icrc1-ledger-u256.wasm.gz",
         sha256 = sha256,
         url = canister_url(git_commit_id, "ic-icrc1-ledger-u256.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ck_eth_index"]
+    http_file(
+        name = "mainnet_cketh-index-ng",
+        downloaded_file_path = "ic-icrc1-index-ng-u256.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-index-ng-u256.wasm.gz"),
     )
 
 def mainnet_sns_canisters():

@@ -696,11 +696,12 @@ fn num_pages(mapping: &Mapping) -> usize {
 ///
 /// 1) The index is present and less than the maximum supported version.
 /// 2) The number of pages is present and consistent with the index.
+///
 /// For the index, check that all the ranges:
-///   1) Have positive length.
-///   2) Are backed by data within the [0; self.num_pages) interval in the overlay file.
-///   3) Don't overlap.
-///   4) Are not back-to-back, e.g. [2..4][4..9].
+/// 1) Have positive length.
+/// 2) Are backed by data within the [0; self.num_pages) interval in the overlay file.
+/// 3) Don't overlap.
+/// 4) Are not back-to-back, e.g. [2..4][4..9].
 ///
 /// We should always check correctness before constructing an `OverlayFile`.
 fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), PersistenceError> {

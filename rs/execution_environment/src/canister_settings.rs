@@ -76,8 +76,8 @@ impl CanisterSettings {
         self.reserved_cycles_limit
     }
 
-    pub fn log_visibility(&self) -> Option<LogVisibility> {
-        self.log_visibility
+    pub fn log_visibility(&self) -> Option<&LogVisibility> {
+        self.log_visibility.as_ref()
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
@@ -381,8 +381,8 @@ impl ValidatedCanisterSettings {
         self.reservation_cycles
     }
 
-    pub fn log_visibility(&self) -> Option<LogVisibility> {
-        self.log_visibility
+    pub fn log_visibility(&self) -> Option<&LogVisibility> {
+        self.log_visibility.as_ref()
     }
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
@@ -401,6 +401,7 @@ impl ValidatedCanisterSettings {
 ///     - there must be enough cycles to avoid freezing the canister.
 /// - controllers:
 ///     - the number of controllers cannot exceed the given maximum.
+///
 /// Keep this function in sync with `do_update_settings()`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_canister_settings(
@@ -592,7 +593,7 @@ pub(crate) fn validate_canister_settings(
         freezing_threshold: settings.freezing_threshold(),
         reserved_cycles_limit: settings.reserved_cycles_limit(),
         reservation_cycles,
-        log_visibility: settings.log_visibility(),
+        log_visibility: settings.log_visibility().cloned(),
         wasm_memory_limit: settings.wasm_memory_limit(),
     })
 }

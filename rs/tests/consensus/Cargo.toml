@@ -10,6 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
+chrono = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -29,6 +30,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
+serde_json = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
@@ -81,3 +83,6 @@ path = "catch_up_possible_test.rs"
 [[bin]]
 name = "ic-systest-catch-up-loop-prevention-test"
 path = "catch_up_loop_prevention_test.rs"
+
+[features]
+upload_perf_systest_results = []

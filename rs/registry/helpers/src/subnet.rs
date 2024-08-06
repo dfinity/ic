@@ -83,7 +83,7 @@ pub trait SubnetRegistry {
     /// Returns notarization delay settings:
     /// - the unit delay for blockmaker;
     /// - the initial delay for notary, to give time to rank-0 block
-    /// propagation.
+    ///   propagation.
     fn get_notarization_delay_settings(
         &self,
         subnet_id: SubnetId,
