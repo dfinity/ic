@@ -377,7 +377,7 @@ pub struct Ledger<Tokens: TokensType> {
     #[serde(default = "default_accounts_overflow_trim_quantity")]
     accounts_overflow_trim_quantity: usize,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     upgrade_with_memory_manager: bool,
 }
 
