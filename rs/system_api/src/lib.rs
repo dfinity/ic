@@ -918,7 +918,7 @@ impl MemoryUsage {
         &mut self,
         execution_bytes: NumBytes,
         execution_memory_type: ExecutionMemoryType,
-    ) {
+    ) -> Result<(), HypervisorError> {
         match execution_memory_type {
             ExecutionMemoryType::WasmMemory => {
                 let (new_usage, overflow) = self

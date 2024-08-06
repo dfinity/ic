@@ -1210,22 +1210,22 @@ impl SandboxSafeSystemState {
                 Ok(())
             }
         }
+    }
 
-        pub fn update_on_low_wasm_memory_hook_status(
-            &mut self,
-            memory_allocation: Option<NumBytes>,
-            used_stable_memory: NumBytes,
-            used_wasm_memory: NumBytes,
-        ) {
-            self.system_state_changes
-                .on_low_wasm_memory_hook_status
-                .update(
-                    self.wasm_memory_threshold,
-                    memory_allocation,
-                    used_stable_memory,
-                    used_wasm_memory,
-                );
-        }
+    pub fn update_on_low_wasm_memory_hook_status(
+        &mut self,
+        memory_allocation: Option<NumBytes>,
+        used_stable_memory: NumBytes,
+        used_wasm_memory: NumBytes,
+    ) {
+        self.system_state_changes
+            .on_low_wasm_memory_hook_status
+            .update(
+                self.wasm_memory_threshold,
+                memory_allocation,
+                used_stable_memory,
+                used_wasm_memory,
+            );
     }
 
     // Returns `true` if storage cycles need to be reserved for the given
