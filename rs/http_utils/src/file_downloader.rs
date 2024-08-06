@@ -187,7 +187,6 @@ pub fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> FileDownloadRe
 fn is_gz_file<R: Read>(reader: &mut R) -> io::Result<bool> {
     let mut buffer = [0; 2];
     reader.read_exact(&mut buffer)?;
-    reader.by_ref().take(2).read_to_end(&mut Vec::new())?;
     Ok(buffer == [0x1f, 0x8b])
 }
 
@@ -195,7 +194,6 @@ fn is_gz_file<R: Read>(reader: &mut R) -> io::Result<bool> {
 fn is_zst_file<R: Read>(reader: &mut R) -> io::Result<bool> {
     let mut buffer = [0; 4];
     reader.read_exact(&mut buffer)?;
-    reader.by_ref().take(4).read_to_end(&mut Vec::new())?;
     Ok(buffer == [0x28, 0xb5, 0x2f, 0xfd])
 }
 
