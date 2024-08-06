@@ -721,7 +721,10 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(10 * 1024 * 1024), // 10 MiB,
+            // 10 MiB capacity allows for creating two universal canisters and taking
+            // one snapshot but attempting to take a second one would fail.
+            // The value is chosen empirically by running the test a couple times.
+            subnet_memory_capacity: NumBytes::from(10 * 1024 * 1024),
             subnet_memory_reservation: NumBytes::from(0),
             canister_snapshots: FlagStatus::Enabled,
             ..Default::default()

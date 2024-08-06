@@ -18,27 +18,36 @@ use std::{
 /// since the last flush to the disk.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterSnapshots {
-    pub(crate) snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
+    snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshot operations are consumed by the `StateManager` in order to
     /// correctly represent backups and restores in the next checkpoint.
-    pub(crate) unflushed_changes: Vec<SnapshotOperation>,
+    unflushed_changes: Vec<SnapshotOperation>,
     /// The set of snapshots ids grouped by canisters.
-    pub(crate) snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
+    snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
+    /// Memory usage of all canister snapshots in bytes.
+    ///
+    /// This field is updated whenever a snapshot is added or removed and
+    /// is used to report the memory usage of all canister snapshots in
+    /// the subnet.
+    memory_usage: NumBytes,
 }
 
 impl CanisterSnapshots {
     pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
         let mut snapshot_ids = BTreeMap::default();
-        for snapshot_id in snapshots.keys() {
+        let mut memory_usage = NumBytes::from(0);
+        for (snapshot_id, snapshot) in snapshots.iter() {
             let canister_id = snapshot_id.get_canister_id();
             let canister_snapshot_ids: &mut BTreeSet<SnapshotId> =
                 snapshot_ids.entry(canister_id).or_default();
             canister_snapshot_ids.insert(*snapshot_id);
+            memory_usage += snapshot.size();
         }
         Self {
             snapshots,
             unflushed_changes: vec![],
             snapshot_ids,
+            memory_usage,
         }
     }
 
@@ -50,6 +59,7 @@ impl CanisterSnapshots {
         let canister_id = snapshot.canister_id();
         self.unflushed_changes
             .push(SnapshotOperation::Backup(canister_id, snapshot_id));
+        self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
         let snapshot_ids = self.snapshot_ids.entry(canister_id).or_default();
         snapshot_ids.insert(snapshot_id);
@@ -82,6 +92,7 @@ impl CanisterSnapshots {
                 if snapshot_ids.is_empty() {
                     self.snapshot_ids.remove(&canister_id);
                 }
+                self.memory_usage -= snapshot.size();
 
                 Some(snapshot)
             }
@@ -186,16 +197,24 @@ impl CanisterSnapshots {
             snapshots: _,
             unflushed_changes: _,
             snapshot_ids: _,
+            memory_usage: _,
         } = self;
     }
 
     /// Returns the amount of memory taken by all canister snapshots on
     /// this subnet.
     pub(crate) fn memory_taken(&self) -> NumBytes {
-        self.snapshots
-            .values()
-            .map(|snapshot| snapshot.size())
-            .sum::<NumBytes>()
+        // The running sum of the memory usage of all canister snapshots should
+        // be the same as the one computed by iterating over all snapshots.
+        debug_assert_eq!(
+            self.snapshots
+                .values()
+                .map(|snapshot| snapshot.size())
+                .sum::<NumBytes>(),
+            self.memory_usage
+        );
+
+        self.memory_usage
     }
 }
 
@@ -475,5 +494,52 @@ mod tests {
         };
 
         assert_eq!(snapshot_manager.snapshot_ids, expected_snapshot_ids);
+    }
+
+    #[test]
+    fn test_memory_usage_correctly_updated_while_adding_and_removing_snapshots() {
+        let canister_id = canister_test_id(0);
+        let (first_snapshot_id, first_snapshot) = fake_canister_snapshot(canister_id, 1);
+        let mut snapshot_manager = CanisterSnapshots::default();
+        assert_eq!(snapshot_manager.snapshots.len(), 0);
+        assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
+        assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
+        assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
+
+        // Pushing new snapshot updates the `memory_usage`.
+        let snapshot1_size = first_snapshot.size();
+        snapshot_manager.push(
+            first_snapshot_id,
+            Arc::<CanisterSnapshot>::new(first_snapshot),
+        );
+        assert_eq!(
+            snapshot_manager.memory_taken(),
+            NumBytes::from(snapshot1_size)
+        );
+
+        let other_canister_id = canister_test_id(1);
+        let (second_snapshot_id, second_snapshot) = fake_canister_snapshot(other_canister_id, 2);
+
+        // Pushing another snapshot updates the `memory_usage`.
+        let snapshot2_size = second_snapshot.size();
+        snapshot_manager.push(
+            second_snapshot_id,
+            Arc::<CanisterSnapshot>::new(second_snapshot),
+        );
+        assert_eq!(
+            snapshot_manager.memory_taken(),
+            NumBytes::from(snapshot1_size + snapshot2_size)
+        );
+
+        // Deleting a snapshot updates the `memory_usage`.
+        snapshot_manager.remove(first_snapshot_id);
+        assert_eq!(
+            snapshot_manager.memory_taken(),
+            NumBytes::from(snapshot2_size)
+        );
+
+        // Deleting the second snapshot brings us back to 0 memory taken.
+        snapshot_manager.remove(second_snapshot_id);
+        assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
     }
 }
