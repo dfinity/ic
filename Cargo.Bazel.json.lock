@@ -1,5 +1,5 @@
 {
-  "checksum": "f9e6adcd4e2ce3f69c1ba55fee34350b45ba8a0276a7d25a4f207b5cf6b9efb7",
+  "checksum": "f76210bf689000c486ca0c2a6e3b515390a14ffe3c7cb9adeaa1a89ffcbd7971",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -64388,7 +64388,7 @@
         "Git": {
           "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
           "commitish": {
-            "Rev": "aaeb5f8592f85c110c2724784427e802190f4d56"
+            "Rev": "bd61f1cc948af134a52098a2b9f290d5f02b3149"
           },
           "strip_prefix": "tla_instrumentation"
         }
@@ -64453,7 +64453,7 @@
         "Git": {
           "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
           "commitish": {
-            "Rev": "aaeb5f8592f85c110c2724784427e802190f4d56"
+            "Rev": "bd61f1cc948af134a52098a2b9f290d5f02b3149"
           },
           "strip_prefix": "tla_instrumentation_proc_macros"
         }
