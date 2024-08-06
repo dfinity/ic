@@ -129,7 +129,7 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = ["@crate_index//:tla_instrumentation_proc_macros"]
 
 ALIASES = {}
 
