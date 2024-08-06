@@ -6,7 +6,7 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, LogVisibilityV2, Method, Payload, UpdateSettingsArgs, IC_00,
+    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
