@@ -124,25 +124,25 @@ pub fn setup(
 /// following algorithm:
 ///
 /// 1. Request a set of (height, hash) tuples from its local StateManager, where
-/// `hash` is the hash of the replicated state after processing the batch at the
-/// specified height. The StateManager is responsible for selecting which parts
-/// of the replicated state are included in the computation of the hash.
+///    `hash` is the hash of the replicated state after processing the batch at the
+///    specified height. The StateManager is responsible for selecting which parts
+///    of the replicated state are included in the computation of the hash.
 ///
 /// 2. Sign the hash-height tuple, resulting in a CertificationShare, and place
-/// the CertificationShare in the certification pool, to be gossiped to other
-/// replicas.
+///    the CertificationShare in the certification pool, to be gossiped to other
+///    replicas.
 ///
 /// 3. On every invocation of `on_state_change`, if sufficiently many
-/// CertificationShares for the same (height, hash) pair were received, combine
-/// them into a full Certification and put it into the certification pool. At
-/// that point, the CertificationShares are not required anymore and can be
-/// purged.
+///    CertificationShares for the same (height, hash) pair were received, combine
+///    them into a full Certification and put it into the certification pool. At
+///    that point, the CertificationShares are not required anymore and can be
+///    purged.
 ///
 /// 4. For every (height, hash) pair with a full Certification, submit
-/// the pair (height, Certification) to the StateManager.
+///    the pair (height, Certification) to the StateManager.
 ///
 /// 5. Whenever the catch-up package height increases, remove all certification
-/// artifacts below this height.
+///    artifacts below this height.
 impl<T: CertificationPool> ChangeSetProducer<T> for CertifierImpl {
     type ChangeSet = ChangeSet;
 

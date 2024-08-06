@@ -26,7 +26,7 @@ pub enum UpdateImageType {
     Sha256,
 }
 
-pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &str) -> String {
+pub fn get_update_image_url(image_type: UpdateImageType, git_revision: &str) -> String {
     match image_type {
         UpdateImageType::Image => {
             format!(
@@ -49,7 +49,7 @@ pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &s
     }
 }
 
-pub(crate) async fn fetch_update_file_sha256_with_retry(
+pub async fn fetch_update_file_sha256_with_retry(
     log: &Logger,
     version_str: &str,
     is_test_img: bool,
@@ -70,7 +70,7 @@ pub(crate) async fn fetch_update_file_sha256_with_retry(
     .expect("Failed to fetch sha256 file.")
 }
 
-pub(crate) async fn fetch_update_file_sha256(
+pub async fn fetch_update_file_sha256(
     version_str: &str,
     is_test_img: bool,
 ) -> Result<String, String> {
@@ -100,7 +100,7 @@ pub(crate) async fn fetch_update_file_sha256(
     Err(format!("SHA256 hash is not found in {}", sha_url))
 }
 
-pub(crate) async fn get_blessed_replica_versions(
+pub async fn get_blessed_replica_versions(
     registry_canister: &RegistryCanister,
 ) -> BlessedReplicaVersions {
     let blessed_vers_result = registry_canister
@@ -114,7 +114,7 @@ pub(crate) async fn get_blessed_replica_versions(
 }
 
 /// Reads the replica version from an unassigned node.
-pub(crate) fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<String> {
+pub fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<String> {
     let sess = endpoint.block_on_ssh_session()?;
     let version_file = Path::new("/opt/ic/share/version.txt");
     let mut chan = sess.scp_recv(version_file)?.0;
@@ -254,7 +254,7 @@ async fn bless_replica_version_with_sha(
     info!(logger, "Updated: {:?}", blessed_versions);
 }
 
-pub(crate) async fn bless_replica_version(
+pub async fn bless_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     image_type: UpdateImageType,
@@ -301,7 +301,7 @@ pub async fn bless_public_replica_version(
     .await;
 }
 
-pub(crate) async fn bless_replica_version_with_urls(
+pub async fn bless_replica_version_with_urls(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     image_type: UpdateImageType,

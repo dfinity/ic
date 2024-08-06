@@ -2,10 +2,7 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::{
-        neuron_id_range_to_u64_range,
-        types::{normalized, Neuron},
-    },
+    neuron::{neuron_id_range_to_u64_range, types::Neuron},
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
@@ -105,11 +102,6 @@ impl NeuronStoreError {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct NeuronNotFound {
-    neuron_id: NeuronId,
-}
-
 impl Display for NeuronStoreError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -201,6 +193,53 @@ pub struct NeuronsFundNeuron {
     pub maturity_equivalent_icp_e8s: u64,
     pub controller: PrincipalId,
     pub hotkeys: Vec<PrincipalId>,
+}
+
+impl NeuronsFundNeuron {
+    /// The number of hotkeys for each Neurons' Fund neuron must be limited due to SNS constraints,
+    /// i.e., an SNS cannot represent arbitrarily-big sets of hotkeys using SNS neuron permissions.
+    /// Concretely, this value should be less than or equal
+    /// `MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR` - 2
+    /// because two permissions will be used for the NNS Governance and the NNS neuron controller.
+    const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 3;
+
+    /// Returns up to `MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON` elements out of `hotkeys`.
+    ///
+    /// Priority is given to *self-authenticating* principals; if there are too few such principals,
+    /// the function picks the remaining elements in the order in which they appear in the original
+    /// vector.
+    pub fn pick_most_important_hotkeys(hotkeys: &Vec<PrincipalId>) -> Vec<PrincipalId> {
+        // Remove duplicates while preserving the order.
+        let mut unique_hotkeys = vec![];
+        let mut non_self_auth_hotkeys = vec![];
+        let mut observed = HashSet::new();
+        for hotkey in hotkeys {
+            if !observed.contains(hotkey) {
+                observed.insert(*hotkey);
+                // Collect hotkeys that are self-authenticating; save non_self_auth_hotkeys for
+                // later, in case there is still space for some of them.
+                if hotkey.is_self_authenticating() {
+                    unique_hotkeys.push(*hotkey);
+                } else {
+                    non_self_auth_hotkeys.push(*hotkey);
+                }
+            }
+            // Limit how many hotkeys may be collected.
+            if unique_hotkeys.len() == Self::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON {
+                break;
+            }
+        }
+
+        // If there is space in `unique_hotkeys`, fill it up using `non_self_auth_hotkeys`.
+        while unique_hotkeys.len() < Self::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON
+            && !non_self_auth_hotkeys.is_empty()
+        {
+            let non_self_authenticating_hotkey = non_self_auth_hotkeys.remove(0);
+            unique_hotkeys.push(non_self_authenticating_hotkey);
+        }
+
+        unique_hotkeys
+    }
 }
 
 enum StorageLocation {
@@ -555,48 +594,42 @@ impl NeuronStore {
         neuron_id: NeuronId,
         sections: NeuronSections,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        let main = || {
-            let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
+        let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
 
-            if let Some(heap_neuron) = heap_neuron.clone() {
-                // If the neuron is active on heap, return early to avoid any operation on stable
-                // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
-                // on stable storage.
-                if !heap_neuron.is_inactive(self.now()) {
-                    return Ok((heap_neuron, StorageLocation::Heap));
-                }
+        if let Some(heap_neuron) = heap_neuron.clone() {
+            // If the neuron is active on heap, return early to avoid any operation on stable
+            // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
+            // on stable storage.
+            if !heap_neuron.is_inactive(self.now()) {
+                return Ok((heap_neuron, StorageLocation::Heap));
+            }
+        }
+
+        let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store
+                .read(neuron_id, sections)
+                .ok()
+                .map(Cow::Owned)
+        });
+
+        match (stable_neuron, heap_neuron) {
+            // 1 copy cases.
+            (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
+            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
+
+            // 2 copies case.
+            (Some(stable), Some(_)) => {
+                println!(
+                    "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
+                     we are at risk of having stale copies",
+                    LOG_PREFIX, neuron_id
+                );
+                Ok((stable, StorageLocation::Stable))
             }
 
-            let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
-                stable_neuron_store
-                    .read(neuron_id, sections)
-                    .ok()
-                    .map(Cow::Owned)
-            });
-
-            match (stable_neuron, heap_neuron) {
-                // 1 copy cases.
-                (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
-                (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
-
-                // 2 copy case.
-                (Some(stable), Some(_)) => {
-                    println!(
-                        "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
-                         we are at risk of having stale copies",
-                        LOG_PREFIX, neuron_id
-                    );
-                    Ok((stable, StorageLocation::Stable))
-                }
-
-                // 0 copies case.
-                (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
-            }
-        };
-
-        let (neuron, storage_location) = main()?;
-        let neuron = normalized(neuron);
-        Ok((neuron, storage_location))
+            // 0 copies case.
+            (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
+        }
     }
 
     // Loads the entire neuron from either heap or stable storage and returns its primary storage.
@@ -741,8 +774,7 @@ impl NeuronStore {
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
             id: n.id(),
             controller: n.controller(),
-            // TODO(NNS1-3198): This should be replaced with a call to `n.hotkeys()`
-            hotkeys: Vec::new(),
+            hotkeys: NeuronsFundNeuron::pick_most_important_hotkeys(&n.hot_keys),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
         .into_iter()

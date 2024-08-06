@@ -24,6 +24,7 @@ use ic_types::{
     CanisterId, Cycles, SnapshotId,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::assert_gt;
 use serde_bytes::ByteBuf;
 
 #[test]
@@ -380,7 +381,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
     assert_eq!(
-        *snapshot.canister_module().unwrap(),
+        *snapshot.canister_module(),
         test.canister_state(canister_id)
             .execution_state
             .as_ref()
@@ -408,6 +409,79 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
     assert_ne!(new_snapshot_id, snapshot_id);
     assert!(!test.state().canister_snapshots.contains(&snapshot_id));
     assert!(test.state().canister_snapshots.contains(&new_snapshot_id));
+}
+
+#[test]
+fn take_canister_snapshot_fails_when_limit_is_reached() {
+    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister and update controllers.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    // Upload chunk.
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+
+    // Take a snapshot for the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+
+    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+
+    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+
+    let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
+    assert_eq!(
+        *snapshot.canister_module(),
+        test.canister_state(canister_id)
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary
+    );
+    assert_eq!(
+        *snapshot.chunk_store(),
+        test.canister_state(canister_id)
+            .system_state
+            .wasm_chunk_store
+    );
+
+    // Take a new snapshot for the canister without providing a replacement ID.
+    // Should fail as only 1 snapshot per canister is allowed.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let error = test
+        .subnet_message("take_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(
+        error.description(),
+        format!(
+            "Canister {} has reached the maximum number of snapshots allowed: 1.",
+            canister_id,
+        )
+    );
 }
 
 fn grow_stable_memory(
@@ -585,11 +659,13 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_snapshots(FlagStatus::Enabled)
-        .with_heap_delta_rate_limit(NumBytes::new(1_000_000))
+        .with_heap_delta_rate_limit(NumBytes::new(80_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
+
+    let initial_heap_delta_estimate = test.state().metadata.heap_delta_estimate;
 
     // Create canister.
     let canister_id = test
@@ -607,6 +683,12 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
+    let heap_delta_estimate_after_taking_snapshot = test.state().metadata.heap_delta_estimate;
+    assert_gt!(
+        heap_delta_estimate_after_taking_snapshot,
+        initial_heap_delta_estimate,
+        "Expected the heap delta estimate to increase after taking a snapshot"
+    );
     let initial_subnet_available_memory = test.subnet_available_memory();
 
     // Taking another snapshot.
@@ -622,6 +704,12 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     assert_eq!(
         test.subnet_available_memory(),
         initial_subnet_available_memory
+    );
+
+    let heap_delta_estimate_after_taking_snapshot_again = test.state().metadata.heap_delta_estimate;
+    assert_eq!(
+        heap_delta_estimate_after_taking_snapshot_again, heap_delta_estimate_after_taking_snapshot,
+        "Expected the heap delta estimate to remain the same after failing to take snapshot"
     );
 }
 
@@ -918,7 +1006,10 @@ fn list_canister_snapshot_succeeds() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.
@@ -1114,6 +1205,83 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
 }
 
 #[test]
+fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
+    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CAPACITY: u64 = 500_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+    const WASM_PAGE_SIZE: u64 = 65_536;
+    const NUM_PAGES: u64 = 2_400;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_heap_delta_rate_limit(NumBytes::new(150_000))
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .build();
+
+    let initial_heap_delta_estimate = test.state().metadata.heap_delta_estimate;
+
+    // Create canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+        .unwrap();
+
+    // Increase memory usage.
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    let heap_delta_estimate_after_taking_snapshot = test.state().metadata.heap_delta_estimate;
+
+    assert_gt!(
+        heap_delta_estimate_after_taking_snapshot,
+        initial_heap_delta_estimate,
+        "Expected the heap delta estimate to increase after taking a snapshot"
+    );
+
+    // Load canister snapshot back into the canister. This should succeed as there's
+    // still enough heap delta available.
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let result = test.subnet_message("load_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+
+    let heap_delta_estimate_after_loading_snapshot = test.state().metadata.heap_delta_estimate;
+
+    assert_gt!(
+        heap_delta_estimate_after_loading_snapshot,
+        heap_delta_estimate_after_taking_snapshot,
+        "Expected the heap delta estimate to increase after loading a snapshot"
+    );
+
+    // Load the same snapshot again. This should fail as the canister is heap delta rate limited.
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterHeapDeltaRateLimited);
+    let message = format!("Canister {} is heap delta rate limited", canister_id).to_string();
+    assert!(error.description().contains(&message));
+
+    let heap_delta_estimate_after_loading_snapshot_again =
+        test.state().metadata.heap_delta_estimate;
+    assert_eq!(
+        heap_delta_estimate_after_loading_snapshot_again,
+        heap_delta_estimate_after_loading_snapshot,
+        "Expected the heap delta estimate to remain the same after failing to load snapshot"
+    );
+}
+
+#[test]
 fn load_canister_snapshot_succeeds() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
@@ -1251,7 +1419,10 @@ fn snapshot_is_deleted_with_canister_delete() {
 
     // Create new canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.into(),
+        )
         .unwrap();
 
     // Take a snapshot of the canister.

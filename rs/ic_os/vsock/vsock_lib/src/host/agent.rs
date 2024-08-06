@@ -28,7 +28,7 @@ const NODE_ID_FILE_PATH: &str = "/boot/config/node-id";
 const SETUP_HOSTNAME_FILE_PATH: &str = "/opt/ic/bin/setup-hostname.sh";
 
 // upgrade
-const UPGRADE_FILE_PATH: &str = "/tmp/upgrade.tar.gz";
+const UPGRADE_FILE_PATH: &str = "/tmp/upgrade";
 const INSTALL_UPGRADE_FILE_PATH: &str = "/opt/ic/bin/install-upgrade.sh";
 
 const VSOCK_VERSION: HostOSVsockVersion = HostOSVsockVersion {
