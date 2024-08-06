@@ -1,5 +1,5 @@
 {
-  "checksum": "5d815f09484e8c3700569828efe9c7cf3d9a1ee161331da6a1594082eaa99734",
+  "checksum": "78efc5b8c1207de7215cd3b5b23cdc4dbd3f2d7aa4ff3ccc08618678733ee6dc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11754,15 +11754,15 @@
       ],
       "license_file": null
     },
-    "cloudflare 0.11.0": {
+    "cloudflare 0.12.0": {
       "name": "cloudflare",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/blind-oracle/cloudflare-rs.git",
+          "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
           },
           "strip_prefix": "cloudflare"
         }
@@ -11842,7 +11842,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.0"
+        "version": "0.12.0"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -16980,7 +16980,7 @@
               "target": "clap"
             },
             {
-              "id": "cloudflare 0.11.0",
+              "id": "cloudflare 0.12.0",
               "target": "cloudflare"
             },
             {
@@ -51459,7 +51459,11 @@
           "common": [
             "__rustls",
             "__tls",
+            "async-compression",
             "blocking",
+            "brotli",
+            "deflate",
+            "gzip",
             "hyper-rustls",
             "json",
             "mime_guess",
@@ -51531,6 +51535,10 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "async-compression 0.4.3",
+                "target": "async_compression"
+              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -78397,7 +78405,7 @@
     "cidr 0.2.3",
     "clap 3.2.25",
     "clap 4.4.8",
-    "cloudflare 0.11.0",
+    "cloudflare 0.12.0",
     "colored 2.0.4",
     "comparable 0.5.4",
     "console 0.11.3",
