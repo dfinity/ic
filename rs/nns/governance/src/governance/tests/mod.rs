@@ -137,7 +137,10 @@ mod settle_neurons_fund_participation_request_tests {
 mod settle_neurons_fund_participation_mem_tests {
     use crate::{
         governance::MAX_NEURONS_FUND_PARTICIPANTS,
-        neurons_fund::{NeuronsFundNeuronPortion, NeuronsFundSnapshot},
+        neurons_fund::{
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
+            NeuronsFundSnapshot,
+        },
         pb::v1 as gov_pb,
     };
     use ic_base_types::PrincipalId;
@@ -161,9 +164,7 @@ mod settle_neurons_fund_participation_mem_tests {
     #[test]
     fn settle_neurons_fund_participation_ingress_mem_limits_pass() {
         let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
-            let controller = PrincipalId::new_user_test_id(id);
-            // TODO: Change this to `0..MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON`.
-            let hotkeys = (0..5)
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
                 .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
                 .collect();
 
@@ -185,9 +186,7 @@ mod settle_neurons_fund_participation_mem_tests {
     #[test]
     fn settle_neurons_fund_participation_ingress_mem_limits_worst_case_bound() {
         let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
-            let controller = PrincipalId::new_user_test_id(id);
-            // TODO: Change this to `0..MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON`.
-            let hotkeys = (0..5)
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
                 .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
                 .collect();
 
