@@ -1,5 +1,6 @@
 mod candid;
 mod canister;
+mod dashboard;
 mod git;
 mod proposal;
 
@@ -11,6 +12,7 @@ use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use crate::dashboard::DashboardClient;
 
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -64,7 +66,8 @@ enum Commands {
     },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::Upgrade {
@@ -77,6 +80,7 @@ fn main() {
             check_dir_has_required_permissions(&output_dir).expect("invalid output directory");
 
             let mut ic_repo = GitRepository::clone_ic();
+            let dashboard = DashboardClient::new();
             let release_notes = ic_repo.release_notes(&canister, &from, &to);
             ic_repo.checkout(&to);
             let upgrade_args = encode_upgrade_args(
@@ -84,6 +88,8 @@ fn main() {
                 args.unwrap_or(canister.default_upgrade_args()),
             );
             let canister_id = ic_repo.parse_canister_id(&canister);
+            let past_proposals = dashboard.list_canister_upgrade_proposals(&canister_id).await;
+            panic!("past proposals: {:?}", past_proposals);
             let compressed_wasm_hash = ic_repo.build_canister_artifact(&canister);
             let output_dir = output_dir.join(canister.to_string()).join(to.to_string());
 
