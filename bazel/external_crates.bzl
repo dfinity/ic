@@ -334,8 +334,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "cloudflare": crate.spec(
-                git = "https://github.com/blind-oracle/cloudflare-rs.git",
-                rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc",
+                git = "https://github.com/dfinity/cloudflare-rs.git",
+                rev = "a6538a036926bd756986c9c0a5de356daef48881",
                 default_features = False,
                 features = [
                     "rustls-tls",
@@ -490,6 +490,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
+            "hmac": crate.spec(
+                version = "^0.12",
+            ),
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
@@ -569,7 +572,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ic-btc-interface": crate.spec(
-                version = "^0.2.0",
+                version = "^0.2.2",
             ),
             "ic-btc-validation": crate.spec(
                 version = "^0.1.0",
@@ -953,14 +956,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                git = "https://github.com/quinn-rs/quinn",
-                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                version = "^0.11.3",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
-                git = "https://github.com/quinn-rs/quinn",
-                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                version = "^0.5.4",
             ),
             "quote": crate.spec(
                 version = "^1.0",
