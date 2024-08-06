@@ -1278,7 +1278,11 @@ impl HasIcName for IcNodeSnapshot {
 }
 
 pub trait HasDependencies {
-    fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf;
+    fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
+        let runfiles = std::env::var("RUNFILES")
+            .expect("Expected environment variable RUNFILES to be defined!");
+        Path::new(&runfiles).join(p)
+    }
 
     fn read_dependency_to_string<P: AsRef<Path>>(&self, p: P) -> Result<String> {
         let dep_path = self.get_dependency_path(p);
@@ -1301,9 +1305,7 @@ pub trait HasDependencies {
 }
 
 impl<T: HasTestEnv> HasDependencies for T {
-    fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
-        self.test_env().get_path("dependencies").join(p)
-    }
+    // TODO(IDX-3174): now that this implementation is empty we should turn the methods of the HasDependencies trait into normal functions.
 }
 
 pub trait HasWasm {

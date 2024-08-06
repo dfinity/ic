@@ -455,13 +455,20 @@ impl GroupSpec {
             job_schedule: None,
             test_name: Some(group_base_name.to_string()),
         };
-        let volatile_status = env.read_dependency_to_string("volatile-status.txt");
-        let runtime_args_map = match volatile_status {
-            Ok(content) => parse_volatile_status_file(content),
-            _ => {
-                warn!(env.logger(), "Failed to read volatile status file. Farm group metadata will be populated with default keys.");
-                HashMap::new()
-            }
+        let version_file_path = std::env::var("VERSION_FILE_PATH")
+            .expect("Expected the environment variable VERSION_FILE_PATH to be defined!");
+        let version_file = env.read_dependency_to_string(version_file_path).unwrap();
+        let runtime_args_map = if Path::new(&version_file).exists() {
+            let volatile_status = std::fs::read_to_string(&version_file)
+                .unwrap_or_else(|e| {
+                    panic!("Couldn't read content of the VERSION_FILE file {version_file}: {e:?}")
+                })
+                .trim_end()
+                .to_string();
+            parse_volatile_status_file(volatile_status)
+        } else {
+            warn!(env.logger(), "Failed to read volatile status file. Farm group metadata will be populated with default keys.");
+            HashMap::new()
         };
 
         if let Some(user) = runtime_args_map.get("USER") {
