@@ -54,7 +54,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
-        log_visibility: LogVisibility::default(),
+        log_visibility: Default::default(),
         canister_log: Default::default(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,

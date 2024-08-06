@@ -722,7 +722,7 @@ impl SystemState {
             canister_version: 0,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
-            log_visibility: LogVisibilityV2::default(),
+            log_visibility: Default::default(),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
