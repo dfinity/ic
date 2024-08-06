@@ -815,10 +815,10 @@ struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
 
-    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Remove `no_` prefix after the InstallCode proposal is supported.
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
     #[clap(long)]
-    no_use_legacy_execute_nns_function: bool,
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StartCanisterCmd {
@@ -847,10 +847,10 @@ struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
 
-    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Remove `no_` prefix after the InstallCode proposal is supported.
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
     #[clap(long)]
-    no_use_legacy_execute_nns_function: bool,
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StopCanisterCmd {
@@ -1018,9 +1018,9 @@ struct ProposeToChangeNnsCanisterCmd {
     memory_allocation: Option<u64>,
 
     /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Remove `no_` prefix after the InstallCode proposal is supported.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the InstallCode proposal is supported.
     #[clap(long)]
-    no_use_legacy_execute_nns_function: bool,
+    use_explicit_action_type: bool,
 }
 
 #[async_trait]
@@ -3962,7 +3962,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.no_use_legacy_execute_nns_function {
+            if cmd.use_explicit_action_type {
                 propose_to_install_code(cmd, canister_client, proposer).await;
             } else if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
@@ -4039,7 +4039,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.no_use_legacy_execute_nns_function {
+            if cmd.use_explicit_action_type {
                 propose_to_start_canister(cmd, canister_client, proposer).await;
             } else {
                 propose_external_proposal_from_command(
@@ -4059,7 +4059,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.no_use_legacy_execute_nns_function {
+            if cmd.use_explicit_action_type {
                 propose_to_stop_canister(cmd, canister_client, proposer).await;
             } else {
                 propose_external_proposal_from_command(
