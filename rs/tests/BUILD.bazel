@@ -259,24 +259,36 @@ copy_file(
     name = "coredns_image",
     src = "@coredns//image",
     out = "coredns.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 copy_file(
     name = "pebble_image",
     src = "@pebble//image",
     out = "pebble.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 copy_file(
     name = "python3_image",
     src = "@python3//image",
     out = "python3.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 copy_file(
     name = "openssl_image",
     src = "@alpine_openssl//image",
     out = "openssl.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 uvm_config_image(
