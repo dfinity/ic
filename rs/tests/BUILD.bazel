@@ -140,6 +140,9 @@ copy_file(
     name = "static-file-server_image",
     src = "@static-file-server//image",
     out = "static-file-server.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 exports_files([
