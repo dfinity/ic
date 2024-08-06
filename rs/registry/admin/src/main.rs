@@ -5562,7 +5562,7 @@ async fn propose_to_install_code(
         Some(proposer),
     ));
 
-    let canister_id = Some(PrincipalId::try_from(cmd.canister_id).unwrap());
+    let canister_id = Some(cmd.canister_id.get());
     let wasm_module = Some(
         read_wasm_module(
             &cmd.wasm_module_path,
@@ -5611,7 +5611,7 @@ async fn propose_to_stop_canister(cmd: StopCanisterCmd, agent: Agent, proposer: 
         Some(proposer),
     ));
 
-    let canister_id = PrincipalId::try_from(cmd.canister_id).unwrap();
+    let canister_id = cmd.canister_id.get();
     let stop_canister = StopOrStartCanister {
         canister_id: Some(canister_id),
         action: Some(GovernanceCanisterAction::Stop as i32),
@@ -5646,7 +5646,7 @@ async fn propose_to_start_canister(cmd: StartCanisterCmd, agent: Agent, proposer
         Some(proposer),
     ));
 
-    let canister_id = PrincipalId::try_from(cmd.canister_id).unwrap();
+    let canister_id = cmd.canister_id.get();
     let start_canister = StopOrStartCanister {
         canister_id: Some(canister_id),
         action: Some(GovernanceCanisterAction::Start as i32),
