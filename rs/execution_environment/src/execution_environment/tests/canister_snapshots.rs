@@ -1442,3 +1442,77 @@ fn snapshot_is_deleted_with_canister_delete() {
     assert!(test.state().canister_state(&canister_id).is_none());
     assert!(test.state().canister_snapshots.get(snapshot_id).is_none());
 }
+
+#[test]
+fn take_canister_snapshot_charges_canister_cycles() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+
+    // Take a snapshot of the canister will decrease the balance.
+    let expected_charge = test
+        .cycles_account_manager()
+        .execution_cost(instructions, test.subnet_size());
+
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge,
+    );
+
+    // let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+}
+
+#[test]
+fn take_canister_snapshot_charges_if_failing() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    // let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        // .with_subnet_memory_reservation(0)
+        // .with_subnet_execution_memory(10)
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+
+    // Expected charge.
+    let expected_charge = test
+        .cycles_account_manager()
+        .execution_cost(instructions, test.subnet_size());
+
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let _err = test
+        .subnet_message("take_canister_snapshot", args.encode())
+        .unwrap_err();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge,
+    );
+}
