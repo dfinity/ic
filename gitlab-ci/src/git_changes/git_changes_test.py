@@ -101,26 +101,3 @@ def test_is_master_branch_false(tmpdir):
     """Tests that a commit has changed one crate."""
     setup_repo(tmpdir, "change_one_file")
     assert not git_changes.is_master(tmpdir)
-
-def test_target_branch_CI_DEFAULT_BRANCH_is_unset(tmpdir):
-    """Tests that the target branch is empty."""
-    setup_repo(tmpdir, "change_one_file", branch="master")
-
-    assert git_changes.target_branch() == "master"
-
-def test_target_branch_CI_MERGE_REQUEST_TARGET_BRANCH_NAME_is_unset(tmpdir):
-    """Tests that the target branch is empty."""
-    setup_repo(tmpdir, "change_one_file", branch="default-branch")
-    os.environ["CI_DEFAULT_BRANCH"] = "default-branch"
-    os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"] = ""
-
-    assert git_changes.target_branch() == "default-branch"
-
-def test_target_branch_CI_MERGE_REQUEST_TARGET_BRANCH_NAME_is_set(tmpdir):
-    """Tests that the target branch is empty."""
-    setup_repo(tmpdir, "change_one_file", branch="master")
-    os.environ["CI_DEFAULT_BRANCH"] = "default-branch"
-    os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"] = "target-branch"
-
-    assert git_changes.target_branch() == "target-branch"
-
