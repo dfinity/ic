@@ -1893,7 +1893,7 @@ pub struct CanisterSettingsArgsBuilder {
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
 }
@@ -1976,7 +1976,7 @@ impl CanisterSettingsArgsBuilder {
     }
 
     /// Sets the log visibility.
-    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
             ..self

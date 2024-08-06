@@ -50,7 +50,7 @@ use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
 
 /// Convert an object into CBOR binary.
@@ -296,9 +296,10 @@ fn fetch_canister_logs(
     })?;
 
     match canister.log_visibility() {
-        LogVisibility::Public => Ok(()),
-        LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibility::Controllers => Err(UserError::new(
+        LogVisibilityV2::Public => Ok(()),
+        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) || LogVisibilityV2::Controllers => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
                 "Caller {} is not allowed to query ic00 method {}",
