@@ -147,7 +147,10 @@ fn test_one_direction(
 
 enum TestType {
     SelfTestOnly,
-    Bidirectional { published_binary: String },
+    Bidirectional {
+        published_binary: String,
+        mainnet_version: String,
+    },
 }
 
 struct TestCase {
@@ -165,9 +168,12 @@ impl TestCase {
         }
     }
 
-    pub fn run(&self, mainnet_version: &str, logger: &Logger) {
+    pub fn run(&self, logger: &Logger) {
         match &self.test_type {
-            TestType::Bidirectional { published_binary } => {
+            TestType::Bidirectional {
+                published_binary,
+                mainnet_version,
+            } => {
                 self.self_test(logger);
                 self.bidirectional_test(mainnet_version, published_binary, logger)
             }
@@ -236,14 +242,6 @@ struct Subnets {
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let basic_test = TestCase::new(
-        TestType::Bidirectional {
-            published_binary: "replicated-state-test".to_string(),
-        },
-        "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
-        "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
-    );
-
     let versions_json = env
         .read_dependency_to_string("testnet/mainnet_revisions.json")
         .expect("mainnet IC versions");
@@ -254,17 +252,30 @@ fn test(env: TestEnv) {
 
     info!(logger, "Mainnet versions: {:?}", mainnet_versions);
 
-    for mainnet_version in mainnet_versions {
-        basic_test.run(&mainnet_version, &logger)
+    let tests = mainnet_versions
+        .iter()
+        .map(|v| {
+            TestCase::new(
+                TestType::Bidirectional {
+                    published_binary: "replicated-state-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
+                "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
+            )
+        })
+        .chain(
+            [TestCase::new(
+                TestType::SelfTestOnly,
+                "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
+            )]
+            .into_iter(),
+        );
+
+    for t in tests {
+        t.run(&logger);
     }
-
-    let input_order_test = TestCase::new(
-        TestType::SelfTestOnly,
-        "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
-        "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
-    );
-
-    input_order_test.run("", &logger);
 }
 
 fn main() -> Result<()> {
