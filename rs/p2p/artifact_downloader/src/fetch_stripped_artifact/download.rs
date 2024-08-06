@@ -190,7 +190,8 @@ pub(crate) async fn download_ingress<P: Peers>(
 mod tests {
     use super::*;
 
-    use ic_p2p_test_utils::mocks::MockValidatedPoolReader;
+    use ic_logger::no_op_logger;
+    use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
     use ic_test_utilities_consensus::{
         fake::{Fake, FakeContentSigner},
         make_genesis,
@@ -199,7 +200,7 @@ mod tests {
     use ic_types::batch::{BatchPayload, IngressPayload};
     use ic_types::consensus::{dkg::Dealings, Block, BlockProposal, DataPayload, Payload, Rank};
     use ic_types::Height;
-    use ic_types_test_utils::ids::node_test_id;
+    use ic_types_test_utils::ids::{node_test_id, NODE_1};
 
     fn mock_pools(
         ingress_message: Option<SignedIngress>,
@@ -327,6 +328,30 @@ mod tests {
         assert_eq!(rpc_response, Err(StatusCode::BAD_REQUEST));
     }
 
+    #[tokio::test]
+    async fn download_works() {
+        let block = fake_block_proposal(vec![]);
+        let ingress_message = SignedIngressBuilder::new().nonce(1).build();
+        let mut mock_transport = MockTransport::new();
+        let mut mock_peers = MockPeers::default();
+        let ingress_message_clone = ingress_message.clone();
+        mock_peers.expect_peers().return_const(vec![NODE_1]);
+        mock_transport
+            .expect_rpc()
+            .returning(move |_, _| Ok(response(ingress_message_clone.clone())));
+
+        let response = download_ingress(
+            Arc::new(mock_transport),
+            IngressMessageId::from(&ingress_message),
+            ConsensusMessageId::from(&block),
+            &no_op_logger(),
+            mock_peers,
+        )
+        .await;
+
+        assert_eq!(response, (ingress_message, NODE_1));
+    }
+
     // Utility functions below
 
     fn fake_block_proposal(ingress_messages: Vec<SignedIngress>) -> ConsensusMessage {
@@ -375,5 +400,15 @@ mod tests {
         };
 
         Bytes::from(pb::GetIngressMessageInBlockRequest::proxy_encode(request))
+    }
+
+    fn response(ingress_message: SignedIngress) -> axum::response::Response<Bytes> {
+        axum::response::Response::builder()
+            .body(Bytes::from(
+                pb::GetIngressMessageInBlockResponse::proxy_encode(
+                    GetIngressMessageInBlockResponse { ingress_message },
+                ),
+            ))
+            .unwrap()
     }
 }
