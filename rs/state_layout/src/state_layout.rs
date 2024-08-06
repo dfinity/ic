@@ -1492,7 +1492,8 @@ impl CheckpointLayout<ReadOnly> {
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     ///
     /// A readonly checkpoint typically prevents modification to the files in the checkpoint.
-    /// However, the removal of the
+    /// However, the removal of the unverified checkpoint marker is allowed as
+    /// the marker is not part the checkpoint conceptually.
     pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if !marker.exists() {

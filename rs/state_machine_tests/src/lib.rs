@@ -2355,6 +2355,7 @@ impl StateMachine {
                 CertificationScope::Full,
                 None,
             );
+            self.state_manager.flush_tip_channel();
 
             other_env.import_canister_state(
                 self.state_manager

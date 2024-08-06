@@ -3605,7 +3605,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
             assert_eq!(tip_height, height(0));
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
 
-            // the state sync is started before the state manager has the state at height 2.
+            // The state sync is started before the state manager has the state at height 2.
             let mut chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
 

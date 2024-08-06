@@ -2809,15 +2809,16 @@ impl StateManager for StateManagerImpl {
                         Ok(true) => {}
                         Ok(false) => {
                             warn!(self.log,
-                                "Unverified checkpoint @{} is not expected to be found in states metadata.",
+                                "Unverified checkpoint @{} cannot be cloned to a new checkpoint height.",
                                 checkpoint_height
                             );
                             return;
                         }
-                        Err(_) => {
+                        Err(err) => {
                             warn!(self.log,
-                                "Checkpoint @{} does not exist but it is found in states metadata.",
-                                checkpoint_height
+                                "Checkpoint @{} does not exist but it is found in states metadata: {:?}",
+                                checkpoint_height,
+                                err
                             );
                             return;
                         }
@@ -2999,13 +3000,13 @@ impl StateManager for StateManagerImpl {
     ///
     /// # Notation
     ///
-    ///  * *OCK* stands for "Oldest Checkpoint to Keep". This is the height of
-    ///    the latest checkpoint ≤ H passed to `remove_states_below`.
+    ///  * *OCK* stands for "Oldest verified Checkpoint to Keep". This is the height of
+    ///    the latest verified checkpoint ≤ H passed to `remove_states_below`.
     ///  * *LSH* stands for "Latest State Height". This is the latest state that
     ///    the state manager has.
-    ///  * *LCH* stands for "Latest Checkpoint Height". This is the height of
-    ///    the latest checkpoint that the state manager created.
-    ///  * *CHS* stands for "CHeckpoint Heights". These are heights of all the
+    ///  * *LCH* stands for "Latest verified Checkpoint Height". This is the height of
+    ///    the latest verified checkpoint that the state manager created.
+    ///  * *CHS* stands for "verified CHeckpoint Heights". These are heights of all the
     ///    verified checkpoints available.
     ///
     /// # Heuristic
