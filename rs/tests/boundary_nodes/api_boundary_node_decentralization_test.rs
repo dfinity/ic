@@ -5,9 +5,6 @@ use ic_tests::boundary_nodes::{
     api_boundary_nodes_integration::decentralization_test, setup::setup_ic,
 };
 
-#[allow(unused_imports)]
-use ic_agent_dynamic_route;
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup_ic)
