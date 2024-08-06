@@ -202,6 +202,7 @@ pub struct CanisterStateBuilder {
     stable_memory: Option<Vec<u8>>,
     wasm: Option<Vec<u8>>,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     ingress_queue: Vec<Ingress>,
     status: CanisterStatusType,
@@ -246,6 +247,11 @@ impl CanisterStateBuilder {
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
         self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self
+    }
+
+    pub fn with_wasm_memory_threshold<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
+        self.wasm_memory_threshold = num_bytes.into();
         self
     }
 
@@ -402,6 +408,7 @@ impl Default for CanisterStateBuilder {
             stable_memory: None,
             wasm: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),
             status: CanisterStatusType::Running,
@@ -457,6 +464,11 @@ impl SystemStateBuilder {
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
         self.system_state.memory_allocation =
             MemoryAllocation::try_from(memory_allocation).unwrap();
+        self
+    }
+
+    pub fn wasm_memory_threshold(mut self, wasm_memory_threshold: NumBytes) -> Self {
+        self.system_state.wasm_memory_threshold = wasm_memory_threshold;
         self
     }
 
@@ -1023,7 +1035,6 @@ prop_compose! {
         update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
         threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
-        ecdsa_signature_agreements in any::<u64>(),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
@@ -1034,7 +1045,6 @@ prop_compose! {
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
         metrics.threshold_signature_agreements = threshold_signature_agreements;
-        metrics.ecdsa_signature_agreements = ecdsa_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(

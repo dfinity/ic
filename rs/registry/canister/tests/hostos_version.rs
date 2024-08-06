@@ -25,7 +25,7 @@ use common::test_helpers::{
     prepare_registry_with_nodes, prepare_registry_with_nodes_from_template,
 };
 
-const GOOD_PACKAGE_URL: &str = "http://release_package.tar.gz";
+const GOOD_PACKAGE_URL: &str = "http://release_package.tar.zst";
 const GOOD_SHA256_HEX: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
 
 // ~~~~~~~~~~ Adding versions ~~~~~~~~~~

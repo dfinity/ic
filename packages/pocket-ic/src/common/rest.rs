@@ -28,7 +28,17 @@ pub struct HttpsConfig {
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HttpGatewayConfig {
-    pub listen_at: Option<u16>,
+    pub ip_addr: Option<String>,
+    pub port: Option<u16>,
+    pub forward_to: HttpGatewayBackend,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpGatewayDetails {
+    pub instance_id: InstanceId,
+    pub port: u16,
     pub forward_to: HttpGatewayBackend,
     pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,

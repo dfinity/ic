@@ -66,7 +66,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 }),
                 release_package_urls: elect
                     .as_ref()
-                    .map(|_| vec!["http://release_package.tar.gz".to_string()])
+                    .map(|_| vec!["http://release_package.tar.zst".to_string()])
                     .unwrap_or_default(),
                 replica_version_to_elect: elect,
                 guest_launch_measurement_sha256_hex: None,

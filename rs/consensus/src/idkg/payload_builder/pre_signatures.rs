@@ -25,6 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// - making new configs when pre-conditions are met;
 /// - gathering ready results (new transcripts) from idkg pool;
 /// - moving completed pre-signatures from "in creation" to "available".
+///
 /// Returns the newly created transcripts.
 pub(super) fn update_pre_signatures_in_creation(
     payload: &mut idkg::IDkgPayload,
@@ -121,6 +122,7 @@ pub(super) fn update_pre_signatures_in_creation(
 /// Update the given tECDSA quadruple by:
 /// - making new configs when pre-conditions are met;
 /// - gathering ready results (new transcripts) from the pool;
+///
 /// Returns the newly created transcripts and if creation of this pre-signature has finished.
 fn update_ecdsa_quadruple_in_creation(
     pre_signature_id: PreSigId,
@@ -964,7 +966,7 @@ pub(super) mod tests {
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestIDkgTranscriptBuilder::new();
 
-        // Start quadruple creation
+        // Start pre-signature creation
         let [ref blinder_config_ref] = create_new_pre_signature_in_creation(
             &env.nodes.ids::<Vec<_>>(),
             env.newest_registry_version,

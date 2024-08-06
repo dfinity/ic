@@ -7,8 +7,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmR
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, NnsCanisterWasmStrategy, NnsInstallationBuilder, SubnetSnapshot,
-    TopologySnapshot,
+    IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_types::SubnetId;
@@ -72,7 +71,6 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             .next()
             .unwrap();
         NnsInstallationBuilder::new()
-            .with_canister_wasm_strategy(NnsCanisterWasmStrategy::TakeBuiltFromSources)
             .install(&nns_node, &env)
             .expect("NNS canisters not installed");
         info!(env.logger(), "NNS canisters are installed.");

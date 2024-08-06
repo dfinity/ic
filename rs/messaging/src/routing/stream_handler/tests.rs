@@ -3,15 +3,14 @@ use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_I
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    replicated_state::{
-        LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_INVALID_RESPONSE, LABEL_VALUE_OUT_OF_MEMORY,
-    },
+    replicated_state::{LABEL_VALUE_INVALID_RESPONSE, LABEL_VALUE_OUT_OF_MEMORY},
     testing::ReplicatedStateTesting,
     CanisterState, CanisterStatus, InputQueueType, ReplicatedState, Stream,
 };

@@ -3708,7 +3708,7 @@ async fn main() {
             eprintln!("Download IC-OS .. ");
             let tmp_dir = tempfile::tempdir().unwrap().into_path();
             let mut tmp_file = tmp_dir.clone();
-            tmp_file.push("temp.gz");
+            tmp_file.push("temp-image");
 
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
