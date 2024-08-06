@@ -137,6 +137,16 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_test_neurons_fund_neurons_with_hotkeys(
+        &mut self,
+        hotkeys: Vec<PrincipalId>,
+        maturity_equivalent_icp_e8s: u64,
+    ) -> &mut Self {
+        self.governance
+            .with_test_neurons_fund_neurons_with_hotkeys(hotkeys, maturity_equivalent_icp_e8s);
+        self
+    }
+
     pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
         self.governance
             .with_additional_neurons(neurons.into_iter().map(|n| n.into()).collect());

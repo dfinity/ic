@@ -59,6 +59,28 @@ struct DirectParticipantConfig {
     pub use_ticketing_system: bool,
 }
 
+#[derive(Clone, Debug, Default)]
+struct NeuronsFundConfig {
+    pub hotkeys: Vec<PrincipalId>,
+}
+
+impl NeuronsFundConfig {
+    fn new_with_20_hotkeys() -> Self {
+        let hotkeys = (0..20)
+            .map(|i: u64| {
+                if i % 2 == 0 {
+                    // Model some self-authenticating hotkeys.
+                    PrincipalId::new_self_authenticating(&i.to_be_bytes())
+                } else {
+                    // Model some non-self-authenticating hotkeys.
+                    PrincipalId::new_user_test_id(i)
+                }
+            })
+            .collect();
+        Self { hotkeys }
+    }
+}
+
 /// This is a parametric test function for the testing the SNS lifecycle. A test instance should
 /// end by calling this function, instantiating it with a set of parameter values that define
 /// a particular testing scenario. If this function panics, the test fails. Otherwise, it succeeds.
@@ -138,6 +160,7 @@ fn test_sns_lifecycle(
     ensure_swap_timeout_is_reached: bool,
     create_service_nervous_system: CreateServiceNervousSystem,
     direct_participants: BTreeMap<PrincipalId, DirectParticipantConfig>,
+    neurons_fund_config: NeuronsFundConfig,
 ) {
     // 0. Deconstruct and clone some immutable objects for convenience.
     let initial_token_distribution = create_service_nervous_system
@@ -251,11 +274,13 @@ fn test_sns_lifecycle(
             .collect();
 
         let with_mainnet_nns_canister_versions = false;
+        let neurons_fund_hotkeys = neurons_fund_config.hotkeys;
         let nns_neuron_controller_principal_ids = install_nns_canisters(
             &pocket_ic,
             direct_participant_initial_icp_balances,
             with_mainnet_nns_canister_versions,
             None,
+            neurons_fund_hotkeys,
         );
 
         let with_mainnet_sns_wasms = false;
@@ -1857,6 +1882,7 @@ fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
             .neurons_fund_participation(true)
             .build(),
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        NeuronsFundConfig::new_with_20_hotkeys(),
     );
 }
 
@@ -1872,6 +1898,7 @@ fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without_ticke
             PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true },
             PrincipalId::new_user_test_id(2) => DirectParticipantConfig { use_ticketing_system: false },
         },
+        NeuronsFundConfig::new_with_20_hotkeys(),
     );
 }
 
@@ -1883,6 +1910,8 @@ fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
             .neurons_fund_participation(false)
             .build(),
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        // No Neurons' Fund ==> no need to configure NNS neurons.
+        NeuronsFundConfig::default(),
     );
 }
 
@@ -1896,6 +1925,8 @@ fn test_sns_lifecycle_overpayment_scenario() {
             .with_dapp_canisters(vec![CanisterId::from_u64(100)])
             .build(),
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        // Overpayment is a scenario driven only by direct participants, so we don't need NF.
+        NeuronsFundConfig::default(),
     );
 }
 
@@ -1912,6 +1943,8 @@ fn test_sns_lifecycle_happy_scenario_with_dapp_canisters() {
             .with_dapp_canisters(vec![CanisterId::from_u64(100)])
             .build(),
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        // No Neurons' Fund ==> no need to configure NNS neurons.
+        NeuronsFundConfig::default(),
     );
 }
 
@@ -1924,6 +1957,7 @@ fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation_same_princi
             .build(),
         // Direct participant has the same principal as the one controlling the Neurons' Fund neuron.
         btreemap! { *TEST_NEURON_1_OWNER_PRINCIPAL => DirectParticipantConfig { use_ticketing_system: true } },
+        NeuronsFundConfig::new_with_20_hotkeys(),
     );
 }
 
@@ -1935,6 +1969,8 @@ fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
             .neurons_fund_participation(true)
             .build(),
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        // There won't be any SNS neurons created, so no need to configure the Neurons' Fund.
+        NeuronsFundConfig::default(),
     );
 }
 
@@ -1946,6 +1982,8 @@ fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
             .neurons_fund_participation(false)
             .build(),
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        // No Neurons' Fund ==> no need to configure NNS neurons.
+        NeuronsFundConfig::default(),
     );
 }
 
@@ -1987,6 +2025,7 @@ fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
         false,
         create_service_nervous_system,
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        NeuronsFundConfig::new_with_20_hotkeys(),
     );
 }
 
@@ -2028,5 +2067,6 @@ fn test_sns_lifecycle_swap_timeout_with_lots_of_dev_neurons() {
         true,
         create_service_nervous_system,
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+        NeuronsFundConfig::new_with_20_hotkeys(),
     );
 }
