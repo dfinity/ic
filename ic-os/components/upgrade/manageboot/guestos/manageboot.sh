@@ -112,22 +112,20 @@ Usage:
   Action is one of
 
     upgrade-install
-      Installs a new system image into the spare partition and changes
-      bootloader to use it on next boot. (Caller will still have to
-      reboot on next opportunity).
+      Installs a new system image into the spare partition. 
       The new system image can be given in two different ways:
-      - as a singe .tar (or .tar.zst) file containing two files
+      - as a single .tar (or .tar.zst) file containing two files
         named "boot.img" and "root.img"
       - as two filenames: first the "boot" partition
         image, then the "root" partition image.
       The update is written to the partitions, but the bootloader is
-      not changed yet, see next command.
+      not changed yet; see upgrade-commit command.
 
     upgrade-commit
       Commits a previously installed upgrade by writing instructions to the
-      bootloader to switch to new system after reboot, and also triggers
+      bootloader to switch to the new system after reboot, and also triggers
       reboot immediately.
-      This must be called after upgrade-install command above finished
+      This must be called after the upgrade-install command above finished
       successfully. Calling it under any other circumstances is illegal and
       will result in a wrong (possibly failing) boot.
 
