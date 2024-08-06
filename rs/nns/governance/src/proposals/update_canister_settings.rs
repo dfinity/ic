@@ -87,7 +87,7 @@ impl UpdateCanisterSettings {
         let freezing_threshold = settings.freezing_threshold.map(Nat::from);
         let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
         let log_visibility = match settings.log_visibility {
-            Some(log_visibility_i32) => Some(Self::valid_log_visibility(log_visibility_i32)?),
+            Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
             None => None,
         };
         // Reserved cycles limit is not supported yet.
@@ -244,6 +244,7 @@ mod tests {
 
         let update_ledger_canister_settings = UpdateCanisterSettings {
             canister_id: Some(LEDGER_CANISTER_ID.get()),
+            // The value of the settings are arbitrary and do not have any meaning.
             settings: Some(CanisterSettings {
                 controllers: Some(Controllers {
                     controllers: vec![GOVERNANCE_CANISTER_ID.get()],

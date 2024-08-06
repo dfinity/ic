@@ -44,25 +44,25 @@ fn test_update_canister_settings() {
         .unwrap()
         .settings
     };
-    let current_settings = canister_settings();
-    assert_ne!(current_settings.controllers, target_controllers);
+    let original_settings = canister_settings();
+    assert_ne!(original_settings.controllers, target_controllers);
     assert_ne!(
-        current_settings.memory_allocation,
+        original_settings.memory_allocation,
         Some(Nat::from(target_memory_allocation))
     );
     assert_ne!(
-        current_settings.compute_allocation,
+        original_settings.compute_allocation,
         Some(Nat::from(target_compute_allocation))
     );
     assert_ne!(
-        current_settings.freezing_threshold,
+        original_settings.freezing_threshold,
         Some(Nat::from(target_freezing_threshold))
     );
     assert_ne!(
-        current_settings.wasm_memory_limit,
+        original_settings.wasm_memory_limit,
         Some(Nat::from(target_wasm_memory_limit))
     );
-    assert_ne!(current_settings.log_visibility, target_log_visibility);
+    assert_ne!(original_settings.log_visibility, target_log_visibility);
 
     // Step 3: Make a proposal to update settings of the registry canister and make sure the
     // proposal execution succeeds.
