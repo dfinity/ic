@@ -346,14 +346,12 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
             consensus_pool,
-            artifact_pools.ingress_pool.clone(),
             consensus_gossip,
             metrics_registry.clone(),
-            node_id,
         );
         new_p2p_consensus.add_client(consensus_rx, client, assembler);
     };
