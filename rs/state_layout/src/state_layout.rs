@@ -14,7 +14,10 @@ use ic_protobuf::{
 use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
+        system_state::{
+            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase,
+            OnLowWasmMemoryHookStatus,
+        },
     },
     page_map::{Shard, StorageLayout},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
@@ -1947,7 +1950,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
-            on_low_wasm_memory_hook_status: Some(item.on_low_wasm_memory_hook_status.into()),
+            on_low_wasm_memory_hook_status: Some(
+                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
+                    &item.on_low_wasm_memory_hook_status,
+                )
+                .into(),
+            ),
         }
     }
 }
@@ -2017,6 +2025,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
             );
         }
+
+        let on_low_wasm_memory_hook_status: Option<
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus,
+        > = value.on_low_wasm_memory_hook_status.map(|v| {
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(v).unwrap_or_default()
+        });
 
         Ok(Self {
             controllers,
@@ -2106,7 +2120,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
             on_low_wasm_memory_hook_status: try_from_option_field(
-                value.on_low_wasm_memory_hook_status,
+                on_low_wasm_memory_hook_status,
                 "CanisterStateBits::on_low_wasm_memory_hook_status",
             )
             .unwrap_or_default(),

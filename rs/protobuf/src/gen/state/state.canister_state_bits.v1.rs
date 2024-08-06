@@ -876,9 +876,10 @@ impl LongExecutionMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum OnLowWasmMemoryHookStatus {
-    ConditionNotSatisfied = 0,
-    Ready = 1,
-    Executed = 2,
+    Unspecified = 0,
+    ConditionNotSatisfied = 1,
+    Ready = 2,
+    Executed = 3,
 }
 impl OnLowWasmMemoryHookStatus {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -887,17 +888,23 @@ impl OnLowWasmMemoryHookStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => "CONDITION_NOT_SATISFIED",
-            OnLowWasmMemoryHookStatus::Ready => "READY",
-            OnLowWasmMemoryHookStatus::Executed => "EXECUTED",
+            OnLowWasmMemoryHookStatus::Unspecified => "ON_LOW_WASM_MEMORY_HOOK_STATUS_UNSPECIFIED",
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
+                "ON_LOW_WASM_MEMORY_HOOK_STATUS_CONDITION_NOT_SATISFIED"
+            }
+            OnLowWasmMemoryHookStatus::Ready => "ON_LOW_WASM_MEMORY_HOOK_STATUS_READY",
+            OnLowWasmMemoryHookStatus::Executed => "ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "CONDITION_NOT_SATISFIED" => Some(Self::ConditionNotSatisfied),
-            "READY" => Some(Self::Ready),
-            "EXECUTED" => Some(Self::Executed),
+            "ON_LOW_WASM_MEMORY_HOOK_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "ON_LOW_WASM_MEMORY_HOOK_STATUS_CONDITION_NOT_SATISFIED" => {
+                Some(Self::ConditionNotSatisfied)
+            }
+            "ON_LOW_WASM_MEMORY_HOOK_STATUS_READY" => Some(Self::Ready),
+            "ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED" => Some(Self::Executed),
             _ => None,
         }
     }

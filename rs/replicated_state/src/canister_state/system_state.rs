@@ -362,8 +362,9 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub enum OnLowWasmMemoryHookStatus {
+    #[default]
     ConditionNotSatisfied,
     Ready,
     Executed,
@@ -386,6 +387,13 @@ impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
 
     fn try_from(value: pb::OnLowWasmMemoryHookStatus) -> Result<Self, Self::Error> {
         match value {
+            pb::OnLowWasmMemoryHookStatus::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "OnLowWasmMemoryHookStatus",
+                err: format!(
+                    "Unexpected value of status of on low wasm memory hook: {:?}",
+                    value
+                ),
+            }),
             pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
                 Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
             }
@@ -396,7 +404,7 @@ impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
 }
 
 impl OnLowWasmMemoryHookStatus {
-    fn update(
+    fn _update(
         &mut self,
         wasm_memory_threshold: NumBytes,
         memory_allocation: Option<NumBytes>,
@@ -418,18 +426,16 @@ impl OnLowWasmMemoryHookStatus {
 
         if left_wasm_space >= wasm_memory_threshold {
             *self = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
-        } else {
-            if *self != OnLowWasmMemoryHookStatus::Executed {
-                *self = OnLowWasmMemoryHookStatus::Ready;
-            }
+        } else if *self != OnLowWasmMemoryHookStatus::Executed {
+            *self = OnLowWasmMemoryHookStatus::Ready;
         }
     }
 
-    fn should_schedule_hook(&self) -> bool {
+    fn _should_schedule_hook(&self) -> bool {
         *self == OnLowWasmMemoryHookStatus::Ready
     }
 
-    fn execute_hook(&mut self) {
+    fn _execute_hook(&mut self) {
         *self = OnLowWasmMemoryHookStatus::Executed;
     }
 }
@@ -760,6 +766,7 @@ impl SystemState {
         initial_cycles: Cycles,
         freeze_threshold: NumSeconds,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         Self::new_internal(
             canister_id,
@@ -768,6 +775,7 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
+            on_low_wasm_memory_hook_status,
         )
     }
 
@@ -778,6 +786,7 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         Self {
             canister_id,
@@ -802,6 +811,7 @@ impl SystemState {
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
+            on_low_wasm_memory_hook_status,
         }
     }
 
@@ -924,6 +934,7 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         )
     }
 
