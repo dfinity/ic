@@ -1630,7 +1630,6 @@ pub mod neurons_fund_snapshot {
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
-        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
         #[prost(message, repeated, tag = "7")]
         pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
         /// Deprecated. Please use `controller` instead (not `hotkeys`!)
@@ -2804,6 +2803,9 @@ pub mod governance {
         pub total_staked_e8s_non_self_authenticating_controller: ::core::option::Option<u64>,
         #[prost(message, optional, tag = "38")]
         pub non_self_authenticating_controller_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "39")]
+        pub public_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.

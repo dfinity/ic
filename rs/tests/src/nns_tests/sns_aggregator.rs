@@ -16,7 +16,6 @@ use ic_system_test_driver::{
     canister_agent::CanisterAgent,
     canister_api::{CallMode, SnsRequestProvider},
     canister_requests,
-    driver::test_env_api::NnsCanisterWasmStrategy,
     generic_workload_engine::{
         engine::Engine,
         metrics::{LoadTestMetrics, RequestOutcome},
@@ -57,7 +56,7 @@ const AGGREGATOR_CANISTER_VERSION: &str = "v1";
 // by `RESPONSES_COLLECTION_EXTRA_TIMEOUT` is reached).
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1_000);
 
-fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStrategy) {
+fn config_for_security_testing(env: &TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
@@ -68,9 +67,9 @@ fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStra
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    install_nns(env, wasm_strategy, vec![], vec![]);
+    install_nns(env, vec![], vec![]);
     let create_service_nervous_system_proposal = openchat_create_service_nervous_system_proposal();
-    install_sns(env, wasm_strategy, create_service_nervous_system_proposal);
+    install_sns(env, create_service_nervous_system_proposal);
 }
 
 pub fn benchmark_config(env: TestEnv) {
@@ -87,8 +86,7 @@ pub fn benchmark_config_with_aggregator(env: TestEnv) {
 }
 
 pub fn config_fast(env: TestEnv) {
-    let strategy = NnsCanisterWasmStrategy::TakeBuiltFromSources;
-    config_for_security_testing(&env, strategy);
+    config_for_security_testing(&env);
     install_aggregator(&env);
 }
 

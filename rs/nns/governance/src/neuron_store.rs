@@ -2,10 +2,8 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::{
-        neuron_id_range_to_u64_range,
-        types::{normalized, Neuron},
-    },
+    neuron::{neuron_id_range_to_u64_range, types::Neuron},
+    neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
@@ -103,11 +101,6 @@ impl NeuronStoreError {
             neuron_id,
         }
     }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct NeuronNotFound {
-    neuron_id: NeuronId,
 }
 
 impl Display for NeuronStoreError {
@@ -555,48 +548,42 @@ impl NeuronStore {
         neuron_id: NeuronId,
         sections: NeuronSections,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        let main = || {
-            let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
+        let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
 
-            if let Some(heap_neuron) = heap_neuron.clone() {
-                // If the neuron is active on heap, return early to avoid any operation on stable
-                // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
-                // on stable storage.
-                if !heap_neuron.is_inactive(self.now()) {
-                    return Ok((heap_neuron, StorageLocation::Heap));
-                }
+        if let Some(heap_neuron) = heap_neuron.clone() {
+            // If the neuron is active on heap, return early to avoid any operation on stable
+            // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
+            // on stable storage.
+            if !heap_neuron.is_inactive(self.now()) {
+                return Ok((heap_neuron, StorageLocation::Heap));
+            }
+        }
+
+        let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store
+                .read(neuron_id, sections)
+                .ok()
+                .map(Cow::Owned)
+        });
+
+        match (stable_neuron, heap_neuron) {
+            // 1 copy cases.
+            (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
+            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
+
+            // 2 copies case.
+            (Some(stable), Some(_)) => {
+                println!(
+                    "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
+                     we are at risk of having stale copies",
+                    LOG_PREFIX, neuron_id
+                );
+                Ok((stable, StorageLocation::Stable))
             }
 
-            let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
-                stable_neuron_store
-                    .read(neuron_id, sections)
-                    .ok()
-                    .map(Cow::Owned)
-            });
-
-            match (stable_neuron, heap_neuron) {
-                // 1 copy cases.
-                (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
-                (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
-
-                // 2 copy case.
-                (Some(stable), Some(_)) => {
-                    println!(
-                        "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
-                         we are at risk of having stale copies",
-                        LOG_PREFIX, neuron_id
-                    );
-                    Ok((stable, StorageLocation::Stable))
-                }
-
-                // 0 copies case.
-                (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
-            }
-        };
-
-        let (neuron, storage_location) = main()?;
-        let neuron = normalized(neuron);
-        Ok((neuron, storage_location))
+            // 0 copies case.
+            (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
+        }
     }
 
     // Loads the entire neuron from either heap or stable storage and returns its primary storage.
@@ -741,8 +728,7 @@ impl NeuronStore {
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
             id: n.id(),
             controller: n.controller(),
-            // TODO(NNS1-3198): This should be replaced with a call to `n.hotkeys()`
-            hotkeys: Vec::new(),
+            hotkeys: pick_most_important_hotkeys(&n.hot_keys),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
         .into_iter()
