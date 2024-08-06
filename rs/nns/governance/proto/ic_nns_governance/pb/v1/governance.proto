@@ -1552,7 +1552,6 @@ message NeuronsFundSnapshot {
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
 
     // The principals that can vote, propose, and follow on behalf of this neuron.
-    // TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
     repeated ic_base_types.pb.v1.PrincipalId hotkeys = 7;
 
     // Deprecated. Please use `controller` instead (not `hotkeys`!)

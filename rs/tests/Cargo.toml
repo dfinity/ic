@@ -292,8 +292,8 @@ name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
 
 [[bin]]
-name = "ic-systest-cow-safety-test"
-path = "consensus/cow_safety_test.rs"
+name = "ic-systest-memory-safety-test"
+path = "message_routing/memory_safety_test.rs"
 
 [[bin]]
 name = "ic-systest-system-api-security-test"
@@ -468,6 +468,10 @@ name = "ic-systest-small"
 path = "testing_verification/testnets/small.rs"
 
 [[bin]]
+name = "ic-systest-small-with-query-stats"
+path = "testing_verification/testnets/small_with_query_stats.rs"
+
+[[bin]]
 name = "ic-systest-small-nns"
 path = "testing_verification/testnets/small_nns.rs"
 
@@ -482,6 +486,10 @@ path = "testing_verification/testnets/medium.rs"
 [[bin]]
 name = "ic-systest-large"
 path = "testing_verification/testnets/large.rs"
+
+[[bin]]
+name = "ic-systest-single-app-large-node-with-nns"
+path = "testing_verification/testnets/single_app_large_node_with_nns.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-performance"
