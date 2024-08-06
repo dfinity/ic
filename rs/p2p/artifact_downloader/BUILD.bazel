@@ -27,6 +27,8 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/p2p/test_utils",
+    "//rs/test_utilities/consensus",
+    "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
     "@crate_index//:anyhow",
     "@crate_index//:futures",
