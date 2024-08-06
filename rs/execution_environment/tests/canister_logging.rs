@@ -241,7 +241,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
         }
         .encode(),
     ));
-    fn not_allowed_error(caller: PrincipalId) -> Result<_, UserError> {
+    fn not_allowed_error(caller: &PrincipalId) -> Result<WasmResult, UserError> {
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!("Caller {caller} is not allowed to query ic00 method fetch_canister_logs"),
@@ -251,22 +251,22 @@ fn test_log_visibility_of_fetch_canister_logs() {
         // (log_visibility, sender, expected_result)
         (LogVisibilityV2::Public, controller, ok.clone()),
         (LogVisibilityV2::Public, not_a_controller, ok.clone()),
-        (LogVisibilityV2::Controllers, controller, ok),
+        (LogVisibilityV2::Controllers, controller, ok.clone()),
         (
             LogVisibilityV2::Controllers,
             not_a_controller,
-            not_allowed_error(not_a_controller),
+            not_allowed_error(&not_a_controller),
         ),
         (
-            LogVisibilityV2::AllowedViewers(allowed_viewers),
+            LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),
             allowed_viewer,
             // TODO(EXC-1675): when disabled works as for controllers, change to ok when enabled.
-            not_allowed_error(allowed_viewer),
+            not_allowed_error(&allowed_viewer),
         ),
         (
-            LogVisibilityV2::AllowedViewers(allowed_viewers),
+            LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),
             not_allowed_viewer,
-            not_allowed_error(not_allowed_viewer),
+            not_allowed_error(&not_allowed_viewer),
         ),
         (
             LogVisibilityV2::AllowedViewers(allowed_viewers),
