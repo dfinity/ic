@@ -7739,3 +7739,24 @@ fn wasm_memory_limit_cannot_exceed_256_tb() {
 
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 }
+
+#[test]
+fn stress_execution_1() {
+    for _ in 0..10000 {
+        let _ = ExecutionTestBuilder::new().build();
+    }
+}
+
+#[test]
+fn stress_execution_2() {
+    for _ in 0..10000 {
+        let _ = ExecutionTestBuilder::new().build();
+    }
+}
+
+#[test]
+fn stress_execution_3() {
+    for _ in 0..10000 {
+        let _ = ExecutionTestBuilder::new().build();
+    }
+}
