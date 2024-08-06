@@ -24,7 +24,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use threadpool::ThreadPool;
 use tokio::{
-    net::TcpListener,
     runtime, select,
     sync::{oneshot, Notify},
 };
@@ -111,8 +110,8 @@ enum WorkerMessage {
 pub struct XNetEndpoint {
     server_address: SocketAddr,
     handler_thread_pool: threadpool::ThreadPool,
-    request_sender: crossbeam_channel::Sender<WorkerMessage>,
     shutdown_notify: Arc<Notify>,
+    request_sender: crossbeam_channel::Sender<WorkerMessage>,
     log: ReplicaLogger,
 }
 
@@ -151,7 +150,7 @@ fn ok<T>(t: T) -> Result<T, Infallible> {
     Ok(t)
 }
 
-async fn func(State(ctx): State<Context>, request: Request<Body>) -> impl IntoResponse {
+async fn enqueue_task(State(ctx): State<Context>, request: Request<Body>) -> impl IntoResponse {
     let (response_sender, response_receiver) = oneshot::channel();
     let task = WorkerMessage::HandleRequest {
         request,
@@ -186,94 +185,82 @@ async fn start_server(
     log: ReplicaLogger,
     shutdown_notify: Arc<Notify>,
 ) -> SocketAddr {
-    let thing = any(func).with_state(ctx);
+    let router = any(enqueue_task).with_state(ctx);
     let hyper_service =
-        hyper::service::service_fn(move |request: Request<Incoming>| thing.clone().call(request));
+        hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
-    // let http = Builder::new(TokioExecutor::new());
+    // let http = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
     let http = hyper::server::conn::http1::Builder::new();
     // let http = hyper::server::conn::http2::Builder::new(TokioExecutor::new());
 
     let graceful_shutdown = GracefulShutdown::new();
 
-    let socket = ic_xnet_hyper::bind_tcp_socket_with_reuse(&address).unwrap();
-    socket.listen(128).unwrap();
+    let (listener, address) =
+        ic_xnet_hyper::bind_listener(&address, runtime_handle).expect("Failed to bind listener");
 
-    let address = {
-        let listener = {
-            let _guard = runtime_handle.enter();
-            TcpListener::from_std(socket.into()).unwrap()
-        };
-        let address = listener.local_addr().unwrap();
-        let logger = log.clone();
+    let logger = log.clone();
 
-        tokio::spawn(async move {
-            loop {
-                select! {
-                    Ok((stream, _peer_addr)) = listener.accept() => {
-                        let logger = logger.clone();
-                        let hyper_service = hyper_service.clone();
+    tokio::spawn(async move {
+        loop {
+            select! {
+                Ok((stream, _peer_addr)) = listener.accept() => {
+                    let logger = logger.clone();
+                    let hyper_service = hyper_service.clone();
 
-                        #[cfg(test)]
-                        {
-                            let _ = tls;
-                            let _ = registry_client;
-                            let io = TokioIo::new(stream);
-                            let conn = http.serve_connection(io, hyper_service);
-                            let wrapped = graceful_shutdown.watch(conn);
-                            tokio::spawn(async move {
-                                if let Err(err) = wrapped.await {
-                                    warn!(logger, "failed to serve connection: {err}");
-                                }
-                            });
-                        }
-
-                        #[cfg(not(test))]
-                        {
-                            let tls = tls.clone();
-                            let registry_client = registry_client.clone();
-
-                                let registry_version = registry_client.get_latest_version();
-                                let server_config = match tls.server_config(
-                                    ic_crypto_tls_interfaces::SomeOrAllNodes::All,
-                                    registry_version,
-                                ) {
-                                    Ok(config) => config,
-                                    Err(err) => {
-                                        warn!(logger, "Failed to get server config from crypto {err}");
-                                        return;
-                                    }
-                                };
-
-                                let tls_acceptor =
-                                    tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
-                                match tls_acceptor.accept(stream).await {
-                                    Ok(tls_stream) => {
-                                        let io = TokioIo::new(tls_stream);
-                                        let conn = http.serve_connection(io, hyper_service);
-                                        let wrapped = graceful_shutdown.watch(conn);
-                                        tokio::spawn(async move {
-                                            if let Err(err) = wrapped.await {
-                                                warn!(logger, "failed to serve connection: {err}");
-                                            }
-                                        });
-                                    }
-                                    Err(err) => {
-                                        warn!(logger, "Error setting up TLS stream: {err}");
-                                    }
-                                };
-                        }
+                    #[cfg(test)]
+                    {
+                        let _ = tls;
+                        let _ = registry_client;
+                        let io = TokioIo::new(stream);
+                        let conn = http.serve_connection(io, hyper_service);
+                        let wrapped = graceful_shutdown.watch(conn);
+                        tokio::spawn(async move {
+                            if let Err(err) = wrapped.await {
+                                warn!(logger, "failed to serve connection: {err}");
+                            }
+                        });
                     }
-                    _ = shutdown_notify.notified() => {
-                        graceful_shutdown.shutdown().await;
-                        break;
-                    }
-                };
-            }
-        });
 
-        address
-    };
+                    #[cfg(not(test))]
+                    {
+                        let registry_version = registry_client.get_latest_version();
+                        let server_config = match tls.server_config(
+                            ic_crypto_tls_interfaces::SomeOrAllNodes::All,
+                            registry_version,
+                        ) {
+                            Ok(config) => config,
+                            Err(err) => {
+                                warn!(logger, "Failed to get server config from crypto {err}");
+                                return;
+                            }
+                        };
+
+                        let tls_acceptor =
+                            tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+                        match tls_acceptor.accept(stream).await {
+                            Ok(tls_stream) => {
+                                let io = TokioIo::new(tls_stream);
+                                let conn = http.serve_connection(io, hyper_service);
+                                let wrapped = graceful_shutdown.watch(conn);
+                                tokio::spawn(async move {
+                                    if let Err(err) = wrapped.await {
+                                        warn!(logger, "failed to serve connection: {err}");
+                                    }
+                                });
+                            }
+                            Err(err) => {
+                                warn!(logger, "Error setting up TLS stream: {err}");
+                            }
+                        };
+                    }
+                }
+                _ = shutdown_notify.notified() => {
+                    graceful_shutdown.shutdown().await;
+                    break;
+                }
+            };
+        }
+    });
 
     address
 }
@@ -368,9 +355,9 @@ impl XNetEndpoint {
 
         Self {
             server_address: address,
+            shutdown_notify,
             handler_thread_pool,
             request_sender,
-            shutdown_notify,
             log,
         }
     }

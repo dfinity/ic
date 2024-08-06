@@ -325,7 +325,6 @@ impl XNetPayloadBuilderImpl {
         ));
         let xnet_client: Arc<dyn XNetClient> = Arc::new(XNetClientImpl::new(
             metrics_registry,
-            runtime_handle.clone(),
             tls_handshake,
             proximity_map.clone(),
         ));
@@ -1542,13 +1541,13 @@ pub trait XNetClient: Sync + Send {
     ) -> Result<CertifiedStreamSlice, XNetClientError>;
 }
 
-type MyBody = http_body_util::Full<hyper::body::Bytes>;
+type XNetClientBody = http_body_util::Full<hyper::body::Bytes>;
 
 /// The default `XNetClient` implementation, wrapping an HTTP client (for both
 /// configuration and connection pooling).
 struct XNetClientImpl {
     /// An HTTP client to be used for querying.
-    http_client: Client<TlsConnector, Request<MyBody>>,
+    http_client: Client<TlsConnector, Request<XNetClientBody>>,
 
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
@@ -1562,16 +1561,16 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        _runtime_handle: runtime::Handle,
         tls: Arc<dyn TlsConfig + Send + Sync>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
-        // TODO(MR-28) Make timeout configurable.
         #[cfg(not(test))]
         let https = TlsConnector::new(tls);
         #[cfg(test)]
         let https = TlsConnector::new_for_tests(tls);
-        let http_client: Client<TlsConnector, Request<MyBody>> =
+
+        // TODO(MR-28) Make timeout configurable.
+        let http_client: Client<TlsConnector, Request<XNetClientBody>> =
             Client::builder(TokioExecutor::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
@@ -1614,13 +1613,7 @@ impl XNetClient for XNetClientImpl {
                 Instant::now().saturating_duration_since(request_start),
             );
 
-            let response = result.map_err(|e| {
-                // if e.is_timeout() {
-                //     XNetClientError::Timeout
-                // } else {
-                XNetClientError::RequestFailed(e)
-                // }
-            })?;
+            let response = result.map_err(XNetClientError::RequestFailed)?;
 
             let status = response.status();
 
@@ -1631,12 +1624,6 @@ impl XNetClient for XNetClientImpl {
                     .map(|col| col.to_bytes())
                     .map_err(XNetClientError::BodyReadError)?;
 
-            // let content = receive_body_without_timeout(
-            //     response.into_body(),
-            //     (5 * POOL_SLICE_BYTE_SIZE_MAX).into(),
-            // )
-            // .await
-            // .map_err(XNetClientError::BodyReadError)?;
             Ok((status, content))
         })
         .await;

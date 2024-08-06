@@ -15,7 +15,10 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::net::TcpStream;
+use tokio::{
+    net::{TcpListener, TcpStream},
+    runtime::Handle,
+};
 use tower::Service;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -25,11 +28,25 @@ fn box_err(e: impl std::error::Error + Send + Sync + 'static) -> BoxError {
     Box::new(e) as Box<_>
 }
 
+pub fn bind_listener(
+    addr: &SocketAddr,
+    runtime_handle: Handle,
+) -> Result<(TcpListener, SocketAddr), BoxError> {
+    let socket = bind_tcp_socket_with_reuse(addr)?;
+    let listener = {
+        let _guard = runtime_handle.enter();
+        TcpListener::from_std(socket.into())?
+    };
+    let address = listener.local_addr()?;
+
+    Ok((listener, address))
+}
+
 /// Binds a TCP socket on the given address after having set the `SO_REUSEADDR`
 /// and `SO_REUSEPORT` flags.
 ///
 /// Setting the flags after binding to the port has no effect.
-pub fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxError> {
+fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxError> {
     use socket2::{Domain, Protocol, SockAddr, Socket, Type};
     let domain = match addr {
         SocketAddr::V4(_) => Domain::IPV4,
@@ -44,6 +61,7 @@ pub fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, 
     }
     socket.set_nonblocking(true)?;
     socket.bind(&SockAddr::from(*addr))?;
+    socket.listen(128)?;
 
     Ok(socket)
 }
@@ -129,7 +147,7 @@ impl Service<Uri> for TlsConnector {
                     let tls_connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
                     let irrelevant_domain =
                         "domain.is-irrelevant-as-hostname-verification-is.disabled";
-                    let thing = tls_connector
+                    let tls_stream = tls_connector
                         .connect(
                             irrelevant_domain
                                 .try_into()
@@ -139,7 +157,7 @@ impl Service<Uri> for TlsConnector {
                         )
                         .await
                         .map_err(box_err)?;
-                    Ok(MaybeHttpsStream::Https(TokioIo::new(thing)))
+                    Ok(MaybeHttpsStream::Https(TokioIo::new(tls_stream)))
                 }
             }
         };
