@@ -6,7 +6,7 @@ copy_ssh_keys() {
     local SOURCE_FILE="$1"
     local DEST_FILE="$2"
     if [ -e "${SOURCE_FILE}" ]; then
-        cp -L "${SOURCE_FILE}" "${DEST_FILE}"
+        cp -L -s "${SOURCE_FILE}" "${DEST_FILE}"
         chmod 600 "${DEST_FILE}"
     fi
 }
