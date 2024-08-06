@@ -836,6 +836,10 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
     }
 }
 
+// TODO(EXC-1678): remove after release.
+/// Feature flag to enable/disable allowed viewers for canister log visibility.
+const ALLOWED_VIEWERS_ENABLED: bool = false;
+
 /// Maximum number of allowed log viewers (specified in the interface spec).
 const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
 
@@ -866,13 +870,16 @@ pub enum LogVisibilityV2 {
 // When decoding, if `AllowedViewers` is encountered, it is changed to a default value
 // to maintain compatibility with the old `LogVisibility`.
 impl Payload<'_> for LogVisibilityV2 {
-    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
-        match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+    fn decode(blob: &[u8]) -> Result<Self, UserError> {
+        let decoded =
+            Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+
+        if !ALLOWED_VIEWERS_ENABLED && matches!(decoded, Self::AllowedViewers(_)) {
             // Fall back to the default value.
-            Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
-            Ok(log_visibility_v2) => Ok(log_visibility_v2),
-            Err(err) => Err(err),
+            return Ok(Self::default());
         }
+
+        Ok(decoded)
     }
 }
 
