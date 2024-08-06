@@ -391,6 +391,18 @@ impl CanisterQueuesMultiFixture {
         )
     }
 
+    fn reserve_and_push_input_response(
+        &mut self,
+        other: CanisterId,
+        input_queue_type: InputQueueType,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.push_output_request(other)
+            .map_err(|(se, req)| (se, (*req).clone().into()))?;
+        self.pop_output()
+            .expect("Just pushed an output request, but nothing popped");
+        self.push_input_response(other, input_queue_type)
+    }
+
     fn push_ingress(&mut self, msg: Ingress) {
         self.queues.push_ingress(msg)
     }
@@ -2372,20 +2384,16 @@ mod mainnet_compatibility_tests {
             queues
                 .push_input_request(LOCAL_CANISTER_ID, InputQueueType::LocalSubnet)
                 .unwrap();
-            // Make an outgoing request just to create a reservation for a response
-            queues.push_output_request(LOCAL_CANISTER_ID).unwrap();
             queues
-                .push_input_response(LOCAL_CANISTER_ID, InputQueueType::LocalSubnet)
+                .reserve_and_push_input_response(LOCAL_CANISTER_ID, InputQueueType::LocalSubnet)
                 .unwrap();
 
             // Put a request and a response from a remote canister in the input queues
             queues
                 .push_input_request(REMOTE_CANISTER_ID, InputQueueType::RemoteSubnet)
                 .unwrap();
-            // Make an outgoing request just to create a reservation for a response
-            queues.push_output_request(REMOTE_CANISTER_ID).unwrap();
             queues
-                .push_input_response(REMOTE_CANISTER_ID, InputQueueType::RemoteSubnet)
+                .reserve_and_push_input_response(REMOTE_CANISTER_ID, InputQueueType::RemoteSubnet)
                 .unwrap();
 
             // Put a request from the canister itself in the input queues
