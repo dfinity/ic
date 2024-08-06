@@ -2787,6 +2787,56 @@ fn large_wasm64_memory_allocation_test() {
 }
 
 #[test]
+fn large_wasm64_stable_read_write_test() {
+    // This test checks if we allow stable_read and stable_write to work with offsets
+    // larger than 4 GiB in the wasm heap memory in 64 bit mode.
+    let wat = r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+        (import "ic0" "stable64_read"
+            (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+        (import "ic0" "stable64_write"
+            (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+        (func $test (export "canister_update test")
+
+            (memory.grow (i64.const 70000))
+            (drop)
+
+            (i64.store (i64.const 4294967312) (i64.const 72))
+            (i64.store (i64.const 4294967313) (i64.const 101))
+            (i64.store (i64.const 4294967314) (i64.const 108))
+            (i64.store (i64.const 4294967315) (i64.const 108))
+            (i64.store (i64.const 4294967316) (i64.const 111))
+           
+            (drop (call $stable_grow (i64.const 10)))
+
+            (call $ic0_stable64_write (i64.const 1) (i64.const 4294967312) (i64.const 5))
+            (call $ic0_stable64_read (i64.const 4294967312) (i64.const 1) (i64.const 5))
+        )
+        (memory i64 0 70007)
+    )"#;
+
+    let gb = 1024 * 1024 * 1024;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    // Declare a large heap.
+    config.max_wasm_memory_size = NumBytes::from(10 * gb);
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_canister_memory_limit(NumBytes::from(40 * gb))
+        .build();
+
+    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
+        Ok(_) => {}
+        Err(e) => panic!("Unexpected error: {:?}", e),
+    }
+}
+
+#[test]
 fn wasm64_saturate_fun_index() {
     let wat = r#"
         (module

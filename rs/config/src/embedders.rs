@@ -3,7 +3,7 @@ use std::time::Duration;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{NumInstructions, NumOsPages};
+use ic_types::{NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use serde::{Deserialize, Serialize};
 
 use crate::flag_status::FlagStatus;
@@ -223,6 +223,12 @@ pub struct Config {
 
     /// The maximum allowed size for an uncompressed canister Wasm module.
     pub wasm_max_size: NumBytes,
+
+    /// The maximum size of the wasm heap memory.
+    pub max_wasm_memory_size: NumBytes,
+
+    /// The maximum size of the stable memory.
+    pub max_stable_memory_size: NumBytes,
 }
 
 impl Config {
@@ -258,6 +264,8 @@ impl Config {
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
             wasm_max_size: WASM_MAX_SIZE,
+            max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
         }
     }
 }
