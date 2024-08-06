@@ -147,3 +147,4 @@ jobs:
     uses: dfinity/dre/.github/workflows/qualify.yaml@main
     with:
       version: ${{ github.sha }}
+      secrets: inherit
