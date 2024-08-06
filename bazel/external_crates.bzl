@@ -244,7 +244,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "^0.9.2",
+                version = "=0.10.0",
                 features = [
                     "alloc",
                     "experimental",
