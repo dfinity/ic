@@ -1,12 +1,10 @@
 //! System test that sets up a 13 node APP subnet to benchmark the subnet
-//! when execution rounds are pushed to 2B instructions on average
-//! (roughly ~1 sec round duration on average)
+//! when the installing a large number of canisters. The canisters are created
+//! by installing a `cloner canister`, which spins up a large batches of canisters
+//! in parallel.
 //!
-//! The execution rounds are filled by installing universal canisters that
-//! each concurrently call `stable_fill()` with `NUMBER_OF_BYTES_TO_WRITE` bytes.
-//!
-//! To run the benchmark, run the following command in the dev environment:
-//! ict test //rs/tests/execution:fill_execution_rounds_workload -k -- --test_tmpdir=test_tmpdir --test_timeout=60000
+//! To run the benchmark, run the following command in the dev container:
+//! ict test //rs/tests/networking:cloner_canisters -k -- --test_timeout=600000 --test_tmpdir=test_tmpdir
 
 use anyhow::Result;
 use candid::{CandidType, Encode};
@@ -27,8 +25,8 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use std::time::Duration;
 
-// 4 hours minutes
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(4 * 60 * 60);
+// 5 hours
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60 * 60);
 
 // 5 minutes
 const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(5 * 60);
@@ -79,7 +77,7 @@ pub fn config(env: TestEnv) {
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), // <- 512 GB
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
     };
 
@@ -118,6 +116,13 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
     let counter_canister_bytes = env.load_wasm(COUNTER_CANISTER_WAT);
+
+    info!(
+        &logger,
+        "Sending ingress messages to {:?}.",
+        app_node.get_public_url().to_string()
+    );
+
     for i in 0..ITERATIONS {
         let counter_canister_bytes_clone = counter_canister_bytes.clone();
         info!(&logger, "{i}/{ITERATIONS}: Installing cloner canister.");
