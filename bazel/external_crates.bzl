@@ -18,8 +18,6 @@ def sanitize_external_crates(sanitizers_enabled):
         "ic-stable-structures": FUZZING_ANNOTATION,
     }
 
-IC_AGENT_CALL_V3_REV = "9e45b314fc7496d48065590fac90790e0bdc6eed"
-
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
@@ -226,11 +224,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                version = "^0.32.2",
+                version = "^0.28.2",
                 features = [
                     "default",
                     "rand",
-                    "serde",
+                    "use-serde",
                 ],
             ),
             "bitcoincore-rpc": crate.spec(
@@ -492,6 +490,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
+            "hmac": crate.spec(
+                version = "^0.12",
+            ),
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
@@ -562,22 +563,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = ICRC_1_REV,
             ),
             "ic-agent": crate.spec(
-                version = "^0.35.0",
+                version = "^0.37.1",
                 features = [
+                    "experimental_sync_call",
                     "hyper",
                     "reqwest",
                     "pem",
                 ],
             ),
-            # TODO: [NET-1734] Delete this once the feature is merged to master.
-            "ic-agent-call-v3": crate.spec(
-                package = "ic-agent",
-                git = "https://github.com/dfinity/agent-rs",
-                rev = IC_AGENT_CALL_V3_REV,
-                features = ["sync_call"],
-            ),
             "ic-btc-interface": crate.spec(
-                version = "^0.2.0",
+                version = "^0.2.2",
             ),
             "ic-btc-test-utils": crate.spec(
                 version = "^0.1.0",
@@ -626,7 +621,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.35.0",
+                version = "^0.37.0",
                 features = ["raw"],
             ),
             "ic-verify-bls-signature": crate.spec(
@@ -675,12 +670,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "itertools": crate.spec(
                 version = "^0.12.0",
-            ),
-            "jemalloc-ctl": crate.spec(
-                version = "^0.3.3",
-            ),
-            "jemallocator": crate.spec(
-                version = "^0.3.2",
             ),
             "json-patch": crate.spec(
                 version = "^0.2.6",
@@ -964,14 +953,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                git = "https://github.com/quinn-rs/quinn",
-                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                version = "^0.11.3",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
-                git = "https://github.com/quinn-rs/quinn",
-                rev = "fb63829dd1f78a98cb7da0fc757db44d14afd9ff",
+                version = "^0.5.4",
             ),
             "quote": crate.spec(
                 version = "^1.0",
@@ -1281,6 +1268,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "threadpool": crate.spec(
                 version = "^1.8.1",
+            ),
+            "tikv-jemalloc-ctl": crate.spec(
+                version = "^0.5",
+            ),
+            "tikv-jemallocator": crate.spec(
+                version = "^0.5",
             ),
             "time": crate.spec(
                 version = "^0.3.36",

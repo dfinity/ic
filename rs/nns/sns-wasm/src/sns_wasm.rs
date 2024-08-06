@@ -624,10 +624,10 @@ where
     ///   3. Installs SNS root, SNS governance, SNS ledger and SNS index WASMs onto the created canisters.
     ///   4. Fund canisters with cycles
     ///   5. Sets the canisters' controllers:
-    ///     a. Root is controlled only by Governance.
-    ///     b. Governance is controlled only by Root.
-    ///     c. Ledger is controlled only by Root.
-    ///     d. Index is controlled only by Root.
+    ///       * Root is controlled only by Governance.
+    ///       * Governance is controlled only by Root.
+    ///       * Ledger is controlled only by Root.
+    ///       * Index is controlled only by Root.
     ///   6. Transfers control of the dapp_canisters from NNS Root to SNS Root.
     ///
     /// Step 3 requires installation parameters which come from the SnsInitPayload object

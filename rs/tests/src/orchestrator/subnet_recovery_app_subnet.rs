@@ -27,18 +27,31 @@ Success::
 
 end::catalog[] */
 
-use crate::orchestrator::utils::subnet_recovery::*;
-use crate::tecdsa::make_key_ids_for_all_schemes;
+use anyhow::bail;
+use candid::Principal;
+use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-        store_message,
+        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress, store_message,
     },
     set_sandbox_env_vars,
+    ssh_access::execute_bash_command,
+    subnet::{
+        assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
+    },
 };
-use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
-use ic_recovery::RecoveryArgs;
+use ic_consensus_threshold_sig_system_test_utils::{
+    create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
+};
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_recovery::{
+    app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
+    steps::Step,
+    NodeMetrics, Recovery, RecoveryArgs,
+};
 use ic_recovery::{file_sync_helper, get_node_metrics};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -49,10 +62,12 @@ use ic_system_test_driver::driver::driver_setup::{
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{Height, ReplicaVersion};
-use slog::info;
-use std::convert::TryFrom;
+use ic_types::{Height, ReplicaVersion, SubnetId};
+use serde::{Deserialize, Serialize};
+use slog::{info, Logger};
 use std::time::Duration;
+use std::{collections::BTreeMap, convert::TryFrom};
+use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
 const APP_NODES: usize = 3;
@@ -427,4 +442,246 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
     topology_snapshot
         .unassigned_nodes()
         .for_each(|n| assert_node_is_unassigned(&n, &logger));
+}
+
+/// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
+/// nodes taken from the given iterator.
+fn break_subnet(
+    subnet: Box<dyn Iterator<Item = IcNodeSnapshot>>,
+    subnet_size: usize,
+    recovery: &Recovery,
+    logger: &Logger,
+) {
+    // Let's take f+1 nodes and break them.
+    let f = (subnet_size - 1) / 3;
+    info!(
+        logger,
+        "Breaking the subnet by breaking the replica binary on f+1={} nodes",
+        f + 1
+    );
+
+    let faulty_nodes = subnet.take(f + 1).collect::<Vec<_>>();
+    for node in faulty_nodes {
+        // simulate subnet failure by breaking the replica process, but not the orchestrator
+        recovery
+            .execute_ssh_command(
+                "admin",
+                node.get_ip_addr(),
+                "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
+            )
+            .expect("couldn't run ssh command");
+    }
+}
+
+/// Halt the subnet and wait until the given app node reports consensus 'is halted'
+fn halt_subnet(
+    app_node: &IcNodeSnapshot,
+    subnet_id: SubnetId,
+    recovery: &Recovery,
+    logger: &Logger,
+) {
+    #[derive(Debug, Deserialize, Serialize)]
+    struct Cursor {
+        #[serde(alias = "__CURSOR")]
+        cursor: String,
+    }
+
+    info!(logger, "Breaking the app subnet by halting it",);
+    let s = app_node.block_on_ssh_session().unwrap();
+    let message_str = execute_bash_command(
+        &s,
+        "journalctl -n1 -o json --output-fields='__CURSOR'".to_string(),
+    )
+    .expect("journal message");
+    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    recovery
+        .halt_subnet(subnet_id, true, &[])
+        .exec()
+        .expect("Failed to halt subnet.");
+    ic_system_test_driver::retry_with_msg!(
+        "check if consensus is halted",
+        logger.clone(),
+        secs(120),
+        secs(10),
+        || {
+            let res = execute_bash_command(
+                &s,
+                format!(
+                    "journalctl --after-cursor='{}' | grep -c 'is halted'",
+                    message.cursor
+                ),
+            );
+            if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0) {
+                Ok(())
+            } else {
+                bail!("Did not find log entry that consensus is halted.")
+            }
+        }
+    )
+    .expect("Failed to detect broken subnet.");
+}
+
+/// A subnet is considered to be broken if it still works in read mode,
+/// but doesn't in write mode
+fn assert_subnet_is_broken(node_url: &Url, can_id: Principal, msg: &str, logger: &Logger) {
+    info!(logger, "Ensure the subnet works in read mode");
+    assert!(
+        can_read_msg(logger, node_url, can_id, msg),
+        "Failed to read message on node: {}",
+        node_url
+    );
+    info!(
+        logger,
+        "Ensure the subnet doesn't work in write mode anymore"
+    );
+    assert!(
+        cannot_store_msg(logger.clone(), node_url, can_id, msg),
+        "Writing messages still successful on: {}",
+        node_url
+    );
+}
+
+/// Assert that the given node has deleted its state within the next 5 minutes.
+fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
+    info!(
+        logger,
+        "Asserting that node {} has deleted its state.",
+        node.get_ip_addr()
+    );
+    // We need to exclude the page_deltas/ directory, which is not deleted on state deletion.
+    // That is because deleting it would break SELinux assumptions.
+    let check = r#"[ "$(ls -A /var/lib/ic/data/ic_state -I page_deltas)" ] && echo "assigned" || echo "unassigned""#;
+    let s = node
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
+
+    ic_system_test_driver::retry_with_msg!(
+        format!("check if node {} is unassigned", node.node_id),
+        logger.clone(),
+        secs(300),
+        secs(10),
+        || match execute_bash_command(&s, check.to_string()) {
+            Ok(s) if s.trim() == "unassigned" => Ok(()),
+            Ok(s) if s.trim() == "assigned" => {
+                bail!("Node {} is still assigned.", node.get_ip_addr())
+            }
+            Ok(s) => bail!("Received unexpected output: {}", s),
+            Err(e) => bail!("Failed to read directory: {}", e),
+        }
+    )
+    .expect("Failed to detect that node has deleted its state.");
+}
+
+/// Select a node with highest finalization height in the given subnet snapshot
+fn select_download_node(subnet: SubnetSnapshot, logger: &Logger) -> (IcNodeSnapshot, NodeMetrics) {
+    let node = subnet
+        .nodes()
+        .filter_map(|n| block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| (n, m)))
+        .max_by_key(|(_, metric)| metric.finalization_height)
+        .expect("No download node found");
+    info!(
+        logger,
+        "Selected download node: ({}, {})",
+        node.0.get_ip_addr(),
+        node.1.finalization_height
+    );
+    node
+}
+
+/// Print ID and IP of all unassigned nodes and the first app subnet found.
+fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
+    let topology_snapshot = env.topology_snapshot();
+
+    info!(logger, "App nodes:");
+    topology_snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .for_each(|n| {
+            info!(logger, "A: {}, ip: {}", n.node_id, n.get_ip_addr());
+        });
+
+    info!(logger, "Unassigned nodes:");
+    topology_snapshot.unassigned_nodes().for_each(|n| {
+        info!(logger, "U: {}, ip: {}", n.node_id, n.get_ip_addr());
+    });
+}
+
+/// Create a chain key on the root subnet using the given NNS node, then
+/// create a new subnet of the given size initialized with the chain key.
+/// Disable signing on NNS and enable it on the new app subnet.
+/// Assert that the key stays the same regardless of whether signing
+/// is enabled on NNS or the app subnet. Return the public key for the given canister.
+fn enable_chain_key_on_new_subnet(
+    env: &TestEnv,
+    nns_node: &IcNodeSnapshot,
+    canister: &MessageCanister,
+    subnet_size: usize,
+    replica_version: ReplicaVersion,
+    key_ids: Vec<MasterPublicKeyId>,
+    logger: &Logger,
+) -> BTreeMap<MasterPublicKeyId, Vec<u8>> {
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+    let snapshot = env.topology_snapshot();
+    let root_subnet_id = snapshot.root_subnet_id();
+    let registry_version = snapshot.get_registry_version();
+
+    info!(logger, "Enabling signing on NNS.");
+    let nns_keys = enable_chain_key_signing_on_subnet(
+        nns_node,
+        canister,
+        root_subnet_id,
+        key_ids.clone(),
+        logger,
+    );
+    let snapshot =
+        block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
+    let registry_version = snapshot.get_registry_version();
+
+    let unassigned_node_ids = snapshot
+        .unassigned_nodes()
+        .take(subnet_size)
+        .map(|n| n.node_id)
+        .collect();
+
+    info!(logger, "Creating new subnet with keys.");
+    block_on(create_new_subnet_with_keys(
+        &governance,
+        unassigned_node_ids,
+        key_ids
+            .iter()
+            .cloned()
+            .map(|key_id| (key_id, root_subnet_id.get()))
+            .collect(),
+        replica_version,
+        logger,
+    ));
+
+    let snapshot =
+        block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
+
+    let app_subnet = snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no application subnet");
+
+    app_subnet.nodes().for_each(|n| {
+        n.await_status_is_healthy()
+            .expect("Timeout while waiting for all nodes to be healthy");
+    });
+
+    info!(logger, "Disabling signing on NNS.");
+    disable_chain_key_on_subnet(nns_node, root_subnet_id, canister, key_ids.clone(), logger);
+    let app_keys = enable_chain_key_signing_on_subnet(
+        nns_node,
+        canister,
+        app_subnet.subnet_id,
+        key_ids,
+        logger,
+    );
+
+    assert_eq!(app_keys, nns_keys);
+    app_keys
 }

@@ -49,6 +49,7 @@ type ChangeAutoStakeMaturity = record {
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshResponse = record { refreshed_neuron_id : opt NeuronId };
 type ClaimSwapNeuronsRequest = record {
+  neuron_recipes : opt NeuronRecipes;
   neuron_parameters : vec NeuronParameters;
 };
 type ClaimSwapNeuronsResponse = record {
@@ -323,6 +324,7 @@ type Neuron = record {
   neuron_fees_e8s : nat64;
 };
 type NeuronId = record { id : blob };
+type NeuronIds = record { neuron_ids : vec NeuronId };
 type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
@@ -341,6 +343,20 @@ type NeuronPermission = record {
   permission_type : vec int32;
 };
 type NeuronPermissionList = record { permissions : vec int32 };
+type NeuronRecipe = record {
+  controller : opt principal;
+  dissolve_delay_seconds : opt nat64;
+  participant : opt Participant;
+  stake_e8s : opt nat64;
+  followees : opt NeuronIds;
+  neuron_id : opt NeuronId;
+};
+type NeuronRecipes = record { neuron_recipes : vec NeuronRecipe };
+type NeuronsFund = record {
+  nns_neuron_hotkeys : opt Principals;
+  nns_neuron_controller : opt principal;
+  nns_neuron_id : opt nat64;
+};
 type Operation = variant {
   ChangeAutoStakeMaturity : ChangeAutoStakeMaturity;
   StopDissolving : record {};
@@ -348,7 +364,9 @@ type Operation = variant {
   IncreaseDissolveDelay : IncreaseDissolveDelay;
   SetDissolveTimestamp : SetDissolveTimestamp;
 };
+type Participant = variant { NeuronsFund : NeuronsFund; Direct : record {} };
 type Percentage = record { basis_points : opt nat64 };
+type Principals = record { principals : vec principal };
 type Proposal = record {
   url : text;
   title : text;

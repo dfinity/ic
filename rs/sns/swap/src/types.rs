@@ -8,8 +8,8 @@ use crate::{
         settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
-        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
-        OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
+        Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
@@ -666,38 +666,6 @@ impl TransferableAmount {
     }
 }
 
-impl OpenRequest {
-    pub fn validate(&self, current_timestamp_seconds: u64, init: &Init) -> Result<(), String> {
-        let mut defects = vec![];
-
-        // Inspect params.
-        match self.params.as_ref() {
-            None => {
-                defects.push("The parameters of the swap are missing.".to_string());
-            }
-            Some(params) => {
-                if let Err(err) = params.is_valid_if_initiated_at(current_timestamp_seconds) {
-                    defects.push(err);
-                } else if let Err(err) = params.validate(init) {
-                    defects.push(err);
-                }
-            }
-        }
-
-        // Inspect open_sns_token_swap_proposal_id.
-        if self.open_sns_token_swap_proposal_id.is_none() {
-            defects.push("The open_sns_token_swap_proposal_id field has no value.".to_string());
-        }
-
-        // Return result.
-        if defects.is_empty() {
-            Ok(())
-        } else {
-            Err(defects.join("\n"))
-        }
-    }
-}
-
 impl DirectInvestment {
     pub fn validate(&self) -> Result<(), String> {
         if !is_valid_principal(&self.buyer_principal) {
@@ -744,7 +712,7 @@ impl CfInvestment {
 }
 
 impl SnsNeuronRecipe {
-    pub fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if let Some(sns) = &self.sns {
             sns.validate()?;
         } else {
@@ -1097,7 +1065,7 @@ impl SettleNeuronsFundParticipationResult {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<[u8; 32]> for SaleNeuronId {
+impl From<[u8; 32]> for SwapNeuronId {
     fn from(value: [u8; 32]) -> Self {
         Self { id: value.to_vec() }
     }
@@ -1105,25 +1073,16 @@ impl From<[u8; 32]> for SaleNeuronId {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<NeuronId> for SaleNeuronId {
+impl From<NeuronId> for SwapNeuronId {
     fn from(neuron_id: NeuronId) -> Self {
         Self { id: neuron_id.id }
     }
 }
 
-// TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
-// SNS governance.proto
-impl TryInto<NeuronId> for SaleNeuronId {
-    type Error = String;
-
-    fn try_into(self) -> Result<NeuronId, Self::Error> {
-        match Subaccount::try_from(self.id) {
-            Ok(subaccount) => Ok(NeuronId::from(subaccount)),
-            Err(err) => Err(format!(
-                "Followee could not be parsed into NeuronId. Err {:?}",
-                err
-            )),
-        }
+impl From<SwapNeuronId> for NeuronId {
+    fn from(src: SwapNeuronId) -> Self {
+        let SwapNeuronId { id } = src;
+        NeuronId { id }
     }
 }
 
@@ -1229,18 +1188,15 @@ mod tests {
     use crate::{
         pb::v1::{
             CfNeuron, CfParticipant, Init, ListDirectParticipantsResponse,
-            NeuronBasketConstructionParameters, OpenRequest, Params, Participant,
+            NeuronBasketConstructionParameters, Params, Participant,
         },
         swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
-    use ic_base_types::PrincipalId;
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
     use std::mem;
-
-    const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
 
     const PARAMS: Params = Params {
         max_participant_icp_e8s: 1_000 * E8,
@@ -1258,22 +1214,6 @@ mod tests {
         }),
         sale_delay_seconds: None,
     };
-
-    lazy_static! {
-        static ref OPEN_REQUEST: OpenRequest = OpenRequest {
-            params: Some(PARAMS),
-            cf_participants: vec![CfParticipant {
-                controller: Some(PrincipalId::new_user_test_id(423939)),
-                hotkey_principal: PrincipalId::new_user_test_id(423939).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    42,
-                    99,
-                    Vec::new() // TODO(NNS1-3199): populate with some hotkey principals
-                ).unwrap()],
-            }],
-            open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
-        };
-    }
 
     lazy_static! {
         // Fill out Init just enough to test Params validation. These values are
@@ -1316,11 +1256,6 @@ mod tests {
     }
 
     #[test]
-    fn open_request_validate_ok() {
-        assert_is_ok!(OPEN_REQUEST.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
-    }
-
-    #[test]
     fn params_high_participants_validate_ok() {
         let params = Params {
             min_participants: 500,
@@ -1330,65 +1265,6 @@ mod tests {
             ..PARAMS
         };
         params.validate(&INIT).unwrap();
-    }
-
-    #[test]
-    fn open_request_validate_invalid_params() {
-        let request = OpenRequest {
-            params: Some(Params {
-                swap_due_timestamp_seconds: 42,
-                ..PARAMS.clone()
-            }),
-            ..OPEN_REQUEST.clone()
-        };
-
-        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
-    }
-
-    #[test]
-    fn open_request_reject_one_neuron_in_basket() {
-        let request_fail = OpenRequest {
-            params: Some(Params {
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 1, // 1 should be too little
-                    dissolve_delay_interval_seconds: 7890000,
-                }),
-                ..PARAMS.clone()
-            }),
-            ..OPEN_REQUEST.clone()
-        };
-
-        let request_success = OpenRequest {
-            params: Some(Params {
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 2, // 2 should be enough
-                    dissolve_delay_interval_seconds: 7890000,
-                }),
-                ..PARAMS.clone()
-            }),
-            ..OPEN_REQUEST.clone()
-        };
-
-        let error = request_fail
-            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
-            .unwrap_err();
-        assert_eq!(
-            error,
-            "neuron_basket_construction_parameters.count (1) must be >= 2".to_string()
-        );
-        request_success
-            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
-            .unwrap();
-    }
-
-    #[test]
-    fn open_request_validate_no_proposal_id() {
-        let request = OpenRequest {
-            open_sns_token_swap_proposal_id: None,
-            ..OPEN_REQUEST.clone()
-        };
-
-        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
     }
 
     #[test]
