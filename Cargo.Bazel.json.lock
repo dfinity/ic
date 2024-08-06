@@ -1,5 +1,5 @@
 {
-  "checksum": "78efc5b8c1207de7215cd3b5b23cdc4dbd3f2d7aa4ff3ccc08618678733ee6dc",
+  "checksum": "85a0d3eca23db5d149d16a127133de811021c97f4ffae6d7b16afbedba2cca37",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17243,6 +17243,11 @@
             {
               "id": "ic-agent 0.37.1",
               "target": "ic_agent"
+            },
+            {
+              "id": "ic-agent 0.37.1",
+              "target": "ic_agent",
+              "alias": "ic_agent_dynamic_route"
             },
             {
               "id": "ic-btc-interface 0.2.2",
