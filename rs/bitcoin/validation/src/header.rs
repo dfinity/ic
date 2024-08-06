@@ -284,7 +284,7 @@ fn compute_next_difficulty(
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
     let actual_interval = prev_header.time - last_adjustment_time;
-    let mut adjusted_interval = actual_interval as u32;
+    let mut adjusted_interval = actual_interval;
 
     // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
     let target_adjustment_interval_time: u32 = DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES; //Number of seconds in 2 weeks
