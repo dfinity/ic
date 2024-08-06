@@ -500,18 +500,16 @@ mod tests {
     fn test_memory_usage_correctly_updated_while_adding_and_removing_snapshots() {
         let canister_id = canister_test_id(0);
         let (first_snapshot_id, first_snapshot) = fake_canister_snapshot(canister_id, 1);
-        let mut snapshot_manager = CanisterSnapshots::default();
-        assert_eq!(snapshot_manager.snapshots.len(), 0);
-        assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
-        assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
-        assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
-
-        // Pushing new snapshot updates the `memory_usage`.
         let snapshot1_size = first_snapshot.size();
-        snapshot_manager.push(
+        let mut snapshots = BTreeMap::new();
+        snapshots.insert(
             first_snapshot_id,
             Arc::<CanisterSnapshot>::new(first_snapshot),
         );
+        let mut snapshot_manager = CanisterSnapshots::new(snapshots);
+        assert_eq!(snapshot_manager.snapshots.len(), 1);
+        assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
+        assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
         assert_eq!(
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size)
