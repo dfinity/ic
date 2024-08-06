@@ -266,6 +266,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rpc_get_from_consensus_pool_test() {
+        let ingress_message = SignedIngressBuilder::new().nonce(1).build();
+        let block = fake_block_proposal(vec![ingress_message.clone()]);
+        let pools = mock_pools(None, Some(block.clone()));
+
+        let rpc_response = rpc_handler(
+            State(pools),
+            request(
+                ConsensusMessageId::from(&block),
+                IngressMessageId::from(&ingress_message),
+            ),
+        )
+        .await
+        .expect("Should handle the request");
+
+        let deserialized = pb::GetIngressMessageInBlockResponse::proxy_decode(&rpc_response)
+            .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
+                GetIngressMessageInBlockResponse::try_from(proto)
+            })
+            .expect("Should return a valid proto")
+            .ingress_message;
+
+        assert_eq!(deserialized, ingress_message);
+    }
+
+    #[tokio::test]
     async fn rpc_get_not_found_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![]);
