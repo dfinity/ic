@@ -734,7 +734,7 @@ impl StateLayout {
         self.checkpoint(height)
     }
 
-    /// Returns if a checkpoint with the given height that is verified or not.
+    /// Returns if a checkpoint with the given height is verified or not.
     /// If the checkpoint is not found, an error is returned.
     pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {
         let cp_name = Self::checkpoint_name(height);

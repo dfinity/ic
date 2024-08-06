@@ -3635,7 +3635,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
             assert_eq!(dst_state_manager.latest_state_height(), height(3));
-            // state 1 should be removable
+            // State 1 should be removable.
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
