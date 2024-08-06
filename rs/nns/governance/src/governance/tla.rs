@@ -1,12 +1,45 @@
 use super::Governance;
 pub use tla_instrumentation::{tla_log_all_globals, tla_log_locals};
-use tla_instrumentation::{
-    GlobalState, InstrumentationState, Label, ResolvedStatePair, TlaValue, ToTla, Update,
-    VarAssignment,
+pub use tla_instrumentation::{
+    GlobalState, InstrumentationState, Label, MethodInstrumentationState, ResolvedStatePair,
+    TlaValue, ToTla, Update, VarAssignment,
 };
 pub use tla_instrumentation_proc_macros::tla_update_method;
+use tokio::task_local;
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+task_local! {
+    pub static TLA_STATE: Rc<RefCell<MethodInstrumentationState>>;
+}
+
+#[macro_export]
+macro_rules! tla_start_scope {
+    ($state:expr, $f:expr) => {
+        TLA_STATE.scope($state, $f)
+    };
+}
+
+#[macro_export]
+macro_rules! tla_get_scope {
+    () => {
+        TLA_STATE.get()
+    };
+}
 
 static mut STATE_PAIRS: Vec<ResolvedStatePair> = Vec::new();
+
+pub static mut TLA_STATE_PAIRS: Vec<ResolvedStatePair> = Vec::new();
+
+#[macro_export]
+macro_rules! tla_add_state_pairs {
+    ($pairs:expr) => {
+        unsafe {
+            TLA_STATE_PAIRS.extend($pairs);
+        }
+    };
+}
 
 static mut STATE: Option<InstrumentationState> = None;
 

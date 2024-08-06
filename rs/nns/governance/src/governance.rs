@@ -130,7 +130,7 @@ pub mod tla;
 #[cfg(feature = "test")]
 use tla::{
     init_tla_state, split_neuron_desc, tla_log_all_globals, tla_log_locals, tla_update_method,
-    with_tla_state, with_tla_state_pairs,
+    with_tla_state, with_tla_state_pairs, MethodInstrumentationState, TLA_STATE, TLA_STATE_PAIRS,
 };
 
 // The limits on NNS proposal title len (in bytes).
@@ -2679,7 +2679,9 @@ impl Governance {
         })?;
 
         let now = self.env.now();
-        tla_log_globals_and_locals!(self, amount: amount_e8s, )
+        tla_log_all_globals!(self);
+        // TODO: make the macro work
+        // tla_log_locals!(amount: amount_e8s);
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2691,7 +2693,7 @@ impl Governance {
             )
             .await;
         tla_log_all_globals!(self);
-        tla_log_locals(amount: amount_e8s)
+        // tla_log_locals!(amount: amount_e8s);
 
         if let Err(error) = result {
             let error = GovernanceError::from(error);
