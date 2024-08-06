@@ -836,10 +836,6 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
     }
 }
 
-// TODO(EXC-1678): remove after release.
-/// Feature flag to enable/disable allowed viewers for canister log visibility.
-const ALLOWED_VIEWERS_ENABLED: bool = false;
-
 /// Maximum number of allowed log viewers (specified in the interface spec).
 const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
 
@@ -865,6 +861,10 @@ pub enum LogVisibilityV2 {
     AllowedViewers(BoundedAllowedViewers),
 }
 
+// TODO(EXC-1678): remove after release.
+/// Feature flag to enable/disable allowed viewers for canister log visibility.
+const ALLOWED_VIEWERS_ENABLED: bool = false;
+
 // Ensure backward compatibility with the old `LogVisibility`.
 // `LogVisibilityV2` extends `LogVisibility` with an additional variant, `AllowedViewers`.
 // When decoding, if `AllowedViewers` is encountered, it is changed to a default value
@@ -875,8 +875,7 @@ impl Payload<'_> for LogVisibilityV2 {
             Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
 
         if !ALLOWED_VIEWERS_ENABLED && matches!(decoded, Self::AllowedViewers(_)) {
-            // Fall back to the default value.
-            return Ok(Self::default());
+            return Ok(Self::default()); // Fall back to the default value.
         }
 
         Ok(decoded)
@@ -1869,7 +1868,7 @@ pub struct CanisterSettingsArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
-    pub log_visibility: Option<LogVisibility>,
+    pub log_visibility: Option<LogVisibilityV2>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
 }
