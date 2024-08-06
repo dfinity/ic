@@ -2177,13 +2177,13 @@ dependencies = [
 
 [[package]]
 name = "cloudflare"
-version = "0.11.0"
-source = "git+https://github.com/blind-oracle/cloudflare-rs.git?rev=386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc#386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+version = "0.12.0"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
 dependencies = [
  "chrono",
  "http 0.2.12",
  "percent-encoding",
- "reqwest 0.11.22",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -5517,7 +5517,7 @@ dependencies = [
  "ratelimit",
  "rcgen",
  "regex",
- "reqwest 0.11.22",
+ "reqwest 0.11.27",
  "rustls 0.21.12",
  "rustls-pemfile 2.1.2",
  "serde",
@@ -6858,7 +6858,7 @@ dependencies = [
  "criterion",
  "hex",
  "ic-crypto-test-utils-reproducible-rng",
- "ic_bls12_381 0.9.2",
+ "ic_bls12_381",
  "itertools 0.12.0",
  "lazy_static",
  "pairing 0.23.0",
@@ -12610,7 +12610,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d420b25c0091059f6c3c23a21427a81915e6e0aca3b79e0d403ed767f286a3b9"
 dependencies = [
  "hex",
- "ic_bls12_381 0.10.0",
+ "ic_bls12_381",
  "lazy_static",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -12623,7 +12623,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.2.12",
  "hex",
- "ic_bls12_381 0.9.2",
+ "ic_bls12_381",
  "lazy_static",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -12854,21 +12854,6 @@ checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 
 [[package]]
 name = "ic_bls12_381"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb94c398e5a5bc56a8f0ff995b2679829e2bbc5f145d9c3ea58d303036e05f2"
-dependencies = [
- "digest 0.10.7",
- "ff 0.13.0",
- "group 0.13.0",
- "pairing 0.23.0",
- "rand_core 0.6.4",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "ic_bls12_381"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
@@ -12879,6 +12864,7 @@ dependencies = [
  "pairing 0.23.0",
  "rand_core 0.6.4",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -17249,10 +17235,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.22"
+version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "046cd98826c46c2ac8ddecae268eb5c2e58628688a5fc7a2643704a73faba95b"
+checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
+ "async-compression",
  "base64 0.21.5",
  "bytes",
  "encoding_rs",
@@ -17276,6 +17263,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sync_wrapper 0.1.2",
  "system-configuration",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -17284,7 +17272,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.3.0",
+ "wasm-streams",
  "web-sys",
  "webpki-roots 0.25.2",
  "winreg 0.50.0",
@@ -17333,7 +17321,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.4.0",
+ "wasm-streams",
  "web-sys",
  "webpki-roots 0.26.1",
  "winreg 0.52.0",
@@ -20931,19 +20919,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b4a05336882dae732ce6bd48b7e11fe597293cb72c13da4f35d7d5f8d53b2a7"
 dependencies = [
  "leb128",
-]
-
-[[package]]
-name = "wasm-streams"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4609d447824375f43e1ffbc051b50ad8f4b3ae8219680c94452ea05eb240ac7"
-dependencies = [
- "futures-util",
- "js-sys",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]

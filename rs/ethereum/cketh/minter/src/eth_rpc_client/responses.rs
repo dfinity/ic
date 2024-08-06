@@ -71,13 +71,24 @@ impl From<TransactionStatus> for ethnum::u256 {
     }
 }
 
+impl TryFrom<u8> for TransactionStatus {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TransactionStatus::Failure),
+            1 => Ok(TransactionStatus::Success),
+            _ => Err(format!("invalid transaction status: {}", value)),
+        }
+    }
+}
+
 impl TryFrom<ethnum::u256> for TransactionStatus {
     type Error = String;
 
     fn try_from(value: ethnum::u256) -> Result<Self, Self::Error> {
         match value {
-            ethnum::u256::ZERO => Ok(TransactionStatus::Failure),
-            ethnum::u256::ONE => Ok(TransactionStatus::Success),
+            ethnum::u256::ZERO | ethnum::u256::ONE => TransactionStatus::try_from(value.as_u8()),
             _ => Err(format!("invalid transaction status: {}", value)),
         }
     }
