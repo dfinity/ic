@@ -397,7 +397,10 @@ impl SocketReaderWithTimeout {
             )
         };
 
-        if result != 0 {
+        if result == 0 {
+            self.socket_timeout = timeout;
+            Ok(())
+        } else {
             // OS error 9 corresponds to the `BAD_FILE_DESCRIPTOR` error.
             // This error may happen here if the main process terminates the
             // sandbox process and immediately closes the socket while the
@@ -418,13 +421,7 @@ impl SocketReaderWithTimeout {
                 err.kind(),
                 err.raw_os_error()
             );
-        }
-
-        if result == 0 {
-            self.socket_timeout = timeout;
-            Ok(())
-        } else {
-            Err(std::io::Error::last_os_error())
+            Err(err)
         }
     }
 }
