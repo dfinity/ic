@@ -2177,13 +2177,13 @@ dependencies = [
 
 [[package]]
 name = "cloudflare"
-version = "0.11.0"
-source = "git+https://github.com/blind-oracle/cloudflare-rs.git?rev=386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc#386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+version = "0.12.0"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
 dependencies = [
  "chrono",
  "http 0.2.12",
  "percent-encoding",
- "reqwest 0.11.22",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -5517,7 +5517,7 @@ dependencies = [
  "ratelimit",
  "rcgen",
  "regex",
- "reqwest 0.11.22",
+ "reqwest 0.11.27",
  "rustls 0.21.12",
  "rustls-pemfile 2.1.2",
  "serde",
@@ -17248,10 +17248,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.22"
+version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "046cd98826c46c2ac8ddecae268eb5c2e58628688a5fc7a2643704a73faba95b"
+checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
+ "async-compression",
  "base64 0.21.5",
  "bytes",
  "encoding_rs",
@@ -17275,6 +17276,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sync_wrapper 0.1.2",
  "system-configuration",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -17283,7 +17285,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.3.0",
+ "wasm-streams",
  "web-sys",
  "webpki-roots 0.25.2",
  "winreg 0.50.0",
@@ -17332,7 +17334,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.4.0",
+ "wasm-streams",
  "web-sys",
  "webpki-roots 0.26.1",
  "winreg 0.52.0",
@@ -20930,19 +20932,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b4a05336882dae732ce6bd48b7e11fe597293cb72c13da4f35d7d5f8d53b2a7"
 dependencies = [
  "leb128",
-]
-
-[[package]]
-name = "wasm-streams"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4609d447824375f43e1ffbc051b50ad8f4b3ae8219680c94452ea05eb240ac7"
-dependencies = [
- "futures-util",
- "js-sys",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]

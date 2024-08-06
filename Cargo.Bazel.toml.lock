@@ -2014,8 +2014,8 @@ dependencies = [
 
 [[package]]
 name = "cloudflare"
-version = "0.11.0"
-source = "git+https://github.com/blind-oracle/cloudflare-rs.git?rev=386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc#386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+version = "0.12.0"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
 dependencies = [
  "chrono",
  "http 0.2.12",
@@ -8779,6 +8779,7 @@ version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
+ "async-compression",
  "base64 0.21.6",
  "bytes",
  "encoding_rs",
