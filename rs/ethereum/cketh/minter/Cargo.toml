@@ -68,3 +68,6 @@ rand = { workspace = true }
 scraper = "0.17.1"
 tempfile = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+debug_checks = []

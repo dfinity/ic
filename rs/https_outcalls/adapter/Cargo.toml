@@ -34,3 +34,6 @@ rand = { workspace = true }
 warp = { version = "0.3.6", features = ["tls"] }
 uuid = { workspace = true }
 tempfile = { workspace = true }
+
+[features]
+http = []

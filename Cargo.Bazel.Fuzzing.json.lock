@@ -1,5 +1,5 @@
 {
-  "checksum": "05d108e4951c797671bc706aedfea6bd63f718f2893e0ca4ec62335136edc344",
+  "checksum": "e152d000fdef6934f0c6ca0dafd60bbe8a5054c3b9b6104e4921c5e79b6ed128",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11853,15 +11853,15 @@
       ],
       "license_file": null
     },
-    "cloudflare 0.11.0": {
+    "cloudflare 0.12.0": {
       "name": "cloudflare",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/blind-oracle/cloudflare-rs.git",
+          "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
           },
           "strip_prefix": "cloudflare"
         }
@@ -11941,7 +11941,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.0"
+        "version": "0.12.0"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -17147,7 +17147,7 @@
               "target": "clap"
             },
             {
-              "id": "cloudflare 0.11.0",
+              "id": "cloudflare 0.12.0",
               "target": "cloudflare"
             },
             {
@@ -17291,6 +17291,10 @@
               "target": "hkdf"
             },
             {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
+            },
+            {
               "id": "http 0.2.12",
               "target": "http",
               "alias": "http_0_2_12"
@@ -17359,7 +17363,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-btc-interface 0.2.0",
+              "id": "ic-btc-interface 0.2.2",
               "target": "ic_btc_interface"
             },
             {
@@ -17749,11 +17753,11 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.11.2",
+              "id": "quinn 0.11.3",
               "target": "quinn"
             },
             {
-              "id": "quinn-udp 0.5.2",
+              "id": "quinn-udp 0.5.4",
               "target": "quinn_udp"
             },
             {
@@ -27749,14 +27753,14 @@
       ],
       "license_file": null
     },
-    "ic-btc-interface 0.2.0": {
+    "ic-btc-interface 0.2.2": {
       "name": "ic-btc-interface",
-      "version": "0.2.0",
+      "version": "0.2.2",
       "package_url": "https://github.com/dfinity/bitcoin-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.0/download",
-          "sha256": "46c2d1eedb5fcd02b6aab21fa6e0989ae560505e510bf221af9ab57bffbc83ac"
+          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.2/download",
+          "sha256": "b0152e14e697b0e988dbfdcb3f7e352d1c76a65b7d2d75c5d76bad22c3aca10d"
         }
       },
       "targets": [
@@ -27796,7 +27800,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.0"
+        "version": "0.2.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -48495,17 +48499,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "quinn 0.11.2": {
+    "quinn 0.11.3": {
       "name": "quinn",
-      "version": "0.11.2",
+      "version": "0.11.3",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/quinn-rs/quinn",
-          "commitish": {
-            "Rev": "fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
-          },
-          "strip_prefix": "quinn"
+        "Http": {
+          "url": "https://static.crates.io/crates/quinn/0.11.3/download",
+          "sha256": "b22d8e7369034b9a7132bc2008cac12f2013c8132b45e0554e6e20e2617f2156"
         }
       },
       "targets": [
@@ -48547,12 +48548,12 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "quinn-proto 0.11.3",
+              "id": "quinn-proto 0.11.6",
               "target": "quinn_proto",
               "alias": "proto"
             },
             {
-              "id": "quinn-udp 0.5.2",
+              "id": "quinn-udp 0.5.4",
               "target": "quinn_udp",
               "alias": "udp"
             },
@@ -48563,6 +48564,10 @@
             {
               "id": "rustls 0.23.11",
               "target": "rustls"
+            },
+            {
+              "id": "socket2 0.5.7",
+              "target": "socket2"
             },
             {
               "id": "thiserror 1.0.62",
@@ -48580,7 +48585,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.2"
+        "version": "0.11.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -48589,17 +48594,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-proto 0.11.3": {
+    "quinn-proto 0.11.6": {
       "name": "quinn-proto",
-      "version": "0.11.3",
+      "version": "0.11.6",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/quinn-rs/quinn",
-          "commitish": {
-            "Rev": "fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
-          },
-          "strip_prefix": "quinn-proto"
+        "Http": {
+          "url": "https://static.crates.io/crates/quinn-proto/0.11.6/download",
+          "sha256": "ba92fb39ec7ad06ca2582c0ca834dfeadcaf06ddfc8e635c80aa7e1c05315fdd"
         }
       },
       "targets": [
@@ -48671,7 +48673,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.3"
+        "version": "0.11.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -48680,17 +48682,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-udp 0.5.2": {
+    "quinn-udp 0.5.4": {
       "name": "quinn-udp",
-      "version": "0.5.2",
+      "version": "0.5.4",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/quinn-rs/quinn",
-          "commitish": {
-            "Rev": "fb63829dd1f78a98cb7da0fc757db44d14afd9ff"
-          },
-          "strip_prefix": "quinn-udp"
+        "Http": {
+          "url": "https://static.crates.io/crates/quinn-udp/0.5.4/download",
+          "sha256": "8bffec3605b73c6f1754535084a85229fa8a30f86014e6c81aeec4abb68b0285"
         }
       },
       "targets": [
@@ -48715,7 +48714,8 @@
         "crate_features": {
           "common": [
             "default",
-            "log"
+            "log",
+            "tracing"
           ],
           "selects": {}
         },
@@ -48748,7 +48748,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.5.2"
+        "version": "0.5.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -51400,7 +51400,11 @@
           "common": [
             "__rustls",
             "__tls",
+            "async-compression",
             "blocking",
+            "brotli",
+            "deflate",
+            "gzip",
             "hyper-rustls",
             "json",
             "mime_guess",
@@ -51472,6 +51476,10 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "async-compression 0.4.4",
+                "target": "async_compression"
+              },
               {
                 "id": "encoding_rs 0.8.33",
                 "target": "encoding_rs"
@@ -78279,7 +78287,7 @@
     "cidr 0.2.3",
     "clap 3.2.25",
     "clap 4.4.6",
-    "cloudflare 0.11.0",
+    "cloudflare 0.12.0",
     "colored 2.0.4",
     "comparable 0.5.4",
     "console 0.11.3",
@@ -78316,6 +78324,7 @@
     "hex 0.4.3",
     "hex-literal 0.4.1",
     "hkdf 0.12.4",
+    "hmac 0.12.1",
     "http 0.2.12",
     "http 1.1.0",
     "http-body 0.4.6",
@@ -78332,7 +78341,7 @@
     "hyper-util 0.1.6",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.37.1",
-    "ic-btc-interface 0.2.0",
+    "ic-btc-interface 0.2.2",
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
@@ -78434,8 +78443,8 @@
     "protobuf 2.28.0",
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
-    "quinn 0.11.2",
-    "quinn-udp 0.5.2",
+    "quinn 0.11.3",
+    "quinn-udp 0.5.4",
     "quote 1.0.35",
     "rand 0.8.5",
     "rand_chacha 0.3.1",

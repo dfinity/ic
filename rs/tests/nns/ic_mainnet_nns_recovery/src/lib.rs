@@ -36,8 +36,7 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
-            SshSession, TopologySnapshot,
+            IcNodeContainer, IcNodeSnapshot, NnsCustomizations, SshSession, TopologySnapshot,
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
@@ -354,7 +353,7 @@ fn install_xrc_mock_canister(
         create_canister_from_icp(env.clone(), recovered_nns_node, principal, 10);
 
     let xrc_mock_wasm: PathBuf = fs::canonicalize(
-        env.get_dependency_path("rs/rosetta-api/tvl/xrc_mock/xrc_mock_canister.wasm"),
+        env.get_dependency_path("rs/rosetta-api/tvl/xrc_mock/xrc_mock_canister.wasm.gz"),
     )
     .unwrap();
 
@@ -445,7 +444,6 @@ fn setup_ic(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 }

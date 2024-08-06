@@ -2785,3 +2785,103 @@ fn large_wasm64_memory_allocation_test() {
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
+
+#[test]
+fn wasm64_saturate_fun_index() {
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i64 i64)
+                    (param $method_name_src i64)    (param $method_name_len i64)
+                    (param $reply_fun i64)          (param $reply_env i64)
+                    (param $reject_fun i64)         (param $reject_env i64)
+                )
+            )
+            (import "ic0" "call_data_append"
+                (func $ic0_call_data_append (param $src i64) (param $size i64))
+            )
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "call_on_cleanup"
+                (func $ic0_call_on_cleanup (param $fun i64) (param $env i64)))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i64.const 100) (i64.const 10)  ;; callee canister id = 777
+                    (i64.const 0) (i64.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i64.const -1) (i64.const 22)   ;; on_reply closure
+                    (i64.const -1) (i64.const 44)   ;; on_reject closure
+                )
+                (call $ic0_call_data_append
+                    (i64.const 19) (i64.const 3)    ;; refers to "XYZ" on the heap
+                )
+                (call $ic0_call_on_cleanup
+                    (i64.const -1) (i64.const 66)   ;; cleanup closure
+                )
+                (call $ic0_call_perform)
+                drop
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "some_remote_method XYZ")
+            (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+
+    let api = ic_system_api::ApiType::update(
+        UNIX_EPOCH,
+        vec![],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+    let _res = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+
+    let system_state_changes = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_system_state_changes();
+
+    // call_perform should trigger one callback update
+    let callback_update = system_state_changes
+        .callback_updates
+        .first()
+        .unwrap()
+        .clone();
+    match callback_update {
+        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Register(_id, callback) => {
+            assert_eq!(
+                callback.on_reply,
+                WasmClosure {
+                    func_idx: u32::MAX,
+                    env: 22
+                }
+            );
+            assert_eq!(
+                callback.on_reject,
+                WasmClosure {
+                    func_idx: u32::MAX,
+                    env: 44
+                }
+            );
+            assert_eq!(
+                callback.on_cleanup,
+                Some(WasmClosure {
+                    func_idx: u32::MAX,
+                    env: 66
+                })
+            );
+        }
+        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Unregister(_) => {
+            panic!("Expected registration of new calback")
+        }
+    }
+}

@@ -68,7 +68,7 @@ rand = { workspace = true }
 ratelimit = "0.9.1"
 rcgen = { workspace = true }
 regex = { workspace = true }
-reqwest = { version = "0.11.22", default-features = false, features = [
+reqwest = { version = "0.11.27", default-features = false, features = [
     "blocking",
     "json",
     "multipart",
