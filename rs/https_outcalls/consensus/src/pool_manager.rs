@@ -291,13 +291,8 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
 
-        let key_from_share = |share: &CanisterHttpResponseShare| {
-            (
-                share.signature.signer,
-                share.content.id,
-                share.content.registry_version,
-            )
-        };
+        let key_from_share =
+            |share: &CanisterHttpResponseShare| (share.signature.signer, share.content.id);
 
         let mut existing_signed_requests: HashSet<_> = canister_http_pool
             .get_validated_shares()
@@ -307,7 +302,7 @@ impl CanisterHttpPoolManagerImpl {
         canister_http_pool
             .get_unvalidated_shares()
             .filter_map(|share| {
-                if existing_signed_requests.contains(&key_from_share(&share)) {
+                if existing_signed_requests.contains(&key_from_share(share)) {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
                         "Redundant share".into(),
@@ -348,7 +343,7 @@ impl CanisterHttpPoolManagerImpl {
                     ))
                 } else {
                     // Update the set of existing signed requests.
-                    existing_signed_requests.insert(key_from_share(&share));
+                    existing_signed_requests.insert(key_from_share(share));
                     self.metrics.shares_validated.inc();
                     Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
                 }
