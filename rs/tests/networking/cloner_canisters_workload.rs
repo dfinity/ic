@@ -10,8 +10,6 @@
 
 use anyhow::Result;
 use candid::{CandidType, Encode};
-use futures::stream::{FuturesUnordered, StreamExt};
-use ic_registry_routing_table::CanisterIdRanges;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
@@ -20,40 +18,64 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
-        simulate_network::{simulate_network, NetworkSimulation, ProductionSubnetTopology},
         test_env::TestEnv,
-        test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            HasWasm, IcNodeContainer,
-        },
-        universal_vm::{UniversalVm, UniversalVms},
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer},
     },
     systest,
-    util::{block_on, UniversalCanister},
 };
-use ic_universal_canister::PayloadBuilder;
 use serde::{Deserialize, Serialize};
 use slog::info;
-use std::{
-    cmp::max,
-    net::{IpAddr, SocketAddr},
-    time::Duration,
-};
+use std::time::Duration;
 
-// 40 minutes
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(60 * 60);
+// 4 hours minutes
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(4 * 60 * 60);
 
-/// Number of canisters that will be installed and executing the workload in parallel.
-const CONCURRENT_REQUESTS: usize = 100;
+// 5 minutes
+const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(5 * 60);
 
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 
-const SUBNET_SIZE: usize = 1;
-
 const CLONER_CANISTER_WASM: &str = "rs/tests/src/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+
+const SUBNET_SIZE: usize = 13;
+
+/*
+
+-- Test timed out at 2024-08-06 01:54:51 UTC --
+[68 / 69] Testing //rs/tests/networking:cloner_canisters_workload; 3600s linux-sandbox
+
+TIMEOUT: //rs/tests/networking:cloner_canisters_workload (Summary)
+      /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/ic/bazel-out/k8-opt/testlogs/rs/tests/networking/cloner_canisters_workload/test.log
+Target //rs/tests/networking:cloner_canisters_workload up-to-date:
+  bazel-bin/rs/tests/networking/cloner_canisters_workload/run-test.sh
+INFO: Elapsed time: 3607.516s, Critical Path: 3606.52s
+INFO: 7 processes: 7 linux-sandbox.
+INFO: Build completed, 1 test FAILED, 7 total actions
+//rs/tests/networking:cloner_canisters_workload                         TIMEOUT in 3600.0s
+  /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/ic/bazel-out/k8-opt/testlogs/rs/tests/networking/cloner_canisters_workload/test.log
+
+Executed 1 out of 1 test: 1 fails locally.
+INFO: Build completed, 1 test FAILED, 7 total actions
+INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/df2d46f4-48ad-42da-8ca5-545234752592
+There was an error while executing CLI: exit status 3
+
+
+*/
+
+// 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
+// Yields 280-310ms commit and certify times.
+// We need minimum 350+ms, so we should probably push this to 150,000 canisters.
+const NUMBER_OF_CANISTERS: u64 = 125_000;
+const CANISTERS_PER_BATCH: u64 = 500;
+const ITERATIONS: u64 = NUMBER_OF_CANISTERS / CANISTERS_PER_BATCH;
+
+/// This number should not exceed the length of the canister output queue,
+/// which is currently 500.
+const CLONER_CANISTER_BATCH_SIZE: u64 = 250;
+const INITIAL_CYCLES: u64 = 10_u64.pow(11); // 100B Cycles
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
@@ -62,12 +84,9 @@ fn main() -> Result<()> {
         .with_setup(config)
         .add_test(systest!(install_cloner_canisters))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
-        .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.
         .execute_from_args()?;
     Ok(())
 }
-
-const MAX_CANISTERS_INSTALLING_IN_PARALLEL: usize = 10;
 
 pub fn config(env: TestEnv) {
     let logger = env.logger();
@@ -77,10 +96,19 @@ pub fn config(env: TestEnv) {
 
     info!(
         &logger,
-        "Step 1: Checking readiness of all replica nodes..."
+        "Step 1: Starting the IC with a subnet of size {SUBNET_SIZE}.",
     );
 
+    // set up IC overriding the default resources to be more powerful
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(64)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), // <- 512 GB
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+    };
+
     InternetComputer::new()
+        .with_default_vm_resources(vm_resources)
+        .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(SUBNET_SIZE))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
@@ -111,57 +139,71 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
-
-    info!(&logger, "Step 3: Installing cloner canister.");
     let app_node = app_subnet.nodes().next().unwrap();
-    let cloner_canister_id =
-        app_node.create_and_install_canister_with_arg(CLONER_CANISTER_WASM, None);
-    info!(
-        &logger,
-        "Succeeded installing cloner canister, {}.", cloner_canister_id
-    );
-
     let counter_canister_bytes = env.load_wasm(COUNTER_CANISTER_WAT);
-
-    info!(&logger, "Step 4: Spinning up canisters.");
-
-    rt.block_on(async {
-        let CanisterAgent { agent } = app_node.build_canister_agent().await;
-
-        let args = Encode!(&SpinupCanistersArgs {
-            canisters_number: 10_000,
-            wasm_module: counter_canister_bytes,
-            initial_cycles: 10_u64.pow(10), // 1B Cycles
-            batch_size: 250,
-            arg: vec![],
-        })
-        .unwrap();
-        // time this call
-        let timer = std::time::Instant::now();
-        match agent
-            .update(&cloner_canister_id, "spinup_canisters")
-            .with_arg(args)
-            .call_and_wait()
-            .await
-        {
-            Ok(_) => {
-                info!(&logger, "Successfully spun up canisters.");
-            }
-            Err(err) => {
-                info!(&logger, "Failed to spin up canisters: {:?}", err);
-            }
-        }
+    for i in 0..ITERATIONS {
+        let counter_canister_bytes_clone = counter_canister_bytes.clone();
+        info!(&logger, "{i}/{ITERATIONS}: Installing cloner canister.");
+        let cloner_canister_id =
+            app_node.create_and_install_canister_with_arg(CLONER_CANISTER_WASM, None);
         info!(
             &logger,
-            "Time taken to spin up canisters: {:?}",
-            timer.elapsed()
+            "{i}/{ITERATIONS}: Succeeded installing cloner canister, {}.", cloner_canister_id
         );
-    });
 
+        info!(
+            &logger,
+            "{i}/{ITERATIONS}: Spinning up {CANISTERS_PER_BATCH} canisters."
+        );
+
+        rt.block_on(async {
+            let CanisterAgent { agent } = app_node.build_canister_agent().await;
+
+            let args = Encode!(&SpinupCanistersArgs {
+                canisters_number: CANISTERS_PER_BATCH,
+                wasm_module: counter_canister_bytes_clone,
+                initial_cycles: INITIAL_CYCLES, // 1B Cycles
+                batch_size: CLONER_CANISTER_BATCH_SIZE,
+                arg: vec![],
+            })
+            .unwrap();
+            // time this call
+            let timer = std::time::Instant::now();
+            match agent
+                .update(&cloner_canister_id, "spinup_canisters")
+                .with_arg(args)
+                .call_and_wait()
+                .await
+            {
+                Ok(_) => {
+                    info!(&logger, "{i}/{ITERATIONS}: Successfully spun up canisters.");
+                }
+                Err(err) => {
+                    info!(
+                        &logger,
+                        " {i}/{ITERATIONS}:Failed to spin up canisters: {:?}", err
+                    );
+                }
+            }
+            info!(
+                &logger,
+                "{i}/{ITERATIONS}: Time taken to spin up canisters: {:?}",
+                timer.elapsed()
+            );
+        });
+    }
+
+    // keep the workload running for a while
     info!(&logger, "Step 5: Finished spinning up canisters.");
 
-    // sleep for 60 min
-    std::thread::sleep(Duration::from_secs(60 * 60));
+    let time_to_wait_for_download = WORKLOAD_RUNTIME - DOWNLOAD_PROMETHEUS_WAIT_TIME;
+    info!(
+        &log,
+        "Waiting {:?} before download.", time_to_wait_for_download
+    );
+    std::thread::sleep(time_to_wait_for_download);
+    info!(&log, "Step 6: Downloading prometheus data");
+    env.download_prometheus_data_dir_if_exists();
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
