@@ -211,6 +211,11 @@ impl PageDelta {
     fn max_page_index(&self) -> Option<PageIndex> {
         self.0.max_key().map(PageIndex::from)
     }
+
+    /// Returns the number of pages in the page delta.
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl<I> From<I> for PageDelta
@@ -949,6 +954,11 @@ impl PageMap {
         }
 
         Ok(())
+    }
+
+    /// Returns the number of delta pages included in this PageMap.
+    pub fn num_delta_pages(&self) -> usize {
+        self.page_delta.len()
     }
 }
 

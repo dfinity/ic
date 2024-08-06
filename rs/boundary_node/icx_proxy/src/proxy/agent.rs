@@ -196,7 +196,7 @@ async fn process_request<V: Validate + 'static>(
     }
 
     let canister_id = canister_id.unwrap();
-    span.record("canister_id", &canister_id.to_string());
+    span.record("canister_id", canister_id.to_string());
 
     if let Some(v) = &args.denylist {
         if v.is_blocked(canister_id, country_code) {

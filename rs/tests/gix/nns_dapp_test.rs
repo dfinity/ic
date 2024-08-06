@@ -23,7 +23,7 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{secs, HasTopologySnapshot, NnsCanisterWasmStrategy},
+    test_env_api::{secs, HasTopologySnapshot},
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
@@ -51,7 +51,6 @@ pub fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))

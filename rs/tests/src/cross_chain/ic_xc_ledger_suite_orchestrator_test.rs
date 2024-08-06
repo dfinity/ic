@@ -21,7 +21,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsCanisterWasmStrategy, NnsCustomizations,
+            NnsCustomizations,
         },
     },
     nns::vote_and_execute_proposal,
@@ -39,7 +39,6 @@ pub fn setup_with_system_and_application_subnets(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 

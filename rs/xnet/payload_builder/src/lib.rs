@@ -485,15 +485,15 @@ impl XNetPayloadBuilderImpl {
     /// In particular:
     ///
     ///  1. `signals_end` must be monotonically increasing, i.e. `expected <=
-    /// signals_end`;
+    ///     signals_end`;
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages_end()`;
+    ///     `signals_end <= stream.messages_end()`;
     ///
     ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
-    /// and
+    ///     and
     fn validate_signals(
         &self,
         subnet_id: SubnetId,

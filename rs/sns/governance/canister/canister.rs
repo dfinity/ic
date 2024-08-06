@@ -353,7 +353,7 @@ fn get_sns_initialization_parameters_(
 /// Performs a command on a neuron if the caller is authorized to do so.
 /// The possible neuron commands are (for details, see the SNS's governance.proto):
 /// - configuring the neuron (increasing or setting its dissolve delay or changing the
-/// dissolve state),
+///   dissolve state),
 /// - disbursing the neuron's stake to a ledger account
 /// - following a set of neurons for proposals of a certain action
 /// - make a proposal in the name of the neuron

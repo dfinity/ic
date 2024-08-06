@@ -292,7 +292,8 @@ impl SchedulerConfig {
     pub fn system_subnet() -> Self {
         let max_instructions_per_message_without_dts = NumInstructions::from(50 * B);
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
-        let max_instructions_per_slice = NumInstructions::from(10 * B);
+        let max_instructions_per_slice = NumInstructions::from(2 * B);
+        let max_instructions_per_install_code_slice = NumInstructions::from(10 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
@@ -304,6 +305,7 @@ impl SchedulerConfig {
             // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
             max_instructions_per_round: max_instructions_per_message_without_dts
                 .max(max_instructions_per_slice)
+                .max(max_instructions_per_install_code_slice)
                 + NumInstructions::from(2 * B),
             max_instructions_per_message: max_instructions_per_message_without_dts,
             max_instructions_per_message_without_dts,
@@ -313,7 +315,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
-            max_instructions_per_install_code_slice: max_instructions_per_slice,
+            max_instructions_per_install_code_slice,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,

@@ -1,7 +1,7 @@
 /* tag::catalog[]
-Title:: COW Safety Test
+Title:: Memory Safety Test
 
-Goal:: COW memory never corrupts canister state. The objective is to have
+Goal:: Memory never corrupts canister state. The objective is to have
 canisters that randomly access all of their available persisted memory, over
 multiple rounds, to ensure that no pattern of changes can result in corrupted
 state.
@@ -40,7 +40,7 @@ use ic_system_test_driver::{
 };
 use ic_utils::interfaces::ManagementCanister;
 
-const COW_SAFETY_CANISTER: &[u8] = include_bytes!("cow_safety.wasm");
+const MEMORY_SAFETY_CANISTER: &[u8] = include_bytes!("../memory_safety.wasm");
 const MAX_MEM_SIZE: u128 = 128 * 1024;
 const TEST_MEM_SIZE: u128 = 64 * 1024;
 const MAX_NODES: usize = 4;
@@ -102,8 +102,8 @@ async fn install_canister(agent: &Agent, effective_canister_id: PrincipalId) -> 
         .unwrap()
         .0;
 
-    // Install the cow safety canister.
-    mgr.install_code(&canister_id, COW_SAFETY_CANISTER)
+    // Install the memory safety canister.
+    mgr.install_code(&canister_id, MEMORY_SAFETY_CANISTER)
         .call_and_wait()
         .await
         .expect("Couldn't install?");

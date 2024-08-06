@@ -34,9 +34,7 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
-use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, NnsCanisterEnvVars,
-};
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::RegistryVersion;
 use prost::Message;
@@ -53,9 +51,6 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // setup the REGISTRY_CANISTER_WASM_PATH environment variable which is read by the installation
-    // procedure.
-    env.set_nns_canisters_env_vars().unwrap();
     let logger = env.logger();
     let root_node = env.get_first_healthy_nns_node_snapshot();
     let pk_bytes = env

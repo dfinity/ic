@@ -2402,7 +2402,7 @@ pub mod sns {
         /// * `Ok(false)` if auto-finalization is still happening (or swap lifecycle reached a final state
         ///   other than Committed), i.e., one of the following conditions holds:
         ///     1. Any of the top-level fields of this `auto_finalization_status` are unset:
-        ///       `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
+        ///        `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for a *committed* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:
@@ -2440,7 +2440,7 @@ pub mod sns {
         /// * `Ok(false)` if auto-finalization is still happening (or swap lifecycle reached a final state
         ///   other than Aborted), i.e., one of the following conditions holds:
         ///     1. Any of the top-level fields of this `auto_finalization_status` are unset:
-        ///       `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
+        ///        `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for an *aborted* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:

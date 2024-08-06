@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New CLI option `--ip_addr` to specify the IP address at which the PocketIC server should listen (defaults to `127.0.0.1`).
 - New argument `ip_addr` of the endpoint `/http_gateway` to specify the IP address at which the HTTP gateway should listen (defaults to `127.0.0.1`).
+- New GET endpoint `/http_gateway` listing all HTTP gateways and their details.
 
 ### Changed
 - The argument `listen_at` of the endpoint `/http_gateway` has been renamed to `port`.
