@@ -946,6 +946,8 @@ impl MemoryUsage {
             self.current_usage.get(),
             self.stable_memory_usage.get() + self.wasm_memory_usage.get()
         );
+
+        Ok(())
     }
 
     /// Tries to allocate the requested amount of message memory.

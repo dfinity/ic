@@ -17,7 +17,10 @@ use ic_management_canister_types::{
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY},
+    canister_state::{
+        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
+        DEFAULT_QUEUE_CAPACITY,
+    },
     CallOrigin, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
@@ -57,7 +60,7 @@ pub enum CallbackUpdate {
 }
 
 /// Tracks changes to the system state that the canister has requested.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,

@@ -362,7 +362,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
     ConditionNotSatisfied,
@@ -404,7 +404,7 @@ impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
 }
 
 impl OnLowWasmMemoryHookStatus {
-    fn _update(
+    pub fn update(
         &mut self,
         wasm_memory_threshold: NumBytes,
         memory_allocation: Option<NumBytes>,
