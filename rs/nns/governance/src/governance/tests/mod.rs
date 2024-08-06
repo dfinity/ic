@@ -200,7 +200,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 initial_token_distribution: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
-                neurons_fund_participants: None,
                 nns_proposal_id: None,
                 neuron_basket_construction_parameters: None,
                 ..converted
@@ -297,7 +296,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 // We'll examine these later
                 initial_token_distribution: None,
                 neuron_basket_construction_parameters: None,
-                neurons_fund_participants: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
@@ -400,7 +398,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         );
 
         assert_eq!(converted.nns_proposal_id, None);
-        assert_eq!(converted.neurons_fund_participants, None);
         assert_eq!(converted.swap_start_timestamp_seconds, None);
         assert_eq!(converted.swap_due_timestamp_seconds, None);
     }
@@ -607,7 +604,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
-                neurons_fund_participants: None,
                 neurons_fund_participation: Some(true),
 
                 neurons_fund_participation_constraints: Some(
