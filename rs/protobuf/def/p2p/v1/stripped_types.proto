@@ -6,8 +6,7 @@ import "types/v1/artifact.proto";
 import "types/v1/consensus.proto";
 import "types/v1/types.proto";
 
-message StrippedBlockProposal {
-}
+message StrippedBlockProposal {}
 
 message StrippedConsensusMessage {
   oneof msg {
@@ -16,6 +15,6 @@ message StrippedConsensusMessage {
   }
 }
 
-message StrippedConsensusMessageId  {
+message StrippedConsensusMessageId {
   types.v1.ConsensusMessageId unstripped_id = 1;
 }
