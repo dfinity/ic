@@ -49,10 +49,11 @@ use ic_consensus_system_test_utils::{
     limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::canister_agent::CanisterAgent;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::SshSession;
 use ic_system_test_driver::driver::test_env_api::{HasDependencies, IcNodeSnapshot};
 use ic_system_test_driver::driver::{
@@ -68,7 +69,8 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
+    assert_canister_counter_with_retries, assert_create_agent_using_call_v2,
+    get_app_subnet_and_node, MetricsFetcher,
 };
 use ic_types::Height;
 
@@ -178,7 +180,10 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         "Step 1: Install {} canisters on the subnet..", canister_count
     );
     let mut canisters = Vec::new();
-    let agent = rt.block_on(app_node.build_canister_agent());
+    let agent = rt.block_on(async {
+        let agent = assert_create_agent_using_call_v2(app_node.get_public_url().as_str()).await;
+        CanisterAgent { agent }
+    });
 
     let nodes = env
         .topology_snapshot()
@@ -188,12 +193,10 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .nodes()
         .collect::<Vec<_>>();
     let agents = rt.block_on(async {
-        join_all(
-            nodes
-                .iter()
-                .cloned()
-                .map(|n| async move { n.build_canister_agent().await }),
-        )
+        join_all(nodes.iter().cloned().map(|n| async move {
+            let agent = assert_create_agent_using_call_v2(n.get_public_url().as_str()).await;
+            CanisterAgent { agent }
+        }))
         .await
     });
 

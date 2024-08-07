@@ -142,6 +142,31 @@ pub mod candid {
         pub reward: Vec<Vec<Nat>>,
     }
 
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, CandidType)]
+    pub struct TransactionReceipt {
+        #[serde(rename = "blockHash")]
+        pub block_hash: String,
+        #[serde(rename = "blockNumber")]
+        pub block_number: Nat,
+        #[serde(rename = "effectiveGasPrice")]
+        pub effective_gas_price: Nat,
+        #[serde(rename = "gasUsed")]
+        pub gas_used: Nat,
+        pub status: Nat,
+        #[serde(rename = "transactionHash")]
+        pub transaction_hash: String,
+        #[serde(rename = "contractAddress")]
+        pub contract_address: Option<String>,
+        pub from: String,
+        pub logs: Vec<LogEntry>,
+        #[serde(rename = "logsBloom")]
+        pub logs_bloom: String,
+        pub to: String,
+        #[serde(rename = "transactionIndex")]
+        pub transaction_index: Nat,
+        pub r#type: String,
+    }
+
     pub type RpcResult<T> = Result<T, RpcError>;
 
     #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]

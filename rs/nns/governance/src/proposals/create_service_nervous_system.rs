@@ -407,7 +407,6 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>
             nns_proposal_id: None,
-            neurons_fund_participants: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
             neurons_fund_participation_constraints: None,

@@ -2525,6 +2525,7 @@ pub struct ClaimSwapNeuronsRequest {
     /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
     /// each NeuronParameter, one neuron will be created.
     /// Deprecated. Use \[`recipes`\] instead.
+    #[deprecated]
     #[prost(message, repeated, tag = "1")]
     pub neuron_parameters: ::prost::alloc::vec::Vec<claim_swap_neurons_request::NeuronParameters>,
 }

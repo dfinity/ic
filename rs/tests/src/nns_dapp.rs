@@ -153,7 +153,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         .with_token_name("ckETH".to_string())
         .build();
     let cketh_canister_id = nns_node.create_and_install_canister_with_arg(
-        &env::var("ICRC1_LEDGER_WASM_PATH").expect("ICRC1_LEDGER_WASM_PATH not set"),
+        &env::var("IC_ICRC1_LEDGER_WASM_PATH").expect("IC_ICRC1_LEDGER_WASM_PATH not set"),
         Some(Encode!(&(LedgerArgument::Init(cketh_init_args))).unwrap()),
     );
 
