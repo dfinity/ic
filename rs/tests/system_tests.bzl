@@ -23,9 +23,8 @@ def _run_system_test(ctx):
             # relative to the $RUNFILES directory.
             export RUNFILES="$PWD"
             KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
-            cd "$TEST_TMPDIR"
-            mkdir root_env
-            "$RUNFILES/{test_executable}" --working-dir . {k8s} --group-base-name {group_base_name} {no_summary_report} "$@" run
+            mkdir "$TEST_TMPDIR/root_env"
+            "$RUNFILES/{test_executable}" --working-dir "$TEST_TMPDIR" {k8s} --group-base-name {group_base_name} {no_summary_report} "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
             k8s = "--k8s" if k8s else "",

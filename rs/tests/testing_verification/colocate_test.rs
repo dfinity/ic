@@ -216,7 +216,11 @@ docker run --name {COLOCATE_CONTAINER_NAME} --network host \
   "${{DOCKER_RUN_ARGS[@]}}" \
   final \
   /home/root/runfiles/{colocated_test_bin} \
-  --working-dir /home/root --no-delete-farm-group --no-farm-keepalive {required_host_features} --group-base-name {colocated_test} run
+    --working-dir /home/root \
+    --no-delete-farm-group --no-farm-keepalive \
+    {required_host_features} \
+    --group-base-name {colocated_test} \
+    run
 EOF
 chmod +x /home/admin/run
 "#,
