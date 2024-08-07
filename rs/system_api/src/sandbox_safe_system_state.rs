@@ -60,7 +60,7 @@ pub enum CallbackUpdate {
 }
 
 /// Tracks changes to the system state that the canister has requested.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,

@@ -1084,7 +1084,7 @@ impl SystemApiImpl {
         let stable_memory_usage = stable_memory
             .size
             .get()
-            .checked_mul(WASM_PAGE_SIZE_IN_BYTES.try_into().unwrap())
+            .checked_mul(WASM_PAGE_SIZE_IN_BYTES)
             .map(|v| NumBytes::new(v as u64))
             .expect("Stable memory size is larger than maximal expected.");
 
