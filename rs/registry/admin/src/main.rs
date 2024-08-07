@@ -1261,7 +1261,7 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
 }
 
 /// Sub-command to submit a proposal to update the settings of a canister. When neigther
-/// `--controllers` nor `--no-controllers` is provided, the controllers will not be updated.
+/// `--controllers` nor `--remove-all-controllers` is provided, the controllers will not be updated.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateCanisterSettingsCmd {
@@ -1272,9 +1272,9 @@ struct ProposeToUpdateCanisterSettingsCmd {
     /// If set, it will update the canister's controllers to this value.
     #[clap(long, multiple_values(true), group = "update_controllers")]
     controllers: Option<Vec<PrincipalId>>,
-    /// If set, it will update the canister's controllers to an empty list.
+    /// If set, it will remove all controllers of the canister.
     #[clap(long, group = "update_controllers")]
-    no_controllers: bool,
+    remove_all_controllers: bool,
 
     #[clap(long)]
     /// If set, it will update the canister's compute allocation to this value.
@@ -1307,7 +1307,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
     async fn action(&self) -> Action {
         let canister_id = Some(self.canister_id.get());
 
-        let controllers = if self.no_controllers {
+        let controllers = if self.remove_all_controllers {
             Some(Controllers {
                 controllers: vec![],
             })
