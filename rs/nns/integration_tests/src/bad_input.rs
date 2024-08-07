@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use dfn_candid::candid;
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::ProposalInfo;
+use ic_nns_governance_api::pb::v1::ProposalInfo;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     set_up_governance_canister, state_machine_test_on_nns_subnet,
@@ -17,7 +17,7 @@ fn test_skipping_quota() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(
             &runtime,
-            GovernanceCanisterInitPayloadBuilder::new().build().into(),
+            GovernanceCanisterInitPayloadBuilder::new().build(),
         )
         .await;
 
@@ -51,7 +51,7 @@ fn test_bad_proposal_id_candid_type() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(
             &runtime,
-            GovernanceCanisterInitPayloadBuilder::new().build().into(),
+            GovernanceCanisterInitPayloadBuilder::new().build(),
         )
         .await;
 
@@ -73,7 +73,7 @@ fn test_bad_proposal_id_candid_encoding() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(
             &runtime,
-            GovernanceCanisterInitPayloadBuilder::new().build().into(),
+            GovernanceCanisterInitPayloadBuilder::new().build(),
         )
         .await;
 
@@ -95,7 +95,7 @@ fn test_inexistent_proposal_id_is_not_a_bad_input() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(
             &runtime,
-            GovernanceCanisterInitPayloadBuilder::new().build().into(),
+            GovernanceCanisterInitPayloadBuilder::new().build(),
         )
         .await;
 

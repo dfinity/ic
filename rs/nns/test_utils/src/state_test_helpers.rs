@@ -35,7 +35,7 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
     governance::Migrations,
     manage_neuron::{
