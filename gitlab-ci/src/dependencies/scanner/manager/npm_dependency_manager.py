@@ -42,6 +42,31 @@ class NPMDependencyManager(DependencyManager):
         return
 
     @staticmethod
+    def __npm_check_engine(repository_name: str, engine_version: int, path: pathlib.Path) -> bool:
+        package_json_file = path / "package.json"
+
+        if not package_json_file.exists():
+            # Unable to read package.json file.
+            return False
+
+        f = open(package_json_file)
+        data = json.load(f)
+
+        supported_engine_versions = data['engines']['node']
+
+        if not supported_engine_versions:
+            # engines not specified in package.json. Using default should be fine
+            return True
+
+        if satisfies(engine_version, supported_engine_versions):
+            # engine version is supported
+            return True
+
+        # We can't run the scan at this point
+        logging.error(f"Engine version is not supported for {repository_name}, Current: {engine_version}; Accepted: {supported_engine_versions}")
+        return False
+
+    @staticmethod
     def __npm_audit_output(engine_version: int, path: pathlib.Path) -> typing.Dict:
         nvm_dir = os.environ.get("NVM_DIR", "/opt/nvm")
         environment = {}
@@ -166,6 +191,11 @@ class NPMDependencyManager(DependencyManager):
     ) -> typing.List[Finding]:
         path = self.root.parent / project.path
         finding_builder: typing.List[Finding] = []
+
+        can_run_scan = self.__npm_check_engine(repository_name, engine_version, path)
+
+        if not can_run_scan:
+            raise RuntimeError(f"Dependency scan for {repository_name} can't be executed due to engine version mismatch")
 
         npm_audit_output = self.__npm_audit_output(engine_version, path)
 
