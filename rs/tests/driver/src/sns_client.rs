@@ -14,7 +14,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
@@ -331,7 +331,7 @@ pub fn test_create_service_nervous_system_proposal(
         .clone();
     CreateServiceNervousSystem {
         swap_parameters: Some(
-            ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
+            ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters {
                 minimum_participants: Some(min_participants),
                 minimum_participant_icp: Some(Tokens::from_e8s(
                     SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
@@ -424,11 +424,6 @@ async fn deploy_new_sns_via_proposal(
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let nns_agent = nns_node.build_canister_agent().await;
-
-    // Sanity check that params is valid
-    SnsInitPayload::try_from(create_service_nervous_system_proposal.clone()).expect(
-        "create_service_nervous_system_proposal could not be converted to an SnsInitPayload - is probably invalid",
-    );
 
     // Check that there are no SNSes
     let sns_wasm_canister_id = SNS_WASM_CANISTER_ID.get();

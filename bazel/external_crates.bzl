@@ -244,7 +244,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "^0.9.2",
+                version = "=0.10.0",
                 features = [
                     "alloc",
                     "experimental",
@@ -334,8 +334,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "cloudflare": crate.spec(
-                git = "https://github.com/blind-oracle/cloudflare-rs.git",
-                rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc",
+                git = "https://github.com/dfinity/cloudflare-rs.git",
+                rev = "a6538a036926bd756986c9c0a5de356daef48881",
                 default_features = False,
                 features = [
                     "rustls-tls",

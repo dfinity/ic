@@ -1,5 +1,5 @@
 {
-  "checksum": "5d815f09484e8c3700569828efe9c7cf3d9a1ee161331da6a1594082eaa99734",
+  "checksum": "08c45d269ac4f0bd5506f009d2f66d5b508fa519511993d3312ad4c1ef1c1bf3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11754,15 +11754,15 @@
       ],
       "license_file": null
     },
-    "cloudflare 0.11.0": {
+    "cloudflare 0.12.0": {
       "name": "cloudflare",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/blind-oracle/cloudflare-rs.git",
+          "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
           },
           "strip_prefix": "cloudflare"
         }
@@ -11842,7 +11842,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.0"
+        "version": "0.12.0"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -16980,7 +16980,7 @@
               "target": "clap"
             },
             {
-              "id": "cloudflare 0.11.0",
+              "id": "cloudflare 0.12.0",
               "target": "cloudflare"
             },
             {
@@ -17276,7 +17276,7 @@
               "target": "ic0"
             },
             {
-              "id": "ic_bls12_381 0.9.2",
+              "id": "ic_bls12_381 0.10.0",
               "target": "ic_bls12_381"
             },
             {
@@ -29726,14 +29726,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic_bls12_381 0.9.2": {
+    "ic_bls12_381 0.10.0": {
       "name": "ic_bls12_381",
-      "version": "0.9.2",
+      "version": "0.10.0",
       "package_url": "https://github.com/dfinity/bls12_381",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic_bls12_381/0.9.2/download",
-          "sha256": "3fb94c398e5a5bc56a8f0ff995b2679829e2bbc5f145d9c3ea58d303036e05f2"
+          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.0/download",
+          "sha256": "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
         }
       },
       "targets": [
@@ -29797,93 +29797,6 @@
             {
               "id": "zeroize 1.8.1",
               "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "rustc_flags": {
-          "common": [
-            "-C",
-            "opt-level=3"
-          ],
-          "selects": {}
-        },
-        "version": "0.9.2"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "ic_bls12_381 0.10.0": {
-      "name": "ic_bls12_381",
-      "version": "0.10.0",
-      "package_url": "https://github.com/dfinity/bls12_381",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.0/download",
-          "sha256": "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_bls12_381",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_bls12_381",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "digest",
-            "experimental",
-            "group",
-            "groups",
-            "pairing",
-            "pairings"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "digest 0.10.7",
-              "target": "digest"
-            },
-            {
-              "id": "ff 0.13.0",
-              "target": "ff"
-            },
-            {
-              "id": "group 0.13.0",
-              "target": "group"
-            },
-            {
-              "id": "pairing 0.23.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
             }
           ],
           "selects": {}
@@ -51459,7 +51372,11 @@
           "common": [
             "__rustls",
             "__tls",
+            "async-compression",
             "blocking",
+            "brotli",
+            "deflate",
+            "gzip",
             "hyper-rustls",
             "json",
             "mime_guess",
@@ -51531,6 +51448,10 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "async-compression 0.4.3",
+                "target": "async_compression"
+              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -78397,7 +78318,7 @@
     "cidr 0.2.3",
     "clap 3.2.25",
     "clap 4.4.8",
-    "cloudflare 0.11.0",
+    "cloudflare 0.12.0",
     "colored 2.0.4",
     "comparable 0.5.4",
     "console 0.11.3",
@@ -78472,7 +78393,7 @@
     "ic-wasm 0.7.1",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
-    "ic_bls12_381 0.9.2",
+    "ic_bls12_381 0.10.0",
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
