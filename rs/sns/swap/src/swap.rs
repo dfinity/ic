@@ -3060,13 +3060,8 @@ impl Swap {
         GetSaleParametersResponse { params }
     }
 
-    /// Extracts a subset of Init fields. Currently, only `neurons_fund_participants` is excluded,
-    /// as that data is provided via a dedicated endpoint `list_community_fund_participants`.
     pub fn get_init(&self, _request: &GetInitRequest) -> GetInitResponse {
-        let init = Init {
-            neurons_fund_participants: None,
-            ..self.init.clone().expect("Swap.init must be defined")
-        };
+        let init = self.init.clone().expect("Swap.init must be defined");
         GetInitResponse { init: Some(init) }
     }
 
@@ -3799,7 +3794,7 @@ mod tests {
     use super::*;
     use crate::pb::v1::{
         new_sale_ticket_response::Ok, CfNeuron, CfParticipant, NeuronBasketConstructionParameters,
-        NeuronsFundParticipants, Params,
+        Params,
     };
     use crate::swap_builder::SwapBuilder;
     use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -4052,24 +4047,11 @@ mod tests {
 
     #[test]
     fn test_get_init() {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         let swap = Swap {
-            init: Some(Init {
-                neurons_fund_participants: Some(NeuronsFundParticipants {
-                    cf_participants: vec![CfParticipant {
-                        controller: None,
-                        hotkey_principal: "test".to_string(),
-                        cf_neurons: vec![CfNeuron::default()],
-                    }],
-                }),
-                ..Default::default()
-            }),
+            init: Some(Init::default()),
             ..Default::default()
         };
-        let expected_init = Init {
-            neurons_fund_participants: None,
-            ..swap.init.clone().unwrap()
-        };
+        let expected_init = swap.init.clone().unwrap();
         assert_eq!(
             swap.get_init(&GetInitRequest {}),
             GetInitResponse {
