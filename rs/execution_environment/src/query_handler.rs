@@ -282,6 +282,10 @@ impl InternalHttpQueryHandler {
     }
 }
 
+// TODO(EXC-1678): remove after release.
+/// Feature flag to enable/disable allowed viewers for canister log visibility.
+const ALLOWED_VIEWERS_ENABLED: bool = false;
+
 fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
@@ -295,7 +299,11 @@ fn fetch_canister_logs(
         )
     })?;
 
-    match canister.log_visibility() {
+    let mut log_visibility = canister.log_visibility();
+    if !ALLOWED_VIEWERS_ENABLED && matches!(log_visibility, LogVisibilityV2::AllowedViewers(_)) {
+        log_visibility = &LogVisibilityV2::Controllers;
+    }
+    match log_visibility {
         LogVisibilityV2::Public => Ok(()),
         LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
         LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
