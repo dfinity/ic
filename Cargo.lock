@@ -1875,6 +1875,7 @@ dependencies = [
  "cloudflare",
  "flate2",
  "futures",
+ "http 1.1.0",
  "ic-agent",
  "ic-http-certification",
  "ic-response-verification",
