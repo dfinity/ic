@@ -15,7 +15,7 @@ async fn get_inputs(tx_id: String) -> Vec<String> {
     // TODO(XC-157): Charge cycles and also add guards.
     match get_inputs_internal(tx_id).await {
         Ok(inputs) => inputs,
-        Err(_) => panic!("Error in getting transaction inputs"),
+        Err(err) => panic!("Error in getting transaction inputs: {:?}", err),
     }
 }
 
@@ -59,8 +59,10 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
     // The max_response_bytes is set to 400KiB because:
     // - The maximum size of a standard non-taproot transaction is 400k vBytes.
     // - Taproot transactions could be as big as full block size (4MiB).
-    // - Currently a subnet's maximum response size is only 2 MiB.
-    // - Transactions bigger than 400KiB can't KYT-checked, but they are very rare.
+    // - Currently a subnet's maximum response size is only 2MiB.
+    // - Transactions bigger than 2MiB are very rare.
+    // 
+    // TODO(XC-171): Transactions between 400k and 2MiB are uncommon but may need to be handled.
     let request = CanisterHttpRequestArgument {
         url: url.to_string(),
         method: HttpMethod::GET,
