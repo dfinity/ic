@@ -42,7 +42,7 @@ class NPMDependencyManager(DependencyManager):
         return
 
     @staticmethod
-    def __npm_check_engine(repository_name: str, engine_version: int, path: pathlib.Path) -> bool:
+    def __npm_check_engine(repository_name: str, engine_version: str, path: pathlib.Path) -> bool:
         package_json_file = path / "package.json"
 
         if not package_json_file.exists():
@@ -52,13 +52,12 @@ class NPMDependencyManager(DependencyManager):
         f = open(package_json_file)
         data = json.load(f)
 
-        supported_engine_versions = data['engines']['node']
-
-        if not supported_engine_versions:
+        if "engines" not in data or "node" not in data["engines"]:
             # engines not specified in package.json. Using default should be fine
             return True
 
-        if satisfies(engine_version, supported_engine_versions):
+        supported_engine_versions = str(data['engines']['node'])
+        if satisfies(engine_version, supported_engine_versions, loose=True):
             # engine version is supported
             return True
 
@@ -187,7 +186,7 @@ class NPMDependencyManager(DependencyManager):
         return vulnerable_dependency
 
     def get_findings(
-        self, repository_name: str, project: Project, engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[str]
     ) -> typing.List[Finding]:
         path = self.root.parent / project.path
         finding_builder: typing.List[Finding] = []
