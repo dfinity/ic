@@ -1626,6 +1626,7 @@ pub struct ExecutionTestBuilder {
     resource_saturation_scaling: usize,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
+    canister_snapshot_baseline_instructions: NumInstructions,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1665,6 +1666,8 @@ impl Default for ExecutionTestBuilder {
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
+            canister_snapshot_baseline_instructions: scheduler_config
+                .canister_snapshot_baseline_instructions,
         }
     }
 }
@@ -2192,6 +2195,7 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
+            self.canister_snapshot_baseline_instructions,
         );
         let (query_stats_collector, _) =
             ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);

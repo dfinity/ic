@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
+use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
@@ -10,6 +11,7 @@ use ic_management_canister_types::{
     LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,
     UploadChunkArgs,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::SnapshotOperation, canister_state::system_state::CyclesUseCase,
 };
@@ -21,7 +23,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
-    CanisterId, Cycles, SnapshotId,
+    CanisterId, Cycles, NumInstructions, SnapshotId,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_gt;
@@ -749,6 +751,19 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
 
     let initial_subnet_available_memory = test.subnet_available_memory();
 
+    // Taking a snapshot of the canister will decrease the balance.
+    // Increase the canister balance to be able to take a new snapshot.
+    let scheduler_config = SubnetConfig::new(SubnetType::Application).scheduler_config;
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
+    let expected_charge = test
+        .cycles_account_manager()
+        .execution_cost(instructions, test.subnet_size());
+    test.canister_state_mut(canister_id)
+        .system_state
+        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let error = test
@@ -1446,25 +1461,43 @@ fn snapshot_is_deleted_with_canister_delete() {
 #[test]
 fn take_canister_snapshot_charges_canister_cycles() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const WASM_PAGE_SIZE: u64 = 65_536;
+    // 7500 of stable memory pages is close to 500MB, but still leaves some room
+    // for Wasm memory of the universal canister.
+    const NUM_PAGES: u64 = 7_500;
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
+
+    let subnet_type = SubnetType::Application;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
-    // Create new canister.
+    // Create canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
         .unwrap();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+        .unwrap();
+
+    // Increase memory usage.
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+
     let initial_balance = test.canister_state(canister_id).system_state.balance();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
     let expected_charge = test
         .cycles_account_manager()
         .execution_cost(instructions, test.subnet_size());
 
+    // Take a snapshot for the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
@@ -1476,43 +1509,60 @@ fn take_canister_snapshot_charges_canister_cycles() {
         test.canister_state(canister_id).system_state.balance(),
         initial_balance - expected_charge,
     );
-
-    // let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
 }
 
 #[test]
-fn take_canister_snapshot_charges_if_failing() {
+fn load_canister_snapshot_charges_canister_cycles() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    // let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
-
+    const WASM_PAGE_SIZE: u64 = 65_536;
+    // 7500 of stable memory pages is close to 500MB, but still leaves some room
+    // for Wasm memory of the universal canister.
+    const NUM_PAGES: u64 = 500;
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
+
+    let subnet_type = SubnetType::Application;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
-        // .with_subnet_memory_reservation(0)
-        // .with_subnet_execution_memory(10)
         .build();
 
-    // Create new canister.
+    // Create canister.
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
         .unwrap();
-    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+        .unwrap();
 
-    // Expected charge.
+    // Increase memory usage.
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    // Take a snapshot for the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
+
+    // Load a snapshot of the canister will decrease the balance.
     let expected_charge = test
         .cycles_account_manager()
         .execution_cost(instructions, test.subnet_size());
 
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
-    let _err = test
-        .subnet_message("take_canister_snapshot", args.encode())
-        .unwrap_err();
-
-    assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
-        initial_balance - expected_charge,
+    // Load an existing snapshot will decrease the balance.
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let result = test.subnet_message("load_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < initial_balance - expected_charge
     );
 }
