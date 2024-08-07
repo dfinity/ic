@@ -204,22 +204,32 @@ pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadR
 
     let tar_file =
         File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
-    let mut buf_reader = io::BufReader::new(tar_file);
+    let mut buf_reader = BufReader::new(tar_file);
 
-    if is_gz_file(&mut buf_reader).unwrap_or(false) {
+    // Check for gzip format
+    buf_reader
+        .seek(SeekFrom::Start(0))
+        .map_err(map_to_untar_error)?;
+    if is_gz_file(&mut buf_reader).map_err(map_to_untar_error)? {
+        buf_reader
+            .seek(SeekFrom::Start(0))
+            .map_err(map_to_untar_error)?;
         let tar = GzDecoder::new(buf_reader);
         let mut archive = Archive::new(tar);
         return archive.unpack(target_dir).map_err(map_to_untar_error);
-    } else {
+    }
+
+    // Check for zstandard format
+    buf_reader
+        .seek(SeekFrom::Start(0))
+        .map_err(map_to_untar_error)?;
+    if is_zst_file(&mut buf_reader).map_err(map_to_untar_error)? {
         buf_reader
             .seek(SeekFrom::Start(0))
-            .map_err(|e| FileDownloadError::IoError(format!("Failed to reset file buffer"), e))?;
-
-        if is_zst_file(&mut buf_reader).unwrap_or(false) {
-            let tar = ZstdDecoder::new(buf_reader).map_err(map_to_untar_error)?;
-            let mut archive = Archive::new(tar);
-            return archive.unpack(target_dir).map_err(map_to_untar_error);
-        }
+            .map_err(map_to_untar_error)?;
+        let tar = ZstdDecoder::new(buf_reader).map_err(map_to_untar_error)?;
+        let mut archive = Archive::new(tar);
+        return archive.unpack(target_dir).map_err(map_to_untar_error);
     }
 
     Err(FileDownloadError::untar_error(
