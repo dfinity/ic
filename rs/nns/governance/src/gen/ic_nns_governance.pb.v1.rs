@@ -2456,37 +2456,6 @@ pub struct UpdateCanisterSettings {
 }
 /// Nested message and enum types in `UpdateCanisterSettings`.
 pub mod update_canister_settings {
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct LogVisibilityAllowedViewers {
-        #[prost(message, repeated, tag = "1")]
-        pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-    }
-    /// Log visibility of a canister.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct LogVisibilityV2 {
-        #[prost(oneof = "log_visibility_v2::LogVisibilityV2", tags = "1, 2, 3")]
-        pub log_visibility_v2: ::core::option::Option<log_visibility_v2::LogVisibilityV2>,
-    }
-    /// Nested message and enum types in `LogVisibilityV2`.
-    pub mod log_visibility_v2 {
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
-        pub enum LogVisibilityV2 {
-            #[prost(int32, tag = "1")]
-            Controllers(i32),
-            #[prost(int32, tag = "2")]
-            Public(i32),
-            #[prost(message, tag = "3")]
-            AllowedViewers(super::LogVisibilityAllowedViewers),
-        }
-    }
     /// The controllers of the canister. We use a message to wrap the repeated field because prost does
     /// not generate `Option<Vec<T>>` for repeated fields.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -2513,8 +2482,6 @@ pub mod update_canister_settings {
         pub freezing_threshold: ::core::option::Option<u64>,
         #[prost(enumeration = "LogVisibility", optional, tag = "5")]
         pub log_visibility: ::core::option::Option<i32>,
-        #[prost(message, optional, tag = "7")]
-        pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
         #[prost(uint64, optional, tag = "6")]
         pub wasm_memory_limit: ::core::option::Option<u64>,
     }

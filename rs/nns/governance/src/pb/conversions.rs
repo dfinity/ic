@@ -2924,7 +2924,6 @@ impl From<pb::update_canister_settings::CanisterSettings>
             memory_allocation: item.memory_allocation,
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
-            log_visibility_v2: item.log_visibility_v2.map(|x| x.into()),
             wasm_memory_limit: item.wasm_memory_limit,
         }
     }
@@ -2940,7 +2939,6 @@ impl From<pb_api::update_canister_settings::CanisterSettings>
             memory_allocation: item.memory_allocation,
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
-            log_visibility_v2: item.log_visibility_v2.map(|x| x.into()),
             wasm_memory_limit: item.wasm_memory_limit,
         }
     }
@@ -2998,72 +2996,6 @@ impl From<pb_api::update_canister_settings::LogVisibility>
             pb_api::update_canister_settings::LogVisibility::Public => {
                 pb::update_canister_settings::LogVisibility::Public
             }
-        }
-    }
-}
-
-impl From<pb::update_canister_settings::LogVisibilityV2>
-    for pb_api::update_canister_settings::LogVisibilityV2
-{
-    fn from(item: pb::update_canister_settings::LogVisibilityV2) -> Self {
-        let Some(log_visibility_v2) = item.log_visibility_v2 else {
-            return Self {
-                log_visibility_v2: None,
-            };
-        };
-        let result = match log_visibility_v2 {
-            pb::update_canister_settings::log_visibility_v2::LogVisibilityV2::Controllers(tag) => {
-                pb_api::update_canister_settings::log_visibility_v2::LogVisibilityV2::Controllers(
-                    tag,
-                )
-            }
-            pb::update_canister_settings::log_visibility_v2::LogVisibilityV2::Public(tag) => {
-                pb_api::update_canister_settings::log_visibility_v2::LogVisibilityV2::Public(tag)
-            }
-            pb::update_canister_settings::log_visibility_v2::LogVisibilityV2::AllowedViewers(
-                allowed_viewers,
-            ) => {
-                pb_api::update_canister_settings::log_visibility_v2::LogVisibilityV2::AllowedViewers(
-                    pb_api::update_canister_settings::LogVisibilityAllowedViewers {
-                        principals: allowed_viewers.principals,
-                    },
-                )
-            }
-        };
-        Self {
-            log_visibility_v2: Some(result),
-        }
-    }
-}
-
-impl From<pb_api::update_canister_settings::LogVisibilityV2>
-    for pb::update_canister_settings::LogVisibilityV2
-{
-    fn from(item: pb_api::update_canister_settings::LogVisibilityV2) -> Self {
-        let Some(log_visibility_v2) = item.log_visibility_v2 else {
-            return Self {
-                log_visibility_v2: None,
-            };
-        };
-        let result = match log_visibility_v2 {
-            pb_api::update_canister_settings::log_visibility_v2::LogVisibilityV2::Controllers(tag) => {
-                pb::update_canister_settings::log_visibility_v2::LogVisibilityV2::Controllers(tag)
-            }
-            pb_api::update_canister_settings::log_visibility_v2::LogVisibilityV2::Public(tag) => {
-                pb::update_canister_settings::log_visibility_v2::LogVisibilityV2::Public(tag)
-            }
-            pb_api::update_canister_settings::log_visibility_v2::LogVisibilityV2::AllowedViewers(
-                allowed_viewers,
-            ) => {
-                pb::update_canister_settings::log_visibility_v2::LogVisibilityV2::AllowedViewers(
-                    pb::update_canister_settings::LogVisibilityAllowedViewers {
-                        principals: allowed_viewers.principals,
-                    },
-                )
-            }
-        };
-        Self {
-            log_visibility_v2: Some(result),
         }
     }
 }
