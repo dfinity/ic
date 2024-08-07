@@ -86,7 +86,7 @@ async fn update_handler<Artifact: PbArtifact>(
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
-) -> Result<(), impl IntoResponse> {
+) -> Result<(), UpdateHandlerError<Artifact>> {
     let pb_slot_update = pb::SlotUpdate::decode(payload)
         .map_err(|e| UpdateHandlerError::SlotUpdateDecoding::<Artifact>(e))?;
 
