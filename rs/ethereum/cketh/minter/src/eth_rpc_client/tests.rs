@@ -662,6 +662,7 @@ mod eth_get_transaction_count {
 }
 
 mod evm_rpc_conversion {
+    use crate::eth_rpc_client::responses::TransactionReceipt;
     use crate::eth_rpc_client::tests::{ANKR, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
         providers::RpcNodeProvider, Block, FeeHistory, HttpOutcallError, LogEntry, MultiCallError,
@@ -670,7 +671,7 @@ mod evm_rpc_conversion {
     use crate::numeric::{BlockNumber, Wei};
     use crate::test_fixtures::arb::{
         arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_log_entry,
-        arb_nat_256,
+        arb_nat_256, arb_transaction_receipt,
     };
     use assert_matches::assert_matches;
     use candid::Nat;
@@ -678,7 +679,7 @@ mod evm_rpc_conversion {
         Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
         HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcService as EvmRpcService,
+        RpcService as EvmRpcService, TransactionReceipt as EvmTransactionReceipt,
     };
     use num_bigint::BigUint;
     use proptest::collection::vec;
@@ -883,6 +884,20 @@ mod evm_rpc_conversion {
         ) {
             let evm_fee_history = evm_rpc_fee_history(minter_fee_history.clone(), gas_used_ratio);
             test_consistency_between_minter_and_evm_rpc(minter_fee_history, Some(evm_fee_history), first_error, second_error, third_error)?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_transaction_receipts_between_minter_and_evm_rpc
+        (
+            transaction_receipts in minter_and_evm_rpc_transaction_receipts(),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let (minter_tx_receipt, evm_rpc_tx_receipt) = transaction_receipts;
+            test_consistency_between_minter_and_evm_rpc(minter_tx_receipt, evm_rpc_tx_receipt, first_error, second_error, third_error)?;
         }
     }
 
@@ -1241,6 +1256,64 @@ mod evm_rpc_conversion {
             ].into_iter().map(|s| s.to_string()).collect(),
             transactions_root: Some("0xdee0b25a965ff236e4d2e89f56de233759d71ad3e3e150ceb4cf5bb1f0ecf5c0".to_string()),
             uncles: vec![],
+        }
+    }
+
+    fn minter_and_evm_rpc_transaction_receipts(
+    ) -> impl Strategy<Value = (Option<TransactionReceipt>, Option<EvmTransactionReceipt>)> {
+        use proptest::{option, prelude::Just};
+        option::of(arb_transaction_receipt()).prop_flat_map(|minter_tx_receipt| {
+            (
+                Just(minter_tx_receipt.clone()),
+                arb_evm_rpc_transaction_receipt(minter_tx_receipt),
+            )
+        })
+    }
+
+    fn arb_evm_rpc_transaction_receipt(
+        minter_tx_receipt: Option<TransactionReceipt>,
+    ) -> impl Strategy<Value = Option<EvmTransactionReceipt>> {
+        use proptest::{collection::vec, option, prelude::Just};
+
+        match minter_tx_receipt {
+            None => Just(None).boxed(),
+            Some(r) => (
+                option::of(".*"),
+                ".*",
+                vec(arb_log_entry(), 1..=100),
+                ".*",
+                ".*",
+                arb_nat_256(),
+                ".*",
+            )
+                .prop_map(
+                    move |(
+                        contract_address,
+                        from,
+                        minter_logs,
+                        logs_bloom,
+                        to,
+                        transaction_index,
+                        r#type,
+                    )| {
+                        Some(EvmTransactionReceipt {
+                            block_hash: r.block_hash.to_string(),
+                            block_number: r.block_number.into(),
+                            effective_gas_price: r.effective_gas_price.into(),
+                            gas_used: r.gas_used.into(),
+                            status: Nat::from(ethnum::u256::from(r.status).as_u8()),
+                            transaction_hash: r.transaction_hash.to_string(),
+                            contract_address,
+                            from,
+                            logs: minter_logs.into_iter().map(evm_rpc_log_entry).collect(),
+                            logs_bloom,
+                            to,
+                            transaction_index,
+                            r#type,
+                        })
+                    },
+                )
+                .boxed(),
         }
     }
 }
