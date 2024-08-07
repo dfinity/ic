@@ -2016,7 +2016,7 @@ pub mod neurons_fund_neuron {
     /// Concretely, this value should be less than or equal
     /// `MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR` - 2
     /// because two permissions will be used for the NNS Governance and the NNS neuron controller.
-    const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 3;
+    pub const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 3;
 
     /// Returns up to `MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON` elements out of `hotkeys`.
     ///
