@@ -8,6 +8,7 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
@@ -206,25 +207,25 @@ pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadR
     let mut buf_reader = io::BufReader::new(tar_file);
 
     if is_gz_file(&mut buf_reader).unwrap_or(false) {
-        let tar_gz_file =
-            File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
-        let tar = GzDecoder::new(tar_gz_file);
+        let tar = GzDecoder::new(buf_reader);
         let mut archive = Archive::new(tar);
-        archive.unpack(target_dir).map_err(map_to_untar_error)?;
-    } else if is_zst_file(&mut buf_reader).unwrap_or(false) {
-        let tar_zst_file =
-            File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
-        let tar = ZstdDecoder::new(tar_zst_file).map_err(map_to_untar_error)?;
-        let mut archive = Archive::new(tar);
-        archive.unpack(target_dir).map_err(map_to_untar_error)?;
+        return archive.unpack(target_dir).map_err(map_to_untar_error);
     } else {
-        return Err(FileDownloadError::untar_error(
-            tar_path,
-            io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
-        ));
+        buf_reader
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| FileDownloadError::IoError(format!("Failed to reset file buffer"), e))?;
+
+        if is_zst_file(&mut buf_reader).unwrap_or(false) {
+            let tar = ZstdDecoder::new(buf_reader).map_err(map_to_untar_error)?;
+            let mut archive = Archive::new(tar);
+            return archive.unpack(target_dir).map_err(map_to_untar_error);
+        }
     }
 
-    Ok(())
+    Err(FileDownloadError::untar_error(
+        tar_path,
+        io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
+    ))
 }
 
 pub type FileDownloadResult<T> = Result<T, FileDownloadError>;
