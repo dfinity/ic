@@ -50,6 +50,7 @@ const CLONER_CANISTER_WASM: &str = "rs/tests/src/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
 const SUBNET_SIZE: usize = 13;
+const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
@@ -88,7 +89,7 @@ pub fn config(env: TestEnv) {
         "Step 1: Starting the IC with a subnet of size {SUBNET_SIZE}.",
     );
 
-    // set up IC overriding the default resources to be more powerful
+    // Production-like resources
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
@@ -101,7 +102,7 @@ pub fn config(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .add_nodes(SUBNET_SIZE)
-                .with_initial_notary_delay(Duration::from_millis(200)),
+                .with_initial_notary_delay(INITIAL_NOTARY_DELAY),
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
@@ -137,7 +138,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
 
     info!(
         &logger,
-        "Sending ingress messages to {:?}.",
+        "Sending ingress messages to {:?}. Be careful to not kill this node while spinning up canisters, otherwise the installation of cloner canisters will fail.",
         app_node.get_public_url().to_string()
     );
 
@@ -166,7 +167,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
             let args = Encode!(&SpinupCanistersArgs {
                 canisters_number: CANISTERS_INSTALLED_PER_CLONER_CANISTER,
                 wasm_module: counter_canister_bytes_clone,
-                initial_cycles: INITIAL_CYCLES, // 1B Cycles
+                initial_cycles: INITIAL_CYCLES,
                 batch_size: CLONER_CANISTER_BATCH_SIZE,
                 arg: vec![],
             })
@@ -206,7 +207,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
     let time_to_wait_for_download = WORKLOAD_RUNTIME - DOWNLOAD_PROMETHEUS_WAIT_TIME;
     info!(
         &logger,
-        "Waiting {:?} before download.", time_to_wait_for_download
+        "Waiting {:?} before downloading prometheus data.", time_to_wait_for_download
     );
     std::thread::sleep(time_to_wait_for_download);
     info!(&logger, "Step 6: Downloading prometheus data");
