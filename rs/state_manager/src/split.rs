@@ -1,6 +1,7 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
     checkpoint::{load_checkpoint, make_checkpoint},
+    flush_page_maps,
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -93,7 +94,7 @@ pub fn split(
 
     // Write the split state as a new checkpoint.
     write_checkpoint(
-        &split_state,
+        split_state,
         state_layout,
         &cp,
         &mut thread_pool,
@@ -170,7 +171,7 @@ fn read_checkpoint(
 /// Writes the given `ReplicatedState` into a new checkpoint under
 /// `state_layout`, based off of `old_cp`.
 fn write_checkpoint(
-    state: &ReplicatedState,
+    mut state: ReplicatedState,
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
@@ -199,9 +200,18 @@ fn write_checkpoint(
         MaliciousFlags::default(),
     );
 
+    let new_height = old_height.increment();
+
+    flush_page_maps(
+        &mut state,
+        new_height,
+        &tip_channel,
+        &metrics.checkpoint_metrics,
+    );
+
     make_checkpoint(
-        state,
-        old_height.increment(),
+        &state,
+        new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
         thread_pool,
