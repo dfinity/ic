@@ -189,7 +189,7 @@ impl UtilityCommand {
                     .arg("--notify")
                     .arg(message)
                     .arg("--count")
-                    .arg(&count.to_string())
+                    .arg(count.to_string())
                     .status();
             }
         }

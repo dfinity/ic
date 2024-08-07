@@ -2,11 +2,13 @@ mod common;
 
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
-use ic_agent::agent::http_transport::ReqwestTransport;
+use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
 use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
-use pocket_ic::common::rest::{HttpsConfig, InstanceConfig, SubnetConfigSet};
+use pocket_ic::common::rest::{
+    HttpGatewayBackend, HttpGatewayDetails, HttpsConfig, InstanceConfig, SubnetConfigSet,
+};
 use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
@@ -14,7 +16,7 @@ use reqwest::Client as NonblockingClient;
 use reqwest::{StatusCode, Url};
 use std::io::Read;
 use std::io::Write;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -225,7 +227,7 @@ fn test_port_file() {
     }
 }
 
-async fn test_gateway(https: bool) {
+async fn test_gateway(server_url: Url, https: bool) {
     // create PocketIC instance
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -269,6 +271,7 @@ async fn test_gateway(https: bool) {
         .unwrap();
 
     // make PocketIc instance live with an HTTP gateway
+    let domains = Some(vec![localhost.to_string(), alt_domain.to_string()]);
     let https_config = if https {
         Some(HttpsConfig {
             cert_path: cert_path.into_os_string().into_string().unwrap(),
@@ -278,32 +281,50 @@ async fn test_gateway(https: bool) {
         None
     };
     let port = pic
-        .make_live_with_params(
-            None,
-            Some(vec![localhost.to_string(), alt_domain.to_string()]),
-            https_config,
-        )
+        .make_live_with_params(None, domains.clone(), https_config.clone())
         .await
         .port_or_known_default()
         .unwrap();
+
+    // check that an HTTP gateway with the matching port is returned when listing all HTTP gateways
+    // and its details are set properly
+    let client = NonblockingClient::new();
+    let http_gateways: Vec<HttpGatewayDetails> = client
+        .get(server_url.join("http_gateway").unwrap())
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let http_gateway_details = http_gateways
+        .into_iter()
+        .find(|details| details.port == port)
+        .unwrap();
+    assert_eq!(
+        http_gateway_details.forward_to,
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id)
+    );
+    assert_eq!(http_gateway_details.domains, domains);
+    assert_eq!(http_gateway_details.https_config, https_config);
 
     // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.localhost/example.com to [::1]
     let mut builder = NonblockingClient::builder()
         .resolve(
             localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             sub_localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             alt_domain,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             sub_alt_domain,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         );
     // add a custom root certificate
     if https {
@@ -374,12 +395,14 @@ async fn test_gateway(https: bool) {
 
 #[tokio::test]
 async fn test_http_gateway() {
-    test_gateway(false).await;
+    let server_url = start_server();
+    test_gateway(server_url, false).await;
 }
 
 #[tokio::test]
 async fn test_https_gateway() {
-    test_gateway(true).await;
+    let server_url = start_server();
+    test_gateway(server_url, true).await;
 }
 
 #[test]
@@ -705,8 +728,6 @@ fn canister_state_dir() {
 /// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
 #[test]
 fn test_specified_id_call_v3() {
-    use ic_agent_call_v3::agent::CallResponse;
-
     // Create live PocketIc instance.
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -726,8 +747,12 @@ fn test_specified_id_call_v3() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let agent = ic_agent_call_v3::Agent::builder()
-            .with_url(endpoint.clone())
+        let transport = ReqwestTransport::create(endpoint.clone())
+            .unwrap()
+            .with_use_call_v3_endpoint();
+
+        let agent = ic_agent::Agent::builder()
+            .with_transport(transport)
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();

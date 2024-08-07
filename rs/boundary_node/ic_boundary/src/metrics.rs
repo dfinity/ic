@@ -21,13 +21,13 @@ use futures::task::{Context as FutContext, Poll};
 use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use http_body::Body as HttpBody;
 use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
-use jemalloc_ctl::{epoch, stats};
 use prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
+use tikv_jemalloc_ctl::{epoch, stats};
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;

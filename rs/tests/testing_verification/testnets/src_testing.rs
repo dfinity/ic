@@ -53,7 +53,6 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{
         await_boundary_node_healthy, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-        NnsCanisterWasmStrategy,
     },
 };
 use ic_system_test_driver::util::{block_on, create_canister};
@@ -131,7 +130,6 @@ pub fn setup(env: TestEnv) {
     // set up NNS canisters
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
 

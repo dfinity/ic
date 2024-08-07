@@ -198,7 +198,6 @@ pub fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();

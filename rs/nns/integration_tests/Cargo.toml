@@ -49,6 +49,8 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
+ic-nns-governance-api = { path = "../governance/api" }
+ic-nns-governance-init = { path = "../governance/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }

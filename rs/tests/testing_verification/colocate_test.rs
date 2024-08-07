@@ -156,10 +156,7 @@ fn setup(env: TestEnv) {
     let docker_env_vars = {
         let mut env_vars = String::from("");
         for (key, value) in env::vars() {
-            // NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-            if key.starts_with("ENV_DEPS__") {
-                env_vars.push_str(format!(r#"--env {key}={value:?} \"#).as_str());
-            }
+            env_vars.push_str(format!(r#"--env {key}={value:?} \"#).as_str());
         }
         env_vars
     };
@@ -214,6 +211,7 @@ else
 fi
 docker run --name {COLOCATE_CONTAINER_NAME} --network host \
   {docker_env_vars}
+  --env RUNFILES=/home/root/root_env/dependencies \
   "${{DOCKER_RUN_ARGS[@]}}" \
   final \
   /home/root/root_env/dependencies/{colocated_test_bin} \

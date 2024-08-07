@@ -40,7 +40,7 @@ import IC.Hash
 import IC.HashTree hiding (Blob, Label)
 import IC.Id.Forms hiding (Blob)
 import IC.Id.Fresh
-import IC.Management (Settings, entityIdToPrincipal)
+import IC.Management (CanisterSettings, InstallCodeArgs, ProvisionalCreateCanisterArgs, entityIdToPrincipal)
 import IC.Test.Agent
 import IC.Test.Agent.Calls (httpbin_proto)
 import IC.Test.Agent.SafeCalls
@@ -78,9 +78,9 @@ icTests my_sub other_sub =
                                                in withAgentConfig $
                                                     testGroup "Interface Spec acceptance tests" $
                                                       let test_subnet_msg sub subnet_id subnet_id' cid = do
-                                                            cid2 <- ic_create (ic00viaWithCyclesSubnet subnet_id cid 20_000_000_000_000) ecid empty
+                                                            cid2 <- ic_create (ic00viaWithCyclesSubnet subnet_id cid 20_000_000_000_000) ecid Nothing
                                                             ic_install (ic00viaWithCyclesSubnet subnet_id cid 0) (enum #install) cid2 trivialWasmModule ""
-                                                            cid3 <- ic_provisional_create (ic00viaWithCyclesSubnet subnet_id cid 20_000_000_000_000) ecid Nothing Nothing empty
+                                                            cid3 <- ic_provisional_create (ic00viaWithCyclesSubnet subnet_id cid 20_000_000_000_000) ecid Nothing Nothing Nothing
                                                             ic_install (ic00viaWithCyclesSubnet subnet_id cid 0) (enum #install) cid3 trivialWasmModule ""
                                                             ic_install (ic00viaWithCyclesSubnet subnet_id cid 0) (enum #reinstall) cid3 trivialWasmModule ""
                                                             ic_install' (ic00viaWithCyclesSubnet' subnet_id' cid 0) (enum #reinstall) cid3 trivialWasmModule "" >>= isReject [3]
@@ -90,9 +90,9 @@ icTests my_sub other_sub =
                                                                 _ <- ic_http_get_request (ic00viaWithCyclesSubnet subnet_id cid) sub httpbin_proto ("equal_bytes/8") Nothing Nothing cid
                                                                 return ()
                                                            in let test_subnet_msg' sub subnet_id cid = do
-                                                                    ic_create' (ic00viaWithCyclesSubnet' subnet_id cid 20_000_000_000_000) ecid empty >>= isReject [3]
-                                                                    ic_provisional_create' (ic00viaWithCyclesSubnet' subnet_id cid 20_000_000_000_000) ecid Nothing Nothing empty >>= isReject [3]
-                                                                    cid2 <- ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid empty
+                                                                    ic_create' (ic00viaWithCyclesSubnet' subnet_id cid 20_000_000_000_000) ecid Nothing >>= isReject [3]
+                                                                    ic_provisional_create' (ic00viaWithCyclesSubnet' subnet_id cid 20_000_000_000_000) ecid Nothing Nothing Nothing >>= isReject [3]
+                                                                    cid2 <- ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid Nothing
                                                                     ic_install' (ic00viaWithCyclesSubnet' subnet_id cid 0) (enum #install) cid2 trivialWasmModule "" >>= isReject [3]
                                                                     ic_raw_rand' (ic00viaWithCyclesSubnet' subnet_id cid 0) ecid >>= isReject [3]
                                                                in let test_subnet_msg_canister_http' sub subnet_id cid = do
@@ -100,7 +100,7 @@ icTests my_sub other_sub =
                                                                    in let install_with_cycles_at_id n cycles prog = do
                                                                             let ecid = rawEntityId $ wordToId n
                                                                             let specified_id = entityIdToPrincipal $ EntityId ecid
-                                                                            cid <- ic_provisional_create ic00 ecid (Just specified_id) (Just cycles) empty
+                                                                            cid <- ic_provisional_create ic00 ecid (Just specified_id) (Just cycles) Nothing
                                                                             assertBool "canister was not created at its specified ID" $ ecid == cid
                                                                             installAt cid prog
                                                                             return cid
@@ -145,23 +145,26 @@ icTests my_sub other_sub =
                                                                                            >>= isErrOrReject [3, 5],
                                                                                        testGroup
                                                                                          "calls to a subnet ID"
-                                                                                         [ let ic_install_subnet'' user subnet_id mode canister_id wasm_module arg =
-                                                                                                 callICWithSubnet'' subnet_id user canister_id #install_code $
-                                                                                                   empty
-                                                                                                     .+ #mode
-                                                                                                     .== mode
-                                                                                                     .+ #canister_id
-                                                                                                     .== Principal canister_id
-                                                                                                     .+ #wasm_module
-                                                                                                     .== wasm_module
-                                                                                                     .+ #arg
-                                                                                                     .== arg
-                                                                                                     .+ #sender_canister_version
-                                                                                                     .== Nothing
+                                                                                         [ let ic_install_subnet'' user subnet_id canister_id wasm_module arg =
+                                                                                                 callICWithSubnet'' subnet_id user canister_id #install_code tmp
+                                                                                                 where
+                                                                                                   tmp :: InstallCodeArgs
+                                                                                                   tmp =
+                                                                                                     empty
+                                                                                                       .+ #mode
+                                                                                                       .== enum #install
+                                                                                                       .+ #canister_id
+                                                                                                       .== Principal canister_id
+                                                                                                       .+ #wasm_module
+                                                                                                       .== wasm_module
+                                                                                                       .+ #arg
+                                                                                                       .== arg
+                                                                                                       .+ #sender_canister_version
+                                                                                                       .== Nothing
                                                                                             in testCase "as user" $ do
                                                                                                  cid <- create ecid
-                                                                                                 ic_install_subnet'' defaultUser my_subnet_id (enum #install) cid trivialWasmModule "" >>= isErrOrReject []
-                                                                                                 ic_install_subnet'' defaultUser other_subnet_id (enum #install) cid trivialWasmModule "" >>= isErrOrReject [],
+                                                                                                 ic_install_subnet'' defaultUser my_subnet_id cid trivialWasmModule "" >>= isErrOrReject []
+                                                                                                 ic_install_subnet'' defaultUser other_subnet_id cid trivialWasmModule "" >>= isErrOrReject [],
                                                                                            testCase "as canister to own subnet" $ do
                                                                                              cid <- install ecid noop
                                                                                              if my_is_root
@@ -187,13 +190,13 @@ icTests my_sub other_sub =
                                                                                          "provisional_create_canister_with_cycles"
                                                                                          [ testCase "specified_id" $ do
                                                                                              let specified_id = entityIdToPrincipal $ EntityId specified_canister_id
-                                                                                             ic_provisional_create ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) empty >>= is specified_canister_id,
+                                                                                             ic_provisional_create ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) Nothing >>= is specified_canister_id,
                                                                                            simpleTestCase "specified_id already taken" ecid $ \cid -> do
                                                                                              let specified_id = entityIdToPrincipal $ EntityId cid
-                                                                                             ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) empty >>= isReject [5],
+                                                                                             ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) Nothing >>= isReject [5],
                                                                                            testCase "specified_id does not belong to the subnet's canister ranges" $ do
                                                                                              let specified_id = entityIdToPrincipal $ EntityId doesn'tExist
-                                                                                             ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) empty >>= isReject [4]
+                                                                                             ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) Nothing >>= isReject [4]
                                                                                          ],
                                                                                        let inst name = do
                                                                                              cid <- create ecid
@@ -535,7 +538,7 @@ icTests my_sub other_sub =
                                                                                          cid2 <- install ecid noop
 
                                                                                          step "Create"
-                                                                                         can_id <- ic_provisional_create (ic00via cid) ecid Nothing Nothing empty
+                                                                                         can_id <- ic_provisional_create (ic00via cid) ecid Nothing Nothing Nothing
 
                                                                                          step "Install"
                                                                                          ic_install (ic00via cid) (enum #install) can_id trivialWasmModule ""
@@ -568,13 +571,13 @@ icTests my_sub other_sub =
                                                                                          ic_install (ic00via cid2) (enum #reinstall) can_id trivialWasmModule ""
 
                                                                                          step "Create"
-                                                                                         can_id2 <- ic_provisional_create (ic00via cid) ecid Nothing Nothing empty
+                                                                                         can_id2 <- ic_provisional_create (ic00via cid) ecid Nothing Nothing Nothing
 
                                                                                          step "Reinstall on empty"
                                                                                          ic_install (ic00via cid) (enum #reinstall) can_id2 trivialWasmModule "",
                                                                                        simpleTestCase "aaaaa-aa (inter-canister, large)" ecid $ \cid -> do
                                                                                          universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                         can_id <- ic_provisional_create (ic00via cid) ecid Nothing Nothing empty
+                                                                                         can_id <- ic_provisional_create (ic00via cid) ecid Nothing Nothing Nothing
                                                                                          ic_install (ic00via cid) (enum #install) can_id universal_wasm ""
                                                                                          do call can_id $ replyData "Hi"
                                                                                            >>= is "Hi",
@@ -691,133 +694,161 @@ icTests my_sub other_sub =
                                                                                          "Settings"
                                                                                          [ testGroup
                                                                                              "Controllers"
-                                                                                             [ testCase "A canister can request its own status if it does not control itself" $ do
-                                                                                                 let controllers = [Principal defaultUser, Principal otherUser]
-                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                                 ic_install ic00 (enum #install) cid universal_wasm ""
+                                                                                             $ [ testCase "A canister can request its own status if it does not control itself" $ do
+                                                                                                   let controllers = [defaultUser, otherUser]
+                                                                                                   cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
+                                                                                                   ic_set_controllers ic00 cid controllers
+                                                                                                   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                                                                   ic_install ic00 (enum #install) cid universal_wasm ""
 
-                                                                                                 cs <- ic_canister_status (ic00via cid) cid
-                                                                                                 assertBool "canister should not control itself in this test" $ not $ elem (Principal cid) controllers
-                                                                                                 Vec.toList (cs .! #settings .! #controllers) `isSet` controllers,
-                                                                                               testCase "Changing controllers" $ do
-                                                                                                 let controllers = [Principal defaultUser, Principal otherUser]
-                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                                 ic_install ic00 (enum #install) cid universal_wasm ""
+                                                                                                   cs <- ic_canister_status (ic00via cid) cid
+                                                                                                   assertBool "canister should not control itself in this test" $ not $ elem cid controllers
+                                                                                                   Vec.toList (cs .! #settings .! #controllers) `isSet` map Principal controllers,
+                                                                                                 testCase "Changing controllers" $ do
+                                                                                                   let controllers = [defaultUser, otherUser]
+                                                                                                   cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
+                                                                                                   ic_set_controllers ic00 cid controllers
+                                                                                                   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                                                                   ic_install ic00 (enum #install) cid universal_wasm ""
 
-                                                                                                 -- Set new controller
-                                                                                                 ic_set_controllers (ic00as defaultUser) cid [ecdsaUser]
+                                                                                                   -- Set new controller
+                                                                                                   ic_set_controllers (ic00as defaultUser) cid [ecdsaUser]
 
-                                                                                                 -- Only that controller can get canister status
-                                                                                                 ic_canister_status'' defaultUser cid >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' otherUser cid >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' anonymousUser cid >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' secp256k1User cid >>= isErrOrReject [3, 5]
-                                                                                                 cs <- ic_canister_status (ic00as ecdsaUser) cid
-                                                                                                 cs .! #settings .! #controllers @?= Vec.fromList [Principal ecdsaUser],
-                                                                                               testCase "Multiple controllers (provisional)" $ do
-                                                                                                 let controllers = [Principal defaultUser, Principal otherUser]
-                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                                 ic_install ic00 (enum #install) cid universal_wasm ""
+                                                                                                   -- Only that controller can get canister status
+                                                                                                   ic_canister_status'' defaultUser cid >>= isErrOrReject [3, 5]
+                                                                                                   ic_canister_status'' otherUser cid >>= isErrOrReject [3, 5]
+                                                                                                   ic_canister_status'' anonymousUser cid >>= isErrOrReject [3, 5]
+                                                                                                   ic_canister_status'' secp256k1User cid >>= isErrOrReject [3, 5]
+                                                                                                   cs <- ic_canister_status (ic00as ecdsaUser) cid
+                                                                                                   cs .! #settings .! #controllers @?= Vec.fromList [Principal ecdsaUser],
+                                                                                                 simpleTestCase "Multiple controllers (aaaaa-aa)" ecid $ \cid -> do
+                                                                                                   let controllers = [cid, otherUser]
+                                                                                                   cid2 <- ic_create_with_controllers (ic00viaWithCycles cid 20_000_000_000_000) ecid controllers
+                                                                                                   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                                                                   ic_install (ic00via cid) (enum #install) cid2 universal_wasm ""
 
-                                                                                                 -- Controllers should be able to fetch the canister status.
-                                                                                                 cs <- ic_canister_status (ic00as defaultUser) cid
-                                                                                                 Vec.toList (cs .! #settings .! #controllers) `isSet` controllers
-                                                                                                 cs <- ic_canister_status (ic00as otherUser) cid
-                                                                                                 Vec.toList (cs .! #settings .! #controllers) `isSet` controllers
+                                                                                                   -- Controllers should be able to fetch the canister status.
+                                                                                                   cs <- ic_canister_status (ic00via cid) cid2
+                                                                                                   Vec.toList (cs .! #settings .! #controllers) `isSet` map Principal controllers
+                                                                                                   cs <- ic_canister_status (ic00as otherUser) cid2
+                                                                                                   Vec.toList (cs .! #settings .! #controllers) `isSet` map Principal controllers
 
-                                                                                                 -- Non-controllers cannot fetch the canister status
-                                                                                                 ic_canister_status'' ecdsaUser cid >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' anonymousUser cid >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' secp256k1User cid >>= isErrOrReject [3, 5],
-                                                                                               simpleTestCase "Multiple controllers (aaaaa-aa)" ecid $ \cid -> do
-                                                                                                 let controllers = [Principal cid, Principal otherUser]
-                                                                                                 cid2 <- ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid (#controllers .== Vec.fromList controllers)
-                                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                                 ic_install (ic00via cid) (enum #install) cid2 universal_wasm ""
+                                                                                                   -- Non-controllers cannot fetch the canister status
+                                                                                                   ic_canister_status'' ecdsaUser cid >>= isErrOrReject [3, 5]
+                                                                                                   ic_canister_status'' anonymousUser cid >>= isErrOrReject [3, 5]
+                                                                                                   ic_canister_status'' secp256k1User cid >>= isErrOrReject [3, 5],
+                                                                                                 simpleTestCase "> 10 controllers" ecid $ \cid -> do
+                                                                                                   ic_create_with_controllers' (ic00viaWithCycles cid 20_000_000_000_000) ecid (replicate 11 cid) >>= isReject [3, 5]
+                                                                                                   ic_set_controllers' ic00 cid (replicate 11 cid) >>= isReject [4],
+                                                                                                 simpleTestCase "No controller" ecid $ \cid -> do
+                                                                                                   cid2 <- ic_create_with_controllers (ic00viaWithCycles cid 20_000_000_000_000) ecid []
+                                                                                                   ic_canister_status'' defaultUser cid2 >>= isErrOrReject [3, 5]
+                                                                                                   ic_canister_status'' otherUser cid2 >>= isErrOrReject [3, 5],
+                                                                                                 testCase "Controller is self" $ do
+                                                                                                   cid <- install ecid noop
+                                                                                                   ic_set_controllers ic00 cid [cid] -- Set controller of cid to be itself
 
-                                                                                                 -- Controllers should be able to fetch the canister status.
-                                                                                                 cs <- ic_canister_status (ic00via cid) cid2
-                                                                                                 Vec.toList (cs .! #settings .! #controllers) `isSet` controllers
-                                                                                                 cs <- ic_canister_status (ic00as otherUser) cid2
-                                                                                                 Vec.toList (cs .! #settings .! #controllers) `isSet` controllers
-
-                                                                                                 -- Non-controllers cannot fetch the canister status
-                                                                                                 ic_canister_status'' ecdsaUser cid >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' anonymousUser cid >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' secp256k1User cid >>= isErrOrReject [3, 5],
-                                                                                               simpleTestCase "> 10 controllers" ecid $ \cid -> do
-                                                                                                 ic_create' (ic00viaWithCycles cid 20_000_000_000_000) ecid (#controllers .== Vec.fromList (replicate 11 (Principal cid)))
-                                                                                                   >>= isReject [3, 5],
-                                                                                               simpleTestCase "No controller" ecid $ \cid -> do
-                                                                                                 cid2 <- ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid (#controllers .== Vec.fromList [])
-                                                                                                 ic_canister_status'' defaultUser cid2 >>= isErrOrReject [3, 5]
-                                                                                                 ic_canister_status'' otherUser cid2 >>= isErrOrReject [3, 5],
-                                                                                               testCase "Controller is self" $ do
-                                                                                                 cid <- install ecid noop
-                                                                                                 ic_set_controllers ic00 cid [cid] -- Set controller of cid to be itself
-
-                                                                                                 -- cid can now request its own status
-                                                                                                 cs <- ic_canister_status (ic00via cid) cid
-                                                                                                 cs .! #settings .! #controllers @?= Vec.fromList [Principal cid],
-                                                                                               testCase "Duplicate controllers" $ do
-                                                                                                 let controllers = [Principal defaultUser, Principal defaultUser, Principal otherUser]
-                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                                 cs <- ic_canister_status (ic00as defaultUser) cid
-                                                                                                 Vec.toList (cs .! #settings .! #controllers) `isSet` controllers
-                                                                                             ],
+                                                                                                   -- cid can now request its own status
+                                                                                                   cs <- ic_canister_status (ic00via cid) cid
+                                                                                                   cs .! #settings .! #controllers @?= Vec.fromList [Principal cid],
+                                                                                                 testCase "Duplicate controllers" $ do
+                                                                                                   let controllers = [defaultUser, defaultUser, otherUser]
+                                                                                                   cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
+                                                                                                   ic_set_controllers ic00 cid controllers
+                                                                                                   cs <- ic_canister_status (ic00as defaultUser) cid
+                                                                                                   Vec.toList (cs .! #settings .! #controllers) `isSet` map Principal controllers
+                                                                                               ]
+                                                                                               ++ ( let invalid_compute_allocation :: CanisterSettings =
+                                                                                                          empty
+                                                                                                            .+ #controllers
+                                                                                                            .== Nothing
+                                                                                                            .+ #compute_allocation
+                                                                                                            .== Just 101
+                                                                                                            .+ #memory_allocation
+                                                                                                            .== Nothing
+                                                                                                            .+ #freezing_threshold
+                                                                                                            .== Nothing
+                                                                                                            .+ #reserved_cycles_limit
+                                                                                                            .== Nothing
+                                                                                                            .+ #log_visibility
+                                                                                                            .== Nothing
+                                                                                                            .+ #wasm_memory_limit
+                                                                                                            .== Nothing
+                                                                                                     in let invalid_memory_allocation :: CanisterSettings =
+                                                                                                              empty
+                                                                                                                .+ #controllers
+                                                                                                                .== Nothing
+                                                                                                                .+ #compute_allocation
+                                                                                                                .== Nothing
+                                                                                                                .+ #memory_allocation
+                                                                                                                .== Just (2 ^ 48 + 1)
+                                                                                                                .+ #freezing_threshold
+                                                                                                                .== Nothing
+                                                                                                                .+ #reserved_cycles_limit
+                                                                                                                .== Nothing
+                                                                                                                .+ #log_visibility
+                                                                                                                .== Nothing
+                                                                                                                .+ #wasm_memory_limit
+                                                                                                                .== Nothing
+                                                                                                         in let invalid_freezing_threshold :: CanisterSettings =
+                                                                                                                  empty
+                                                                                                                    .+ #controllers
+                                                                                                                    .== Nothing
+                                                                                                                    .+ #compute_allocation
+                                                                                                                    .== Nothing
+                                                                                                                    .+ #memory_allocation
+                                                                                                                    .== Nothing
+                                                                                                                    .+ #freezing_threshold
+                                                                                                                    .== Just (2 ^ 64)
+                                                                                                                    .+ #reserved_cycles_limit
+                                                                                                                    .== Nothing
+                                                                                                                    .+ #log_visibility
+                                                                                                                    .== Nothing
+                                                                                                                    .+ #wasm_memory_limit
+                                                                                                                    .== Nothing
+                                                                                                             in let invalid_settings =
+                                                                                                                      [ ("Invalid compute allocation (101)", invalid_compute_allocation),
+                                                                                                                        ("Invalid memory allocation (2^48+1)", invalid_memory_allocation),
+                                                                                                                        ("Invalid freezing threshold (2^64)", invalid_freezing_threshold)
+                                                                                                                      ]
+                                                                                                                 in let test_modes =
+                                                                                                                          [ ( "via provisional_create_canister_with_cycles:",
+                                                                                                                              \(desc, settings) -> testCase desc $ do
+                                                                                                                                ic_provisional_create' ic00 ecid Nothing Nothing (Just settings) >>= isReject [5]
+                                                                                                                            ),
+                                                                                                                            ( "via create_canister:",
+                                                                                                                              \(desc, settings) -> simpleTestCase desc ecid $ \cid -> do
+                                                                                                                                ic_create' (ic00via cid) ecid (Just settings) >>= isReject [5]
+                                                                                                                            ),
+                                                                                                                            ( "via update_settings",
+                                                                                                                              \(desc, settings) -> simpleTestCase desc ecid $ \cid -> do
+                                                                                                                                ic_update_settings' ic00 cid settings >>= isReject [5]
+                                                                                                                            )
+                                                                                                                          ]
+                                                                                                                     in map (\(desc, test) -> testGroup desc (map test invalid_settings)) test_modes
+                                                                                                  ),
                                                                                            simpleTestCase "Valid allocations" ecid $ \cid -> do
-                                                                                             cid2 <-
-                                                                                               ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid $
-                                                                                                 empty
-                                                                                                   .+ #compute_allocation
-                                                                                                   .== (1 :: Natural)
-                                                                                                   .+ #memory_allocation
-                                                                                                   .== (1024 * 1024 :: Natural)
-                                                                                                   .+ #freezing_threshold
-                                                                                                   .== 1000_000
+                                                                                             let settings :: CanisterSettings =
+                                                                                                   empty
+                                                                                                     .+ #controllers
+                                                                                                     .== Nothing
+                                                                                                     .+ #compute_allocation
+                                                                                                     .== Just 1
+                                                                                                     .+ #memory_allocation
+                                                                                                     .== Just (1024 * 1024)
+                                                                                                     .+ #freezing_threshold
+                                                                                                     .== Just 1000_000
+                                                                                                     .+ #reserved_cycles_limit
+                                                                                                     .== Nothing
+                                                                                                     .+ #log_visibility
+                                                                                                     .== Nothing
+                                                                                                     .+ #wasm_memory_limit
+                                                                                                     .== Nothing
+                                                                                             cid2 <- ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid (Just settings)
                                                                                              cs <- ic_canister_status (ic00via cid) cid2
                                                                                              cs .! #settings .! #compute_allocation @?= 1
                                                                                              cs .! #settings .! #memory_allocation @?= 1024 * 1024
-                                                                                             cs .! #settings .! #freezing_threshold @?= 1000_000,
-                                                                                           testGroup
-                                                                                             "via provisional_create_canister_with_cycles:"
-                                                                                             [ testCase "Invalid compute allocation (101)" $ do
-                                                                                                 ic_provisional_create' ic00 ecid Nothing Nothing (#compute_allocation .== 101)
-                                                                                                   >>= isReject [5],
-                                                                                               testCase "Invalid memory allocation (2^48+1)" $ do
-                                                                                                 ic_provisional_create' ic00 ecid Nothing Nothing (#memory_allocation .== (2 ^ (48 :: Int) + 1))
-                                                                                                   >>= isReject [5],
-                                                                                               testCase "Invalid freezing threshold (2^64)" $ do
-                                                                                                 ic_provisional_create' ic00 ecid Nothing Nothing (#freezing_threshold .== 2 ^ (64 :: Int))
-                                                                                                   >>= isReject [5]
-                                                                                             ],
-                                                                                           testGroup
-                                                                                             "via create_canister:"
-                                                                                             [ simpleTestCase "Invalid compute allocation (101)" ecid $ \cid -> do
-                                                                                                 ic_create' (ic00via cid) ecid (#compute_allocation .== 101)
-                                                                                                   >>= isReject [5],
-                                                                                               simpleTestCase "Invalid memory allocation (2^48+1)" ecid $ \cid -> do
-                                                                                                 ic_create' (ic00via cid) ecid (#memory_allocation .== (2 ^ (48 :: Int) + 1))
-                                                                                                   >>= isReject [5],
-                                                                                               simpleTestCase "Invalid freezing threshold (2^64)" ecid $ \cid -> do
-                                                                                                 ic_create' (ic00via cid) ecid (#freezing_threshold .== 2 ^ (64 :: Int))
-                                                                                                   >>= isReject [5]
-                                                                                             ],
-                                                                                           testGroup
-                                                                                             "via update_settings"
-                                                                                             [ simpleTestCase "Invalid compute allocation (101)" ecid $ \cid -> do
-                                                                                                 ic_update_settings' ic00 cid (#compute_allocation .== 101)
-                                                                                                   >>= isReject [5],
-                                                                                               simpleTestCase "Invalid memory allocation (2^48+1)" ecid $ \cid -> do
-                                                                                                 ic_update_settings' ic00 cid (#memory_allocation .== (2 ^ (48 :: Int) + 1))
-                                                                                                   >>= isReject [5],
-                                                                                               simpleTestCase "Invalid freezing threshold (2^64)" ecid $ \cid -> do
-                                                                                                 ic_update_settings' ic00 cid (#freezing_threshold .== 2 ^ (64 :: Int))
-                                                                                                   >>= isReject [5]
-                                                                                             ]
+                                                                                             cs .! #settings .! #freezing_threshold @?= 1000_000
                                                                                          ],
                                                                                        testGroup
                                                                                          "anonymous user"
@@ -1683,14 +1714,16 @@ icTests my_sub other_sub =
 
                                                                                                return (requestId req)
                                                                                              ensure_provisional_create_canister_request_exists ecid user = do
-                                                                                               let arg =
+                                                                                               let arg :: ProvisionalCreateCanisterArgs =
                                                                                                      empty
                                                                                                        .+ #amount
-                                                                                                       .== (Just initial_cycles :: Maybe Natural)
+                                                                                                       .== Just initial_cycles
                                                                                                        .+ #settings
-                                                                                                       .== (Nothing :: Maybe Settings)
+                                                                                                       .== Nothing
                                                                                                        .+ #specified_id
-                                                                                                       .== (Nothing :: Maybe Principal)
+                                                                                                       .== Nothing
+                                                                                                       .+ #sender_canister_version
+                                                                                                       .== Nothing
                                                                                                req <-
                                                                                                  addNonce >=> addExpiry $
                                                                                                    rec
@@ -1751,11 +1784,13 @@ icTests my_sub other_sub =
                                                                                                  cert <- getStateCert anonymousUser cid [["canister", cid, "controllers"]]
                                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [defaultUser],
                                                                                                testCase "multiple controllers of installed canister" $ do
-                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList [Principal defaultUser, Principal otherUser])
+                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
+                                                                                                 ic_set_controllers ic00 cid [defaultUser, otherUser]
                                                                                                  cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
                                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [defaultUser, otherUser],
                                                                                                testCase "zero controllers of installed canister" $ do
-                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList [])
+                                                                                                 cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
+                                                                                                 ic_set_controllers ic00 cid []
                                                                                                  cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
                                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [],
                                                                                                testCase "module_hash of universal canister" $ do
@@ -1970,11 +2005,11 @@ icTests my_sub other_sub =
                                                                                                  (abs (fromIntegral exp - fromIntegral act) < eps)
 
                                                                                              create prog = do
-                                                                                               cid <- ic_provisional_create ic00 ecid Nothing (Just (fromIntegral def_cycles)) empty
+                                                                                               cid <- ic_provisional_create ic00 ecid Nothing (Just (fromIntegral def_cycles)) Nothing
                                                                                                installAt cid prog
                                                                                                return cid
                                                                                              create_via cid initial_cycles = do
-                                                                                               cid2 <- ic_create (ic00viaWithCycles cid initial_cycles) ecid empty
+                                                                                               cid2 <- ic_create (ic00viaWithCycles cid initial_cycles) ecid Nothing
                                                                                                universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                                ic_install (ic00via cid) (enum #install) cid2 universal_wasm (run noop)
                                                                                                return cid2
@@ -2022,12 +2057,12 @@ icTests my_sub other_sub =
                                                                                                      cid <- create noop
                                                                                                      queryBalance cid >>= isRoughly def_cycles,
                                                                                                    testCaseSteps "default (i.e. max) balance" $ \step -> do
-                                                                                                     cid <- ic_provisional_create ic00 ecid Nothing Nothing empty
+                                                                                                     cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
                                                                                                      installAt cid noop
                                                                                                      cycles <- queryBalance128 cid
                                                                                                      step $ "Cycle balance now at " ++ show cycles,
                                                                                                    testCaseSteps "> 2^128 succeeds" $ \step -> do
-                                                                                                     cid <- ic_provisional_create ic00 ecid Nothing (Just (10 * 2 ^ (128 :: Int))) empty
+                                                                                                     cid <- ic_provisional_create ic00 ecid Nothing (Just (10 * 2 ^ (128 :: Int))) Nothing
                                                                                                      installAt cid noop
                                                                                                      cycles <- queryBalance128 cid
                                                                                                      step $ "Cycle balance now at " ++ show cycles

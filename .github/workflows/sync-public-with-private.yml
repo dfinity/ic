@@ -5,18 +5,19 @@ on:
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/minimal-runner-image:0.1
     if: ${{ github.repository != 'dfinity/ic' }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
         ref: 'master-private'
+        token: ${{ secrets.IDX_PUSH_TO_PR }}
 
     - name: Sync changes from public ic
       run: |

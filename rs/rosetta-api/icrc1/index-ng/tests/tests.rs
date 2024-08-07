@@ -377,7 +377,10 @@ fn sanity_check_ledger() {
             .map_err(|err| err.code())
         {
             Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
-            r => panic!("get_blocks not disabled in the Ledger! (call result: {r:?})"),
+            _ => panic!(
+                "{}",
+                "get_blocks not disabled in the Ledger! (call result: {r:?})"
+            ),
         }
     }
     #[cfg(feature = "icrc3_disabled")]
@@ -392,7 +395,10 @@ fn sanity_check_ledger() {
             .map_err(|err| err.code())
         {
             Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
-            r => panic!("icrc3_get_blocks not disabled in the Ledger! (call result: {r:?})"),
+            _ => panic!(
+                "{}",
+                "icrc3_get_blocks not disabled in the Ledger! (call result: {r:?})"
+            ),
         }
     }
 }

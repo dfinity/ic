@@ -68,7 +68,6 @@ def setup_repo(tmpdir, testcase, branch="feature_branch"):
     if "CI_COMMIT_REF_NAME" in os.environ:
         del os.environ["CI_COMMIT_REF_NAME"]
 
-
 @pytest.mark.fails_on_merge_train
 def test_change_one_file(tmpdir):
     """Tests that a commit has changed one crate."""

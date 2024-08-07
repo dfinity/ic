@@ -1,15 +1,11 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
-load(
-    "//rs/nervous_system:compressed_wasm_size_limits.bzl",
-    "NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES",
-    "SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES",
-)
 
-# The list of canisters that are being published/uploaded to github as artifacts include
+# The list of canisters that are being published/uploaded as artifacts to our CDN (download.dfinity.systems) include
 # 1. Officially released canisters that can be downloaded/verified by 3rd parties - https://github.com/dfinity/ic/blob/master/.github/workflows/tag-release.yml
-# 2. Canisters required for dfx - https://github.com/dfinity/dfx-extensions/tree/main/extensions-utils/src/dependencies/download_wasms
-# 3. Mainnet canisters - https://github.com/dfinity/ic/blob/master/mainnet-canisters.bzl
+# 2. Mainnet canisters - https://github.com/dfinity/ic/blob/master/mainnet-canisters.bzl
+# 3. Canisters required for dfx - https://github.com/dfinity/dfx-extensions/tree/main/extensions-utils/src/dependencies/download_wasms
+# 4. Canisters required for test environments.
 CANISTERS = {
     "canister-creator-canister.wasm.gz": "//rs/rust_canisters/canister_creator:canister_creator_canister",
     "cycles-minting-canister.wasm.gz": "//rs/nns/cmc:cycles-minting-canister",
@@ -20,29 +16,37 @@ CANISTERS = {
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
-    "ic-ledger-suite-orchestrator-canister.wasm.gz": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
     "ic-icrc1-index.wasm.gz": "//rs/rosetta-api/icrc1/index:index_canister",
     "ic-icrc1-index-ng.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
     "ic-icrc1-index-ng-u256.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",
     "ic-icrc1-ledger.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "ic-icrc1-ledger-u256.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
     "ic-icp-index-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
     "identity-canister.wasm.gz": "//rs/nns/identity:identity-canister",
     "ledger-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
     "ledger-canister_notify-method.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
-    "pmap_canister.wasm.gz": "//rs/rust_canisters/pmap:pmap_canister",
-    "proxy_canister.wasm.gz": "//rs/rust_canisters/proxy_canister:proxy_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
     "sns-governance-canister_test.wasm.gz": "//rs/sns/governance:sns-governance-canister-test",
-    "sns-governance-mem-test-canister.wasm.gz": "//rs/sns/integration_tests:sns-governance-mem-test-canister",
     "sns-root-canister.wasm.gz": "//rs/sns/root:sns-root-canister",
     "sns-swap-canister.wasm.gz": "//rs/sns/swap:sns-swap-canister",
     "sns-wasm-canister.wasm.gz": "//rs/nns/sns-wasm:sns-wasm-canister",
     "wasm.wasm.gz": "//rs/rust_canisters/dfn_core:wasm",
+    # Needed by DRE team for qualification
+    "xnet-test-canister.wasm.gz": "//rs/rust_canisters/xnet_test:xnet-test-canister",
+    # Used in snsdemo repo for NNS dapp test environment
+    "bitcoin-mock-canister.wasm.gz": "//rs/bitcoin/mock:bitcoin_canister_mock",
+}
+
+COMPRESSED_CANISTERS = {
+    "ic-btc-canister.wasm.gz": "@btc_canister//file",
+    "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+    "ic-icrc1-archive-u256.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
+    "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
 }
 
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
@@ -51,7 +55,6 @@ CANISTERS_MAX_SIZE_E5_BYTES = {
     "ic-ckbtc-minter.wasm": "19",
     "ledger-canister.wasm": "19",
     "ledger-canister_notify-method.wasm": "19",
-    "sns-canister.wasm": "15",
 }
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
@@ -67,6 +70,32 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
     "ic-ledger-suite-orchestrator-canister.wasm.gz": "16",
+}
+
+# How these limits were chosen:
+#
+#   1. Temporarily set value to "0".
+#   2. Run the test: bazel test //publish/canisters:all
+#   3. Fail message reports size it sees.
+#   4. Pick a number that gives at least 20% headroom.
+#
+# This way, there is some room to grow, but an alarm eventually gets triggered after a "significant"
+# amount of growth happens.
+
+NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
+    "cycles-minting-canister.wasm.gz": "5",
+    "genesis-token-canister.wasm.gz": "3",
+    "governance-canister.wasm.gz": "12",
+    "governance-canister_test.wasm.gz": "12",
+    "registry-canister.wasm.gz": "12",
+    "root-canister.wasm.gz": "4",
+}
+
+SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
+    "sns-governance-canister.wasm.gz": "10",
+    "sns-governance-canister_test.wasm.gz": "10",
+    "sns-root-canister.wasm.gz": "4",
+    "sns-swap-canister.wasm.gz": "7",
 }
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
@@ -105,13 +134,6 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTERS_MAX_SIZE_COMPRESSED_
     )
     for (name, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
 ]
-
-COMPRESSED_CANISTERS = {
-    "ic-btc-canister.wasm.gz": "@btc_canister//file",
-    "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
-    "ic-icrc1-archive-u256.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
-    "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
-}
 
 # `bazel cquery --output=files` that is used by build-ic script does not show external sources of `filegroup` targets.
 [

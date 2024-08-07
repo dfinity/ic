@@ -36,6 +36,7 @@ maplit = "1.0.2"
 nix = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+rayon = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 serde = { workspace = true }
@@ -44,6 +45,13 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 uuid = { workspace = true }
+
+# Optional dependencies needed for fuzzing
+arbitrary = { workspace = true, optional = true }
+assert_matches = { workspace = true, optional = true }
+ic-test-utilities-io = { path = "../test_utilities/io", optional = true }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics", optional = true }
+proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -66,3 +74,12 @@ scoped_threadpool = "0.1.*"
 [[bench]]
 name = "bench_allocator"
 harness = false
+
+[features]
+fuzzing_code = [
+    "dep:arbitrary",
+    "dep:assert_matches",
+    "dep:ic-test-utilities-io",
+    "dep:ic-test-utilities-metrics",
+    "dep:proptest",
+]

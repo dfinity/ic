@@ -5,12 +5,9 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance::{
-    self,
-    pb::v1::{
-        manage_neuron_response::Command, proposal::Action, ExecuteNnsFunction, Neuron, NnsFunction,
-        Proposal,
-    },
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::Command, proposal::Action, ExecuteNnsFunction, Neuron, NnsFunction,
+    Proposal,
 };
 use ic_state_machine_tests::StateMachine;
 use std::collections::HashMap;

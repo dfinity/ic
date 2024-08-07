@@ -47,7 +47,7 @@ BUILD_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "@crate_index//:proptest",
     "@crate_index//:serde_bytes",
 ] + select({

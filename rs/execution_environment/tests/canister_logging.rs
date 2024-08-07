@@ -125,7 +125,7 @@ fn test_fetch_canister_logs_via_submit_ingress() {
         result,
         Err(SubmitIngressError::UserError(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "fetch_canister_logs API is only accessible in non-replicated mode",
+            "ic00 method fetch_canister_logs can not be called via ingress messages",
         )))
     );
 }
@@ -149,7 +149,7 @@ fn test_fetch_canister_logs_via_execute_ingress() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "fetch_canister_logs API is only accessible in non-replicated mode",
+            "Cannot enqueue management message because fetch_canister_logs method is not allowed to be called via ingress messages.",
         ))
     );
 }

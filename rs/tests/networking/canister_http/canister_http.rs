@@ -50,36 +50,6 @@ pub fn install_nns_canisters(env: &TestEnv) {
     info!(&env.logger(), "NNS canisters installed");
 }
 
-// WIP [NNS1-2157]
-pub fn install_mainnet_nns_canisters(env: &TestEnv) {
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .use_mainnet_nns_canisters()
-        .install(&nns_node, env)
-        .expect("Mainnet NNS canisters not installed");
-    info!(&env.logger(), "Mainnet NNS canisters installed");
-}
-
-// WIP [NNS1-2157]
-pub fn install_qualifying_nns_canisters(env: &TestEnv) {
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .use_qualifying_nns_canisters()
-        .install(&nns_node, env)
-        .expect("Qualifying NNS canisters not installed");
-    info!(&env.logger(), "Qualifying NNS canisters installed");
-}
-
 pub fn setup(env: TestEnv) {
     // Set up Universal VM with HTTP Bin testing service
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))

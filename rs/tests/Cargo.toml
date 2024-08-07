@@ -54,6 +54,7 @@ ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic_consensus_system_test_utils = { path = "./consensus/utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "./consensus/tecdsa/utils" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -81,6 +82,7 @@ ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }
+ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-nns-gtc = { path = "../nns/gtc" }
 ic-nns-handler-root = { path = "../nns/handlers/root/impl" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
@@ -199,50 +201,6 @@ name = "ic-systest-rotate-ecdsa-idkg-key"
 path = "consensus/orchestrator/rotate_ecdsa_idkg_key_test.rs"
 
 [[bin]]
-name = "ic-systest-tecdsa-add-nodes"
-path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-tschnorr-message-sizes"
-path = "consensus/tecdsa/tschnorr_message_sizes_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-key-rotation"
-path = "consensus/tecdsa/tecdsa_key_rotation_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-remove-nodes"
-path = "consensus/tecdsa/tecdsa_remove_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-signature-life-cycle"
-path = "consensus/tecdsa/tecdsa_signature_life_cycle_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-signature-fails-without-cycles"
-path = "consensus/tecdsa/tecdsa_signature_fails_without_cycles_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-signature-from-nns-without-cycles"
-path = "consensus/tecdsa/tecdsa_signature_from_nns_without_cycles_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-signature-from-other-subnet"
-path = "consensus/tecdsa/tecdsa_signature_from_other_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-signature-same-subnet"
-path = "consensus/tecdsa/tecdsa_signature_same_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-signature-timeout"
-path = "consensus/tecdsa/tecdsa_signature_timeout_test.rs"
-
-[[bin]]
-name = "ic-systest-tecdsa-two-signing-subnets"
-path = "consensus/tecdsa/tecdsa_two_signing_subnets_test.rs"
-
-[[bin]]
 name = "ic-systest-btc-get-balance"
 path = "financial_integrations/btc_get_balance_test.rs"
 
@@ -263,8 +221,8 @@ name = "ic-systest-rosetta-network-test"
 path = "financial_integrations/rosetta/rosetta_network_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-neuron-disbourse-test"
-path = "financial_integrations/rosetta/rosetta_neuron_disbourse_test.rs"
+name = "ic-systest-rosetta-neuron-disburse-test"
+path = "financial_integrations/rosetta/rosetta_neuron_disburse_test.rs"
 
 [[bin]]
 name = "ic-systest-rosetta-neuron-dissolve-test"
@@ -331,72 +289,28 @@ name = "ic-systest-rejoin-test-large-state"
 path = "message_routing/rejoin_test_large_state.rs"
 
 [[bin]]
-name = "ic-systest-liveness-with-equivocation-test"
-path = "consensus/liveness_with_equivocation_test.rs"
-
-[[bin]]
 name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
 
 [[bin]]
-name = "ic-systest-cow-safety-test"
-path = "consensus/cow_safety_test.rs"
-
-[[bin]]
-name = "ic-systest-replica-determinism-test"
-path = "consensus/replica_determinism_test.rs"
-
-[[bin]]
-name = "ic-systest-request-auth-malicious-replica-test"
-path = "consensus/request_auth_malicious_replica_test.rs"
-
-[[bin]]
-name = "ic-systest-safety-test"
-path = "consensus/safety_test.rs"
+name = "ic-systest-memory-safety-test"
+path = "message_routing/memory_safety_test.rs"
 
 [[bin]]
 name = "ic-systest-system-api-security-test"
 path = "execution/system_api_security_test.rs"
 
 [[bin]]
-name = "ic-systest-tecdsa-complaint-test"
-path = "consensus/tecdsa/tecdsa_complaint_test.rs"
-
-[[bin]]
-name = "ic-systest-max-ingress-payload-size-test"
-path = "consensus/max_ingress_payload_size_test.rs"
-
-[[bin]]
-name = "ic-systest-dual-workload-test"
-path = "consensus/dual_workload_test.rs"
-
-[[bin]]
-name = "ic-systest-catch-up-possible-test"
-path = "consensus/catch_up_possible_test.rs"
-
-[[bin]]
-name = "ic-systest-catch-up-loop-prevention-test"
-path = "consensus/catch_up_loop_prevention_test.rs"
-
-[[bin]]
-name = "ic-systest-max-xnet-payload-size-test"
-path = "consensus/max_xnet_payload_size_test.rs"
-
-[[bin]]
-name = "ic-systest-node-graceful-leaving-test"
-path = "consensus/node_graceful_leaving_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-integration"
-path = "boundary_nodes/boundary_node_integration_test.rs"
+name = "ic-systest-boundary-node-intgrtn"
+path = "boundary_nodes/boundary_node_intgrtn_test.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-integration-on-playnet"
-path = "boundary_nodes/boundary_node_integration_on_playnet_test.rs"
+name = "ic-systest-boundary-node-intgrtn-on-playnet"
+path = "boundary_nodes/boundary_node_intgrtn_on_playnet_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-update-workload-test"
@@ -555,6 +469,10 @@ name = "ic-systest-small"
 path = "testing_verification/testnets/small.rs"
 
 [[bin]]
+name = "ic-systest-small-with-query-stats"
+path = "testing_verification/testnets/small_with_query_stats.rs"
+
+[[bin]]
 name = "ic-systest-small-nns"
 path = "testing_verification/testnets/small_nns.rs"
 
@@ -569,6 +487,10 @@ path = "testing_verification/testnets/medium.rs"
 [[bin]]
 name = "ic-systest-large"
 path = "testing_verification/testnets/large.rs"
+
+[[bin]]
+name = "ic-systest-single-app-large-node-with-nns"
+path = "testing_verification/testnets/single_app_large_node_with_nns.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-performance"

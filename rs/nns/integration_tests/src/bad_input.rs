@@ -5,7 +5,8 @@ use assert_matches::assert_matches;
 use dfn_candid::candid;
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
-use ic_nns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::ProposalInfo};
+use ic_nns_governance_api::pb::v1::ProposalInfo;
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     set_up_governance_canister, state_machine_test_on_nns_subnet,
 };
