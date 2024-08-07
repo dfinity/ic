@@ -1,14 +1,6 @@
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
-CLONER_CANISTER_RUNTIME_DEPS = [
-    "//rs/tests/networking/canisters:cloner_canister",
-]
-
-CLONER_CANISTER_TYPES_DEPS = [
-    "//rs/tests/networking/canisters:cloner_canister_types",
-]
-
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 PROXY_CANISTER_RUNTIME_DEPS = [
@@ -246,8 +238,15 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + CLONER_CANISTER_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
-        "//rs/tests:jaeger_uvm_config_image",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+        "//rs/tests/networking/canisters:cloner_canister",
     ],
-    deps = DEPENDENCIES + CLONER_CANISTER_TYPES_DEPS + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_features",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/networking/canisters:cloner_canister_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
 )
