@@ -23,6 +23,8 @@ use ic_protobuf::{
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use prost::bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, str::FromStr};
@@ -355,13 +357,14 @@ impl CountBytes for SignedIngress {
 ///
 /// Used internally by the InternetComputer. See related [`SignedIngress`] for
 /// the message as it was received from the `HttpHandler`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, ValidateEq)]
 pub struct Ingress {
     pub source: UserId,
     pub receiver: CanisterId,
     pub effective_canister_id: Option<CanisterId>,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
+    #[validate_eq(Skip)]
     pub method_payload: Vec<u8>,
     pub message_id: MessageId,
     pub expiry_time: Time,

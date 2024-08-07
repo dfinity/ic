@@ -1,3 +1,8 @@
+use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
+use ic_wasm_types::CanisterModule;
+
 use crate::{
     canister_state::execution_state::Memory,
     canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
@@ -16,8 +21,9 @@ use std::{
 ///
 /// Additionally, keeps track of all the accumulated changes
 /// since the last flush to the disk.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterSnapshots {
+    #[validate_eq(Recursive)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshot operations are consumed by the `StateManager` in order to
     /// correctly represent backups and restores in the next checkpoint.
@@ -270,7 +276,7 @@ pub struct ExecutionStateSnapshot {
 }
 
 /// Contains all information related to a canister snapshot.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct CanisterSnapshot {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
@@ -283,6 +289,7 @@ pub struct CanisterSnapshot {
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
+    #[validate_eq(Recursive)]
     chunk_store: WasmChunkStore,
     execution_snapshot: ExecutionStateSnapshot,
 }
