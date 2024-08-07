@@ -348,10 +348,14 @@ fn induct_loopback_stream_success() {
 
     let mut expected_state = state.clone();
 
-    let stream = state.get_stream(&LOCAL_SUBNET);
+    let loopback_stream = state.get_stream(&LOCAL_SUBNET);
     // Both messages are expected to be inducted successfully.
-    push_inputs_x(&mut expected_state, messages_in_stream(stream, 21..=22)).unwrap();
-    let response_num_bytes = response_ref_in_stream(stream, 22).count_bytes();
+    push_inputs_x(
+        &mut expected_state,
+        messages_in_stream(loopback_stream, 21..=22),
+    )
+    .unwrap();
+    let response_num_bytes = response_ref_in_stream(loopback_stream, 22).count_bytes();
 
     // The loopback stream should be empty with `begin` and `signals_end` advanced.
     let loopback_stream = stream_from_config(StreamConfigX {
@@ -663,18 +667,24 @@ fn garbage_collect_messages_with_reject_signals_success() {
     let mut streams = state.take_streams();
 
     // The expected stream has the first 2 messages garbage collected.
-    let stream = streams.get(&REMOTE_SUBNET);
+    let outgoing_stream = streams.get(&REMOTE_SUBNET);
     let expected_stream = stream_from_config(StreamConfigX {
         begin: 33,
-        messages: vec![clone_message_from_stream(stream, 33)],
+        messages: vec![clone_message_from_stream(outgoing_stream, 33)],
         signals_end: 43,
         ..StreamConfigX::default()
     });
 
     // The expected rejected messages are @31 and @32.
     let expected_rejected_messages = vec![
-        (CanisterNotFound, clone_message_from_stream(stream, 31)),
-        (CanisterMigrating, clone_message_from_stream(stream, 32)),
+        (
+            CanisterNotFound,
+            clone_message_from_stream(outgoing_stream, 31),
+        ),
+        (
+            CanisterMigrating,
+            clone_message_from_stream(outgoing_stream, 32),
+        ),
     ];
 
     let slice = slices.get(&REMOTE_SUBNET).unwrap();
@@ -1053,11 +1063,11 @@ fn garbage_collect_local_state_success() {
 
     let mut expected_state = state.clone();
     // The expected stream has the first two messages gc'ed and the stream flags set.
-    let stream = state.get_stream(&REMOTE_SUBNET);
-    let response_num_bytes = response_ref_in_stream(stream, 32).count_bytes();
+    let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
+    let response_num_bytes = response_ref_in_stream(outgoing_stream, 32).count_bytes();
     let expected_stream = stream_from_config(StreamConfigX {
         begin: 33,
-        messages: vec![clone_message_from_stream(stream, 33)],
+        messages: vec![clone_message_from_stream(outgoing_stream, 33)],
         signals_end: 43,
         flags: StreamFlags {
             deprecated_responses_only: true,
@@ -1137,17 +1147,17 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
     )
     .unwrap();
 
-    let stream = state.get_stream(&REMOTE_SUBNET);
+    let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
     // The expected stream has indices advanced and the first 3 messages gc'ed.
     let pruned_stream = stream_from_config(StreamConfigX {
         begin: 34,
-        messages: vec![clone_message_from_stream(stream, 34)],
+        messages: vec![clone_message_from_stream(outgoing_stream, 34)],
         signals_end: 43,
         ..StreamConfigX::default()
     });
     // The response @33 is rerouted into a new stream.
     let rerouted_stream = stream_from_config(StreamConfigX {
-        messages: vec![clone_message_from_stream(stream, 33)],
+        messages: vec![clone_message_from_stream(outgoing_stream, 33)],
         ..StreamConfigX::default()
     });
 
@@ -1574,45 +1584,6 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
     });
 }
 
-// Note: this is covered by the test
-// `garbage_collect_local_state_with_reject_signals_for_response_success()`.
-/*
-#[test]
-fn reroute_rejected_response_success() {
-    with_test_replica_logger(|log| {
-        // Empty initial state.
-        let (stream_handler, mut initial_state, _) = new_fixture(&log);
-
-        // Response to be rerouted.
-        let response: RequestOrResponse = test_response(*LOCAL_CANISTER, *REMOTE_CANISTER).into();
-
-        // Expected state has a stream to `REMOTE_SUBNET` containing the rerouted response.
-        let mut expected_state = initial_state.clone();
-        let mut rerouted_stream = generate_outgoing_stream(StreamConfig {
-            messages_begin: 0,
-            message_count: 0,
-            signals_end: 0,
-            reject_signals: None,
-        });
-        rerouted_stream.push(response.clone());
-        expected_state.with_streams(btreemap![REMOTE_SUBNET => rerouted_stream]);
-
-        // Act
-        let mut streams = initial_state.take_streams();
-        stream_handler.handle_rejected_messages(
-            vec![(RejectReason::CanisterMigrating, response)],
-            REMOTE_SUBNET,
-            &mut initial_state,
-            &mut streams,
-            &mut (i64::MAX / 2),
-        );
-
-        // Assert
-        assert_eq!(streams, expected_state.take_streams());
-    });
-}
-*/
-
 /// Common implementation for tests checking reject responses generated locally by the
 /// `StreamHandler` directly.
 fn check_stream_handler_locally_generated_reject_response_impl(
@@ -2015,181 +1986,6 @@ fn induct_stream_slices_partial_success() {
     });
 }
 
-// Note: this is covered by the test `induct_stream_slices_partial_success()`.
-/*
-/// Tests that a response to a missing canister is dropped, incrementing the
-/// respective critical error count.
-#[test]
-fn induct_stream_slices_response_to_missing_canister() {
-    with_test_replica_logger(|log| {
-        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-
-        let mut expected_state = initial_state.clone();
-
-        // Initial state with no canisters and one stream.
-        let outgoing_stream = generate_outgoing_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 0,
-            signals_end: 43,
-            reject_signals: None,
-        });
-        initial_state.with_streams(btreemap![REMOTE_SUBNET => outgoing_stream]);
-
-        // Incoming slice with one response addressed to a missing canister.
-        let mut stream_slice = generate_stream_slice(StreamSliceConfig {
-            header_begin: 43,
-            header_end: None,
-            messages_begin: 43,
-            message_count: 0,
-            signals_end: 21,
-            reject_signals: None,
-            flags: Default::default(),
-        });
-        stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
-
-        // The expected stream should have `signals_end` incremented for the 1 dropped message.
-        let expected_outgoing_stream = generate_outgoing_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 0,
-            signals_end: 44,
-            reject_signals: None,
-        });
-        expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
-
-        // Act
-        let mut available_guaranteed_response_memory =
-            stream_handler.available_guaranteed_response_memory(&initial_state);
-        let inducted_state = stream_handler.induct_stream_slices(
-            initial_state,
-            btreemap![REMOTE_SUBNET => stream_slice],
-            &mut available_guaranteed_response_memory,
-        );
-
-        // Assert
-        assert_eq!(
-            expected_state.system_metadata(),
-            inducted_state.system_metadata(),
-        );
-        assert_eq!(expected_state, inducted_state);
-
-        assert_eq!(
-            stream_handler.available_guaranteed_response_memory(&inducted_state),
-            available_guaranteed_response_memory
-        );
-
-        assert_inducted_xnet_messages_eq(
-            metric_vec(&[(
-                &[
-                    (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
-                    (LABEL_STATUS, LABEL_VALUE_CANISTER_NOT_FOUND),
-                ],
-                1,
-            )]),
-            &metrics_registry,
-        );
-        assert_eq!(
-            0,
-            fetch_inducted_payload_sizes_stats(&metrics_registry).count
-        );
-        assert_eq_critical_error_induct_response_failed(1, &metrics_registry);
-    });
-}
-*/
-
-// Note: this is covered by the test `induct_stream_slices_partial_success()`.
-/*
-/// Tests that a message from a sender that is not currently and has not
-/// recently (according to `canister_migrations`) been hosted by the remote
-/// subnet is dropped, incrementing the respective critical error count.
-#[test]
-fn induct_stream_slices_sender_subnet_mismatch() {
-    with_test_replica_logger(|log| {
-        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-
-        // Initial state with one canister...
-        let initial_canister_state = new_canister_state(
-            *LOCAL_CANISTER,
-            user_test_id(24).get(),
-            *INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
-        initial_state.put_canister_state(initial_canister_state);
-
-        // ...and one stream.
-        let outgoing_stream = generate_outgoing_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 1,
-            signals_end: 43,
-            reject_signals: None,
-        });
-        initial_state.with_streams(btreemap![REMOTE_SUBNET => outgoing_stream]);
-
-        // Incoming slice with requests from canisters not hosted by the remote subnet.
-        let mut stream_slice = generate_stream_slice(StreamSliceConfig {
-            header_begin: 43,
-            header_end: None,
-            messages_begin: 43,
-            message_count: 0,
-            signals_end: 21,
-            reject_signals: None,
-            flags: Default::default(),
-        });
-        // Canister hosted by some other subnet (this one).
-        stream_slice.push_message(test_request(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER).into());
-        // Canister not mapped to any subnet in the routing table.
-        stream_slice.push_message(test_request(*UNKNOWN_CANISTER, *LOCAL_CANISTER).into());
-
-        // The expected state should be unchanged...
-        let mut expected_state = initial_state.clone();
-
-        // ...except that the stream should have `signals_end` incremented for the 2 dropped messages.
-        let expected_outgoing_stream = generate_outgoing_stream(StreamConfig {
-            messages_begin: 21,
-            message_count: 1,
-            signals_end: 45,
-            reject_signals: None,
-        });
-        expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
-
-        let mut available_guaranteed_response_memory =
-            stream_handler.available_guaranteed_response_memory(&initial_state);
-        let inducted_state = stream_handler.induct_stream_slices(
-            initial_state,
-            btreemap![REMOTE_SUBNET => stream_slice],
-            &mut available_guaranteed_response_memory,
-        );
-
-        // Assert
-        assert_eq!(
-            expected_state.system_metadata(),
-            inducted_state.system_metadata(),
-        );
-        assert_eq!(expected_state, inducted_state);
-
-        assert_eq!(
-            stream_handler.available_guaranteed_response_memory(&inducted_state),
-            available_guaranteed_response_memory
-        );
-
-        assert_inducted_xnet_messages_eq(
-            metric_vec(&[(
-                &[
-                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
-                    (LABEL_STATUS, LABEL_VALUE_SENDER_SUBNET_MISMATCH),
-                ],
-                2,
-            )]),
-            &metrics_registry,
-        );
-        assert_eq!(
-            0,
-            fetch_inducted_payload_sizes_stats(&metrics_registry).count
-        );
-        assert_eq_critical_error_sender_subnet_mismatch(2, &metrics_registry);
-    });
-}
-*/
-
 /// Tests that a message addressed to a canister that is not currently hosted by
 /// this subnet; and is not being migrated on a path containing both this subnet
 /// and its known host; is dropped, incrementing the respective critical error
@@ -2241,12 +2037,12 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
     let mut expected_state = state.clone();
 
     // ...except that the stream should have `signals_end` incremented for the 2 dropped messages.
-    let stream = state.get_stream(&REMOTE_SUBNET);
+    let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
     let expected_stream = stream_from_config(StreamConfigX {
         begin: 21,
         messages: vec![
-            clone_message_from_stream(stream, 21),
-            clone_message_from_stream(stream, 22),
+            clone_message_from_stream(outgoing_stream, 21),
+            clone_message_from_stream(outgoing_stream, 22),
         ],
         signals_end: 47,
         ..StreamConfigX::default()
@@ -2341,13 +2137,13 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
 
     let mut expected_state = state.clone();
     // Expecting a stream with...
-    let stream = state.get_stream(&REMOTE_SUBNET);
+    let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
     let expected_stream = stream_from_config(StreamConfigX {
         begin: 21,
         messages: vec![
             // ...the initial messages still in it...
-            clone_message_from_stream(stream, 21),
-            clone_message_from_stream(stream, 22),
+            clone_message_from_stream(outgoing_stream, 21),
+            clone_message_from_stream(outgoing_stream, 22),
             // ...a reject response for the request @43...
             reject_response,
         ],
@@ -2442,13 +2238,13 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
 
     let mut expected_state = state.clone();
     // Expecting a stream with...
-    let stream = state.get_stream(&REMOTE_SUBNET);
+    let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
     let expected_stream = stream_from_config(StreamConfigX {
         begin: 21,
         messages: vec![
             // ...the initial messages still in it...
-            clone_message_from_stream(stream, 21),
-            clone_message_from_stream(stream, 22),
+            clone_message_from_stream(outgoing_stream, 21),
+            clone_message_from_stream(outgoing_stream, 22),
             // ...a reject response for the request @43...
             reject_response,
         ],
@@ -2539,13 +2335,13 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
     )
     .unwrap();
     // ...and a stream with...
-    let stream = state.get_stream(&CANISTER_MIGRATION_SUBNET);
+    let migration_stream = state.get_stream(&CANISTER_MIGRATION_SUBNET);
     let expected_stream = stream_from_config(StreamConfigX {
         begin: 21,
         messages: vec![
             // ...the initial messages still in it...
-            clone_message_from_stream(stream, 21),
-            clone_message_from_stream(stream, 22),
+            clone_message_from_stream(migration_stream, 21),
+            clone_message_from_stream(migration_stream, 22),
         ],
         // ...and a `signals_end` incremented by 2.
         signals_end: 45,
@@ -3223,7 +3019,7 @@ fn with_test_setup_and_config(
     // i.e. it produces a `CallContextManager` that you'd have if the full API for
     // sending messages were used.
     //
-    // For all other messages a `remote_callback_id` is used, i.e. something that
+    // For all other messages a `other_callback_id` is used, i.e. something that
     // simulates callback IDs generated in a different canister.
     let mut other_callback_id = 0_u64;
     let mut messages_from_configs = |configs: Vec<MessageConfigX>| -> Vec<RequestOrResponse> {
@@ -3369,6 +3165,10 @@ fn stream_from_config(config: StreamConfigX<Vec<RequestOrResponse>>) -> Stream {
 /// The generic parameter `C` is either `Vec<MessageConfigX>` or `Vec<RequestOrResponse>`.
 /// The whole container is used rather than the type inside the vector because Rust insists
 /// `T` must implement `Default` to use an empty `Vec<T>::new()` as the default.
+///
+/// Note:
+/// - `messages_begin` is used for `header_begin` if it is `None`.
+/// - `messages_begin` + `messages.len()` is used for `header_end` if it is `None`.
 #[derive(Default)]
 struct StreamSliceConfigX<C: IntoIterator + Default> {
     header_begin: Option<u64>,
@@ -3407,7 +3207,7 @@ fn stream_slice_from_config(config: StreamSliceConfigX<Vec<RequestOrResponse>>) 
     StreamSlice::new(header, queue)
 }
 
-/// Returns a reference to a request in the `stream` at `stream_index`.
+/// Returns a reference to a request in a stream at `stream_index`.
 ///
 /// Panics if no such request exists.
 fn request_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Request {
@@ -3417,7 +3217,7 @@ fn request_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Req
     }
 }
 
-/// Returns a reference to a request in the `stream` at `stream_index`.
+/// Returns a reference to a request in a stream slice at `stream_index`.
 ///
 /// Panics if no such request exists.
 fn request_ref_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &Request {
@@ -3431,7 +3231,7 @@ fn request_ref_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &
     }
 }
 
-/// Returns a reference to a response in the `stream` at `stream_index`.
+/// Returns a reference to a response in a stream at `stream_index`.
 ///
 /// Panics if no such response exists.
 fn response_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Response {
@@ -3441,7 +3241,7 @@ fn response_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Re
     }
 }
 
-/// Returns a reference to a response in the `slice` at `stream_index`.
+/// Returns a reference to a response in the stream slice at `stream_index`.
 ///
 /// Panics if no such response exists.
 fn response_ref_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &Response {
@@ -3455,7 +3255,7 @@ fn response_ref_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> 
     }
 }
 
-/// Returns a a clone of the message in the `stream` at `stream_index`.
+/// Returns a clone of the message in a stream at `stream_index`.
 ///
 /// Panics if no such message exists.
 fn clone_message_from_stream(opt_stream: Option<&Stream>, stream_index: u64) -> RequestOrResponse {
@@ -3465,7 +3265,7 @@ fn clone_message_from_stream(opt_stream: Option<&Stream>, stream_index: u64) -> 
     }
 }
 
-/// Returns a a clone of the message in the `slice` at `stream_index`.
+/// Returns a clone of the message in a stream slice at `stream_index`.
 ///
 /// Panics if no such message exists.
 fn clone_message_from_slice(
@@ -3498,6 +3298,9 @@ fn messages_in_stream(
     stream_index_range: std::ops::RangeInclusive<u64>,
 ) -> impl Iterator<Item = &RequestOrResponse> {
     match opt_stream {
+        // Not the `unwrap()`s here ensure that the code panics when the whole range was not
+        // available rather than just silently terminating the iterator prematurely. This behaviour
+        // is important to ensure we actually test as intended.
         Some(stream) => stream_index_range
             .map(|stream_index| stream.messages().get(stream_index.into()).unwrap()),
         None => unreachable!(),
@@ -3512,6 +3315,9 @@ fn messages_in_slice(
     stream_index_range: std::ops::RangeInclusive<u64>,
 ) -> impl Iterator<Item = &RequestOrResponse> {
     match opt_slice {
+        // Not the `unwrap()`s here ensure that the code panics when the whole range was not
+        // available rather than just silently terminating the iterator prematurely. This behaviour
+        // is important to ensure we actually test as intended.
         Some(slice) => stream_index_range
             .map(|stream_index| slice.messages().unwrap().get(stream_index.into()).unwrap()),
         None => unreachable!(),
@@ -3572,12 +3378,12 @@ struct MetricsFixture {
 }
 
 impl MetricsFixture {
-    /// Retrieved an int counter.
+    /// Retrieves an int counter.
     fn fetch_int_counter(&self, name: &str) -> Option<u64> {
         fetch_int_counter(&self.registry, name)
     }
 
-    /// Retrieve an int gauge vec.
+    /// Retrieves an int gauge vec.
     fn fetch_int_gauge_vec(&self, name: &str) -> MetricVec<u64> {
         fetch_int_gauge_vec(&self.registry, name)
     }
