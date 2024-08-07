@@ -45,7 +45,7 @@ const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(10 * 60);
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 
-const CLONER_CANISTER_WASM: &str = "rs/tests/src/cloner_canister.wasm.gz";
+const CLONER_CANISTER_WASM: &str = "rs/tests/networking/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
 const SUBNET_SIZE: usize = 1;
