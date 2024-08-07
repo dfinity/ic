@@ -18,7 +18,7 @@ write_log() {
     logger -t "${SCRIPT}" "${message}"
 }
 
-function get_version_noreport() {
+get_version_noreport() {
     if [ -r "${VERSION_FILE}" ]; then
         VERSION=$(cat ${VERSION_FILE})
         VERSION_OK=1
@@ -33,18 +33,16 @@ function get_version_noreport() {
 #
 # Arguments:
 # $1 - name of grubenv file
-function read_grubenv() {
+read_grubenv() {
     local GRUBENV_FILE="$1"
 
     while IFS="=" read -r key value; do
         case "$key" in
             '#'*) ;;
-            'boot_alternative') ;&
-            'boot_cycle')
+            'boot_alternative' | 'boot_cycle')
                 eval "$key=\"$value\""
                 ;;
             *) ;;
-
         esac
     done <"$GRUBENV_FILE"
 }
@@ -53,7 +51,7 @@ function read_grubenv() {
 #
 # Arguments:
 # $1 - name of grubenv file
-function write_grubenv() {
+write_grubenv() {
     local GRUBENV_FILE="$1"
 
     TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
@@ -71,7 +69,7 @@ function write_grubenv() {
 }
 
 # Convert A -> B and B -> A
-function swap_alternative() {
+swap_alternative() {
     if [ "$1" == B ]; then
         echo A
     else
@@ -79,40 +77,54 @@ function swap_alternative() {
     fi
 }
 
-function get_boot_partition() {
-    if [ "$1" == B ]; then
-        echo /dev/vda7
-    else
-        echo /dev/vda4
-    fi
-}
-function get_root_partition() {
-    if [ "$1" == B ]; then
-        echo /dev/vda8
-    else
-        echo /dev/vda5
-    fi
-}
-function get_var_partition() {
-    if [ "$1" == B ]; then
-        echo /dev/vda9
-    else
-        echo /dev/vda6
+declare -A GUESTOS_PARTITIONS=(
+    [A_boot]="/dev/vda4"
+    [B_boot]="/dev/vda7"
+    [A_root]="/dev/vda5"
+    [B_root]="/dev/vda8"
+    [A_var]="/dev/vda6"
+    [B_var]="/dev/vda9"
+)
+
+declare -A HOSTOS_PARTITIONS=(
+    [A_boot]="/dev/hostlvm/A_boot"
+    [B_boot]="/dev/hostlvm/B_boot"
+    [A_root]="/dev/hostlvm/A_root"
+    [B_root]="/dev/hostlvm/B_root"
+    [A_var]="/dev/hostlvm/A_var"
+    [B_var]="/dev/hostlvm/B_var"
+)
+
+# Get partition based on alternative and type
+# Arguments:
+# $1 - alternative (A or B)
+# $2 - partition type (boot, root, var)
+get_partition() {
+    local ALTERNATIVE="$1"
+    local PARTITION_TYPE="$2"
+    
+    if [ "$SYSTEM_TYPE" == "guestos" ]; then
+        echo "${GUESTOS_PARTITIONS[${ALTERNATIVE}_${PARTITION_TYPE}]}"
+    else if [ "$SYSTEM_TYPE" == "hostos" ]; then
+        echo "${HOSTOS_PARTITIONS[${ALTERNATIVE}_${PARTITION_TYPE}]}"
     fi
 }
 
-function usage() {
+usage() {
     cat <<EOF
 Usage:
-  manageboot.sh [ -f grubenvfile] action
+  manageboot.sh [ -f grubenvfile] system_type action
 
   -f specify alternative grubenv file (defaults to /boot/grub/grubenv).
      Primarily useful for testing
 
+  Arguments:
+    system_type - System type (guestos or hostos)
+
   Action is one of
 
     upgrade-install
-      Installs a new system image into the spare partition. 
+      Installs a new system image into the spare partition.
       The new system image can be given in two different ways:
       - as a single .tar (or .tar.zst) file containing two files
         named "boot.img" and "root.img"
@@ -165,7 +177,7 @@ fi
 
 # Parsing options first
 GRUBENV_FILE=/boot/grub/grubenv
-while getopts ":f" OPT; do
+while getopts ":f:" OPT; do
     case "${OPT}" in
         f)
             GRUBENV_FILE="${OPTARG}"
@@ -176,6 +188,21 @@ while getopts ":f" OPT; do
             ;;
     esac
 done
+shift $((OPTIND -1))
+
+SYSTEM_TYPE="$1"
+ACTION="$2"
+shift 2
+
+if [ -z "${SYSTEM_TYPE}" ] || [ -z "${ACTION}" ]; then
+    usage >&2
+    exit 1
+fi
+
+if [[ "${SYSTEM_TYPE}" != "guestos" && "${SYSTEM_TYPE}" != "hostos" ]]; then
+    echo "Invalid system type. Must be 'guestos' or 'hostos'."
+    exit 1
+fi
 
 get_version_noreport
 
@@ -191,9 +218,9 @@ if [ "${boot_cycle}" == "first_boot" ]; then
     CURRENT_ALTERNATIVE=$(swap_alternative "${CURRENT_ALTERNATIVE}")
     IS_STABLE=0
 
-    write_metric "guestos_boot_stable" \
+    write_metric "${SYSTEM_TYPE}_boot_stable" \
         "0" \
-        "GuestOS is boot stable" \
+        "${SYSTEM_TYPE} is boot stable" \
         "gauge"
 fi
 
@@ -201,40 +228,35 @@ if [ "${boot_cycle}" == "failsafe_check" ]; then
     # If the system booted is marked as "failsafe_check" then bootloader
     # will revert to the other system on next boot.
     NEXT_BOOT=$(swap_alternative "${NEXT_BOOT}")
-    write_log "GuestOS sets ${NEXT_BOOT} as failsafe for next boot"
+    write_log "${SYSTEM_TYPE} sets ${NEXT_BOOT} as failsafe for next boot"
 
     # TODO should also set IS_STABLE=0 here to prevent manual overwrite
     # of a backup install slot.
 
-    write_metric "guestos_boot_stable" \
+    write_metric "${SYSTEM_TYPE}_boot_stable" \
         "0" \
-        "GuestOS is boot stable" \
+        "${SYSTEM_TYPE} is boot stable" \
         "gauge"
-    write_metric_attr "guestos_boot_action" \
+    write_metric_attr "${SYSTEM_TYPE}_boot_action" \
         "{next_boot=\"${NEXT_BOOT}\",version=\"${VERSION}\"}" \
         "2" \
-        "GuestOS boot action" \
+        "${SYSTEM_TYPE} boot action" \
         "gauge"
-
 fi
 
 TARGET_ALTERNATIVE=$(swap_alternative "${CURRENT_ALTERNATIVE}")
-CURRENT_ROOT=$(get_root_partition "${CURRENT_ALTERNATIVE}")
-TARGET_ROOT=$(get_root_partition "${TARGET_ALTERNATIVE}")
-CURRENT_BOOT=$(get_boot_partition "${CURRENT_ALTERNATIVE}")
-TARGET_BOOT=$(get_boot_partition "${TARGET_ALTERNATIVE}")
-CURRENT_VAR=$(get_var_partition "${CURRENT_ALTERNATIVE}")
-TARGET_VAR=$(get_var_partition "${TARGET_ALTERNATIVE}")
+CURRENT_ROOT=$(get_partition "${CURRENT_ALTERNATIVE}" "root")
+TARGET_ROOT=$(get_partition "${TARGET_ALTERNATIVE}" "root")
+CURRENT_BOOT=$(get_partition "${CURRENT_ALTERNATIVE}" "boot")
+TARGET_BOOT=$(get_partition "${TARGET_ALTERNATIVE}" "boot")
+CURRENT_VAR=$(get_partition "${CURRENT_ALTERNATIVE}" "var")
+TARGET_VAR=$(get_partition "${TARGET_ALTERNATIVE}" "var")
 
 # Execute subsequent action
-ACTION="$1"
-
-shift
-
 case "${ACTION}" in
     upgrade-install)
         if [ "${IS_STABLE}" != 1 ]; then
-            write_log "GuestOS attempted to install upgrade in unstable state"
+            write_log "${SYSTEM_TYPE} attempted to install upgrade in unstable state"
             echo "Cannot install an upgrade before present system is committed as stable." >&2
             exit 1
         fi
@@ -253,33 +275,33 @@ case "${ACTION}" in
             exit 1
         fi
 
-        write_log "GuestOS current version ${VERSION} at slot ${CURRENT_ALTERNATIVE}"
-        write_log "GuestOS upgrade started, modifying slot ${TARGET_ALTERNATIVE} at ${TARGET_BOOT} and ${TARGET_ROOT}"
+        write_log "${SYSTEM_TYPE} current version ${VERSION} at slot ${CURRENT_ALTERNATIVE}"
+        write_log "${SYSTEM_TYPE} upgrade started, modifying slot ${TARGET_ALTERNATIVE} at ${TARGET_BOOT} and ${TARGET_ROOT}"
 
         # Write to target partitions, and "wipe" header of var partition
         # (to ensure that new target starts from a pristine state).
         dd if="${BOOT_IMG}" of="${TARGET_BOOT}" bs=1M status=progress
-        write_metric_attr "guestos_boot_action" \
+        write_metric_attr "${SYSTEM_TYPE}_boot_action" \
             "{written_boot=\"${TARGET_BOOT}\"}" \
             "1" \
-            "GuestOS boot action" \
+            "${SYSTEM_TYPE} boot action" \
             "gauge"
 
         dd if="${ROOT_IMG}" of="${TARGET_ROOT}" bs=1M status=progress
-        write_metric_attr "guestos_boot_action" \
+        write_metric_attr "${SYSTEM_TYPE}_boot_action" \
             "{written_root=\"${TARGET_ROOT}\"}" \
             "1" \
-            "GuestOS boot action" \
+            "${SYSTEM_TYPE} boot action" \
             "gauge"
 
         dd if=/dev/zero of="${TARGET_VAR}" bs=1M count=16 status=progress
-        write_metric_attr "guestos_boot_action" \
+        write_metric_attr "${SYSTEM_TYPE}_boot_action" \
             "{written_var=\"true\"}" \
             "1" \
-            "GuestOS boot action" \
+            "${SYSTEM_TYPE} boot action" \
             "gauge"
 
-        write_log "GuestOS upgrade written to slot ${TARGET_ALTERNATIVE}"
+        write_log "${SYSTEM_TYPE} upgrade written to slot ${TARGET_ALTERNATIVE}"
 
         ;;
     upgrade-commit)
@@ -293,18 +315,18 @@ case "${ACTION}" in
         boot_cycle=first_boot
         write_grubenv "${GRUBENV_FILE}"
 
-        write_log "GuestOS upgrade committed to slot ${TARGET_ALTERNATIVE}"
-        write_metric_attr "guestos_boot_action" \
+        write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}"
+        write_metric_attr "${SYSTEM_TYPE}_boot_action" \
             "{committed=\"true\"}" \
             "1" \
-            "GuestOS boot action" \
+            "${SYSTEM_TYPE} boot action" \
             "gauge"
-        write_metric "guestos_boot_stable" \
+        write_metric "${SYSTEM_TYPE}_boot_stable" \
             "0" \
-            "GuestOS is boot stable" \
+            "${SYSTEM_TYPE} is boot stable" \
             "gauge"
 
-        write_log "GuestOS upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
+        write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
         sync
         # Ignore termination signals from the following reboot, so that
         # the script exits without error.
@@ -315,15 +337,15 @@ case "${ACTION}" in
         if [ "$boot_cycle" != "stable" ]; then
             boot_cycle=stable
             write_grubenv "${GRUBENV_FILE}"
-            write_log "GuestOS stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
-            write_metric "guestos_boot_stable" \
+            write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
+            write_metric "${SYSTEM_TYPE}_boot_stable" \
                 "1" \
-                "GuestOS is boot stable" \
+                "${SYSTEM_TYPE} is boot stable" \
                 "gauge"
-            write_metric_attr "guestos_boot_action" \
+            write_metric_attr "${SYSTEM_TYPE}_boot_action" \
                 "{confirm_boot=\"${CURRENT_BOOT}\",version=\"${VERSION}\"}" \
                 "1" \
-                "GuestOS boot action" \
+                "${SYSTEM_TYPE} boot action" \
                 "gauge"
         fi
         ;;
