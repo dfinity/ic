@@ -11888,7 +11888,6 @@ dependencies = [
  "cycles-minting-canister",
  "deterministic_ips",
  "dfn_candid",
- "dfn_core",
  "dfn_protobuf",
  "ed25519-dalek",
  "futures",
