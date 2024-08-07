@@ -586,16 +586,13 @@ mod tests {
         let tar_path = temp_dir.path().join("test.tar.zst");
         let extract_dir = temp_dir.path().join("extract");
 
-        // Create a Zstandard compressed tarball
         let tar_zst = File::create(&tar_path).unwrap();
         let mut encoder = ZstdEncoder::new(tar_zst, 0).unwrap();
         create_tar(&mut encoder).unwrap();
         encoder.finish().unwrap();
 
-        // Extract the tarball
         extract_tar_into_dir(&tar_path, &extract_dir).unwrap();
 
-        // Verify the extracted content
         let extracted_file = extract_dir.join("test.txt");
         let mut file = File::open(extracted_file).unwrap();
         let mut contents = String::new();
