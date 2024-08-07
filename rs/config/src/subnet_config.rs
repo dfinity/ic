@@ -159,11 +159,11 @@ const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
 
 /// Instructions used to upload a chunk (1MiB) to the wasm chunk store. This is
 /// 1/10th of a round.
-pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(100_000);
+pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(200_000_000);
 
 /// Baseline cost for creating or loading a canister snapshot.
 pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
-    NumInstructions::new(200_000_000);
+    NumInstructions::new(100_000);
 
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone, Serialize, Deserialize)]

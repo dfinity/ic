@@ -2683,6 +2683,8 @@ impl From<CanisterManagerError> for UserError {
                     format!(
                         "Canister {} has reached the maximum number of snapshots allowed: {}.{additional_help}", canister_id, limit,
                     )
+                )
+            }
             CanisterSnapshotNotEnoughCycles(err) => {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
