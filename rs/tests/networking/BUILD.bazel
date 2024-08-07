@@ -1,7 +1,10 @@
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
-CLONER_CANISTER_RUNTIME_DEPS = ["//rs/tests/networking:cloner_canister.wasm.gz"]
+CLONER_CANISTER_DEPS = [
+    "//rs/tests/networking:cloner_canister",
+    "//rs/tests/networking:cloner_canister_types",
+]
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -240,7 +243,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + CLONER_CANISTER_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + CLONER_CANISTER_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],

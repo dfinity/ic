@@ -48,23 +48,16 @@ const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const CLONER_CANISTER_WASM: &str = "rs/tests/src/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
-const SUBNET_SIZE: usize = 13;
+const SUBNET_SIZE: usize = 1;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
-const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 125_000;
+const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 200_000;
 const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 500;
 const AMOUNT_OF_CLONER_CANISTERS: u64 =
     NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
-
-// Don't change these values.
-/// The batch size for the cloner canister to install canisters concurrently.
-const CLONER_CANISTER_BATCH_SIZE: u64 = 250;
-/// The initial cycles for the canisters spun up by the cloner canister.
-/// If too low or too high, the canisters will not be installed, or the cloner will run out of cycles.
-const INITIAL_CYCLES: u64 = 10_u64.pow(11); // 100B Cycles
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
@@ -119,6 +112,7 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn install_cloner_canisters(env: TestEnv) {
+    let start_time = std::time::Instant::now();
     let rt = tokio::runtime::Runtime::new().unwrap();
     let top_snapshot = env.topology_snapshot();
     let logger = env.logger();
@@ -165,9 +159,6 @@ pub fn install_cloner_canisters(env: TestEnv) {
             let args = Encode!(&SpinupCanistersArgs {
                 canisters_number: CANISTERS_INSTALLED_PER_CLONER_CANISTER,
                 wasm_module: counter_canister_bytes_clone,
-                initial_cycles: INITIAL_CYCLES,
-                batch_size: CLONER_CANISTER_BATCH_SIZE,
-                arg: vec![],
             })
             .unwrap();
             // time this call
@@ -202,7 +193,8 @@ pub fn install_cloner_canisters(env: TestEnv) {
     // keep the workload running for a while
     info!(&logger, "Step 5: Finished spinning up canisters.");
 
-    let time_to_wait_for_download = WORKLOAD_RUNTIME - DOWNLOAD_PROMETHEUS_WAIT_TIME;
+    let time_to_wait_for_download =
+        (WORKLOAD_RUNTIME - DOWNLOAD_PROMETHEUS_WAIT_TIME) - start_time.elapsed();
     info!(
         &logger,
         "Waiting {:?} before downloading prometheus data.", time_to_wait_for_download
@@ -215,8 +207,5 @@ pub fn install_cloner_canisters(env: TestEnv) {
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct SpinupCanistersArgs {
     pub canisters_number: u64,
-    pub initial_cycles: u64,
     pub wasm_module: Vec<u8>,
-    pub arg: Vec<u8>,
-    pub batch_size: u64,
 }
