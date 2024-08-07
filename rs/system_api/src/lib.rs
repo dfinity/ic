@@ -901,14 +901,11 @@ impl MemoryUsage {
                 self.current_usage = NumBytes::from(new_usage);
                 self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
-                sandbox_safe_system_state
-                    .system_state_changes
-                    .on_low_wasm_memory_hook_status
-                    .update(
-                        Some(reserved_bytes),
-                        self.stable_memory_usage,
-                        self.wasm_memory_usage,
-                    );
+                sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(
+                    Some(reserved_bytes),
+                    self.stable_memory_usage,
+                    self.wasm_memory_usage,
+                );
                 Ok(())
             }
         }
@@ -1086,9 +1083,10 @@ impl SystemApiImpl {
     ) -> Self {
         let stable_memory_usage = stable_memory
             .size
-            .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
-            .map(NumBytes::new)
-            .ok_or(HypervisorError::OutOfMemory)?;
+            .get()
+            .checked_mul(WASM_PAGE_SIZE_IN_BYTES.try_into().unwrap())
+            .map(|v| NumBytes::new(v as u64))
+            .expect("Stable memory size is larger than maximal expected.");
 
         let memory_usage = MemoryUsage::new(
             log.clone(),
