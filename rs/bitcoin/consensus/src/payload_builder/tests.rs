@@ -183,6 +183,7 @@ fn can_successfully_create_bitcoin_payload() {
                     proposal_context.validation_context,
                     &[],
                     SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
+                    0,
                 )
                 .0;
             assert_eq!(payload, expected_payload);
