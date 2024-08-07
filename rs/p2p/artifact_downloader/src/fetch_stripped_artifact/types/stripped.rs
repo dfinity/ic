@@ -5,46 +5,14 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
 };
 use ic_types::{
-    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
-    consensus::{BlockProposal, ConsensusMessage},
-    messages::SignedIngress,
+    artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
+    consensus::ConsensusMessage,
 };
 
 #[derive(Debug)]
 // TODO(kpop): Add all fields necessary to reconstruct a block
 pub struct StrippedBlockProposal {
     unstripped_consensus_message_id: ConsensusMessageId,
-}
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum InsertionError {}
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum AssemblyError {}
-
-impl StrippedBlockProposal {
-    /// Returns the list of [`IngressMessageId`]s which have been stripped from the block.
-    // TODO(kpop): Implement this
-    pub(crate) fn missing_ingress_messages(&self) -> Vec<IngressMessageId> {
-        unimplemented!()
-    }
-
-    /// Tries to insert a missing ingress message into the block.
-    // TODO(kpop): Implement this
-    pub(crate) fn try_insert_ingress_message(
-        &mut self,
-        _ingress_message: SignedIngress,
-    ) -> Result<(), InsertionError> {
-        unimplemented!()
-    }
-
-    /// Tries to reassemble a block.
-    ///
-    /// Fails if there are still some ingress messages missing.
-    // TODO(kpop): Implement this
-    pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
-        unimplemented!()
-    }
 }
 
 #[derive(Debug)]

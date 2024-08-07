@@ -8,7 +8,7 @@ use ic_metrics::MetricsRegistry;
 use ic_quic_transport::Transport;
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
-    consensus::ConsensusMessage,
+    consensus::{BlockProposal, ConsensusMessage},
     messages::SignedIngress,
     NodeId,
 };
@@ -16,8 +16,10 @@ use ic_types::{
 use crate::FetchArtifact;
 
 use super::{
-    download::download_ingress, metrics::FetchStrippedConsensusArtifactMetrics,
-    stripper::Strippable, types::stripped::MaybeStrippedConsensusMessage,
+    download::download_ingress,
+    metrics::FetchStrippedConsensusArtifactMetrics,
+    stripper::Strippable,
+    types::stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal},
 };
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
@@ -212,4 +214,35 @@ async fn get_or_fetch<P: Peers>(
         peer_rx,
     )
     .await
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum InsertionError {}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum AssemblyError {}
+
+impl StrippedBlockProposal {
+    /// Returns the list of [`IngressMessageId`]s which have been stripped from the block.
+    // TODO(kpop): Implement this
+    pub(crate) fn missing_ingress_messages(&self) -> Vec<IngressMessageId> {
+        unimplemented!()
+    }
+
+    /// Tries to insert a missing ingress message into the block.
+    // TODO(kpop): Implement this
+    pub(crate) fn try_insert_ingress_message(
+        &mut self,
+        _ingress_message: SignedIngress,
+    ) -> Result<(), InsertionError> {
+        unimplemented!()
+    }
+
+    /// Tries to reassemble a block.
+    ///
+    /// Fails if there are still some ingress messages missing.
+    // TODO(kpop): Implement this
+    pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
+        unimplemented!()
+    }
 }
