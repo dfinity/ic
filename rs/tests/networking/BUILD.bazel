@@ -231,8 +231,6 @@ system_test_nns(
 
 system_test(
     name = "cloner_canister_workload",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -243,10 +241,12 @@ system_test(
     ],
     deps = [
         "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/canisters:cloner_canister_types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )

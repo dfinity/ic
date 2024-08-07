@@ -36,8 +36,8 @@ use ic_system_test_driver::{
 use slog::info;
 use std::time::Duration;
 
-// 2 hours
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(2 * 60 * 60);
+// 1.5 hours
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(90 * 60 * 60);
 
 // 10 minutes
 const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(10 * 60);
