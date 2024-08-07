@@ -148,13 +148,13 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::net::Ipv6Addr;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
     fmt::Debug,
     fs::{metadata, read_to_string, File},
     io::Read,
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     process::exit,
     str::FromStr,
@@ -3034,7 +3034,10 @@ async fn propose_to_create_service_nervous_system(
         Some(proposer),
     ));
     let response = canister_client
-        .submit_external_proposal(&create_make_proposal_payload(proposal, &proposer), &title)
+        .submit_external_proposal(
+            &create_make_proposal_payload(proposal.into(), &proposer).into(),
+            &title,
+        )
         .await;
 
     match response {
@@ -5865,11 +5868,12 @@ impl GovernanceCanisterClient {
                     title,
                     summary,
                     &url,
-                    external_update_type,
+                    external_update_type.into(),
                     payload,
                 ),
                 self.0.proposal_author(),
-            ),
+            )
+            .into(),
             title,
         )
         .await

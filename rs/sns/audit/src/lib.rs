@@ -5,7 +5,7 @@ use colored::{ColoredString, Colorize};
 use ic_agent::Agent;
 use ic_neurons_fund::u64_to_dec;
 use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse,
 };

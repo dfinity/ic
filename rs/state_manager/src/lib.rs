@@ -19,7 +19,6 @@ use crate::{
     tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
 };
 use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::CanisterId;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
@@ -42,7 +41,9 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::{
+    canister_snapshots::SnapshotOperation, page_map::PageAllocatorFileDescriptor,
+};
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
     page_map::{PersistenceError, StorageMetrics},
@@ -58,7 +59,8 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
+    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SnapshotId,
+    SubnetId,
 };
 use ic_utils_thread::JoinOnDrop;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
@@ -914,7 +916,7 @@ fn initialize_tip(
 
 fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
     let mut result = Vec::new();
-    for entry in PageMapType::list_all(state) {
+    for entry in PageMapType::list_all_including_snapshots(state) {
         if let Some(page_map) = entry.get(state) {
             result.push((entry, page_map.num_host_pages()));
         }
@@ -1076,11 +1078,14 @@ pub enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
     WasmChunkStore(CanisterId),
+    SnapshotWasmMemory(SnapshotId),
+    SnapshotStableMemory(SnapshotId),
+    SnapshotWasmChunkStore(SnapshotId),
 }
 
 impl PageMapType {
-    /// List all PageMaps contained in `state`
-    fn list_all(state: &ReplicatedState) -> Vec<PageMapType> {
+    /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
+    fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
         for (id, canister) in &state.canister_states {
             result.push(Self::WasmChunkStore(id.to_owned()));
@@ -1088,6 +1093,18 @@ impl PageMapType {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
             }
+        }
+
+        result
+    }
+
+    /// List all PageMaps contained in `state`, including those in snapshots.
+    fn list_all_including_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
+        let mut result = Self::list_all_without_snapshots(state);
+        for (id, _snapshot) in state.canister_snapshots.iter() {
+            result.push(Self::SnapshotWasmMemory(id.to_owned()));
+            result.push(Self::SnapshotStableMemory(id.to_owned()));
+            result.push(Self::SnapshotWasmChunkStore(id.to_owned()));
         }
 
         result
@@ -1105,6 +1122,9 @@ impl PageMapType {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
+            PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot(id)?.vmemory_0()),
+            PageMapType::SnapshotStableMemory(id) => Ok(layout.snapshot(id)?.stable_memory()),
+            PageMapType::SnapshotWasmChunkStore(id) => Ok(layout.snapshot(id)?.wasm_chunk_store()),
         }
     }
 
@@ -1124,6 +1144,18 @@ impl PageMapType {
             PageMapType::WasmChunkStore(id) => state
                 .canister_state(id)
                 .map(|can| can.system_state.wasm_chunk_store.page_map()),
+            PageMapType::SnapshotWasmMemory(id) => state
+                .canister_snapshots
+                .get(*id)
+                .map(|snap| &snap.execution_snapshot().wasm_memory.page_map),
+            PageMapType::SnapshotStableMemory(id) => state
+                .canister_snapshots
+                .get(*id)
+                .map(|snap| &snap.execution_snapshot().stable_memory.page_map),
+            PageMapType::SnapshotWasmChunkStore(id) => state
+                .canister_snapshots
+                .get(*id)
+                .map(|snap| snap.chunk_store().page_map()),
         }
     }
 
@@ -1143,6 +1175,13 @@ impl PageMapType {
             PageMapType::WasmChunkStore(id) => state
                 .canister_state_mut(id)
                 .map(|can| can.system_state.wasm_chunk_store.page_map_mut()),
+            // Snapshots are kept behind an `Arc` inside `state`, which makes the pattern of `list_all` and `get_mut` for pagemaps difficult
+            // without excessive copies.
+            // In the few places where we need to iterate over all pagemaps and modify them we instead handle snapshots separately.
+            // Note that this is not a problem in the many more places where we need to iterate over all pagemaps and only need read access.
+            PageMapType::SnapshotWasmMemory(_) => unimplemented!(),
+            PageMapType::SnapshotStableMemory(_) => unimplemented!(),
+            PageMapType::SnapshotWasmChunkStore(_) => unimplemented!(),
         }
     }
 }
@@ -1159,7 +1198,7 @@ pub type DirtyPages = Vec<DirtyPageMap>;
 /// Get dirty pages of all PageMaps backed by a checkpoint
 /// file.
 pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
-    PageMapType::list_all(state)
+    PageMapType::list_all_without_snapshots(state) // Snapshots don't have dirty pages for the manifest computation.
         .into_iter()
         .filter_map(|entry| {
             let page_map = entry.get(state)?;
@@ -1181,12 +1220,31 @@ fn strip_page_map_deltas(
     state: &mut ReplicatedState,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
-    PageMapType::list_all(state).into_iter().for_each(|entry| {
-        if let Some(page_map) = entry.get_mut(state) {
-            assert!(page_map.unflushed_delta_is_empty());
-            page_map.strip_all_deltas(Arc::clone(&fd_factory));
-        }
-    });
+    PageMapType::list_all_without_snapshots(state)
+        .into_iter()
+        .for_each(|entry| {
+            if let Some(page_map) = entry.get_mut(state) {
+                assert!(page_map.unflushed_delta_is_empty());
+                page_map.strip_all_deltas(Arc::clone(&fd_factory));
+            }
+        });
+    for (_id, canister_snapshot) in state.canister_snapshots.iter_mut() {
+        let new_snapshot = Arc::make_mut(canister_snapshot);
+        new_snapshot
+            .chunk_store_mut()
+            .page_map_mut()
+            .strip_all_deltas(Arc::clone(&fd_factory));
+        new_snapshot
+            .execution_snapshot_mut()
+            .wasm_memory
+            .page_map
+            .strip_all_deltas(Arc::clone(&fd_factory));
+        new_snapshot
+            .execution_snapshot_mut()
+            .stable_memory
+            .page_map
+            .strip_all_deltas(Arc::clone(&fd_factory));
+    }
 
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
@@ -1205,8 +1263,8 @@ fn strip_page_map_deltas(
 /// 2) The page deltas must be empty in both states.
 /// 3) The memory sizes must match.
 fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
-    let maps = PageMapType::list_all(src);
-    assert_eq!(maps, PageMapType::list_all(tip));
+    let maps = PageMapType::list_all_without_snapshots(src);
+    assert_eq!(maps, PageMapType::list_all_without_snapshots(tip));
 
     for map_type in maps {
         let src_page_map_opt = map_type.get(src);
@@ -1217,6 +1275,32 @@ fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
         if let (Some(src_page_map), Some(tip_page_map)) = (src_page_map_opt, tip_page_map_opt) {
             tip_page_map.switch_to_checkpoint(src_page_map);
         }
+    }
+
+    for ((tip_id, tip_snapshot), (src_id, src_snapshot)) in tip
+        .canister_snapshots
+        .iter_mut()
+        .zip(src.canister_snapshots.iter())
+    {
+        let new_snapshot = Arc::make_mut(tip_snapshot);
+
+        assert_eq!(tip_id, src_id);
+
+        new_snapshot
+            .chunk_store_mut()
+            .page_map_mut()
+            .switch_to_checkpoint(src_snapshot.chunk_store().page_map());
+
+        new_snapshot
+            .execution_snapshot_mut()
+            .wasm_memory
+            .page_map
+            .switch_to_checkpoint(&src_snapshot.execution_snapshot().wasm_memory.page_map);
+        new_snapshot
+            .execution_snapshot_mut()
+            .stable_memory
+            .page_map
+            .switch_to_checkpoint(&src_snapshot.execution_snapshot().stable_memory.page_map);
     }
 
     for (tip_canister, src_canister) in tip.canisters_iter_mut().zip(src.canisters_iter()) {
@@ -1945,38 +2029,77 @@ impl StateManagerImpl {
     fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
         self.metrics.checkpoint_metrics.page_map_flushes.inc();
         let mut pagemaps = Vec::new();
-        for entry in PageMapType::list_all(tip_state) {
+
+        let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
+            // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
+            // created one. In these cases, we also need to wipe the data from the file on disk.
+            // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
+            // when loading a PageMap from a checkpoint. Furthermore, we only want to wipe data from the file on
+            // disk before applying any unflushed deltas of that PageMap. We detect this case by looking at
+            // has_stripped_unflushed_deltas, which will be false at the beginning, but true as soon as we strip unflushed
+            // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
+            // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
+            // unlushed delta, and we truncate the file on disk to size 0.
+            let truncate =
+                page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas();
+            let page_map_clone = if !page_map.unflushed_delta_is_empty() {
+                Some(page_map.clone())
+            } else {
+                None
+            };
+            if truncate || page_map_clone.is_some() {
+                pagemaps.push(PageMapToFlush {
+                    page_map_type: entry,
+                    truncate,
+                    page_map: page_map_clone,
+                });
+            }
+            // We strip empty unflushed deltas to keep has_stripped_unflushed_deltas() correct
+            page_map.strip_unflushed_delta();
+        };
+
+        for entry in PageMapType::list_all_without_snapshots(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
-                // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
-                // created one. In these cases, we also need to wipe the data from the file on disk.
-                // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
-                // when loading a PageMap from a checkpoint. Furthermore, we only want to wipe data from the file on
-                // disk before applying any unflushed deltas of that PageMap. We detect this case by looking at
-                // has_stripped_unflushed_deltas, which will be false at the beginning, but true as soon as we strip unflushed
-                // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
-                // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
-                // unlushed delta, and we truncate the file on disk to size 0.
-                let truncate =
-                    page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas();
-                let page_map_clone = if !page_map.unflushed_delta_is_empty() {
-                    Some(page_map.clone())
-                } else {
-                    None
-                };
-                if truncate || page_map_clone.is_some() {
-                    pagemaps.push(PageMapToFlush {
-                        page_map_type: entry,
-                        truncate,
-                        page_map: page_map_clone,
-                    });
-                }
-                // We strip empty unflushed deltas to keep has_stripped_unflushed_deltas() correct
-                page_map.strip_unflushed_delta();
+                add_to_pagemaps_and_strip(entry, page_map);
             }
         }
-        if !pagemaps.is_empty() {
+
+        // Take all snapshot operations that happened since the last flush and clear the list stored in `tip_state`.
+        // This way each operation is executed exactly once, independent of how many times `flush_page_maps` is called.
+        let snapshot_operations = tip_state.canister_snapshots.take_unflushed_changes();
+
+        for op in &snapshot_operations {
+            // Only CanisterSnapshots that are new since the last flush will have PageMaps that need to be flushed. They will
+            // have a corresponding Backup in the snapshot operations list.
+            if let SnapshotOperation::Backup(_canister_id, snapshot_id) = op {
+                // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
+                if let Some(canister_snapshot) = tip_state.canister_snapshots.get_mut(*snapshot_id)
+                {
+                    let new_snapshot = Arc::make_mut(canister_snapshot);
+
+                    add_to_pagemaps_and_strip(
+                        PageMapType::SnapshotWasmChunkStore(*snapshot_id),
+                        new_snapshot.chunk_store_mut().page_map_mut(),
+                    );
+                    add_to_pagemaps_and_strip(
+                        PageMapType::SnapshotWasmMemory(*snapshot_id),
+                        &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
+                    );
+                    add_to_pagemaps_and_strip(
+                        PageMapType::SnapshotStableMemory(*snapshot_id),
+                        &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
+                    );
+                }
+            }
+        }
+
+        if !pagemaps.is_empty() || !snapshot_operations.is_empty() {
             self.tip_channel
-                .send(TipRequest::FlushPageMapDelta { height, pagemaps })
+                .send(TipRequest::FlushPageMapDelta {
+                    height,
+                    pagemaps,
+                    snapshot_operations,
+                })
                 .unwrap();
             // We flush further when the tip_channel queue is not empty. Meaning we're blind
             // to a request being processed, so we send Noop to signal for the busy Tip Thread.
@@ -2522,7 +2645,7 @@ impl StateManagerImpl {
             } else {
                 vec![TipRequest::DefragTip {
                     height,
-                    page_map_types: PageMapType::list_all(state),
+                    page_map_types: PageMapType::list_all_without_snapshots(state),
                 }]
             };
 

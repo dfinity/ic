@@ -5,7 +5,7 @@ use ic_nervous_system_root::change_canister::{
     CanisterAction as RootCanisterAction, StopOrStartCanisterRequest,
 };
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command, proposal::Action, stop_or_start_canister::CanisterAction,
     ExecuteNnsFunction, NnsFunction, Proposal, StopOrStartCanister,
 };
