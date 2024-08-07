@@ -665,10 +665,10 @@ mod evm_rpc_conversion {
     use crate::eth_rpc_client::responses::TransactionReceipt;
     use crate::eth_rpc_client::tests::{ANKR, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
-        providers::RpcNodeProvider, Block, FeeHistory, HttpOutcallError, LogEntry, MultiCallError,
-        MultiCallResults, Reduce, SingleCallError,
+        providers::RpcNodeProvider, Block, Equality, FeeHistory, HttpOutcallError, LogEntry,
+        MinByKey, MultiCallError, MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
     };
-    use crate::numeric::{BlockNumber, Wei};
+    use crate::numeric::{BlockNumber, TransactionCount, Wei};
     use crate::test_fixtures::arb::{
         arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_log_entry,
         arb_nat_256, arb_transaction_receipt,
@@ -679,7 +679,8 @@ mod evm_rpc_conversion {
         Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
         HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcService as EvmRpcService, TransactionReceipt as EvmTransactionReceipt,
+        RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcService,
+        TransactionReceipt as EvmTransactionReceipt,
     };
     use num_bigint::BigUint;
     use proptest::collection::vec;
@@ -901,6 +902,46 @@ mod evm_rpc_conversion {
         }
     }
 
+    proptest! {
+        #[test]
+        fn should_have_consistent_transaction_count_between_minter_and_evm_rpc
+        (
+            first_tx_count in arb_evm_rpc_transaction_count(),
+            second_tx_count in arb_evm_rpc_transaction_count(),
+            third_tx_count in arb_evm_rpc_transaction_count(),
+        ) {
+            let (ankr_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
+                evm_rpc_providers();
+            let evm_results = match (&first_tx_count, &second_tx_count, &third_tx_count) {
+                (Ok(count_1), Ok(count_2), Ok(count_3)) if count_1 == count_2 && count_2 == count_3 => {
+                    EvmMultiRpcResult::Consistent(Ok(count_1.clone()))
+                }
+                _ => EvmMultiRpcResult::Inconsistent(vec![
+                    (ankr_evm_rpc_provider, first_tx_count.clone()),
+                    (public_node_evm_rpc_provider, second_tx_count.clone()),
+                    (llama_nodes_evm_rpc_provider, third_tx_count.clone()),
+                ]),
+            };
+            let minter_results: MultiCallResults<TransactionCount> = MultiCallResults::from_iter(vec![
+                (ANKR, first_tx_count.map_err(SingleCallError::from)),
+                (PUBLIC_NODE, second_tx_count.map_err(SingleCallError::from)),
+                (LLAMA_NODES, third_tx_count.map_err(SingleCallError::from)),
+            ])
+            .map(&TransactionCount::try_from, &|e| {
+                panic!("BUG: selected Nat should fit in a U256: {:?}", e)
+            });
+
+            prop_assert_eq_ignoring_provider(
+                ReduceWithStrategy::<Equality>::reduce(evm_results.clone()),
+                ReduceWithStrategy::<Equality>::reduce(minter_results.clone()),
+            )?;
+            prop_assert_eq_ignoring_provider(
+                ReduceWithStrategy::<MinByKey>::reduce(evm_results),
+                ReduceWithStrategy::<MinByKey>::reduce(minter_results),
+            )?;
+        }
+    }
+
     fn test_consistency_between_minter_and_evm_rpc<R, M, E>(
         minter_ok: M,
         evm_rpc_ok: E,
@@ -915,18 +956,8 @@ mod evm_rpc_conversion {
         MultiCallResults<M>: Reduce<Item = R>,
         EvmMultiRpcResult<E>: Reduce<Item = R>,
     {
-        let ankr_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
-            url: "ankr".to_string(),
-            headers: None,
-        });
-        let public_node_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
-            url: "public_node".to_string(),
-            headers: None,
-        });
-        let llama_nodes_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
-            url: "llama".to_string(),
-            headers: None,
-        });
+        let (ankr_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
+            evm_rpc_providers();
 
         // 0 error
         let evm_result = EvmMultiRpcResult::Consistent(Ok(evm_rpc_ok.clone()));
@@ -1012,6 +1043,26 @@ mod evm_rpc_conversion {
         prop_assert_eq_ignoring_provider(evm_result.reduce(), minter_result.reduce())?;
 
         Ok(())
+    }
+
+    fn evm_rpc_providers() -> (RpcService, RpcService, RpcService) {
+        let ankr_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "ankr".to_string(),
+            headers: None,
+        });
+        let public_node_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "public_node".to_string(),
+            headers: None,
+        });
+        let llama_nodes_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "llama".to_string(),
+            headers: None,
+        });
+        (
+            ankr_evm_rpc_provider,
+            public_node_evm_rpc_provider,
+            llama_nodes_evm_rpc_provider,
+        )
     }
 
     fn prop_assert_eq_ignoring_provider<
@@ -1315,5 +1366,9 @@ mod evm_rpc_conversion {
                 )
                 .boxed(),
         }
+    }
+
+    fn arb_evm_rpc_transaction_count() -> impl Strategy<Value = EvmRpcResult<Nat>> {
+        proptest::result::maybe_ok(arb_nat_256(), arb_evm_rpc_error())
     }
 }

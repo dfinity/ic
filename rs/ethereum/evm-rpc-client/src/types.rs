@@ -167,6 +167,14 @@ pub mod candid {
         pub r#type: String,
     }
 
+    #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]
+    pub struct GetTransactionCountArgs {
+        /// The address for which the transaction count is requested.
+        pub address: String,
+        /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+        pub block: BlockTag,
+    }
+
     pub type RpcResult<T> = Result<T, RpcError>;
 
     #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]
