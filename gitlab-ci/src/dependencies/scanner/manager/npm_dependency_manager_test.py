@@ -50,7 +50,7 @@ def test_npm_check_engine_compatible(_fopen_mock, _path_patch, npm_test):
 
 @patch("pathlib.Path.exists", return_value=True)
 @patch("builtins.open", new_callable=mock_open, read_data='{"engines":{"node":"<19"}}')
-def test_npm_check_engine_not_compatible(_fopen_mock, _path_patch, npm_test):
+def test_npm_check_engine_not_compatible_throws_runtime_error(_fopen_mock, _path_patch, npm_test):
     with pytest.raises(RuntimeError) as e:
         path = pathlib.Path()
         assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is False
