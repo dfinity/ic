@@ -18,6 +18,7 @@
 //! `systemctl start ic-replica`
 
 use anyhow::Result;
+use candid::Encode;
 use cloner_canister_types::SpinupCanistersArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -47,7 +48,7 @@ const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const CLONER_CANISTER_WASM: &str = "rs/tests/networking/canisters/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
-const SUBNET_SIZE: usize = 1;
+const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
