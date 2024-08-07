@@ -85,6 +85,7 @@ impl GovernanceCanisterInitPayloadBuilder {
     pub fn with_test_neurons_impl(
         &mut self,
         maturity_equivalent_icp_e8s: Option<u64>,
+        hotkeys: Vec<PrincipalId>,
     ) -> &mut Self {
         use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 
@@ -101,6 +102,8 @@ impl GovernanceCanisterInitPayloadBuilder {
             Neuron {
                 id: Some(neuron_id),
                 controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                // Use large values to avoid the possibility of collisions with other self-authenticating hotkeys
+                hot_keys: hotkeys,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
                 cached_neuron_stake_e8s: 1_000_000_000, /* invariant: part of
                                                          * TEST_NEURON_TOTAL_STAKE_E8S */
@@ -161,7 +164,7 @@ impl GovernanceCanisterInitPayloadBuilder {
     /// Initializes the governance canister with a few neurons to be used in tests.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_test_neurons(&mut self) -> &mut Self {
-        self.with_test_neurons_impl(None)
+        self.with_test_neurons_impl(None, vec![])
     }
 
     /// Initializes the governance canister with a few neurons to be used in tests. One of
@@ -171,7 +174,21 @@ impl GovernanceCanisterInitPayloadBuilder {
         &mut self,
         maturity_equivalent_icp_e8s: u64,
     ) -> &mut Self {
-        self.with_test_neurons_impl(Some(maturity_equivalent_icp_e8s))
+        self.with_test_neurons_impl(Some(maturity_equivalent_icp_e8s), vec![])
+    }
+
+    /// Initializes the governance canister with a few neurons to be used in tests. One of
+    /// the neurons will have:
+    /// - `hotkeys`
+    /// - `maturity_equivalent_icp_e8s` worth of maturity
+    /// - had joined the Neurons' Fund
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_test_neurons_fund_neurons_with_hotkeys(
+        &mut self,
+        hotkeys: Vec<PrincipalId>,
+        maturity_equivalent_icp_e8s: u64,
+    ) -> &mut Self {
+        self.with_test_neurons_impl(Some(maturity_equivalent_icp_e8s), hotkeys)
     }
 
     /// Initializes the governance canister with the given neurons.

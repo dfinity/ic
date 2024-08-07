@@ -21,7 +21,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsCanisterWasmStrategy, NnsCustomizations,
+            NnsCustomizations,
         },
     },
     nns::vote_and_execute_proposal,
@@ -39,7 +39,6 @@ pub fn setup_with_system_and_application_subnets(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 
@@ -189,7 +188,7 @@ async fn install_nns_controlled_canister<'a>(
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
     let canister = application_subnet_runtime
         .create_canister(Some(u128::MAX))
@@ -260,7 +259,7 @@ async fn upgrade_ledger_suite_orchestrator_by_nns_proposal<'a>(
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
     let wasm = canister_wasm.as_slice().to_vec();
     let proposal_payload = ChangeCanisterRequest::new(

@@ -15,7 +15,7 @@ ic-base-types = { path = "../../../types/base_types" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
-ic-nns-governance = { path = "../../../nns/governance" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
 ic-recovery = { path = "../../../recovery" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
