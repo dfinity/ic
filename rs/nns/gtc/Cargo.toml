@@ -27,7 +27,7 @@ ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
-ic-nns-governance = { path = "../governance" }
+ic-nns-governance-api = { path = "../governance/api" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }

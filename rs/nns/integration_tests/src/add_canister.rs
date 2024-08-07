@@ -8,7 +8,7 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},

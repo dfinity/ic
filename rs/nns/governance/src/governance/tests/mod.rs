@@ -134,6 +134,84 @@ mod settle_neurons_fund_participation_request_tests {
 } // end mod settle_neurons_fund_participation_request_tests
 
 #[cfg(feature = "test")]
+mod settle_neurons_fund_participation_mem_tests {
+    use crate::{
+        governance::MAX_NEURONS_FUND_PARTICIPANTS,
+        neurons_fund::{
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
+            NeuronsFundSnapshot,
+        },
+        pb::v1 as gov_pb,
+    };
+    use ic_base_types::PrincipalId;
+    use ic_nns_common::pb::v1::NeuronId;
+    use ic_nns_governance_api::pb::v1::SettleNeuronsFundParticipationResponse;
+
+    fn make_dummy_neuron_portion() -> NeuronsFundNeuronPortion {
+        NeuronsFundNeuronPortion {
+            id: Default::default(),
+            hotkeys: Default::default(),
+            controller: Default::default(),
+            amount_icp_e8s: 1_000_000_000,
+            maturity_equivalent_icp_e8s: 1_000_000_000,
+            is_capped: false,
+        }
+    }
+
+    /// This test ensures that the number of bytes representing the response payload of
+    /// `NnsGov.settle_neurons_fund_participation` is (worst-case) within IC ingress message limits.
+    /// See https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_pass() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                hotkeys,
+                id: NeuronId { id },
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        assert!(bytes.len() < 2_000_000);
+    }
+
+    /// This test may be adjusted slightly; it is here to help monitor the potentially unbounded
+    /// `NnsGov.settle_neurons_fund_participation` response payload byte size.
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_worst_case_bound() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                id: NeuronId { id },
+                hotkeys,
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        // The following bound is obtained experimentally.
+        let expected_bytes_cap = 620_113;
+        assert!(
+            bytes.len() < expected_bytes_cap,
+            "The bytes.len() = {}, expected_bytes_cap = {}",
+            bytes.len(),
+            expected_bytes_cap
+        );
+    }
+}
+
+#[cfg(feature = "test")]
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;

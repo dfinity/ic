@@ -167,7 +167,7 @@ impl WasmChunkStore {
         Ok(hash)
     }
 
-    pub(crate) fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
+    pub fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
         Self { data, metadata }
     }
 

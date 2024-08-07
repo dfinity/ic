@@ -7,7 +7,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
@@ -46,8 +46,10 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;
-use std::collections::BTreeSet;
-use std::{collections::HashMap, time::UNIX_EPOCH};
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::UNIX_EPOCH,
+};
 
 // Valid images to be used in the CreateServiceNervousSystem proposal.
 pub const IMAGE_1: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
