@@ -14928,7 +14928,6 @@ dependencies = [
  "ic-utils 0.37.0",
  "proxy_canister",
  "reqwest 0.12.5",
- "serde",
  "slog",
  "tests",
  "tokio",

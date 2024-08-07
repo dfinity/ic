@@ -18,7 +18,7 @@
 //! `systemctl start ic-replica`
 
 use anyhow::Result;
-use candid::{CandidType, Encode};
+use cloner_canister_types::SpinupCanistersArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
@@ -32,7 +32,6 @@ use ic_system_test_driver::{
     },
     systest,
 };
-use serde::{Deserialize, Serialize};
 use slog::info;
 use std::time::Duration;
 
@@ -45,7 +44,7 @@ const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(10 * 60);
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 
-const CLONER_CANISTER_WASM: &str = "rs/tests/networking/cloner_canister.wasm.gz";
+const CLONER_CANISTER_WASM: &str = "rs/tests/networking/canisters/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
 const SUBNET_SIZE: usize = 1;
@@ -202,10 +201,4 @@ pub fn install_cloner_canisters(env: TestEnv) {
     std::thread::sleep(time_to_wait_for_download);
     info!(&logger, "Step 6: Downloading prometheus data");
     env.download_prometheus_data_dir_if_exists();
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct SpinupCanistersArgs {
-    pub canisters_number: u64,
-    pub wasm_module: Vec<u8>,
 }
